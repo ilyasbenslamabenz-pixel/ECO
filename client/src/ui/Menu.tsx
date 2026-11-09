@@ -111,6 +111,11 @@ export function MainMenu() {
                 <option value="low">Basse</option><option value="medium">Moyenne</option><option value="high">Haute</option>
               </select>
             </label>
+            <label>Vue de la ville
+              <select value={settings.view ?? '2d'} onChange={(e) => setSettings({ view: e.target.value as '2d' | '3d' })}>
+                <option value="2d">Tableau illustré (recommandé)</option><option value="3d">Monde 3D</option>
+              </select>
+            </label>
             <label>Heure de la ville
               <select value={settings.timeMode} onChange={(e) => setSettings({ timeMode: e.target.value as 'golden' })}>
                 <option value="golden">Heure dorée</option><option value="cycle">Cycle jour/nuit</option><option value="day">Plein jour</option><option value="night">Nuit</option>

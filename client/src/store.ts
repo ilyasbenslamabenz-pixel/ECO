@@ -16,11 +16,13 @@ export type Selection = null | { kind: 'city'; id: number } | { kind: 'infra'; i
 
 export interface Toast { id: number; text: string; kind: 'info' | 'good' | 'warn' | 'bad' }
 
+/** '2d' : tableau illustré de la capitale (par défaut) ; '3d' : mégapole Babylon.js. */
+export type ViewMode = '2d' | '3d';
 export type TimeMode = 'golden' | 'cycle' | 'day' | 'night';
 
 const SETTINGS_KEY = 'eco_settings';
 const loadSettings = () => {
-  const d = { quality: 'medium' as Quality, volume: 0.5, labels: true, dayLength: 180, timeMode: 'golden' as TimeMode };
+  const d = { quality: 'medium' as Quality, volume: 0.5, labels: true, dayLength: 180, timeMode: 'golden' as TimeMode, view: '2d' as ViewMode };
   try { return { ...d, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return d; }
 };
 
@@ -38,7 +40,7 @@ interface State {
   selection: Selection;
   draft: Policy | null; // politique en cours d'édition
   toasts: Toast[];
-  settings: { quality: Quality; volume: number; labels: boolean; dayLength: number; timeMode: TimeMode };
+  settings: { quality: Quality; volume: number; labels: boolean; dayLength: number; timeMode: TimeMode; view: ViewMode };
   tutorialStep: number;
   minimizedEvents: number[]; // événements dont la fenêtre de décision a été réduite (ils restent dans le panneau Événements)
   set: (p: Partial<State>) => void;
