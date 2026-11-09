@@ -731,7 +731,7 @@ function evaluateMilestone(S: GameState, C: ClimateState, m: Milestone, actual: 
     addCapital(C, { etat: -4 * k, citoyens: -6 * k });
     S.satisfaction.trust = clamp(S.satisfaction.trust - 1.5 * k, 0, 100);
     coalitionMood(S, -0.05 * k);
-    addRecord(S, -0.02 * k);
+    addRecord(S, -0.05 * k); // un jalon manqué pèse sur le bilan presque autant qu’un jalon atteint le renforce
     bumpGroup(S, 'climat', -0.25);
     m.text = `${head} Objectif manqué de ${nf(m.gap, 1)} points : soutien Citoyens −${nf(6 * k)}, État −${nf(4 * k)}, confiance −${nf(1.5 * k, 1)}, associations climat mécontentes.`;
     notice(S, 'bad', `Plan climat : jalon ${m.year} manqué`, m.text);
