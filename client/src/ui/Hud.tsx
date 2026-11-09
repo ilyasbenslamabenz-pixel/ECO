@@ -407,9 +407,6 @@ export function SettingsPanel() {
         <Tabs value={settings.quality} onChange={(q) => setSettings({ quality: q })} tabs={[['low', 'Basse'], ['medium', 'Moyenne'], ['high', 'Haute']]} />
         <p className="muted small">Basse : sans ombres, relief allégé, moins d'arbres et de véhicules.</p>
       </Section>
-      <Section title="Vue de la ville" hint="Tableau : illustration de la capitale, fluide sur tous les appareils. 3D : mégapole complète, caméra libre, plus exigeante.">
-        <Tabs value={settings.view ?? '2d'} onChange={(v) => setSettings({ view: v })} tabs={[['2d', 'Tableau illustré'], ['3d', 'Monde 3D']]} />
-      </Section>
       <Section title="Heure de la ville">
         <Tabs value={settings.timeMode} onChange={(m) => setSettings({ timeMode: m })} tabs={[['golden', 'Heure dorée'], ['cycle', 'Cycle jour/nuit'], ['day', 'Plein jour'], ['night', 'Nuit']]} />
       </Section>

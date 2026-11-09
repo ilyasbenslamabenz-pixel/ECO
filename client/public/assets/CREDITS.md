@@ -29,5 +29,3 @@ modèles procéduraux originaux (CC0) et modèles dérivés de [Poly Haven](http
 | models/lampadaire_classique.glb | street_lamp_01 | lanterne décimée, fût régénéré |
 | models/arbre_parc_large.glb | jacaranda_tree | enveloppe du feuillage + tronc décimé, feuillage reteinté en vert |
 | models/arbre_parc_rond.glb | tree_small_02 | enveloppe du feuillage + tronc décimé, mis à l'échelle ×2 |
-
-- Vue « tableau » (client/public/assets/tableau/ville.jpg) : illustration fournie par l'auteur du projet (générée avec Canva), recadrée.

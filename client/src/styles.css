@@ -683,30 +683,3 @@ input[type='range']:focus-visible::-webkit-slider-thumb { outline: 2px solid var
 .sat-driver-bar i { display: block; height: 100%; }
 .sat-driver-bar.up i { background: var(--good); }
 .sat-driver-bar.down i { background: var(--bad); margin-left: auto; }
-
-/* --- Vue 2D « tableau » (game/CityTableau.tsx) --- */
-.tableau { position: absolute; inset: 0; overflow: hidden; background: var(--ink-3); cursor: grab; touch-action: none; user-select: none; }
-.tableau:active { cursor: grabbing; }
-.tableau-stage { position: absolute; will-change: left, top, width; }
-.tableau-stage > img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
-.tableau-night { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 600ms; background: linear-gradient(180deg, rgba(8, 14, 40, 0.78), rgba(10, 16, 44, 0.55)); mix-blend-mode: multiply; }
-.tableau.tableau-night .tableau-night { opacity: 1; }
-.tableau-top { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--top) + 26px); pointer-events: none; background: linear-gradient(180deg, var(--ink-3) 55%, transparent); }
-.spot { position: absolute; transform: translate(-19px, -19px); display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: var(--text); font-family: var(--sans); cursor: pointer; text-align: left; }
-.spot-pin { flex: none; width: 38px; height: 38px; display: grid; place-items: center; background: var(--ink); border: 1px solid var(--gold); border-radius: 50%; box-shadow: 0 0 0 3px rgba(14, 22, 40, 0.55), var(--shadow); color: var(--gold-hi); transition: transform var(--t), background var(--t); }
-.spot:hover .spot-pin, .spot.on .spot-pin { transform: scale(1.12); background: var(--gold); color: var(--ink-3); }
-.spot-text { display: flex; flex-direction: column; padding: 4px 9px; background: rgba(14, 22, 40, 0.86); border-left: 2px solid var(--gold); border-radius: var(--r-sm); opacity: 0; transform: translateX(-4px); transition: opacity var(--t), transform var(--t); pointer-events: none; white-space: nowrap; }
-.spot-text b { font-family: var(--serif); font-weight: 600; font-size: 14px; }
-.spot-text em { font-style: normal; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.spot:hover .spot-text, .spot:focus-visible .spot-text, .spot.on .spot-text, .spot-1 .spot-text, .spot-2 .spot-text { opacity: 1; transform: none; }
-.spot-1 .spot-pin { border-color: var(--warn); color: var(--warn); }
-.spot-2 .spot-pin { border-color: var(--bad); color: var(--bad); animation: spot-pulse 1.8s ease-in-out infinite; }
-.spot .stamp { background: var(--paper); font-size: 9px; padding: 1px 5px; }
-@keyframes spot-pulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(14, 22, 40, 0.55), 0 0 0 0 rgba(232, 128, 114, 0.55); } 50% { box-shadow: 0 0 0 3px rgba(14, 22, 40, 0.55), 0 0 0 12px rgba(232, 128, 114, 0); } }
-.tableau-works { position: absolute; left: 84.5%; top: 82.5%; right: 0; bottom: 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; cursor: default; border-radius: 0; }
-.tw-row { display: grid; grid-template-columns: minmax(0, 1fr) 54px auto; gap: 8px; align-items: center; font-size: 11px; }
-.tw-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tw-row em { font-style: normal; color: var(--muted); white-space: nowrap; }
-.tw-row .meter { min-width: 0; }
-@media (prefers-reduced-motion: reduce) { .spot-2 .spot-pin { animation: none; } }
-.tableau-fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
