@@ -675,3 +675,11 @@ input[type='range']:focus-visible::-webkit-slider-thumb { outline: 2px solid var
 /* La barre du haut garde la priorité aux indicateurs : les jauges climat compactes n'apparaissent que sur grand écran
    (elles restent dans le panneau Plan climat). */
 @media (max-width: 1799px) { .climat-mini { display: none !important; } }
+
+/* Population : « pourquoi la satisfaction bouge » (contributions des facteurs) */
+.sat-driver { display: grid; grid-template-columns: 16px minmax(0, 1fr) 90px 72px; align-items: center; gap: 8px; font-size: 12.5px; margin: 5px 0; }
+.sat-driver b { text-align: right; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px; }
+.sat-driver-bar { height: 6px; background: var(--line); border-radius: var(--r-sm); overflow: hidden; display: block; }
+.sat-driver-bar i { display: block; height: 100%; }
+.sat-driver-bar.up i { background: var(--good); }
+.sat-driver-bar.down i { background: var(--bad); margin-left: auto; }

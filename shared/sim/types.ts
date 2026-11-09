@@ -186,6 +186,8 @@ export interface CityState {
   satisfaction: number; // 0..100
   housingUnits: number;
   localRevenue: number; // €/an
+  localRef?: number; // accès local aux équipements (soins, écoles, police) en début de partie : repère de l'effet de quartier
+  localImpulse?: number; // effet d'annonce local en cours (programme engagé dans le quartier), points de satisfaction
 }
 
 export interface Macro {
@@ -289,11 +291,34 @@ export interface Demography {
 export interface Satisfaction {
   overall: number;
   byCategory: Record<CategoryId, number>;
-  factors: Record<string, number>; // composantes 0..100
+  factors: Record<string, number>; // composantes 0..100 : notes mesurées (qualité des services, revenu réel, impôts…)
+  felt?: Record<string, number>; // mêmes composantes telles que ressenties (amplification, accoutumance, annonces : social.ts)
   trust: number;
   protestRisk: number; // 0..1
   strikeRisk: number;
   unrestRisk: number;
+  /** « Pourquoi la satisfaction bouge » : contribution de chaque facteur (et des crises) au mois écoulé. */
+  drivers?: SatDriver[];
+  /** Mémoire du modèle de satisfaction ressentie (références d'accoutumance, effets d'annonce) ; absente des instantanés. */
+  dyn?: SatDyn;
+}
+
+export interface SatDriver {
+  id: string; // facteur (voir social.ts FACTORS) ou 'crises'
+  label: string;
+  level: number; // contribution à la satisfaction générale, écart au début de partie (points)
+  delta: number; // variation de cette contribution sur le mois (points)
+  announce: number; // part due aux effets d'annonce et de surprise encore actifs (points)
+}
+
+export interface SatDyn {
+  ref: Record<string, Record<string, number>>; // référence d'accoutumance par catégorie et facteur (note brute 0..100)
+  prev: Record<string, Record<string, number>>; // note brute du mois précédent (effet de surprise)
+  imp: Record<string, Record<string, number>>; // impulsions d'annonce et de surprise en cours (points de note)
+  budget: Record<string, number>; // budgets du mois précédent rapportés aux besoins (effet d'annonce budgétaire)
+  sc: Record<string, number>; // contributions lissées de chaque facteur à la satisfaction générale (points)
+  sc0: Record<string, number>; // mêmes contributions en début de partie
+  fin0?: number; // déficit public de début de partie (part du PIB) : repère de crédibilité financière
 }
 
 export interface GameState {

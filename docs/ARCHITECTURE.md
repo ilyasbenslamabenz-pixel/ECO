@@ -53,7 +53,7 @@ Policy (décisions du joueur)  ──►  tick(state, policy) ──►  nouvel 
 | Fiscal | `sim/fiscal.ts` | Barème progressif, IS, TVA par catégorie, patrimoine, immobilier, écotaxes, cotisations |
 | Économie / emploi | `sim/economy.ts` | 12 secteurs, demande, production, emploi, salaires, profits, investissement, prix |
 | Finances publiques | `sim/budget.ts` | Recettes, dépenses, solde, trésorerie, dette, obligations, taux |
-| Social | `sim/social.ts` | Qualité des services, satisfaction par catégorie et par ville, confiance, risques |
+| Social | `sim/social.ts` | Qualité des services, satisfaction par catégorie et par ville (notes mesurées puis **ressenties** : amplification des écarts, accoutumance, effets de surprise et d'annonce ; contributions du mois `satisfaction.drivers`, voir `docs/EQUILIBRAGE.md` § 4.1), confiance, risques |
 | Orchestration | `sim/engine.ts` | Ordre des moteurs, historique, notifications |
 | Politique | `sim/politics.ts` | Partis, popularité, parlement, coalition, groupes d'intérêt, décrets / projets de loi et votes, élections, censure |
 | International | `sim/international.ts` | États voisins, relations, accords, droits de douane et représailles |

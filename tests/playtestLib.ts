@@ -10,10 +10,10 @@ import { CARDS, cardStatus } from '../shared/sim/climate';
 import { titleOf } from '../shared/sim/missions';
 import type { GameState, Policy } from '../shared/sim/types';
 
-export const STRATEGIES = ['passif', 'besoins', 'climat', 'austerite', 'depensier', 'equilibre'] as const;
+export const STRATEGIES = ['passif', 'besoins', 'climat', 'austerite', 'depensier', 'equilibre', 'expert'] as const;
 export type Strategy = (typeof STRATEGIES)[number];
 export const STRATEGY_NAMES: Record<Strategy, string> = {
-  passif: 'Passif', besoins: 'Besoins', climat: 'Climat', austerite: 'Austérité', depensier: 'Dépensier', equilibre: 'Équilibré',
+  passif: 'Passif', besoins: 'Besoins', climat: 'Climat', austerite: 'Austérité', depensier: 'Dépensier', equilibre: 'Équilibré', expert: 'Expert',
 };
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -149,8 +149,12 @@ export function botStep(S: GameState, strat: Strategy, mem: BotMemory) {
       playClimate(S, mem, { perMonth: 1, gap: 1 });
       return;
     case 'austerite':
-      // −4 % sur toutes les lignes chaque janvier pendant 5 ans (≈ −18 %), puis gel
-      if (jan && S.month > 0 && S.month <= 60) scaleBudget(S, 0.96);
+      // rigueur : −4 % sur toutes les lignes chaque janvier (5 ans au plus, ≈ −18 %) tant que le déficit dépasse 0,5 % du
+      // PIB ; une fois les comptes rétablis, l'excédent est rendu aux contribuables (−0,5 point de TVA par an)
+      if (jan && S.month > 0) {
+        if (S.month <= 60 && deficit(S) > 0.005) scaleBudget(S, 0.96);
+        else if (deficit(S) < -0.005 && S.policy.vat.normal > 0.15) nudgeVat(S, -0.005);
+      }
       return;
     case 'depensier':
       // +5 % sur toutes les lignes chaque janvier, toutes les actions proposées sans regarder le budget, cartes à volonté
@@ -170,7 +174,46 @@ export function botStep(S: GameState, strat: Strategy, mem: BotMemory) {
         else if (deficit(S) < -0.01 && S.policy.vat.normal > 0.18) nudgeVat(S, -0.005);
       }
       return;
+    case 'expert':
+      // joueur expert : le jeu équilibré, plus une stratégie énergétique suivie (600 MW d'éolien en mer par an, fermeture du
+      // fossile dès que la marge le permet), un signal-prix carbone progressif, une carte climat par mois et une discipline
+      // budgétaire qui épargne les services
+      if (S.month === 0) applyServiceAction(S, { type: 'fileRecherche', techs: CLIMATE_RESEARCH });
+      playMissions(S, mem, { maxDeficit: 0.035 });
+      playNeeds(S, mem, { maxDeficit: 0.03, maxDebt: 0.95, maxCost: 0.003, cooldown: 12, perMonth: 1 });
+      playClimate(S, mem, { perMonth: 1, gap: 1, maxDeficit: 0.035 });
+      if (jan && S.month > 0 && deficit(S) < 0.04) applyAction(S, { type: 'energyBuild', tech: 'eolienMer', mw: 600 });
+      closeFossil(S);
+      // signal-prix carbone progressif (+15 €/t par an jusqu’à 200 €/t : décret), recettes affectées au désendettement
+      if (jan && S.month >= 24 && S.policy.eco.carbon < 200) lever(S, (p) => { p.eco.carbon += 15; p.eco.industrial += 15; });
+      if (jan && S.month > 0) {
+        if (deficit(S) > 0.03) trimNonSocial(S, 0.95);
+        if (deficit(S) > 0.04) nudgeVat(S, 0.01);
+        else if (deficit(S) < -0.01 && S.policy.vat.normal > 0.18) nudgeVat(S, -0.005);
+      }
+      return;
   }
+}
+
+/** Ferme du fossile (charbon, puis fioul, puis gaz) quand la marge électrique à la pointe dépasse 15 %. */
+function closeFossil(S: GameState) {
+  const E = S.energy;
+  if (!E || S.month % 6 !== 3) return;
+  const m = E.balance.margin;
+  if (m <= 0.15) return;
+  for (const tech of ['charbon', 'petrole', 'gaz'] as const) {
+    const cap = E.fleet[tech]?.mw ?? 0;
+    if (cap < 1) continue;
+    const mw = Math.min(cap, Math.max(100, Math.round((m * E.balance.peakMW * 0.5) / 50) * 50));
+    applyAction(S, { type: 'energyClose', tech, mw });
+    return;
+  }
+}
+/** Économies hors services sociaux (défense, subventions, administration) : décret, sans toucher santé, éducation, sécurité. */
+function trimNonSocial(S: GameState, k: number) {
+  const p: Policy = clone(S.pending?.policy ?? S.policy);
+  for (const b of ['defense', 'subventions', 'administration', 'infrastructures'] as const) p.budget[b] = Math.round(p.budget[b] * k);
+  schedulePolicy(S, p, { parliament: true });
 }
 
 // ---------- Mesures ----------
@@ -333,4 +376,36 @@ export function markdownTable(rows: Record<string, string>[]) {
   const sep = `|---|${rows.map(() => '---').join('|')}|`;
   const body = keys.map((k) => `| ${k} | ${rows.map((r) => r[k]).join(' | ')} |`);
   return [head, sep, ...body].join('\n');
+}
+
+// ---------- Sensibilité de la satisfaction aux leviers ----------
+/** Leviers isolés appliqués au mois 3 d'une partie ; on mesure l'écart de satisfaction avec la partie témoin. */
+export const LEVERS: { id: string; label: string; apply: (S: GameState) => void }[] = [
+  { id: 'medecins', label: 'Recruter 8 % de médecins', apply: (S) => { applyServiceAction(S, { type: 'recruter', service: 'sante', role: 'medecins', count: Math.round(S.health!.doctors.staff * 0.08) }); } },
+  { id: 'policiers', label: 'Recruter 8 % de policiers', apply: (S) => { applyServiceAction(S, { type: 'recruter', service: 'securite', role: 'policiers', count: Math.round(S.security!.police.staff * 0.08) }); } },
+  { id: 'enseignants', label: 'Recruter 5 % d\'enseignants', apply: (S) => { applyServiceAction(S, { type: 'recruter', service: 'education', role: 'enseignants', count: Math.round(S.education!.teachers.staff * 0.05) }); } },
+  { id: 'transports', label: 'Budget transports +20 %', apply: (S) => { lever(S, (p) => { p.budget.transports *= 1.2; }); } },
+  { id: 'logement', label: 'Plan de 8 000 logements sociaux', apply: (S) => { applyServiceAction(S, { type: 'planLogement', kind: 'social', units: 8000, months: 24 }); } },
+  { id: 'tva', label: 'TVA normale −1 pt', apply: (S) => { lever(S, (p) => { p.vat.normal -= 0.01; }); } },
+  { id: 'credit', label: 'Crédit d\'activité +400 €', apply: (S) => { lever(S, (p) => { p.incomeTax.activityCredit += 400; }); } },
+  { id: 'embauche', label: 'Aide à l\'embauche +1 500 €', apply: (S) => { lever(S, (p) => { p.labour.hiringAid += 1500; }); } },
+  { id: 'charbon', label: 'Carte « sortie du charbon »', apply: (S) => { card(S, 'sortie_charbon'); } },
+  { id: 'austerite', label: 'Toutes les lignes −4 %', apply: (S) => scaleBudget(S, 0.96) },
+];
+
+/** Écart de satisfaction (points) entre la partie avec levier et la partie témoin, aux horizons donnés (mois). */
+export function leverSensitivity(seed = 2030, horizons = [3, 12, 36]) {
+  const base = newGame(seed);
+  for (let i = 0; i < 3; i++) tick(base);
+  const ref: number[] = [];
+  const A = clone(base);
+  const H = Math.max(...horizons);
+  for (let m = 1; m <= H; m++) { tick(A); ref[m] = A.satisfaction.overall; }
+  return LEVERS.map((L) => {
+    const B = clone(base);
+    L.apply(B);
+    const delta: Record<number, number> = {};
+    for (let m = 1; m <= H; m++) { tick(B); if (horizons.includes(m)) delta[m] = B.satisfaction.overall - ref[m]; }
+    return { id: L.id, label: L.label, delta };
+  });
 }

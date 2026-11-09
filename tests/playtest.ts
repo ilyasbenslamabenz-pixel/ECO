@@ -2,7 +2,16 @@
 //   npm run playtest                 → 6 stratégies × 3 graines × 30 ans
 //   npm run playtest -- 50 2030      → 50 ans, une seule graine
 //   npm run playtest -- 30 2030,7,99 --md   → tableau Markdown (docs/EQUILIBRAGE.md)
-import { STRATEGIES, markdownTable, runStrategy, summarize, type RunResult } from './playtestLib';
+//   npm run playtest -- --levers     → sensibilité de la satisfaction aux leviers isolés (3, 12, 36 mois)
+import { STRATEGIES, leverSensitivity, markdownTable, runStrategy, summarize, type RunResult } from './playtestLib';
+
+if (process.argv.includes('--levers')) {
+  const seed = Number(process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 2030);
+  const f = (v: number) => (v >= 0 ? '+' : '') + v.toFixed(2).replace('.', ',');
+  console.log('| Levier | 3 mois | 12 mois | 36 mois |\n|---|---|---|---|');
+  for (const r of leverSensitivity(seed)) console.log(`| ${r.label} | ${f(r.delta[3])} | ${f(r.delta[12])} | ${f(r.delta[36])} |`);
+  process.exit(0);
+}
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const years = Number(args[0] ?? 30);

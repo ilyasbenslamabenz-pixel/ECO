@@ -114,7 +114,7 @@ export interface PoliticsState {
   lowTrustMonths: number;
   lastMotion: number;
   motions: { month: number; kind: 'censure' | 'confiance'; yes: number; no: number; passed: boolean }[];
-  ref: { sat: Record<string, number>; factors: Record<string, number>; trust: number; u: number };
+  ref: { sat: Record<string, number>; factors: Record<string, number>; trust: number; u: number; deficit?: number };
   defeated: null | { month: number; reason: string };
 }
 
@@ -128,7 +128,18 @@ export const ELECTORAL_THRESHOLD = 0.05;
  * un bilan solide la compense en grande partie.
  */
 export const WEAR_PER_YEAR = 0.04;
+/**
+ * Écart de satisfaction d'une catégorie (points) qui fait varier d'un facteur e^0,5 le poids du camp gouvernemental.
+ * La satisfaction ressentie (social.ts) réagit 2 à 5 fois plus aux décisions qu'avant : l'échelle passe de 15 à 25 pour
+ * que les élections restent disputées (les enjeux saillants lisent les notes mesurées, inchangées).
+ */
+export const SAT_POLITICAL_SCALE = 25;
+/** Poids électoral du redressement des comptes (log du poids par unité de PIB de déficit en moins, borné à 4 points de PIB). */
+export const RIGOR_WEIGHT = { centristes: 12, liberaux: 12 };
+const deficitOf = (S: GameState) => -S.accounts.balance / Math.max(1, S.accounts.gdp);
 export const WEAR_MAX = 0.5;
+/** Mémoire du bilan : part conservée chaque mois (demi-vie ≈ 11 ans) ; un long règne exige des résultats renouvelés. */
+export const RECORD_MEMORY = 0.995;
 /** Une coalition battue ne peut s'élargir à un partenaire que si elle garde au moins cette part des sièges. */
 export const ENLARGE_MIN_SHARE = 0.44;
 export function governmentWear(S: Pick<GameState, 'month' | 'politics'>) {
@@ -224,17 +235,20 @@ export function computePopularity(S: GameState): Record<PartyId, number> {
     const aff = AFFINITY[c];
     if (!aff) continue;
     const count = n[c] || 0;
-    const d = ((sat[c] ?? 55) - (P.ref.sat[c] ?? 55)) / 15 + econ;
+    const d = ((sat[c] ?? 55) - (P.ref.sat[c] ?? 55)) / SAT_POLITICAL_SCALE + econ;
     const w = aff.map((a, k) => a * Math.exp(gov.has(PARTY_IDS[k]) ? 0.5 * d : -0.25 * d));
     const ws = w.reduce((s, v) => s + v, 0);
     w.forEach((v, k) => (raw[k] += (count * v) / ws));
   }
   const fr = (k: string) => (P.ref.factors[k] ?? 55) - (f[k] ?? P.ref.factors[k] ?? 55);
+  const rigor = clamp((P.ref.deficit ?? deficitOf(S)) - deficitOf(S), 0, 0.04); // récompense seulement : les dérapages sont sanctionnés par la stabilité
   const issue: Record<PartyId, number> = {
     ecologistes: fr('environnement') / 25,
     sociaux_democrates: fr('inegalites') / 30 + fr('emploi') / 40,
-    centristes: (S.satisfaction.trust - P.ref.trust) / 40,
-    liberaux: fr('fiscalite') / 30,
+    // comptes redressés (déficit réduit par rapport au début de partie) : « équilibre budgétaire » et « dette maîtrisée »
+    // sont des priorités des centristes et des libéraux ; leurs électeurs en créditent le gouvernement qui les redresse
+    centristes: (S.satisfaction.trust - P.ref.trust) / 40 + (gov.has('centristes') ? RIGOR_WEIGHT.centristes * rigor : 0),
+    liberaux: fr('fiscalite') / 30 + (gov.has('liberaux') ? RIGOR_WEIGHT.liberaux * rigor : 0),
     conservateurs: fr('securite') / 30 + fr('stabilite') / 40 + fr('pouvoirAchat') / 60,
   };
   // l'usure frappe le camp du chef du gouvernement (les partenaires de législature n'en portent pas la responsabilité)
@@ -246,7 +260,7 @@ export function computePopularity(S: GameState): Record<PartyId, number> {
 }
 
 export function initPolitics(S: GameState): PoliticsState {
-  const ref = { sat: { ...S.satisfaction.byCategory }, factors: { ...S.satisfaction.factors }, trust: S.satisfaction.trust, u: unemploymentOf(S) };
+  const ref = { sat: { ...S.satisfaction.byCategory }, factors: { ...S.satisfaction.factors }, trust: S.satisfaction.trust, u: unemploymentOf(S), deficit: deficitOf(S) };
   const P: PoliticsState = {
     parties: PARTY_IDS.map((id) => ({ id, popularity: 0.2, seats: 0, mood: 0 })),
     seatsTotal: SEATS_TOTAL, leader: 'centristes', coalition: [], majority: [], mode: 'majorite', discipline: 0.8, confidenceBonus: 0,
@@ -699,6 +713,7 @@ export function politicsStep(S: GameState) {
     p.mood *= 0.985;
   }
   P.confidenceBonus *= 0.94;
+  if (P.record) P.record *= RECORD_MEMORY; // les électeurs oublient peu à peu les succès passés
   P.discipline = disciplineOf(S, P);
   updateGroups(S, P);
   // hostilité du patronat : la confiance des entreprises s'érode

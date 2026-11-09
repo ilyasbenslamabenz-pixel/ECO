@@ -1,6 +1,7 @@
 // Persistance des parties : PostgreSQL si DATABASE_URL est défini, sinon SQLite (node:sqlite).
 import fs from 'node:fs';
 import path from 'node:path';
+import { DATA_DIR } from './config';
 
 export interface GameMeta { id: string; name: string; month: number; updatedAt: number; createdAt: number }
 
@@ -50,9 +51,15 @@ async function postgres(url: string): Promise<Backend> {
 
 async function sqlite(): Promise<Backend> {
   const { DatabaseSync } = await import('node:sqlite');
-  const dir = process.env.DATA_DIR || path.resolve(process.cwd(), 'server/data');
-  fs.mkdirSync(dir, { recursive: true });
-  const db = new DatabaseSync(path.join(dir, 'eco-nation.db'));
+  const dir = DATA_DIR;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.accessSync(dir, fs.constants.W_OK);
+  } catch (e) {
+    throw new Error(`le dossier de données « ${dir} » n'existe pas ou n'est pas accessible en écriture. Créez-le ou corrigez la variable DATA_DIR (chemin absolu d'un dossier persistant).`, { cause: e });
+  }
+  const file = path.join(dir, 'eco-nation.db');
+  const db = new DatabaseSync(file);
   db.exec(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS eco_games (
@@ -68,7 +75,7 @@ async function sqlite(): Promise<Backend> {
     WHERE eco_games.owner = excluded.owner`);
   const del = db.prepare('DELETE FROM eco_games WHERE id = ? AND owner = ?');
   return {
-    name: 'SQLite',
+    name: `SQLite (${file})`,
     async list(owner) {
       return (list.all(owner) as { id: string; name: string; month: number; created_at: number; updated_at: number }[]).map((x) => ({ id: x.id, name: x.name, month: x.month, createdAt: x.created_at, updatedAt: x.updated_at }));
     },
@@ -85,15 +92,21 @@ async function sqlite(): Promise<Backend> {
   };
 }
 
-const backend: Promise<Backend> = process.env.DATABASE_URL ? postgres(process.env.DATABASE_URL) : sqlite();
-backend.then((b) => console.log(`💾 Base de données : ${b.name}`)).catch((e) => {
-  console.error("Impossible d'ouvrir la base de données :", e);
-  process.exit(1);
-});
+let backend: Promise<Backend> | null = null;
+/** Ouvre la base (une seule fois). Rejette avec un message explicite si elle est inaccessible. */
+function open(): Promise<Backend> {
+  backend ??= (process.env.DATABASE_URL ? postgres(process.env.DATABASE_URL) : sqlite()).catch((e: unknown) => {
+    const what = process.env.DATABASE_URL ? 'PostgreSQL (DATABASE_URL)' : 'SQLite';
+    throw new Error(`impossible d'ouvrir la base ${what} : ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+  });
+  return backend;
+}
 
 export const db = {
-  list: async (owner: string) => (await backend).list(owner),
-  load: async (id: string, owner: string) => (await backend).load(id, owner),
-  save: async (id: string, owner: string, name: string, month: number, data: string) => (await backend).save(id, owner, name, month, data),
-  remove: async (id: string, owner: string) => (await backend).remove(id, owner),
+  /** À attendre avant d'accepter des connexions : renvoie le nom de la base ouverte. */
+  ready: async () => (await open()).name,
+  list: async (owner: string) => (await open()).list(owner),
+  load: async (id: string, owner: string) => (await open()).load(id, owner),
+  save: async (id: string, owner: string, name: string, month: number, data: string) => (await open()).save(id, owner, name, month, data),
+  remove: async (id: string, owner: string) => (await open()).remove(id, owner),
 };
