@@ -11,8 +11,11 @@ import { applyServiceAction, type ServicesAction } from '../../shared/sim/engine
 import { cityFacilities } from '../../shared/sim/services';
 import type { CountryConfig, GameState, Policy } from '../../shared/sim/types';
 import { db } from './db';
+import { DATA_DIR, DIST, HOST, PORT, PRODUCTION, checkNode, fatal } from './config';
 
-const PORT = Number(process.env.PORT) || 3002;
+checkNode();
+process.on('uncaughtException', (e) => console.error('[ECO NATION] Erreur non interceptée :', e));
+process.on('unhandledRejection', (e) => console.error('[ECO NATION] Promesse rejetée non traitée :', e));
 const app = express();
 app.use(express.json({ limit: '200kb' }));
 const server = http.createServer(app);
@@ -171,13 +174,20 @@ app.delete('/api/games/:id', async (req, res) => {
   res.json({ ok: await db.remove(req.params.id, owner) });
 });
 
-const dist = path.resolve(process.cwd(), 'client/dist');
-if (fs.existsSync(dist)) {
+const dist = DIST;
+if (fs.existsSync(path.join(dist, 'index.html'))) {
   app.use(express.static(dist, { index: false, maxAge: '1h' }));
-  app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+  // `root` : le contrôle des fichiers cachés ne porte que sur le chemin relatif (l'application peut être installée sous un dossier caché)
+  app.get(/^(?!\/api|\/socket\.io).*/, (_req, res) => res.sendFile('index.html', { root: dist }));
 } else {
+  if (PRODUCTION) console.warn(`[ECO NATION] Attention : client non construit (${dist}/index.html absent). Lancez « npm ci --include=dev && npm run build » avant « npm start ».`);
   app.get('/', (_req, res) => res.send('Serveur ECO NATION actif. Lancez le client avec « npm run dev » ou construisez-le avec « npm run build ».'));
 }
+// erreurs des routes (Express 5 transmet les promesses rejetées) : journalisées, réponse JSON sobre
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[ECO NATION] Erreur de requête :', err);
+  if (!res.headersSent) res.status(500).json({ error: 'Erreur interne du serveur' });
+});
 
 // ---------- Temps réel ----------
 type Ack = (r: unknown) => void;
@@ -307,4 +317,19 @@ async function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-server.listen(PORT, () => console.log(`🌍 ECO NATION — serveur prêt sur http://localhost:${PORT}`));
+// Démarrage : la base est ouverte AVANT d'accepter des connexions ; toute erreur arrête le serveur avec un message clair.
+server.on('error', (e: NodeJS.ErrnoException) => {
+  if (e.code === 'EADDRINUSE') fatal(`le port ${PORT} est déjà utilisé. Arrêtez l'autre processus ou choisissez un autre port avec la variable PORT.`, e);
+  if (e.code === 'EACCES') fatal(`le port ${PORT} est réservé (droits insuffisants). Utilisez un port supérieur à 1024 avec la variable PORT.`, e);
+  fatal("le serveur HTTP n'a pas pu démarrer.", e);
+});
+console.log(`[ECO NATION] Démarrage (${PRODUCTION ? 'production' : 'développement'}, Node.js ${process.versions.node})`);
+if (!process.env.DATABASE_URL) console.log(`[ECO NATION] Dossier des données : ${DATA_DIR}${process.env.DATA_DIR ? '' : ' (défaut : définissez DATA_DIR pour un dossier persistant hors de l\'application)'}`);
+try {
+  console.log(`[ECO NATION] Base de données : ${await db.ready()}`);
+} catch (e) {
+  let root: unknown = e;
+  while (root instanceof Error && root.cause) root = root.cause; // cause technique d'origine (code système, pilote…)
+  fatal(e instanceof Error ? e.message : String(e), root !== e ? root : undefined);
+}
+server.listen(PORT, HOST, () => console.log(`[ECO NATION] Serveur prêt sur le port ${PORT}${HOST ? ` (${HOST})` : ''} : http://localhost:${PORT}`));
