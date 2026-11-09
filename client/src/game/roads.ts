@@ -4,7 +4,7 @@
 // Le profil en long de chaque voie (ponts, sauts-de-mouton) est calculé une seule fois et partagé
 // avec la circulation (traffic.ts) pour que les véhicules roulent exactement sur les tabliers.
 import {
-  Color3, DynamicTexture, Matrix, Mesh, MeshBuilder, StandardMaterial, Texture, VertexData, type GlowLayer, type ArcRotateCamera, type Scene,
+  Color3, Constants, DynamicTexture, Matrix, Mesh, MeshBuilder, StandardMaterial, Texture, VertexData, type GlowLayer, type ArcRotateCamera, type Scene,
 } from '@babylonjs/core';
 import { CustomMaterial } from '@babylonjs/materials/custom/customMaterial';
 import { mulberry32 } from '../../../shared/noise';
@@ -13,6 +13,7 @@ import type { CountryDef } from '../../../shared/sim/types';
 import { ENV, RES, VS, densify, type Grid } from './terrain';
 import { setThinCount } from './thin';
 import { whenModels } from './cityModels';
+import { CK, cellAt } from './cellmap';
 import { createThinInstances, type ModelLibrary, type ThinInstanceBuffer } from './modelLibrary';
 
 // ---------------------------------------------------------------------------------------------
@@ -762,7 +763,8 @@ export function createRoads(scene: Scene, grid: Grid, country: CountryDef) {
 
   // --- rubans des voies, garde-corps, glissières, tabliers ---
   const g = new Geo();
-  const stone = new Geo(); // extra : 0 pierre, 1 pavés, 2 pelouse
+  const stone = new Geo(); // extra : 0 pierre, 1 pavés, 2 pelouse, 3 lit du chenal, 4 tympan de pont, 5 voûte d'arche
+  const glint = new Geo(); // reflets des éclairages des ponts sur l'eau (extra : 0 arche, 1 lampadaire)
   const piers: number[] = []; // x, yBas, z, hauteur, largeur, profondeur, angle
   const stoneSpan = (pi: number, s: number) => net.bridges.some((b) => b.p === pi && net.paths[pi].stone && s > b.s0 - 0.006 && s < b.s1 + 0.006);
   net.paths.forEach((p, pi) => {
@@ -862,10 +864,10 @@ export function createRoads(scene: Scene, grid: Grid, country: CountryDef) {
           const top0 = prev.y + 0.0011, top1 = cur.y + 0.0011;
           const nxw = (pz1 - pz0) * side, nzw = -(px1 - px0) * side;
           const l = Math.hypot(nxw, nzw) || 1;
-          const a = stone.v(px0, prev.bottom, pz0, nxw / l, 0, nzw / l, (s - step) / 0.008, sv(prev.bottom, top0), 0);
-          const bb = stone.v(px1, cur.bottom, pz1, nxw / l, 0, nzw / l, s / 0.008, sv(cur.bottom, top1), 0);
-          const c = stone.v(px1, top1, pz1, nxw / l, 0, nzw / l, s / 0.008, 0, 0);
-          const d = stone.v(px0, top0, pz0, nxw / l, 0, nzw / l, (s - step) / 0.008, 0, 0);
+          const a = stone.v(px0, prev.bottom, pz0, nxw / l, 0, nzw / l, (s - step) / 0.008, sv(prev.bottom, top0), 4);
+          const bb = stone.v(px1, cur.bottom, pz1, nxw / l, 0, nzw / l, s / 0.008, sv(cur.bottom, top1), 4);
+          const c = stone.v(px1, top1, pz1, nxw / l, 0, nzw / l, s / 0.008, 0, 4);
+          const d = stone.v(px0, top0, pz0, nxw / l, 0, nzw / l, (s - step) / 0.008, 0, 4);
           stone.quad(a, bb, c, d);
           // face intérieure du parapet
           const ix0 = prev.x - prev.tz * (W - 0.0005) * side, iz0 = prev.z + prev.tx * (W - 0.0005) * side;
@@ -887,13 +889,40 @@ export function createRoads(scene: Scene, grid: Grid, country: CountryDef) {
           let ny = -step, nt = dy; // normale vers le bas/l'intérieur de la voûte
           const l = Math.hypot(ny, nt) || 1; ny /= l; nt /= l;
           const nxx = prev.tx * nt, nzz = prev.tz * nt;
-          const a = stone.v(L0[0], prev.bottom, L0[1], nxx, ny, nzz, 0, (s - step) / 0.008, 0);
-          const bb = stone.v(R0[0], prev.bottom, R0[1], nxx, ny, nzz, (2 * W) / 0.008, (s - step) / 0.008, 0);
-          const c = stone.v(R1[0], cur.bottom, R1[1], nxx, ny, nzz, (2 * W) / 0.008, s / 0.008, 0);
-          const d = stone.v(L1[0], cur.bottom, L1[1], nxx, ny, nzz, 0, s / 0.008, 0);
+          const ia = prev.arch && cur.arch ? 5 : 0;
+          const a = stone.v(L0[0], prev.bottom, L0[1], nxx, ny, nzz, 0, (s - step) / 0.008, ia);
+          const bb = stone.v(R0[0], prev.bottom, R0[1], nxx, ny, nzz, (2 * W) / 0.008, (s - step) / 0.008, ia);
+          const c = stone.v(R1[0], cur.bottom, R1[1], nxx, ny, nzz, (2 * W) / 0.008, s / 0.008, ia);
+          const d = stone.v(L1[0], cur.bottom, L1[1], nxx, ny, nzz, 0, s / 0.008, ia);
           stone.quad(a, bb, c, d);
         }
         prev = cur;
+      }
+      // reflets de la mise en lumière sur l'eau : sous chaque arche (voûte éclairée) et sous les lampadaires
+      // des parapets, traînées étirées de part et d'autre du pont
+      {
+        const quad = (cx: number, cz: number, ux: number, uz: number, hw: number, len: number, kind: number) => {
+          const y = b.water + 0.0006;
+          const ox = -uz * hw, oz = ux * hw;
+          const a = glint.v(cx + ox, y, cz + oz, 0, 1, 0, 0, 0, kind), bq = glint.v(cx - ox, y, cz - oz, 0, 1, 0, 1, 0, kind);
+          const c = glint.v(cx - ox + ux * len, y, cz - oz + uz * len, 0, 1, 0, 1, 1, kind), d = glint.v(cx + ox + ux * len, y, cz + oz + uz * len, 0, 1, 0, 0, 1, kind);
+          glint.quad(a, d, c, bq);
+        };
+        for (let k = 0; k < nA; k++) {
+          const o = sampleAt(p, b.s0 + (k + 0.5) * (span / nA), tmp);
+          const aw = (span / nA - 2 * pw) * 0.42;
+          for (const side of [1, -1]) {
+            const ux = -o.tz * side, uz = o.tx * side; // vers l'extérieur du pont
+            quad(o.x + ux * W * 0.2, o.z + uz * W * 0.2, ux, uz, aw, W * 0.8 + 0.045, 0);
+          }
+        }
+        for (let s = b.s0 + 0.004; s < b.s1; s += 0.022) {
+          const o = sampleAt(p, s, tmp);
+          for (const side of [1, -1]) {
+            const ux = -o.tz * side, uz = o.tx * side;
+            quad(o.x + ux * W, o.z + uz * W, ux, uz, 0.0014, 0.05, 1);
+          }
+        }
       }
       // avant-becs des piles (côté amont et aval)
       for (let k = 1; k < nA; k++) {
@@ -1027,18 +1056,64 @@ export function createRoads(scene: Scene, grid: Grid, country: CountryDef) {
   stoneMat.Fragment_Definitions('varying float vSurf; varying vec2 vSuv;');
   stoneMat.Fragment_Custom_Diffuse(/* glsl */ `
     vec3 sc = texture2D(tStone, vSuv).rgb;
-    vec3 pv = mix(texture2D(tPave, vPositionW.xz / 0.0035).rgb, vec3(0.62, 0.6, 0.56), 0.45);
+    float kS = floor(vSurf + 0.5);
+    // promenade des quais : pavés de grès chauds, grandes dalles jointoyées, bordure de granit le long du parapet
+    vec3 pv = mix(texture2D(tPave, vPositionW.xz / 0.0035).rgb, vec3(0.56, 0.54, 0.50), 0.45) * vec3(1.02, 0.98, 0.92);
+    vec2 sl = abs(fract(vPositionW.xz / 0.0022) - 0.5);
+    pv *= 1.0 - 0.16 * smoothstep(0.44, 0.49, max(sl.x, sl.y));
     vec3 gr = texture2D(tGrassQ, vPositionW.xz * 4.0).rgb * vec3(0.55, 0.68, 0.45);
-    diffuseColor = vSurf < 0.5 ? sc : vSurf < 1.5 ? pv : vSurf < 2.5 ? gr : vec3(0.09, 0.11, 0.1);
+    diffuseColor = kS < 0.5 || kS > 3.5 ? sc : kS < 1.5 ? pv : kS < 2.5 ? gr : vec3(0.09, 0.11, 0.1);
   `);
   stoneMat.Fragment_Before_FragColor(/* glsl */ `
     // mise en lumière chaude de la pierre et des promenades la nuit
-    float lit = vSurf < 0.5 ? 0.55 : vSurf < 1.5 ? 0.35 : vSurf < 2.5 ? 0.05 : 0.0;
+    // ponts : tympans éclairés par en dessous (plus vifs près de l'eau), voûtes des arches embrasées
+    float lit = kS < 0.5 ? 0.55 : kS < 1.5 ? 0.45 : kS < 2.5 ? 0.05 : kS < 3.5 ? 0.0 : kS < 4.5 ? 0.45 + 0.7 * clamp(vSuv.y * 0.6, 0.0, 1.0) : 1.5;
     color.rgb += uNightS * lit * diffuseColor * vec3(1.0, 0.72, 0.42);
+    if (kS > 4.5) color.rgb += uNightS * vec3(0.22, 0.14, 0.06);
   `);
   stoneMat.onBindObservable.add(() => { stoneMat.getEffect()?.setFloat('uNightS', ENV.night); });
   stoneMesh.material = stoneMat;
   addShadowCaster(scene, stoneMesh);
+  // traînées de lumière des ponts sur l'eau (additif, un appel de rendu)
+  if (glint.count) {
+    const gm = glint.mesh('bridgeGlints', scene);
+    gm.receiveShadows = false;
+    const tex = new DynamicTexture('bridgeGlintTex', { width: 32, height: 128 }, scene, true);
+    const c = tex.getContext() as CanvasRenderingContext2D;
+    const img = c.createImageData(32, 128);
+    const h = (a: number) => { const v = Math.sin(a * 91.7) * 43758.5; return v - Math.floor(v); };
+    for (let y = 0; y < 128; y++) {
+      const v = 1 - (y + 0.5) / 128; // 0 au pont (bas de l'image), 1 au loin
+      const ripple = 0.35 + 0.65 * h(Math.floor(v * 40));
+      for (let x = 0; x < 32; x++) {
+        const u = (x + 0.5) / 32;
+        const jit = (h(Math.floor(v * 40) + 7) - 0.5) * 0.25;
+        const k = Math.exp(-(((u - 0.5 - jit) / 0.22) ** 2)) * Math.pow(1 - v, 1.4) * ripple;
+        const o = (y * 32 + x) * 4;
+        img.data[o] = 230 * Math.min(1, k); img.data[o + 1] = 160 * Math.min(1, k); img.data[o + 2] = 80 * Math.min(1, k); img.data[o + 3] = 255;
+      }
+    }
+    c.putImageData(img, 0, 0);
+    tex.update(true);
+    tex.wrapU = tex.wrapV = Texture.CLAMP_ADDRESSMODE;
+    const gmMat = new StandardMaterial('bridgeGlintMat', scene);
+    gmMat.disableLighting = true;
+    gmMat.diffuseColor = Color3.Black();
+    gmMat.specularColor = Color3.Black();
+    gmMat.emissiveTexture = tex;
+    gmMat.alpha = 0.99;
+    gmMat.alphaMode = Constants.ALPHA_ADD;
+    gmMat.fogEnabled = false;
+    gmMat.backFaceCulling = false;
+    gmMat.zOffset = -3;
+    gm.material = gmMat;
+    excludeFromGlow(scene, gm);
+    scene.onBeforeRenderObservable.add(() => {
+      const n = Math.min(0.9, ENV.night * 1.3);
+      gmMat.emissiveColor.set(n, n, n);
+      gm.setEnabled(n > 0.01);
+    });
+  }
 
   // --- piles (instances fines) ---
   const pierBox = MeshBuilder.CreateBox('piers', { size: 1 }, scene);
@@ -1383,7 +1458,7 @@ function createFurniture(scene: Scene, grid: Grid, country: CountryDef, net: Net
           const x = gx + (h1 - 0.5) * st * 0.9, z = gz + (h2 - 0.5) * st * 0.9;
           const d = dist(x, z);
           // même seuil que cities.ts (pas de bâtiment au-delà de 0,5)
-          if (d > RP || parkMask(country.seed, x, z) < 0.5 || urban(x, z) < 0.1) continue;
+          if (d > RP || (parkMask(country.seed, x, z) < 0.5 && cellAt(x, z) !== CK.square) || urban(x, z) < 0.1) continue;
           if (nearGrid(x, z) || occAt(net, x, z) & 1 || grid.sample(x, z) < 0.027) continue;
           trees.push({ x, y: surfaceY(grid, x, z), z, a: h1 * 6.28, s: 0.8 + h2 * 0.45, d: d + 0.05, k: h1 < 0.4 ? 2 : 1 });
         }
@@ -1427,7 +1502,7 @@ function createFurniture(scene: Scene, grid: Grid, country: CountryDef, net: Net
         const hv = hash(c.x * 3.1, c.z * 1.7);
         const aut = ENV.autumn * (sp === 3 ? 0.9 : hv > 0.3 ? 0.85 : 0.25);
         let r = 0.92 + hv * 0.16 + aut * 0.45, g = 0.95 + hv * 0.1 - aut * 0.2, bl = 0.95 - aut * 0.55;
-        const w = ENV.winter * 0.55;
+        const w = ENV.winter * (sp === 1 ? 0.15 : 0.5); // arbres de parc ronds : persistants (chênes verts)
         r += (0.85 - r) * w; g += (0.78 - g) * w; bl += (0.72 - bl) * w;
         b.setColor(i, r, g, bl);
       }

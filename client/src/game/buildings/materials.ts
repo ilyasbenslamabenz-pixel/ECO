@@ -156,7 +156,7 @@ export function buildingMaterial(scene: Scene, name: string, o: MatOptions) {
       const nh = l.nightH ?? 0.05;
       ngt = `nightPhoto = texture2D(ngt${l.night}, fm / vec2(${f(nh)}, ${f(nh)})).rgb; hasNight = 1.0;`;
     }
-    return `${i ? 'else ' : ''}if (li == ${i}) { uv = ${uv}; tx = ${sample}; grid = vec2(${l.cols.toFixed(1)}, ${l.rows.toFixed(1)}); glassK = ${(l.glass ?? 0).toFixed(3)}; ${l.noTint ? 'useTint = 0.0;' : ''} ${nrm} ${ngt} }`;
+    return `${i ? 'else ' : ''}if (li == ${i}) { uv = ${uv}; tx = ${sample}; grid = vec2(${l.cols.toFixed(1)}, ${l.rows.toFixed(1)}); glassK = ${(l.glass ?? 0).toFixed(3)}; winW = ${f(l.w / l.cols)}; ${l.noTint ? 'useTint = 0.0;' : ''} ${nrm} ${ngt} }`;
   }).join('\n');
 
   mat.Vertex_Definitions(VERT_DEFS);
@@ -181,7 +181,7 @@ export function buildingMaterial(scene: Scene, name: string, o: MatOptions) {
     if (part < 0.5 || part > 3.5) {
       int li = int(vB.x + 0.5);
       vec2 uv = fm; vec4 tx = vec4(0.5); vec2 grid = vec2(1.0); float glassK = 0.0;
-      vec3 nightPhoto = vec3(0.0); float hasNight = 0.0; float useTint = 1.0;
+      vec3 nightPhoto = vec3(0.0); float hasNight = 0.0; float useTint = 1.0; float winW = 1.0;
       ${branches}
       alb = tx.rgb * mix(vec3(1.0), vT.rgb, useTint);
       float lum = dot(tx.rgb, vec3(0.3, 0.55, 0.15));
@@ -204,9 +204,15 @@ export function buildingMaterial(scene: Scene, name: string, o: MatOptions) {
         float on = step(hc, vB.w * mix(0.6, 1.25, hf) * share * (floorId < 0.5 ? 2.0 : 1.0)) * mix(0.35, 1.0, floorOn);
         emis = win * on * litColor(bHash(cell * 1.7 + 3.1 + seed)) * (0.7 + 0.7 * bHash(cell + 9.1));
       }
+      // au loin, une fenêtre fait moins d'un pixel : on remplace le tirage par sa moyenne (lueur chaude
+      // continue au lieu d'un scintillement de points)
+      float pxKm = length(vPositionW - vEyePosition.xyz) * 0.0015;
+      float avgK = smoothstep(0.6, 1.8, pxKm / winW);
+      vec3 emisAvg = vec3(1.0, 0.74, 0.48) * (0.015 + 0.11 * share * vB.w) * (hasNight > 0.5 ? 1.2 : 0.8) * (0.4 + 0.6 * clamp(glassK + 0.3, 0.0, 1.0));
+      emis = mix(emis, emisAvg, avgK);
       alb = mix(alb, alb * 0.4, gMask);
-      // vitrages : léger gauchissement aléatoire par panneau (reflets moirés réalistes)
-      pj = (vec2(bHash(cell + 1.3), bHash(cell + 7.9)) - 0.5) * 0.03 * step(0.01, gMask);
+      // vitrages : léger gauchissement aléatoire par panneau (reflets moirés réalistes), atténué au loin
+      pj = (vec2(bHash(cell + 1.3), bHash(cell + 7.9)) - 0.5) * 0.03 * step(0.01, gMask) * (1.0 - avgK);
     } else if (part > 2.5) {
       // verrière (sheds, garde-corps vitrés)
       alb = vec3(0.32, 0.38, 0.42);
@@ -226,6 +232,10 @@ export function buildingMaterial(scene: Scene, name: string, o: MatOptions) {
     if (gMask > 0.01) {
       vec3 nR = normalize(normalW + T * pj.x + Bv * pj.y);
       vec3 Rf = reflect(-viewDirectionW, nR);
+      // vue aérienne : les étages bas reflètent la ville sombre, les étages hauts l'horizon embrasé
+      // (dégradé vertical des tours de verre au couchant)
+      float hAbove = clamp((vPositionW.y - vBase) / 0.28, 0.0, 1.0);
+      Rf = normalize(vec3(Rf.x, Rf.y + hAbove * 0.22 * step(0.6, gMask), Rf.z));
       // nuages du ciel HDR (modulation du reflet)
       float cloud = dot(textureCube(envTex, vec3(Rf.x, abs(Rf.y) * 0.9 + 0.04, Rf.z)).rgb, vec3(0.33));
       vec3 sd = normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + vec3(1e-4));
@@ -234,12 +244,16 @@ export function buildingMaterial(scene: Scene, name: string, o: MatOptions) {
       vec3 hor = mix(uHorAway, uHorSun, pow(toward, 1.6));
       vec3 skyC = mix(hor, uZen, pow(max(Rf.y, 0.0), 0.42)) * (0.8 + 0.4 * cloud);
       // vers le bas : la ville dans l'ombre (acier bleuté), puis la brume dorée près de l'horizon
-      vec3 low = mix(uZen * 0.7 + uHaze * 0.2, uHaze * 0.85, smoothstep(-0.3, 0.0, Rf.y));
+      vec3 low = mix(vec3(0.07, 0.10, 0.14) + uHaze * 0.22 + uZen * 0.15, uHaze * 0.9, smoothstep(-0.3, 0.0, Rf.y));
       vec3 env = mix(low, skyC, smoothstep(-0.03, 0.05, Rf.y));
-      float fres = 0.08 + 0.92 * pow(1.0 - max(dot(nR, viewDirectionW), 0.0), 4.0);
-      float k = clamp(gMask * mix(0.55, 1.0, fres) * ${refl}, 0.0, 1.0);
+      // halo du soleil reflété (même diffusion que le dôme du ciel) : les façades tournées vers le couchant s'embrasent
+      float mu = max(dot(Rf, uSunDir), 0.0);
+      env += uSunCol * (pow(mu, 6.0) * 0.55 + pow(mu, 40.0) * 0.9) * smoothstep(-0.05, 0.02, Rf.y);
+      float fres = 0.1 + 0.9 * pow(1.0 - max(dot(nR, viewDirectionW), 0.0), 3.0);
+      float k = clamp(gMask * mix(0.6, 1.0, fres) * ${refl}, 0.0, 0.82); // les fenêtres restent lisibles sous le reflet
       color.rgb = mix(color.rgb, env * mix(vec3(1.0), vT.rgb, 0.7 * step(0.6, gMask)), k);
-      color.rgb += uSunCol * pow(max(dot(Rf, uSunDir), 0.0), 220.0) * 2.5 * gMask;
+      // reflet spéculaire du disque solaire, élargi par le gauchissement des panneaux
+      color.rgb += uSunCol * (pow(mu, 260.0) * 3.0 + pow(mu, 90.0) * 0.8) * gMask;
     }
     // intensité : quasi pleine dès l'allumage (captée par le bloom), la part allumée porte la progression
     color.rgb += emis * smoothstep(0.0, 0.25, uLights) * (1.15 + 0.5 * uLights);
@@ -296,7 +310,7 @@ export function treeMaterial(scene: Scene) {
   mat.Fragment_Custom_Diffuse(/* glsl */ `
     vec3 leaf = mix(vec3(0.20, 0.32, 0.12), vec3(0.30, 0.40, 0.16), vB.z);
     leaf = mix(leaf, vec3(0.55, 0.36, 0.12), uAutumn * 0.7 * vB.y);
-    leaf = mix(leaf, vec3(0.36, 0.31, 0.26), uWinter * 0.6);
+    leaf = mix(leaf, vec3(0.36, 0.31, 0.26), uWinter * mix(0.1, 0.6, step(0.55, vB.y))); // près d'un arbre sur deux est persistant
     leaf *= 0.8 + 0.35 * bNoise(vPositionW.xz * 3000.0 + vPositionW.y * 2000.0);
     diffuseColor = vPart > 1.5 ? leaf : vec3(0.30, 0.22, 0.16);
   `);

@@ -17,6 +17,8 @@ import { balconyTemplate, boxTemplate, ringTemplate, cylTemplate, houseTemplate,
 import { BLD_VIEW, balconyMaterial, buildingMaterial, treeMaterial, type Layer } from './buildings/materials';
 import { acg, haussmannTexture, houseTexture, residTexture } from './buildings/textures';
 import { setThinCount } from './thin';
+import { CK, commitCells, setCell, squareCell } from './cellmap';
+import { createEmblemCrown, type EmblemTop } from './landmark';
 
 export const GROWTH_CAP = 1.5;
 const CELL = 0.2; // trame des rues peinte par le terrain (km)
@@ -453,6 +455,38 @@ export function createCities(scene: Scene, grid: Grid, country: CountryDef, bloc
     if (rnd() < 0.35) putAt(B.det, bid, cx + topW * 0.2, y, cz, 0.0012, 0.0012, R(0.02, 0.05), 0, IN.equip, 0, 0, [1, 1, 1]);
   };
 
+  /**
+   * Tour emblématique du quartier d'affaires de la capitale : fût elliptique vrillé et effilé (30 tronçons
+   * pivotés), loggias techniques sombres, lanterne lumineuse et flèche (maillage émissif séparé).
+   */
+  const emblemTop: { v: EmblemTop | null } = { v: null };
+  const emblem = (r: Rect, H: number) => {
+    const bid = newBld(0);
+    const cx = (r.x0 + r.x1) / 2, cz = (r.z0 + r.z1) / 2;
+    const W = r.x1 - r.x0, D = r.z1 - r.z0;
+    const ph = 0.02;
+    // socle vitré en gradins, posé entre les voies (pas de test d'emprise : l'îlot a été choisi dégagé)
+    const pw = Math.min(W, D, 0.12);
+    const g = ground(cx, cz, pw, pw, 0);
+    const y0 = g.yc;
+    putAt(B.tBox, bid, cx, g.base, cz, pw, pw, ph + (g.yc - g.base), 0, TW.f006, 0, 0.7, [0.95, 0.98, 1.02], y0);
+    putAt(B.tBox, bid, cx, y0 + ph, cz, pw * 0.8, pw * 0.8, 0.01, 0, TW.f005, 0, 0.7, [1, 1, 1], y0);
+    let y = y0 + ph;
+    const N = 30, s0 = 0.068, shaft = (H - ph) * 0.9;
+    let wx = 0, wz = 0, rot = 0;
+    for (let k = 0; k < N; k++) {
+      const t = k / N;
+      const w = s0 * (1 - 0.5 * Math.pow(t, 1.25));
+      wx = w * 1.5; wz = w * 0.78; rot = 0.25 + t * 2.6;
+      const hh = shaft / N;
+      putAt(B.tCyl, bid, cx, y, cz, wx, wz, hh, rot, TW.f005, 0, 0.75, [0.92, 0.98, 1.06], y0);
+      // étages techniques (refuges) : bandeaux sombres tous les six tronçons
+      if (k % 6 === 5) putAt(B.tCyl, bid, cx, y + hh - 0.004, cz, wx * 1.015, wz * 1.015, 0.004, rot, TW.metal, 0, 0, [1, 1, 1]);
+      y += hh;
+    }
+    emblemTop.v = { x: cx, y, z: cz, w: wx, d: wz, rot };
+  };
+
   /** Immeuble de bureaux de moyenne hauteur (6 à 14 étages). */
   const officeBlock = (x: number, z: number, w: number, d: number, floors: number) => {
     const bid = newBld();
@@ -671,7 +705,7 @@ export function createCities(scene: Scene, grid: Grid, country: CountryDef, bloc
   };
 
   // ---------- parcours des îlots ----------
-  interface Plan { rect: Rect; zone: string; core: number; best: number; district: number; thr: number; nearPort: boolean; x: number; z: number }
+  interface Plan { rect: Rect; zone: string; core: number; best: number; district: number; thr: number; nearPort: boolean; x: number; z: number; i: number; j: number; b0: number; b1: number }
   const plans: Plan[] = [];
   const i0 = Math.ceil(-HALF_W / CELL), i1 = Math.floor(HALF_W / CELL) - 1;
   const j0 = Math.ceil(-HALF_D / CELL), j1 = Math.floor(HALF_D / CELL) - 1;
@@ -684,9 +718,25 @@ export function createCities(scene: Scene, grid: Grid, country: CountryDef, bloc
       if (blocked.has(key(i, j))) continue;
       if (parkMask(country.seed, x, z) > 0.5) continue;
       if (Math.min(grid.sample(x, z), grid.sample(bx0 + 0.02, bz0 + 0.02), grid.sample(bx0 + 0.18, bz0 + 0.02), grid.sample(bx0 + 0.02, bz0 + 0.18), grid.sample(bx0 + 0.18, bz0 + 0.18)) < 0.024) continue;
+      // square de quartier : îlot planté (le sol peint pelouse, allées et bassin ; quelques grands arbres)
+      if (dens > 0.25 && squareCell(country.seed, i, j) && clear(x, z, 0.08, 0.08)) {
+        setCell(i, j, CK.square);
+        const nt = detail ? 14 : 8;
+        for (let k = 0; k < nt; k++) {
+          const a = rnd() * 6.283, rr = 0.035 + rnd() * 0.05;
+          tree(x + Math.cos(a) * rr, z + Math.sin(a) * rr, R(0.014, 0.022));
+        }
+        continue;
+      }
       const p0 = Math.min(1, Math.pow(dens, 0.55) * 1.08);
       const u = rnd();
-      if (u > p0 * GROWTH_CAP) continue;
+      // îlot jamais bâti : lotissement et jardins peints par le sol, quelques arbres
+      const lot = () => {
+        setCell(i, j, CK.lot);
+        const nt = detail ? 3 : 2;
+        for (let k = 0; k < nt; k++) tree(R(bx0 + 0.04, bx0 + 0.16), R(bz0 + 0.04, bz0 + 0.16), R(0.01, 0.016));
+      };
+      if (u > p0 * GROWTH_CAP) { lot(); continue; }
       let district = 0, best = Infinity;
       for (const c of country.cities) { const v = Math.hypot(c.x - x, c.z - z) / c.radius; if (v < best) { best = v; district = c.id; } }
       const dc = country.cities[district];
@@ -709,8 +759,8 @@ export function createCities(scene: Scene, grid: Grid, country: CountryDef, bloc
       else if (dens > 0.33) zone = rnd() < 0.15 ? 'suburb' : 'collectif';
       else zone = 'suburb';
       // qualité basse : moins d'îlots dans le tissu courant (le centre reste complet)
-      if (!['cbd', 'cbd2', 'hauss', 'office'].includes(zone) && rnd() > keep) continue;
-      plans.push({ rect, zone, core: dc.capital ? 1 - dCap / cbdR : 0.4 * (1 - best / 0.16), best, district, thr: u / Math.max(0.01, p0), nearPort, x, z });
+      if (!['cbd', 'cbd2', 'hauss', 'office'].includes(zone) && rnd() > keep) { if (zone !== 'ind') lot(); continue; }
+      plans.push({ rect, zone, core: dc.capital ? 1 - dCap / cbdR : 0.4 * (1 - best / 0.16), best, district, thr: u / Math.max(0.01, p0), nearPort, x, z, i, j, b0: 0, b1: 0 });
     }
   }
   // tours signatures : les îlots les plus centraux du centre d'affaires de la capitale
@@ -744,10 +794,12 @@ export function createCities(scene: Scene, grid: Grid, country: CountryDef, bloc
     curThreshold = pl.thr;
     const r = pl.rect;
     const W = r.x1 - r.x0;
+    pl.b0 = blds.length;
     switch (pl.zone) {
       case 'cbd':
       case 'cbd2': {
         const si = sigSet.get(pl);
+        if (si === 0) { emblem(r, 0.74); break; }
         if (si !== undefined) { skyscraper(r, sigH[si], sigOrder[si]); break; }
         const core = Math.max(0, pl.core);
         const H = pl.zone === 'cbd'
@@ -782,7 +834,9 @@ export function createCities(scene: Scene, grid: Grid, country: CountryDef, bloc
       case 'suburb': suburbBlock(r); break;
       case 'ind': industrialBlock(r, pl.nearPort); break;
     }
+    pl.b1 = blds.length;
   }
+  const planKind = (z: string) => (z === 'cbd' || z === 'cbd2' || z === 'office' ? CK.tall : z === 'hauss' || z === 'ville' ? CK.court : CK.built);
 
   // ---------- envoi au GPU ----------
   const all = Object.values(B);
@@ -817,6 +871,13 @@ export function createCities(scene: Scene, grid: Grid, country: CountryDef, bloc
     }
     box.thinInstanceBufferUpdated('matrix');
     box.thinInstanceRefreshBoundingInfo(false);
+    // carte des îlots : un îlot dont aucun bâtiment n'est encore apparu est peint comme un lotissement
+    for (const pl of plans) {
+      let any = false;
+      for (let b = pl.b0; b < pl.b1 && !any; b++) if (on[b] && !dead.has(b)) any = true;
+      setCell(pl.i, pl.j, any ? planKind(pl.zone) : pl.zone === 'ind' ? CK.none : CK.lot);
+    }
+    commitCells();
   };
   update(country.cities.map(() => 1));
 
@@ -836,6 +897,7 @@ export function createCities(scene: Scene, grid: Grid, country: CountryDef, bloc
   });
 
   const meshes = all.map((b) => b.mesh).filter((m) => (m.thinInstanceCount ?? 0) > 0);
+  if (emblemTop.v) createEmblemCrown(scene, emblemTop.v);
   // halo nocturne : les bâtiments n'ont pas d'émissif Babylon, inutile de les redessiner dans la passe de halo
   for (const l of scene.effectLayers ?? []) if (l instanceof GlowLayer) for (const m of all) l.addExcludedMesh(m.mesh);
   const instances = all.reduce((s, b) => s + b.count, 0);
