@@ -6,6 +6,7 @@ import { mulberry32 } from '../../../shared/noise';
 import { HALF_D, HALF_W, MAP_D, MAP_W, coastX, parkMask, urbanDensity } from '../../../shared/sim/country';
 import type { CountryDef } from '../../../shared/sim/types';
 import { ENV, RES, VS, densify, distToPolyline, forestMask, type Grid } from './terrain';
+import { CI0, CJ0, CNI, CNJ, cellTexture } from './cellmap';
 import { MASK_H, MASK_W, QUAY_HALF, createRoads, getNetwork, riverMask, setTerrainStep } from './roads';
 
 const TEX = (name: string, scene: Scene) => {
@@ -79,6 +80,7 @@ export function createTerrain(scene: Scene, grid: Grid, country: CountryDef, ste
   const mask = RawTexture.CreateLuminanceTexture(riverMask(getNetwork(grid, country)), MASK_W, MASK_H, scene, false, false, Texture.BILINEAR_SAMPLINGMODE);
   mask.wrapU = mask.wrapV = Texture.CLAMP_ADDRESSMODE;
   mat.AddUniform('tRiverMask', 'sampler2D', mask);
+  mat.AddUniform('tCells', 'sampler2D', cellTexture(scene));
   mat.AddUniform('uWinter', 'float', 0);
   mat.AddUniform('uAutumn', 'float', 0);
   mat.AddUniform('uSnow', 'float', 0);
@@ -180,19 +182,109 @@ export function createTerrain(scene: Scene, grid: Grid, country: CountryDef, ste
       st = mix(st, 0.5, clamp(fw / per * 2.0 - 0.5, 0.0, 1.0));
       mk = max(mk, zone * st * 0.95);
     }
-    // sol des îlots (cours minérales, parkings) : asphalte sombre, pour que le bâti se détache vu de loin
+    // --- nature de l'îlot (cellmap.ts) : bâti, centre d'affaires, lotissement peint, square planté ---
+    vec2 ci = floor(p / 0.2);
+    float ck = floor(texture2D(tCells, (ci - vec2(${CI0.toFixed(1)}, ${CJ0.toFixed(1)}) + 0.5) / vec2(${CNI.toFixed(1)}, ${CNJ.toFixed(1)})).r * 6.375 + 0.5);
+    vec2 cq = p - ci * 0.2;                 // position dans l'îlot (0..0,2 km)
+    vec2 ce = min(cq, 0.2 - cq);            // distance aux rues de l'îlot
+    float ch = enHash(ci + 0.37);
+    float ch2 = enHash(ci * 1.7 + 5.1);
+    // verdure urbaine : climat doux, l'hiver la ternit à peine (pelouses, persistants)
+    vec3 lawn = grass * vec3(0.78, 1.08, 0.62);
+    lawn = mix(lawn, lawn * vec3(1.2, 0.95, 0.65), uAutumn * 0.4);
+    lawn = mix(lawn, vec3(dot(lawn, vec3(0.33))) * vec3(1.0, 1.04, 0.86), uWinter * 0.22);
+    vec3 canopyC = vec3(0.16, 0.24, 0.10) * (0.85 + 0.3 * ch2);
+    canopyC = mix(canopyC, vec3(0.30, 0.22, 0.10), uAutumn * 0.5);
+    // houppiers vus du ciel (disques sombres, liseré clair côté soleil)
+    vec2 tg = p / 0.014;
+    vec2 tc = floor(tg);
+    vec2 tj = vec2(enHash(tc + 1.3), enHash(tc + 8.7));
+    vec2 tdv = (fract(tg) - 0.25 - tj * 0.5) * 0.014;
+    float tr = 0.0028 + 0.0022 * enHash(tc + 4.4);
+    float crown = 1.0 - smoothstep(tr - fw * 0.7, tr + fw * 0.7, length(tdv));
+    float crownLit = clamp(0.5 - tdv.x / tr * 0.6 + tdv.y / tr * 0.2, 0.0, 1.0);
+    vec3 crownCol = canopyC * (0.75 + 0.55 * crownLit);
+    float treeH = enHash(tc + 2.2);
+    // sol des îlots bâtis (cours minérales, parkings) : teinte variable d'un îlot à l'autre
     vec3 block = mix(urb * 0.72, vec3(0.36, 0.37, 0.37), 0.4);
+    if (ck > 0.5) block *= (0.86 + 0.28 * ch) * mix(vec3(0.95, 0.98, 1.04), vec3(1.05, 1.0, 0.92), step(0.5, ch2));
+    vec3 inner = block;
+    vec3 innerFar = block;
+    if (ck > 1.5 && ck < 2.5) {
+      // centre d'affaires : parvis en pierre claire et dalles
+      vec3 plaza = mix(pave * 0.75, vec3(0.44, 0.43, 0.42), 0.5) * (0.88 + 0.2 * ch);
+      inner = plaza; innerFar = plaza * 0.92;
+    } else if (ck > 2.5 && ck < 3.5) {
+      // lotissement / petits collectifs peints : toits le long des rues, jardins et arbres au cœur
+      float g = enNoise(p * 600.0) * 0.5 + enNoise(p * 2400.0) * 0.5;
+      vec3 garden = mix(lawn * 0.85, lawn * 1.05, g);
+      vec2 lp = abs(fract(p / 0.019) - 0.5);
+      garden = mix(garden, canopyC * 0.9, step(0.46, max(lp.x, lp.y)) * 0.6); // haies
+      vec3 roofT = ch2 < 0.6 ? vec3(0.62, 0.34, 0.25) : vec3(0.34, 0.35, 0.39);
+      float dense = step(0.56, vUrban);
+      float house = 0.0; vec3 roofC = roofT;
+      if (dense < 0.5) {
+        float lotA = cq.x / 0.019, lotB = cq.y / 0.019;
+        float hA = step(0.019, ce.y) * step(ce.y, 0.031) * step(0.02, ce.x) * step(0.16, fract(lotA)) * step(fract(lotA), 0.8);
+        float hB = step(0.019, ce.x) * step(ce.x, 0.031) * step(0.033, ce.y) * step(0.16, fract(lotB)) * step(fract(lotB), 0.8);
+        float id = hA > 0.5 ? floor(lotA) + cq.y * 7.0 : floor(lotB) + cq.x * 7.0;
+        float hh = enHash(ci + vec2(id, id * 0.37));
+        roofC = hh < 0.62 ? vec3(0.62, 0.34, 0.25) * (0.85 + 0.3 * hh) : vec3(0.33, 0.35, 0.39);
+        float ridge = hA > 0.5 ? step(0.025, ce.y) : step(0.025, ce.x);
+        roofC *= 0.8 + 0.32 * ridge;
+        house = max(hA, hB) * step(0.08, enHash(ci + vec2(id * 1.3, 2.0)));
+        garden = mix(garden, crownCol, crown * step(0.55, treeH) * step(0.04, min(ce.x, ce.y)));
+      } else {
+        // petits collectifs : barres à toit plat le long de deux rues, cour plantée
+        float sA = step(0.02, ce.y) * step(ce.y, 0.036) * step(0.024, ce.x);
+        float sB = step(0.02, ce.x) * step(ce.x, 0.036) * step(0.05, ce.y) * step(0.5, ch);
+        house = max(sA, sB);
+        vec2 rl = abs(fract(p / 0.004) - 0.5);
+        roofC = mix(vec3(0.55, 0.54, 0.52), vec3(0.44, 0.42, 0.40), ch2) * (0.92 + 0.12 * g) * (1.0 - 0.08 * step(0.45, max(rl.x, rl.y)));
+        garden = mix(garden, crownCol, crown * step(0.45, treeH) * step(0.045, min(ce.x, ce.y)));
+      }
+      inner = mix(garden, roofC, house);
+      innerFar = mix(lawn * 0.8, canopyC, 0.25 + 0.3 * ch);
+      innerFar = mix(innerFar, mix(roofT, vec3(0.5, 0.49, 0.47), dense) * 0.9, mix(0.25, 0.4, dense) + 0.15 * ch2);
+      enLight += house * step(0.7, enHash(floor(p / 0.006))) * 0.35;
+    } else if (ck > 3.5 && ck < 4.5) {
+      // square : pelouse, allées en croix et en diagonale, bassin central, grands arbres
+      vec2 c2 = cq - 0.1;
+      float diag = min(abs(c2.x - c2.y), abs(c2.x + c2.y)) * 0.7071;
+      float path = max(1.0 - smoothstep(0.0025, 0.0025 + fw, diag), 1.0 - smoothstep(0.0025, 0.0025 + fw, min(abs(c2.x), abs(c2.y))));
+      float me = min(ce.x, ce.y);
+      path = max(path, step(0.019, me) * (1.0 - step(0.025, me)));
+      float rr = length(c2);
+      vec3 grav = vec3(0.66, 0.60, 0.50) * (0.9 + 0.12 * enNoise(p * 3000.0));
+      vec3 sq = mix(lawn * (0.95 + 0.12 * enNoise(p * 900.0)), grav, clamp(path, 0.0, 1.0));
+      sq = mix(sq, grav, 1.0 - smoothstep(0.022, 0.022 + fw, rr));
+      sq = mix(sq, vec3(0.20, 0.34, 0.42), 1.0 - smoothstep(0.013, 0.013 + fw, rr));
+      sq = mix(sq, crownCol, crown * step(0.3, treeH) * (1.0 - clamp(path, 0.0, 1.0)) * step(0.03, rr));
+      inner = sq;
+      innerFar = mix(lawn * 0.9, canopyC, 0.45);
+      enLight += (1.0 - smoothstep(0.022, 0.03, rr)) * 0.5;
+    } else if (ck > 4.5) {
+      // îlots fermés anciens : cours pavées claires
+      inner = mix(block, pave * 0.85, 0.35);
+      innerFar = inner;
+    }
     vec3 streetCol = mix(asph, vec3(0.92, 0.92, 0.88), mk);
     streetCol = mix(streetCol, veg * vec3(0.8, 1.05, 0.75), step(marks.x, -0.5) * 0.9);
-    vec3 cityCol = block;
+    // motif fin (houppiers, toits, allées) : moyenne au loin pour éviter le moiré
+    float mid = smoothstep(0.0012, 0.004, fw);
+    inner = mix(inner, innerFar, mid);
+    vec3 cityCol = inner;
     cityCol = mix(cityCol, pave * 0.95, walk);
     cityCol = mix(cityCol, streetCol, road);
     // vue lointaine : moyenne du motif pour éviter le moiré
     float far = smoothstep(0.0025, 0.009, fw);
-    cityCol = mix(cityCol, mix(block, asph * 0.9, 0.16), far);
-    // parcs urbains (dans les îlots seulement)
+    cityCol = mix(cityCol, mix(innerFar, asph * 0.9, 0.16), far);
+    // parcs urbains (dans les îlots seulement) : pelouses et masses d'arbres
     float parkK = smoothstep(0.3, 0.6, vPark) * (1.0 - max(road, walk) * (1.0 - far));
-    cityCol = mix(cityCol, veg * vec3(0.85, 1.1, 0.8), parkK);
+    float woods = smoothstep(0.42, 0.62, enFbm(p * 9.0 + 3.0));
+    vec3 parkCol = mix(lawn, canopyC * 1.05, woods * 0.8);
+    parkCol = mix(parkCol, crownCol, crown * step(0.5, treeH) * (1.0 - mid) * (1.0 - woods));
+    cityCol = mix(cityCol, parkCol, parkK);
     col = mix(col, cityCol, urban * 0.92);
     // éclairage public : flaques de lumière le long des rues
     float pool = 0.0;
@@ -204,7 +296,7 @@ export function createTerrain(scene: Scene, grid: Grid, country: CountryDef, ste
       float f = (fract(along / sp + 0.5) - 0.5) * sp;
       pool = max(pool, exp(-(f * f) / 0.00006) * exp(-(across * across) / mix(0.00005, 0.00016, boul)));
     }
-    enLight = urban * (1.0 - vPark * 0.7) * ((0.06 + 0.9 * pool * (1.0 - far)) * max(road, walk) + 0.05 + far * 0.12);
+    enLight = urban * (1.0 - vPark * 0.7) * ((0.06 + 0.9 * pool * (1.0 - far)) * max(road, walk) + 0.05 + far * 0.12 + enLight * (1.0 - far * 0.6) * (1.0 - max(road, walk)));
     col *= 1.0 - uWet * 0.12;
     diffuseColor = col;
   `);
