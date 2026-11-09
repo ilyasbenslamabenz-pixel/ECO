@@ -3,3 +3,6 @@ client/dist
 server/data
 *.log
 __pycache__
+
+# copies de travail des agents Claude Code
+.claude/worktrees/
