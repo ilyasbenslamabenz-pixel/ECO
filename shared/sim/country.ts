@@ -167,9 +167,26 @@ export function generateCountry(cfg: CountryConfig): CountryDef {
   // Quartiers
   const names = makeNames(seed, cfg.metropoles + cfg.villes + cfg.communes + 10);
   let nameIdx = 0;
+  // La capitale est une ville d'estuaire : son centre est posé sur la rive du fleuve principal, à environ 5 km de
+  // l'embouchure, pour que le centre d'affaires, le fleuve, le port et la mer se voient ensemble.
   let ccx = 1.5 + rnd() * 2;
   let ccz = 1 + rnd() * 2;
-  for (let t = 0; t < 50 && !land(ccx, ccz, 1); t++) { ccx += 0.7; ccz += (rnd() - 0.5) * 2; }
+  {
+    const main = country.rivers[0].points;
+    let best = -1, bestD = Infinity;
+    for (let i = 1; i < main.length - 1; i++) { const d = Math.abs(main[i][0] - coastX(seed, main[i][1]) - 5); if (d < bestD) { bestD = d; best = i; } }
+    if (best > 0) {
+      const [ax, az] = main[best - 1], [bx, bz] = main[best + 1];
+      const L = Math.hypot(bx - ax, bz - az) || 1;
+      const nx = -(bz - az) / L, nz = (bx - ax) / L;
+      const [mx, mz] = main[best];
+      search: for (const side of [1, -1]) for (const off of [1.1, 1.4, 1.8]) {
+        const x = mx + nx * off * side, z = mz + nz * off * side;
+        if (land(x, z, 0.5)) { ccx = x; ccz = z; break search; }
+      }
+    }
+  }
+  for (let t = 0; t < 50 && !land(ccx, ccz, 0.5); t++) { ccx += 0.7; ccz += (rnd() - 0.5) * 2; }
   const addCity = (kind: CityKind, x: number, z: number, capital = false) => {
     const id = country.cities.length;
     const coastal = x - coastX(seed, z) < 3;
@@ -203,7 +220,7 @@ export function generateCountry(cfg: CountryConfig): CountryDef {
   // le premier grand quartier secondaire est le quartier portuaire, sur le littoral
   if (cfg.metropoles > 1) {
     for (let t = 0; t < 300; t++) {
-      const z = ccz - 5 + rnd() * 10;
+      const z = ccz + (t % 2 ? 1 : -1) * (5 + rnd() * 3.5); // port voisin du centre, de part ou d'autre de l'estuaire
       const x = coastX(seed, z) + 2.4;
       if (land(x, z, 0.5) && country.cities.every((c) => Math.hypot(c.x - x, c.z - z) > c.radius + 2.8)) { addCity('metropole', x, z); break; }
     }
