@@ -1,10 +1,10 @@
 // Non-régression de l'équilibre de jeu : des joueurs-robots déterministes (tests/playtestLib.ts) jouent plusieurs
 // années et l'on vérifie, avec des bornes LARGES, les grandes intentions de design (docs/EQUILIBRAGE.md) :
 // l'inaction est sanctionnée, un joueur actif réussit environ une mission sur deux, le jalon climat 2035 est à portée
-// d'un jeu équilibré, la dépense sans compter mène au défaut, l'austérité est impopulaire, aucune stratégie isolée ne
-// suffit. Ces tests ne figent pas des valeurs exactes : un réglage qui les fait échouer change l'expérience de jeu.
+// d'un jeu équilibré et le jalon 2050 d'un jeu expert, la dépense sans compter mène au défaut, l'austérité est viable mais
+// coûteuse, aucune stratégie isolée ne suffit, et la satisfaction réagit lisiblement aux décisions. Ces tests ne figent pas des valeurs exactes : un réglage qui les fait échouer change l'expérience de jeu.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { applyServiceAction, tick } from '../shared/sim/engine';
+import { applyServiceAction, schedulePolicy, tick } from '../shared/sim/engine';
 import { newGame, runStrategy, type RunResult, type Strategy } from './playtestLib';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -15,7 +15,8 @@ beforeAll(() => {
   R.passif = runStrategy('passif', 16);
   R.besoins = runStrategy('besoins', 16);
   R.climat = runStrategy('climat', 16);
-  R.equilibre = runStrategy('equilibre', 16);
+  R.equilibre = runStrategy('equilibre', 22); // jusqu'au bilan du jalon 2050 (décembre 2050)
+  R.expert = runStrategy('expert', 22);
   R.austerite = runStrategy('austerite', 8);
   R.depensier = runStrategy('depensier', 10);
 }, 240_000);
@@ -47,10 +48,12 @@ describe('équilibre : inaction et stratégies isolées', () => {
     expect(r.defeats.some((d) => d.reason === 'defaut')).toBe(true);
   });
 
-  it('l\'austérité est impopulaire', () => {
+  it('l\'austérité est viable mais coûteuse : impopulaire, elle passe la première élection et perd la suivante', () => {
     const r = R.austerite;
     expect(r.at[5].satisfaction).toBeLessThan(R.passif.at[5].satisfaction - 3);
+    expect(lostElectionAt(r)).toBeGreaterThan(4 * 12); // les comptes redressés lui valent le crédit des électeurs centristes
     expect(lostElectionAt(r)).toBeLessThanOrEqual(8 * 12);
+    expect(r.at[5].debt).toBeLessThan(R.passif.at[5].debt - 0.03); // … et elle désendette
   });
 });
 
@@ -78,6 +81,15 @@ describe('équilibre : joueur actif', () => {
     expect(lostElectionAt(r)).toBeGreaterThan(lostElectionAt(R.passif));
     expect(r.defeats.some((d) => d.reason === 'defaut')).toBe(false);
     expect(r.maxDebt).toBeLessThan(1.0);
+    // le joueur expert fait mieux que l'équilibré, sans garantie absolue
+    expect(R.expert.successRate).toBeGreaterThan(r.successRate);
+  });
+
+  it('facteur 4 : le joueur expert atteint le jalon 2050, le joueur équilibré s\'en approche', () => {
+    expect(R.expert.milestones[2050]).toBe('atteint');
+    expect(R.equilibre.milestoneGap[2050]).toBeLessThan(5); // « proche » au moins
+    expect(R.passif.milestones[2035]).toBe('manque');
+    expect(R.expert.defeats.some((d) => d.reason === 'defaut')).toBe(false);
   });
 
   it('les crises restent occasionnelles (≈ 0,3 à 1 par an)', () => {
@@ -89,6 +101,45 @@ describe('équilibre : joueur actif', () => {
 });
 
 describe('équilibre : retour rapide des décisions', () => {
+  it('la satisfaction réagit aux décisions : effet d\'annonce en 3 mois, effet de fond à 12 mois', () => {
+    const A = newGame();
+    for (let i = 0; i < 3; i++) tick(A);
+    const B = clone(A);
+    const C = clone(A);
+    expect(applyServiceAction(B, { type: 'recruter', service: 'sante', role: 'medecins', count: Math.round(B.health!.doctors.staff * 0.08) }).ok).toBe(true);
+    applyServiceAction(C, { type: 'recruter', service: 'securite', role: 'policiers', count: Math.round(C.security!.police.staff * 0.08) });
+    tick(A); tick(B); tick(C);
+    // le mois suivant, la décision apparaît dans « pourquoi la satisfaction bouge »
+    const d = B.satisfaction.drivers!.find((x) => x.id === 'sante')!;
+    expect(d.announce).toBeGreaterThan(0.2);
+    expect(d.delta).toBeGreaterThan(0.05);
+    for (let i = 0; i < 2; i++) { tick(A); tick(B); tick(C); }
+    expect(B.satisfaction.overall - A.satisfaction.overall).toBeGreaterThan(0.3); // 3 mois (moteur d'origine : +0,01)
+    for (let i = 0; i < 9; i++) { tick(A); tick(B); tick(C); }
+    expect(B.satisfaction.overall - A.satisfaction.overall).toBeGreaterThan(0.8); // 12 mois (moteur d'origine : +0,2)
+    expect(C.satisfaction.overall - A.satisfaction.overall).toBeGreaterThan(0.4); // 12 mois (moteur d'origine : +0,09)
+  });
+
+  it('le calibrage de départ est intact : ressenti = mesuré à la création, pas d\'impulsion', () => {
+    const S = newGame();
+    for (const [k, v] of Object.entries(S.satisfaction.factors)) expect(S.satisfaction.felt![k]).toBeCloseTo(v, 9);
+    expect(S.satisfaction.overall).toBeCloseTo(65.8, 0);
+    for (const d of S.satisfaction.drivers!) { expect(d.level).toBeCloseTo(0, 9); expect(d.announce).toBeCloseTo(0, 9); }
+  });
+
+  it('une coupe budgétaire est ressentie tout de suite, puis l\'accoutumance en absorbe une partie', () => {
+    const A = newGame();
+    for (let i = 0; i < 3; i++) tick(A);
+    const B = clone(A);
+    const p = clone(B.policy);
+    for (const k of Object.keys(p.budget) as (keyof typeof p.budget)[]) p.budget[k] *= 0.96;
+    schedulePolicy(B, p);
+    const gap: number[] = [];
+    for (let m = 1; m <= 48; m++) { tick(A); tick(B); gap[m] = B.satisfaction.overall - A.satisfaction.overall; }
+    expect(gap[3]).toBeLessThan(-0.8);
+    expect(gap[48]).toBeGreaterThan(gap[12]); // accoutumance : la colère retombe en partie
+  });
+
   it('un recrutement de médecins proposé par le diagnostic améliore les soins en moins d\'un an', () => {
     const A = newGame();
     for (let i = 0; i < 3; i++) tick(A);
