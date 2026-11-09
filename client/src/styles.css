@@ -709,3 +709,4 @@ input[type='range']:focus-visible::-webkit-slider-thumb { outline: 2px solid var
 .tw-row em { font-style: normal; color: var(--muted); white-space: nowrap; }
 .tw-row .meter { min-width: 0; }
 @media (prefers-reduced-motion: reduce) { .spot-2 .spot-pin { animation: none; } }
+.tableau-fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }

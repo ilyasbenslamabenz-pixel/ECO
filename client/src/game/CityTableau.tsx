@@ -8,6 +8,8 @@ import { useStore, type Panel } from '../store';
 import { useNeeds } from '../ui/Besoins';
 import { Icon } from '../ui/Icon';
 import { monthLabel } from '../ui/charts';
+import { TableauFx } from './TableauFx';
+import { weatherFor } from './life';
 
 const SRC = '/assets/tableau/ville.jpg';
 const RATIO = 1680 / 793; // largeur / hauteur de l'image recadrée
@@ -32,6 +34,7 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 export function CityTableau() {
   const snap = useStore((s) => s.snap);
+  const country = useStore((s) => s.country);
   const panel = useStore((s) => s.panel);
   const timeMode = useStore((s) => s.settings.timeMode);
   const set = useStore((s) => s.set);
@@ -115,6 +118,9 @@ export function CityTableau() {
           {works.length > 4 && <button className="link small" onClick={() => set({ panel: 'besoins' })}>+ {works.length - 4} autres</button>}
         </aside>
       </div>
+      <TableauFx left={left} top={top} W={W} H={H} night={timeMode === 'night'}
+        weather={country && snap ? weatherFor(country.seed, snap.month) : 'clair'}
+        activity={snap ? snap.accounts.gdpReal / Math.max(1, snap.baseline.gdpReal) : 1} />
       <div className="tableau-top" />
     </div>
   );
