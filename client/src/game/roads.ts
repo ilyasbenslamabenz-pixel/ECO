@@ -1058,7 +1058,7 @@ export function createRoads(scene: Scene, grid: Grid, country: CountryDef) {
     vec3 sc = texture2D(tStone, vSuv).rgb;
     float kS = floor(vSurf + 0.5);
     // promenade des quais : pavés de grès chauds, grandes dalles jointoyées, bordure de granit le long du parapet
-    vec3 pv = mix(texture2D(tPave, vPositionW.xz / 0.0035).rgb, vec3(0.66, 0.62, 0.55), 0.4) * vec3(1.06, 1.0, 0.9);
+    vec3 pv = mix(texture2D(tPave, vPositionW.xz / 0.0035).rgb, vec3(0.56, 0.54, 0.50), 0.45) * vec3(1.02, 0.98, 0.92);
     vec2 sl = abs(fract(vPositionW.xz / 0.0022) - 0.5);
     pv *= 1.0 - 0.16 * smoothstep(0.44, 0.49, max(sl.x, sl.y));
     vec3 gr = texture2D(tGrassQ, vPositionW.xz * 4.0).rgb * vec3(0.55, 0.68, 0.45);
@@ -1067,9 +1067,9 @@ export function createRoads(scene: Scene, grid: Grid, country: CountryDef) {
   stoneMat.Fragment_Before_FragColor(/* glsl */ `
     // mise en lumière chaude de la pierre et des promenades la nuit
     // ponts : tympans éclairés par en dessous (plus vifs près de l'eau), voûtes des arches embrasées
-    float lit = kS < 0.5 ? 0.55 : kS < 1.5 ? 0.45 : kS < 2.5 ? 0.05 : kS < 3.5 ? 0.0 : kS < 4.5 ? 0.7 + 1.1 * clamp(vSuv.y * 0.6, 0.0, 1.0) : 2.2;
+    float lit = kS < 0.5 ? 0.55 : kS < 1.5 ? 0.45 : kS < 2.5 ? 0.05 : kS < 3.5 ? 0.0 : kS < 4.5 ? 0.45 + 0.7 * clamp(vSuv.y * 0.6, 0.0, 1.0) : 1.5;
     color.rgb += uNightS * lit * diffuseColor * vec3(1.0, 0.72, 0.42);
-    if (kS > 4.5) color.rgb += uNightS * vec3(0.35, 0.22, 0.1);
+    if (kS > 4.5) color.rgb += uNightS * vec3(0.22, 0.14, 0.06);
   `);
   stoneMat.onBindObservable.add(() => { stoneMat.getEffect()?.setFloat('uNightS', ENV.night); });
   stoneMesh.material = stoneMat;
@@ -1090,7 +1090,7 @@ export function createRoads(scene: Scene, grid: Grid, country: CountryDef) {
         const jit = (h(Math.floor(v * 40) + 7) - 0.5) * 0.25;
         const k = Math.exp(-(((u - 0.5 - jit) / 0.22) ** 2)) * Math.pow(1 - v, 1.4) * ripple;
         const o = (y * 32 + x) * 4;
-        img.data[o] = 255 * Math.min(1, k); img.data[o + 1] = 190 * Math.min(1, k); img.data[o + 2] = 110 * Math.min(1, k); img.data[o + 3] = 255;
+        img.data[o] = 230 * Math.min(1, k); img.data[o + 1] = 160 * Math.min(1, k); img.data[o + 2] = 80 * Math.min(1, k); img.data[o + 3] = 255;
       }
     }
     c.putImageData(img, 0, 0);
@@ -1109,7 +1109,7 @@ export function createRoads(scene: Scene, grid: Grid, country: CountryDef) {
     gm.material = gmMat;
     excludeFromGlow(scene, gm);
     scene.onBeforeRenderObservable.add(() => {
-      const n = Math.min(1.4, ENV.night * 2.2);
+      const n = Math.min(0.9, ENV.night * 1.3);
       gmMat.emissiveColor.set(n, n, n);
       gm.setEnabled(n > 0.01);
     });

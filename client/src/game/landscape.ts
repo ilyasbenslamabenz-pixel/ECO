@@ -244,9 +244,9 @@ export function createTerrain(scene: Scene, grid: Grid, country: CountryDef, ste
         garden = mix(garden, crownCol, crown * step(0.45, treeH) * step(0.045, min(ce.x, ce.y)));
       }
       inner = mix(garden, roofC, house);
-      innerFar = mix(lawn * 0.8, canopyC, 0.25 + 0.3 * ch);
-      innerFar = mix(innerFar, mix(roofT, vec3(0.5, 0.49, 0.47), dense) * 0.9, mix(0.25, 0.4, dense) + 0.15 * ch2);
-      enLight += house * step(0.7, enHash(floor(p / 0.006))) * 0.35;
+      innerFar = mix(lawn * 0.8, canopyC, 0.32 + 0.12 * ch);
+      innerFar = mix(innerFar, mix(roofT, vec3(0.5, 0.49, 0.47), dense) * 0.9, mix(0.28, 0.4, dense) + 0.06 * ch2);
+      enLight += house * step(0.7, enHash(floor(p / 0.006))) * 0.35 + smoothstep(0.0025, 0.009, fw) * 0.3 * (0.5 + ch2);
     } else if (ck > 3.5 && ck < 4.5) {
       // square : pelouse, allées en croix et en diagonale, bassin central, grands arbres
       vec2 c2 = cq - 0.1;
@@ -261,7 +261,7 @@ export function createTerrain(scene: Scene, grid: Grid, country: CountryDef, ste
       sq = mix(sq, vec3(0.20, 0.34, 0.42), 1.0 - smoothstep(0.013, 0.013 + fw, rr));
       sq = mix(sq, crownCol, crown * step(0.3, treeH) * (1.0 - clamp(path, 0.0, 1.0)) * step(0.03, rr));
       inner = sq;
-      innerFar = mix(lawn * 0.9, canopyC, 0.45);
+      innerFar = mix(lawn * 0.75, canopyC, 0.6);
       enLight += (1.0 - smoothstep(0.022, 0.03, rr)) * 0.5;
     } else if (ck > 4.5) {
       // îlots fermés anciens : cours pavées claires

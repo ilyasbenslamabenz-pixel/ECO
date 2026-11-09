@@ -232,6 +232,10 @@ export function buildingMaterial(scene: Scene, name: string, o: MatOptions) {
     if (gMask > 0.01) {
       vec3 nR = normalize(normalW + T * pj.x + Bv * pj.y);
       vec3 Rf = reflect(-viewDirectionW, nR);
+      // vue aérienne : les étages bas reflètent la ville sombre, les étages hauts l'horizon embrasé
+      // (dégradé vertical des tours de verre au couchant)
+      float hAbove = clamp((vPositionW.y - vBase) / 0.28, 0.0, 1.0);
+      Rf = normalize(vec3(Rf.x, Rf.y + hAbove * 0.22 * step(0.6, gMask), Rf.z));
       // nuages du ciel HDR (modulation du reflet)
       float cloud = dot(textureCube(envTex, vec3(Rf.x, abs(Rf.y) * 0.9 + 0.04, Rf.z)).rgb, vec3(0.33));
       vec3 sd = normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + vec3(1e-4));
@@ -246,7 +250,7 @@ export function buildingMaterial(scene: Scene, name: string, o: MatOptions) {
       float mu = max(dot(Rf, uSunDir), 0.0);
       env += uSunCol * (pow(mu, 6.0) * 0.55 + pow(mu, 40.0) * 0.9) * smoothstep(-0.05, 0.02, Rf.y);
       float fres = 0.1 + 0.9 * pow(1.0 - max(dot(nR, viewDirectionW), 0.0), 3.0);
-      float k = clamp(gMask * mix(0.6, 1.0, fres) * ${refl}, 0.0, 1.0);
+      float k = clamp(gMask * mix(0.6, 1.0, fres) * ${refl}, 0.0, 0.82); // les fenêtres restent lisibles sous le reflet
       color.rgb = mix(color.rgb, env * mix(vec3(1.0), vT.rgb, 0.7 * step(0.6, gMask)), k);
       // reflet spéculaire du disque solaire, élargi par le gauchissement des panneaux
       color.rgb += uSunCol * (pow(mu, 260.0) * 3.0 + pow(mu, 90.0) * 0.8) * gMask;
