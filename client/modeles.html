@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ECO NATION — bibliothèque de modèles 3D</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b1220; color: #dde; font: 13px system-ui, sans-serif; overflow: hidden; }
+      canvas { width: 100%; height: 100%; display: block; outline: none; }
+      #panneau { position: absolute; top: 8px; left: 8px; background: #0b1220cc; padding: 8px 10px; border-radius: 6px; max-width: 360px; }
+      button { margin-right: 6px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="rendu"></canvas>
+    <div id="panneau">
+      <b>Bibliothèque de modèles</b> — <span id="etat">chargement…</span><br />
+      <button id="jour">Jour</button><button id="nuit">Nuit</button>
+    </div>
+    <script type="module" src="/src/modelsDemo.ts"></script>
+  </body>
+</html>

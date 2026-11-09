@@ -1,0 +1,1061 @@
+{
+  "version": 1,
+  "description": "Bibliothèque de modèles 3D d'ECO NATION, générée par eco-nation/tools/blender/ (Blender headless). Unités : mètres ; Y en haut ; avant vers +Z (Babylon).",
+  "convention_emissive": {
+    "attribut": "TEXCOORD_0 (uv), composante u = code entier",
+    "codes": {
+      "1": "phare",
+      "2": "feu_arriere",
+      "3": "vitrage",
+      "4": "gyrophare",
+      "5": "orange",
+      "6": "vert",
+      "7": "flash",
+      "8": "eclairage",
+      "9": "vitrage_sombre"
+    },
+    "couleurs_srgb": {
+      "1": [
+        1.0,
+        0.95,
+        0.82
+      ],
+      "2": [
+        1.0,
+        0.08,
+        0.05
+      ],
+      "3": [
+        1.0,
+        0.82,
+        0.52
+      ],
+      "4": [
+        0.15,
+        0.35,
+        1.0
+      ],
+      "5": [
+        1.0,
+        0.62,
+        0.1
+      ],
+      "6": [
+        0.1,
+        1.0,
+        0.35
+      ],
+      "7": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "8": [
+        1.0,
+        0.86,
+        0.62
+      ],
+      "9": [
+        0.25,
+        0.32,
+        0.4
+      ]
+    }
+  },
+  "modeles": [
+    {
+      "id": "abribus",
+      "fichier": "abribus.glb",
+      "categorie": "mobilier_urbain",
+      "dimensions_m": {
+        "largeur": 4.8,
+        "hauteur": 2.78,
+        "longueur": 1.85
+      },
+      "triangles": 188,
+      "triangles_par_noeud": {
+        "abribus": 188
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        3,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 17800,
+      "source": "Généré procéduralement (eco-nation/tools/blender/mobilier_toiture.py)",
+      "licence": "CC0",
+      "notes": "Abribus 4,6 m, parois vitrées, panneau publicitaire rétroéclairé."
+    },
+    {
+      "id": "ambulance",
+      "fichier": "ambulance.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.33,
+        "hauteur": 2.62,
+        "longueur": 5.44
+      },
+      "triangles": 776,
+      "triangles_par_noeud": {
+        "ambulance": 776
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        4,
+        5,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 57100,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Fourgon blanc à bandes jaunes, gyrophares bleus."
+    },
+    {
+      "id": "arbre_parc_large",
+      "fichier": "arbre_parc_large.glb",
+      "categorie": "arbre",
+      "dimensions_m": {
+        "largeur": 18.46,
+        "hauteur": 16.96,
+        "longueur": 14.67
+      },
+      "triangles": 381,
+      "triangles_par_noeud": {
+        "lod0": 381,
+        "lod1": 141
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [
+        {
+          "noeud": "lod0",
+          "triangles": 381,
+          "usage": "proche"
+        },
+        {
+          "noeud": "lod1",
+          "triangles": 141,
+          "usage": "lointain (au-delà d'environ 300 m)"
+        }
+      ],
+      "codes_emissifs": [],
+      "peignable": false,
+      "taille_octets": 75528,
+      "source": "Dérivé de Poly Haven « jacaranda_tree » (CC0) : enveloppe du feuillage + tronc décimé",
+      "licence": "CC0",
+      "notes": "Grand feuillu de parc (~16 m, houppier étalé de 20 m)."
+    },
+    {
+      "id": "arbre_parc_rond",
+      "fichier": "arbre_parc_rond.glb",
+      "categorie": "arbre",
+      "dimensions_m": {
+        "largeur": 5.29,
+        "hauteur": 9.14,
+        "longueur": 7.7
+      },
+      "triangles": 390,
+      "triangles_par_noeud": {
+        "lod0": 390,
+        "lod1": 136
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [
+        {
+          "noeud": "lod0",
+          "triangles": 390,
+          "usage": "proche"
+        },
+        {
+          "noeud": "lod1",
+          "triangles": 136,
+          "usage": "lointain (au-delà d'environ 300 m)"
+        }
+      ],
+      "codes_emissifs": [],
+      "peignable": false,
+      "taille_octets": 90816,
+      "source": "Dérivé de Poly Haven « tree_small_02 » (CC0, ×2) : enveloppe du feuillage + tronc décimé",
+      "licence": "CC0",
+      "notes": "Feuillu de parc au houppier rond (~9 m)."
+    },
+    {
+      "id": "arbre_peuplier",
+      "fichier": "arbre_peuplier.glb",
+      "categorie": "arbre",
+      "dimensions_m": {
+        "largeur": 4.72,
+        "hauteur": 22.58,
+        "longueur": 4.78
+      },
+      "triangles": 192,
+      "triangles_par_noeud": {
+        "lod0": 192,
+        "lod1": 88
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [
+        {
+          "noeud": "lod0",
+          "triangles": 192,
+          "usage": "proche"
+        },
+        {
+          "noeud": "lod1",
+          "triangles": 88,
+          "usage": "lointain (au-delà d'environ 300 m)"
+        }
+      ],
+      "codes_emissifs": [],
+      "peignable": false,
+      "taille_octets": 36232,
+      "source": "Généré procéduralement (polyhaven.py, fonction peuplier)",
+      "licence": "CC0",
+      "notes": "Peuplier d'Italie (~22 m), silhouette fusiforme des berges."
+    },
+    {
+      "id": "arbre_platane",
+      "fichier": "arbre_platane.glb",
+      "categorie": "arbre",
+      "dimensions_m": {
+        "largeur": 12.31,
+        "hauteur": 16.14,
+        "longueur": 11.07
+      },
+      "triangles": 382,
+      "triangles_par_noeud": {
+        "lod0": 382,
+        "lod1": 90
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [
+        {
+          "noeud": "lod0",
+          "triangles": 382,
+          "usage": "proche"
+        },
+        {
+          "noeud": "lod1",
+          "triangles": 90,
+          "usage": "lointain (au-delà d'environ 300 m)"
+        }
+      ],
+      "codes_emissifs": [],
+      "peignable": false,
+      "taille_octets": 56428,
+      "source": "Généré procéduralement (polyhaven.py, fonction platane)",
+      "licence": "CC0",
+      "notes": "Platane d'alignement (~16 m), houppier en masses lobées."
+    },
+    {
+      "id": "avion_gros_porteur",
+      "fichier": "avion_gros_porteur.glb",
+      "categorie": "avion",
+      "dimensions_m": {
+        "largeur": 60.02,
+        "hauteur": 16.57,
+        "longueur": 63.78
+      },
+      "triangles": 1120,
+      "triangles_par_noeud": {
+        "avion_gros_porteur": 1120
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        3,
+        6,
+        7,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 72960,
+      "source": "Généré procéduralement (eco-nation/tools/blender/avions.py)",
+      "licence": "CC0",
+      "notes": "Gros-porteur bimoteur type A330-300 : 63,7 m, 60,3 m d'envergure."
+    },
+    {
+      "id": "avion_moyen_courrier",
+      "fichier": "avion_moyen_courrier.glb",
+      "categorie": "avion",
+      "dimensions_m": {
+        "largeur": 35.52,
+        "hauteur": 11.48,
+        "longueur": 37.77
+      },
+      "triangles": 952,
+      "triangles_par_noeud": {
+        "avion_moyen_courrier": 952
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        3,
+        6,
+        7,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 60440,
+      "source": "Généré procéduralement (eco-nation/tools/blender/avions.py)",
+      "licence": "CC0",
+      "notes": "Moyen-courrier type A320 : 37,6 m de long, 35,8 m d'envergure."
+    },
+    {
+      "id": "bateau_mouche",
+      "fichier": "bateau_mouche.glb",
+      "categorie": "navire",
+      "dimensions_m": {
+        "largeur": 8.3,
+        "hauteur": 7.1,
+        "longueur": 46.0
+      },
+      "triangles": 480,
+      "triangles_par_noeud": {
+        "bateau_mouche": 480
+      },
+      "origine": "ligne_de_flottaison",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        2,
+        3,
+        6,
+        8
+      ],
+      "peignable": false,
+      "taille_octets": 39472,
+      "source": "Généré procéduralement (eco-nation/tools/blender/navires.py)",
+      "licence": "CC0",
+      "notes": "Bateau-promenade de rivière 46 × 8,2 m, verrière éclairée."
+    },
+    {
+      "id": "berline",
+      "fichier": "berline.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.1,
+        "hauteur": 1.45,
+        "longueur": 4.83
+      },
+      "triangles": 608,
+      "triangles_par_noeud": {
+        "berline": 608
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        9
+      ],
+      "peignable": true,
+      "taille_octets": 42004,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Berline 4,8 m (carrosserie gris clair à teinter)."
+    },
+    {
+      "id": "bus_articule",
+      "fichier": "bus_articule.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.58,
+        "hauteur": 3.36,
+        "longueur": 18.06
+      },
+      "triangles": 1120,
+      "triangles_par_noeud": {
+        "bus_articule": 1120
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        3,
+        5,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 80212,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Bus urbain articulé 18 m, bandeaux vitrés éclairés."
+    },
+    {
+      "id": "camion_porteur",
+      "fichier": "camion_porteur.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.86,
+        "hauteur": 3.58,
+        "longueur": 8.7
+      },
+      "triangles": 680,
+      "triangles_par_noeud": {
+        "camion_porteur": 680
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 51012,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Porteur 19 t à caisse fermée, cabine avancée."
+    },
+    {
+      "id": "chateau_eau",
+      "fichier": "chateau_eau.glb",
+      "categorie": "toiture",
+      "dimensions_m": {
+        "largeur": 4.91,
+        "hauteur": 9.01,
+        "longueur": 5.04
+      },
+      "triangles": 300,
+      "triangles_par_noeud": {
+        "chateau_eau": 300
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [],
+      "peignable": false,
+      "taille_octets": 18244,
+      "source": "Généré procéduralement (eco-nation/tools/blender/mobilier_toiture.py)",
+      "licence": "CC0",
+      "notes": "Château d'eau de toiture en bois cerclé, 9 m de haut."
+    },
+    {
+      "id": "citadine",
+      "fichier": "citadine.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.0,
+        "hauteur": 1.5,
+        "longueur": 3.98
+      },
+      "triangles": 604,
+      "triangles_par_noeud": {
+        "citadine": 604
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        9
+      ],
+      "peignable": true,
+      "taille_octets": 41456,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Citadine 3,95 m, hayon."
+    },
+    {
+      "id": "climatiseur",
+      "fichier": "climatiseur.glb",
+      "categorie": "toiture",
+      "dimensions_m": {
+        "largeur": 0.78,
+        "hauteur": 0.6,
+        "longueur": 0.36
+      },
+      "triangles": 259,
+      "triangles_par_noeud": {
+        "climatiseur": 259
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [],
+      "peignable": false,
+      "taille_octets": 33640,
+      "source": "Poly Haven « exterior_aircon_unit » (CC0), décimé, texture cuite en couleurs de sommets.",
+      "licence": "CC0",
+      "notes": "Poly Haven « exterior_aircon_unit » (CC0), décimé, texture cuite en couleurs de sommets."
+    },
+    {
+      "id": "eolienne",
+      "fichier": "eolienne.glb",
+      "categorie": "energie",
+      "dimensions_m": {
+        "largeur": 93.88,
+        "hauteur": 149.0,
+        "longueur": 14.4
+      },
+      "triangles": 404,
+      "triangles_par_noeud": {
+        "mat": 92,
+        "nacelle": 68,
+        "rotor": 244
+      },
+      "origine": "sol",
+      "parties_animees": [
+        {
+          "nom": "nacelle",
+          "type": "rotation",
+          "axe": "y",
+          "pivot_m": [
+            0.0,
+            93.0,
+            0.0
+          ],
+          "description": "Lacet de la nacelle (et du rotor) autour de l'axe vertical."
+        },
+        {
+          "nom": "rotor",
+          "type": "rotation",
+          "axe": "z",
+          "pivot_m": [
+            0.0,
+            95.0,
+            5.6
+          ],
+          "vitesse_tr_min": [
+            6,
+            14
+          ],
+          "description": "Rotation du rotor autour de l'axe avant-arrière (Z Babylon)."
+        }
+      ],
+      "lods": [],
+      "codes_emissifs": [
+        2
+      ],
+      "peignable": false,
+      "taille_octets": 25836,
+      "source": "Généré procéduralement (eco-nation/tools/blender/port_energie.py)",
+      "licence": "CC0",
+      "notes": "Éolienne terrestre de 150 m en bout de pale : moyeu à 95 m, rotor de 110 m."
+    },
+    {
+      "id": "feu_tricolore",
+      "fichier": "feu_tricolore.glb",
+      "categorie": "mobilier_urbain",
+      "dimensions_m": {
+        "largeur": 0.44,
+        "hauteur": 3.27,
+        "longueur": 0.36
+      },
+      "triangles": 208,
+      "triangles_par_noeud": {
+        "feu_tricolore": 208
+      },
+      "origine": "sol",
+      "parties_animees": [
+        {
+          "nom": "lampes",
+          "type": "emissif",
+          "description": "Rouge = code 2, orange = code 5, vert = code 6 : alterner l'émission."
+        }
+      ],
+      "lods": [],
+      "codes_emissifs": [
+        2,
+        5,
+        6
+      ],
+      "peignable": false,
+      "taille_octets": 18416,
+      "source": "Généré procéduralement (eco-nation/tools/blender/mobilier_toiture.py)",
+      "licence": "CC0",
+      "notes": "Feu tricolore sur mât de 3,2 m, lampes à codes distincts."
+    },
+    {
+      "id": "lampadaire",
+      "fichier": "lampadaire.glb",
+      "categorie": "mobilier_urbain",
+      "dimensions_m": {
+        "largeur": 0.36,
+        "hauteur": 8.35,
+        "longueur": 2.51
+      },
+      "triangles": 120,
+      "triangles_par_noeud": {
+        "lampadaire": 120
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        8
+      ],
+      "peignable": false,
+      "taille_octets": 11636,
+      "source": "Généré procéduralement (eco-nation/tools/blender/mobilier_toiture.py)",
+      "licence": "CC0",
+      "notes": "Lampadaire routier 8 m à crosse, lanterne LED (code 8)."
+    },
+    {
+      "id": "lampadaire_classique",
+      "fichier": "lampadaire_classique.glb",
+      "categorie": "mobilier_urbain",
+      "dimensions_m": {
+        "largeur": 0.4,
+        "hauteur": 3.87,
+        "longueur": 0.35
+      },
+      "triangles": 146,
+      "triangles_par_noeud": {
+        "lampadaire_classique": 146
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        8
+      ],
+      "peignable": false,
+      "taille_octets": 14376,
+      "source": "Lanterne : Poly Haven « street_lamp_01 » (CC0) décimée, verre émissif (code 8) ; fût tourné généré.",
+      "licence": "CC0",
+      "notes": "Lanterne : Poly Haven « street_lamp_01 » (CC0) décimée, verre émissif (code 8) ; fût tourné généré."
+    },
+    {
+      "id": "local_technique",
+      "fichier": "local_technique.glb",
+      "categorie": "toiture",
+      "dimensions_m": {
+        "largeur": 4.2,
+        "hauteur": 3.86,
+        "longueur": 3.26
+      },
+      "triangles": 184,
+      "triangles_par_noeud": {
+        "local_technique": 184
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        8
+      ],
+      "peignable": false,
+      "taille_octets": 16828,
+      "source": "Généré procéduralement (eco-nation/tools/blender/mobilier_toiture.py)",
+      "licence": "CC0",
+      "notes": "Local technique de toiture (édicule d'ascenseur, ventilation)."
+    },
+    {
+      "id": "peniche",
+      "fichier": "peniche.glb",
+      "categorie": "navire",
+      "dimensions_m": {
+        "largeur": 5.05,
+        "hauteur": 6.2,
+        "longueur": 38.5
+      },
+      "triangles": 612,
+      "triangles_par_noeud": {
+        "peniche": 612
+      },
+      "origine": "ligne_de_flottaison",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        2,
+        3,
+        6,
+        7
+      ],
+      "peignable": false,
+      "taille_octets": 46584,
+      "source": "Généré procéduralement (eco-nation/tools/blender/navires.py)",
+      "licence": "CC0",
+      "notes": "Péniche au gabarit Freycinet 38,5 × 5,05 m."
+    },
+    {
+      "id": "petrolier",
+      "fichier": "petrolier.glb",
+      "categorie": "navire",
+      "dimensions_m": {
+        "largeur": 44.0,
+        "hauteur": 46.0,
+        "longueur": 250.0
+      },
+      "triangles": 848,
+      "triangles_par_noeud": {
+        "petrolier": 848
+      },
+      "origine": "ligne_de_flottaison",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        2,
+        3,
+        6,
+        7,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 68024,
+      "source": "Généré procéduralement (eco-nation/tools/blender/navires.py)",
+      "licence": "CC0",
+      "notes": "Pétrolier type Suezmax 250 × 44 m."
+    },
+    {
+      "id": "police",
+      "fichier": "police.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.1,
+        "hauteur": 1.62,
+        "longueur": 4.83
+      },
+      "triangles": 784,
+      "triangles_par_noeud": {
+        "police": 784
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        4,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 58104,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Berline sérigraphiée, rampe de gyrophares bleus."
+    },
+    {
+      "id": "porte_conteneurs",
+      "fichier": "porte_conteneurs.glb",
+      "categorie": "navire",
+      "dimensions_m": {
+        "largeur": 48.2,
+        "hauteur": 65.35,
+        "longueur": 300.0
+      },
+      "triangles": 2246,
+      "triangles_par_noeud": {
+        "porte_conteneurs": 2246
+      },
+      "origine": "ligne_de_flottaison",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        2,
+        3,
+        6,
+        7,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 189116,
+      "source": "Généré procéduralement (eco-nation/tools/blender/navires.py)",
+      "licence": "CC0",
+      "notes": "Porte-conteneurs post-panamax 300 × 48 m, conteneurs intégrés."
+    },
+    {
+      "id": "portique_rtg",
+      "fichier": "portique_rtg.glb",
+      "categorie": "port",
+      "dimensions_m": {
+        "largeur": 27.7,
+        "hauteur": 28.46,
+        "longueur": 12.6
+      },
+      "triangles": 548,
+      "triangles_par_noeud": {
+        "portique_rtg": 476,
+        "chariot": 72
+      },
+      "origine": "sol",
+      "parties_animees": [
+        {
+          "nom": "chariot",
+          "type": "translation",
+          "axe": "x",
+          "pivot_m": [
+            0.0,
+            27.7,
+            0.0
+          ],
+          "course_m": [
+            -9.25,
+            9.25
+          ],
+          "description": "Chariot et spreader : translation transversale (axe X Babylon)."
+        }
+      ],
+      "lods": [],
+      "codes_emissifs": [
+        3,
+        5
+      ],
+      "peignable": false,
+      "taille_octets": 45876,
+      "source": "Généré procéduralement (eco-nation/tools/blender/port_energie.py)",
+      "licence": "CC0",
+      "notes": "Portique de parc sur pneus (RTG) : portée 23,5 m, 1 sur 5."
+    },
+    {
+      "id": "portique_sts",
+      "fichier": "portique_sts.glb",
+      "categorie": "port",
+      "dimensions_m": {
+        "largeur": 28.4,
+        "hauteur": 81.9,
+        "longueur": 117.5
+      },
+      "triangles": 1188,
+      "triangles_par_noeud": {
+        "portique_sts": 1116,
+        "chariot": 72
+      },
+      "origine": "sol",
+      "parties_animees": [
+        {
+          "nom": "chariot",
+          "type": "translation",
+          "axe": "z",
+          "pivot_m": [
+            0.0,
+            49.0,
+            35.25
+          ],
+          "course_m": [
+            -31.2,
+            76.2
+          ],
+          "description": "Chariot et spreader : translation le long de la flèche (axe Z Babylon, +Z = côté eau)."
+        }
+      ],
+      "lods": [],
+      "codes_emissifs": [
+        2,
+        3,
+        8
+      ],
+      "peignable": false,
+      "taille_octets": 98652,
+      "source": "Généré procéduralement (eco-nation/tools/blender/port_energie.py)",
+      "licence": "CC0",
+      "notes": "Portique de quai ship-to-shore : 30,5 m entre rails, avant-bec 65 m, flèche à 49 m."
+    },
+    {
+      "id": "rame_intermediaire",
+      "fichier": "rame_intermediaire.glb",
+      "categorie": "rail",
+      "dimensions_m": {
+        "largeur": 2.69,
+        "hauteur": 4.83,
+        "longueur": 12.0
+      },
+      "triangles": 548,
+      "triangles_par_noeud": {
+        "rame_intermediaire": 548
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        3,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 44936,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Voiture intermédiaire avec pantographe (12 m)."
+    },
+    {
+      "id": "rame_tete",
+      "fichier": "rame_tete.glb",
+      "categorie": "rail",
+      "dimensions_m": {
+        "largeur": 2.69,
+        "hauteur": 3.63,
+        "longueur": 16.0
+      },
+      "triangles": 640,
+      "triangles_par_noeud": {
+        "rame_tete": 640
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        3,
+        5,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 50684,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Voiture de tête de tramway / métro léger (16 m)."
+    },
+    {
+      "id": "remorqueur",
+      "fichier": "remorqueur.glb",
+      "categorie": "navire",
+      "dimensions_m": {
+        "largeur": 12.6,
+        "hauteur": 16.6,
+        "longueur": 32.0
+      },
+      "triangles": 532,
+      "triangles_par_noeud": {
+        "remorqueur": 532
+      },
+      "origine": "ligne_de_flottaison",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        2,
+        3,
+        6,
+        7
+      ],
+      "peignable": false,
+      "taille_octets": 44404,
+      "source": "Généré procéduralement (eco-nation/tools/blender/navires.py)",
+      "licence": "CC0",
+      "notes": "Remorqueur portuaire 32 m, défenses et timonerie vitrée."
+    },
+    {
+      "id": "semi_remorque",
+      "fichier": "semi_remorque.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.91,
+        "hauteur": 4.0,
+        "longueur": 16.6
+      },
+      "triangles": 1188,
+      "triangles_par_noeud": {
+        "semi_remorque": 1188
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 82844,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Tracteur et remorque 13,6 m, 16,5 m au total."
+    },
+    {
+      "id": "suv",
+      "fichier": "suv.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.15,
+        "hauteur": 1.77,
+        "longueur": 4.75
+      },
+      "triangles": 640,
+      "triangles_par_noeud": {
+        "suv": 640
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        9
+      ],
+      "peignable": true,
+      "taille_octets": 44748,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "SUV 4,7 m, barres de toit."
+    },
+    {
+      "id": "taxi",
+      "fichier": "taxi.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.1,
+        "hauteur": 1.57,
+        "longueur": 4.83
+      },
+      "triangles": 652,
+      "triangles_par_noeud": {
+        "taxi": 652
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        5,
+        9
+      ],
+      "peignable": false,
+      "taille_octets": 46108,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Berline sombre, lanternon TAXI (code orange)."
+    },
+    {
+      "id": "utilitaire",
+      "fichier": "utilitaire.glb",
+      "categorie": "vehicule",
+      "dimensions_m": {
+        "largeur": 2.33,
+        "hauteur": 2.5,
+        "longueur": 5.44
+      },
+      "triangles": 608,
+      "triangles_par_noeud": {
+        "utilitaire": 608
+      },
+      "origine": "sol",
+      "parties_animees": [],
+      "lods": [],
+      "codes_emissifs": [
+        1,
+        2,
+        9
+      ],
+      "peignable": true,
+      "taille_octets": 41996,
+      "source": "Généré procéduralement (eco-nation/tools/blender/vehicules.py)",
+      "licence": "CC0",
+      "notes": "Fourgon utilitaire 5,4 m."
+    }
+  ]
+}
