@@ -4,7 +4,8 @@ import { DEFAULT_CONFIG, generateCountry, initialPopShares } from './country';
 import { ageGroups, demographyStep, lifeExpectancy, mortalityMultiplier } from './demography';
 import { INVEST_TARGET, clamp, economyStep, participationRate } from './economy';
 import { averageConsumptionTax, sanitizeBrackets } from './fiscal';
-import { airQuality, categoryIncome, citiesStep, satisfactionStep, servicesStep } from './social';
+import { airQuality, announceDecision, categoryIncome, citiesStep, satisfactionStep, servicesStep } from './social';
+import { BUILDINGS } from './construction';
 import type { Accounts, CountryConfig, Demography, GameState, Notice, Policy, Services } from './types';
 // --- modules politique/international/événements/victoire ---
 import { applyPoliticalAction, initPolitics, legislativeStep, politicsStep, splitReform, submitBills, type Bill, type PoliticalAction } from './politics';
@@ -573,7 +574,37 @@ export function applyProgramAction(S: GameState, a: SectorAction): { ok: boolean
 // --- modules services publics/recherche/construction ---
 /** Action d'un ministère (recrutement, programme d'investissement, plan logement, recherche). Voir `services.ts`. */
 export function applyServiceAction(S: GameState, a: ServicesAction) {
-  return applyServicesAction(S, a, (kind, title, text) => pushNotice(S, kind, title, text));
+  // effectifs avant la décision (pour mesurer l'ampleur d'un plan de recrutement annoncé)
+  const staffBefore = a && a.type === 'recruter' ? roleStaff(S, a.service, a.role) : 0;
+  const r = applyServicesAction(S, a, (kind, title, text) => pushNotice(S, kind, title, text));
+  if (r.ok) announceServiceAction(S, a, staffBefore, r);
+  return r;
+}
+
+const ROLE_STAFF: Record<string, (S: GameState) => number | undefined> = {
+  medecins: (S) => S.health?.doctors.staff, infirmiers: (S) => S.health?.nurses.staff,
+  enseignants: (S) => S.education?.teachers.staff, chercheurs: (S) => S.education?.lecturers.staff,
+  policiers: (S) => S.security?.police.staff, pompiers: (S) => S.security?.firefighters.staff, magistrats: (S) => S.security?.justice.staff,
+};
+function roleStaff(S: GameState, _service: string, role: string) {
+  return ROLE_STAFF[role]?.(S) ?? 0;
+}
+const SERVICE_FACTOR = { sante: 'sante', education: 'education', securite: 'securite', logement: 'logement', transport: 'transports' } as const;
+/** Effet d'annonce des décisions ponctuelles : la population réagit à la décision avant que ses effets ne se matérialisent. */
+function announceServiceAction(S: GameState, a: ServicesAction, staffBefore: number, r: object) {
+  if (a.type === 'recruter') {
+    // +8 % d'effectifs ≈ +7 points de note sur le facteur concerné
+    const n = Number((r as { recruited?: number }).recruited) || 0;
+    if (staffBefore > 0 && n > 0) announceDecision(S, SERVICE_FACTOR[a.service], 90 * (n / staffBefore), { line: a.service });
+  } else if (a.type === 'programme') {
+    const def = BUILDINGS[a.building];
+    const factor = def ? SERVICE_FACTOR[def.category as keyof typeof SERVICE_FACTOR] : undefined;
+    if (factor) announceDecision(S, factor, 1.2 * Math.max(1, Math.min(10, a.count ?? 1)), { cityId: a.cityId });
+  } else if (a.type === 'planLogement') {
+    // 10 000 logements sociaux ≈ +4 points sur le logement (rénovation : moitié moins visible)
+    const units = Math.max(0, Number(a.units) || 0);
+    announceDecision(S, 'logement', (a.kind === 'social' ? 4 : 2) * (units / 10000));
+  }
 }
 
 /** Données envoyées au client à chaque mois (sans la géographie ni l'historique complet). */
@@ -581,7 +612,8 @@ export function snapshot(S: GameState) {
   const { country: _c, history: _h, ...rest } = S;
   const last: Record<string, number> = {};
   for (const [k, v] of Object.entries(S.history)) last[k] = v[v.length - 1];
-  return { ...rest, last, date: dateLabel(S.month, S.startYear) };
+  const { dyn: _d, ...satisfaction } = S.satisfaction; // mémoire interne du modèle de satisfaction : inutile au client
+  return { ...rest, satisfaction, last, date: dateLabel(S.month, S.startYear) };
 }
 export type Snapshot = ReturnType<typeof snapshot>;
 

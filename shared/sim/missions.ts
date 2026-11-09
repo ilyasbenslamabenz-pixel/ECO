@@ -271,7 +271,7 @@ function improvements(S: GameState): Candidate[] {
   const ren = S.energy?.elecRenShare;
   if (ren !== undefined) add('renouvelable', Math.min(0.98, Math.ceil((ren + 0.03) * 100) / 100), 24, 2, ren < 0.95);
   const sat = S.satisfaction.overall;
-  add('satisfaction', Math.min(90, half(sat + 0.5)), 18, 1, sat < 88);
+  add('satisfaction', Math.min(90, half(sat + 1)), 18, 1, sat < 88); // un levier ressenti apporte ≈ +0,5 à +1,3 point (social.ts)
   const debt = val(S, 'dette') ?? 0;
   add('dette', Math.round((debt - 0.02) * 200) / 200, 24, 2, debt > 0.3 && S.month >= MACRO_WARMUP);
   const def = val(S, 'deficit') ?? 0;

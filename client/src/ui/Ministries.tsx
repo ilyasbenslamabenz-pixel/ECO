@@ -254,6 +254,40 @@ export function EconomiePanel() {
 }
 
 // ---------- Population & société ----------
+const DRIVER_ICON: Record<string, string> = {
+  pouvoirAchat: 'monnaie', fiscalite: 'fiscalite', emploi: 'travail', sante: 'sante', education: 'education', securite: 'securite',
+  transports: 'transports', logement: 'logement', inegalites: 'stats', environnement: 'environnement', services: 'services',
+  stabilite: 'finances', libertes: 'plume', crises: 'evenements',
+};
+const sgn = (v: number, d = 2) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(d).replace('.', ',')}`;
+
+/** « Pourquoi la satisfaction bouge » : contributions du mois écoulé, par facteur, et cumul depuis le début de partie. */
+function SatisfactionDrivers({ drivers }: { drivers: { id: string; label: string; level: number; delta: number; announce: number }[] }) {
+  if (!drivers.length) return null;
+  const month = drivers.reduce((s, d) => s + d.delta, 0);
+  const moving = [...drivers].filter((d) => Math.abs(d.delta) >= 0.005 || Math.abs(d.announce) >= 0.05).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 6);
+  const lasting = [...drivers].filter((d) => Math.abs(d.level) >= 0.05).sort((a, b) => Math.abs(b.level) - Math.abs(a.level)).slice(0, 6);
+  const Row = ({ d, v, digits }: { d: (typeof drivers)[number]; v: number; digits: number }) => (
+    <div className="sat-driver">
+      <Icon name={DRIVER_ICON[d.id] ?? 'info'} size={15} />
+      <span>{d.label}{Math.abs(d.announce) >= 0.05 && <em className="muted"> dont annonce {sgn(d.announce, 1)}</em>}</span>
+      <span className={`sat-driver-bar ${v >= 0 ? 'up' : 'down'}`}><i style={{ width: `${Math.min(100, (Math.abs(v) / (digits === 2 ? 0.5 : 4)) * 100)}%` }} /></span>
+      <b className={v > 0 ? 'good' : v < 0 ? 'bad' : undefined}><Icon name={v >= 0 ? 'economie' : 'baisse'} size={13} /> {sgn(v, digits)}</b>
+    </div>
+  );
+  return (
+    <div className="cols">
+      <Section title="Pourquoi la satisfaction bouge" hint="Contribution de chaque facteur à la variation de la satisfaction générale ce mois-ci (points). « Dont annonce » : part due aux effets d'annonce et de surprise d'une décision récente (recrutement, budget, impôts, programme), qui s'estompe en quelques mois pendant que l'effet de fond s'installe.">
+        <p className="muted small">Ce mois-ci : <b className={month > 0 ? 'good' : month < 0 ? 'bad' : undefined}>{sgn(month)} pt</b></p>
+        {moving.length ? moving.map((d) => <Row key={d.id} d={d} v={d.delta} digits={2} />) : <p className="muted small">Satisfaction stable : aucun facteur ne bouge sensiblement.</p>}
+      </Section>
+      <Section title="Depuis le début du mandat" hint="Contribution cumulée de chaque facteur à l'écart de satisfaction générale depuis la prise de fonctions (points).">
+        {lasting.length ? lasting.map((d) => <Row key={d.id} d={d} v={d.level} digits={1} />) : <p className="muted small">Pas encore d'écart notable.</p>}
+      </Section>
+    </div>
+  );
+}
+
 export function PopulationPanel() {
   const snap = useStore((s) => s.snap);
   const country = useStore((s) => s.country);
@@ -283,12 +317,14 @@ export function PopulationPanel() {
                 <div key={c} className="sat-row"><span>{CATEGORY_NAMES[c]} <em className="muted">{people(D.categories[c] ?? 0)}</em></span><Meter value={S.byCategory[c] ?? 0} /><b>{Math.round(S.byCategory[c] ?? 0)}</b></div>
               ))}
             </Section>
-            <Section title="Facteurs de satisfaction" hint="Notes sur 100 (moyenne pondérée). Chaque catégorie accorde un poids différent à chaque facteur.">
-              {Object.entries(S.factors).map(([k, v]) => (
-                <div key={k} className="sat-row"><span>{FACTOR_NAMES[k as Factor] ?? k}</span><Meter value={v} /><b>{Math.round(v)}</b></div>
-              ))}
+            <Section title="Facteurs de satisfaction" hint="Note ressentie sur 100 (moyenne pondérée) ; entre parenthèses, la note mesurée. Le ressenti amplifie les écarts récents (une amélioration se remarque, puis devient la norme en quelques années) et intègre les effets d'annonce. Chaque catégorie accorde un poids différent à chaque facteur.">
+              {Object.entries(S.factors).map(([k, v]) => {
+                const felt = S.felt?.[k] ?? v;
+                return <div key={k} className="sat-row"><span>{FACTOR_NAMES[k as Factor] ?? k}</span><Meter value={felt} /><b>{Math.round(felt)} <em className="muted">({Math.round(v)})</em></b></div>;
+              })}
             </Section>
           </div>
+          <SatisfactionDrivers drivers={S.drivers ?? []} />
         </>
       )}
       {tab === 'demo' && (
