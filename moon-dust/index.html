@@ -20,6 +20,7 @@
   --lamp: #f0b44c;
   --ok: #72d3a6;
   --warn: #f2805f;
+  --he3: #7fd8ff;
   --f-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
   --f-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -55,10 +56,21 @@ canvas#game { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9
 .tool:hover { border-color: var(--lamp); }
 .tool[aria-pressed="false"] { color: var(--muted); text-decoration: line-through; }
 .tool.home { color: var(--lamp); }
+.tool.turbo { color: var(--he3); min-width: 76px; }
+.tool.turbo:disabled { color: var(--muted); cursor: default; border-color: var(--line); }
+.tool.turbo.on { border-color: var(--he3); background: rgba(20, 60, 80, .9); }
+.contracts { display: grid; gap: 12px; }
+.ct { display: grid; gap: 5px; }
+.ct p { margin: 0; font-size: 13px; }
+.ct .bar { height: 5px; }
+.ct .bar i { background: var(--he3); }
+.ct.done p { color: var(--muted); text-decoration: line-through; }
+.ct.done .bar i { background: var(--ok); }
+.reward { font-family: var(--f-mono); font-size: 11px; color: var(--lamp); }
 .hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: rgba(11, 13, 19, .8); border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px; font-weight: 600; pointer-events: none; white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
-.alert { position: absolute; top: 10px; left: 10px; background: rgba(60, 14, 8, .85); border: 1px solid var(--warn); color: #ffd9cf; padding: 6px 12px; border-radius: 8px; font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; animation: blink 1s steps(2) infinite; max-width: calc(100% - 210px); }
+.alert { position: absolute; top: 52px; left: 10px; background: rgba(60, 14, 8, .85); border: 1px solid var(--warn); color: #ffd9cf; padding: 6px 12px; border-radius: 8px; font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; animation: blink 1s steps(2) infinite; max-width: calc(100% - 20px); }
 @keyframes blink { 50% { border-color: transparent; } }
-.toasts { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; pointer-events: none; width: min(92%, 440px); }
+.toasts { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; pointer-events: none; width: min(92%, 440px); }
 .toast { background: rgba(11, 13, 19, .88); border: 1px solid var(--line); border-left: 3px solid var(--lamp); padding: 6px 12px; border-radius: 6px; font-size: 13px; animation: pop .25s ease-out; }
 .toast.ok { border-left-color: var(--ok); }
 .toast.warn { border-left-color: var(--warn); }
@@ -122,6 +134,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line)
       <canvas id="game" aria-label="Monde lunaire en 3D couvert de poussière"></canvas>
       <div class="alert" id="alert" hidden>Micrométéorites : sors des cercles rouges</div>
       <div class="tools">
+        <button class="tool turbo" id="turboBtn" type="button" title="Turbo (touche Espace)">Turbo</button>
         <button class="tool home" id="homeBtn" type="button" title="Rentrer à la base (touche B)">Base</button>
         <button class="tool" id="zoomOut" type="button" aria-label="Dézoomer">−</button>
         <button class="tool" id="zoomIn" type="button" aria-label="Zoomer">+</button>
@@ -140,7 +153,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line)
         <p>Ce navigateur n'a pas pu lancer WebGL ou charger le moteur 3D. Essaie avec une version récente de Chrome, Firefox, Safari ou Edge.</p>
       </div>
     </div>
-    <p class="help">Maintiens le clic (ou le doigt) sur le sol pour guider le robot, ou utilise <kbd>←↑↓→</kbd>, <kbd>ZQSD</kbd> ou <kbd>WASD</kbd>. Molette ou <kbd>+</kbd> <kbd>−</kbd> pour zoomer, <kbd>B</kbd> pour rentrer à la base en pilote automatique. Le robot aspire tout seul. Réservoir plein : vends la poussière à la base, puis améliore ton matériel. Pendant les pluies de micrométéorites, sors des cercles rouges, sinon le réservoir se renverse.</p>
+    <p class="help">Maintiens le clic (ou le doigt) sur le sol pour guider le robot, ou utilise <kbd>←↑↓→</kbd>, <kbd>ZQSD</kbd> ou <kbd>WASD</kbd>. Molette ou <kbd>+</kbd> <kbd>−</kbd> pour zoomer, <kbd>B</kbd> pour rentrer à la base en pilote automatique, <kbd>Espace</kbd> pour le turbo. Le robot aspire tout seul. La poussière bleutée cache de l'hélium-3 : elle rapporte cinq fois plus. Réservoir plein : vends la poussière à la base, puis améliore ton matériel. Pendant les pluies de micrométéorites, sors des cercles rouges, sinon le réservoir se renverse.</p>
   </main>
 
   <aside class="console">
@@ -157,6 +170,10 @@ kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line)
         <div class="statRow"><span>Trouvailles de la zone</span><b id="findCount">0 / 3</b></div>
         <div class="finds" id="finds"></div>
       </div>
+    </section>
+    <section class="panel">
+      <h2>Contrats de la zone</h2>
+      <div class="contracts" id="contracts"></div>
     </section>
     <section class="panel">
       <h2>Atelier</h2>
@@ -210,17 +227,21 @@ const UPG = [
   { id: "reservoir", name: "Grand réservoir", base: 35, k: 1.55, max: 12, val: l => Math.round(400 * (1 + 0.6 * l)), fmt: v => fmtN(v) + " g" },
   { id: "prix", name: "Contrat de raffinage", base: 60, k: 1.7, max: 12, val: l => 1 + 0.25 * l, fmt: v => "×" + v.toFixed(2).replace(".", ",") },
   { id: "blindage", name: "Blindage anti-impact", base: 70, k: 1.8, max: 6, val: l => Math.round(40 * (1 - 0.15 * l)), fmt: v => "perte " + v + " %" },
+  { id: "turbo", name: "Surpresseur turbo", base: 90, k: 1.75, max: 6, val: l => 6 + 1.5 * l, fmt: v => v.toFixed(1).replace(".", ",") + " s de turbo" },
   { id: "drone", name: "Mini-robot autonome", base: 150, k: 2, max: 6, val: l => l, fmt: v => v + (v > 1 ? " robots" : " robot") },
 ];
 const costOf = (u, l) => Math.round(u.base * Math.pow(u.k, l));
+const upg = id => UPG.find(u => u.id === id);
 
 let S;
 function freshState() {
-  return { credits: 0, zone: 0, lv: { brosse: 0, aspi: 0, vitesse: 0, reservoir: 0, prix: 0, blindage: 0, drone: 0 }, tank: 0, zoneDone: false, bannerSeen: false };
+  return { credits: 0, zone: 0, lv: { brosse: 0, aspi: 0, vitesse: 0, reservoir: 0, prix: 0, blindage: 0, turbo: 0, drone: 0 }, tank: 0, zoneDone: false, bannerSeen: false, contracts: null, stats: null, lastSeen: 0 };
 }
-const radius = () => UPG[0].val(S.lv.brosse);
-const power = () => UPG[1].val(S.lv.aspi);
-const speed = () => UPG[2].val(S.lv.vitesse);
+let turboT = 0, turboCD = 0;
+const TURBO_REST = 25;
+const radius = () => UPG[0].val(S.lv.brosse) * (turboT > 0 ? 1.5 : 1);
+const power = () => UPG[1].val(S.lv.aspi) * (turboT > 0 ? 2.5 : 1);
+const speed = () => UPG[2].val(S.lv.vitesse) * (turboT > 0 ? 1.3 : 1);
 const cap = () => UPG[3].val(S.lv.reservoir);
 const price = () => 0.1 * UPG[4].val(S.lv.prix) * (1 + 0.6 * S.zone);
 const lossPct = () => UPG[5].val(S.lv.blindage) / 100;
@@ -360,7 +381,8 @@ let outerMesh;
 
 // ---------- poussière : données + textures ----------
 let dust = new Float32Array(GW * GH);
-const grain = new Int8Array(GW * GH), blocked = new Uint8Array(GW * GH);
+const grain = new Int8Array(GW * GH), blocked = new Uint8Array(GW * GH), he3 = new Uint8Array(GW * GH);
+let he3Patches = [], heAcc = 0;
 let total = 1, remaining = 0, zone, Z;
 const colCv = canvas(GW, GH), colCtx = colCv.getContext("2d"), colImg = colCtx.createImageData(GW, GH);
 const hCv = canvas(GW, GH), hCtx = hCv.getContext("2d"), hImg = hCtx.createImageData(GW, GH);
@@ -386,6 +408,7 @@ function paintCell(i) {
   d[p] = zone.tint[0] + g - thick * 40;
   d[p + 1] = zone.tint[1] + g - thick * 44;
   d[p + 2] = zone.tint[2] + g - thick * 50;
+  if (he3[i]) { d[p] = d[p] * 0.4 + 105 * 0.6; d[p + 1] = d[p + 1] * 0.4 + 205 * 0.6; d[p + 2] = d[p + 2] * 0.4 + 245 * 0.6; }
   d[p + 3] = a >= 1 ? 255 : Math.round(255 * Math.pow(a, 0.5));
 }
 const hAt = (cx, cy) => Math.min(dust[clamp(cy, 0, GH - 1) * GW + clamp(cx, 0, GW - 1)], 6) * HSCALE;
@@ -711,6 +734,23 @@ function buildZone(i) {
     finds.push({ x, z, name, found: false, m, anim: 0 });
   }
 
+  // gisements d'hélium-3 (générateur séparé : le reste de la zone ne change pas)
+  he3.fill(0); he3Patches = [];
+  const hr = mulberry32(5000 + i * 131);
+  guard = 0;
+  while (he3Patches.length < 4 && guard++ < 400) {
+    const r = 2.4 + hr() * 1.4, x = -W / 2 + 6 + hr() * (W - 12), z = -H / 2 + 6 + hr() * (H - 12);
+    if (Math.hypot(x - BASE.x, z - BASE.z) < 14) continue;
+    if (he3Patches.some(o => Math.hypot(o.x - x, o.z - z) < 14)) continue;
+    if (rocks.some(o => Math.hypot(o.x - x, o.z - z) < o.r + r)) continue;
+    he3Patches.push({ x, z, r });
+    const [x0, y0] = cellOf(x - r, z - r), [x1, y1] = cellOf(x + r, z + r);
+    for (let cy = Math.max(0, y0); cy <= Math.min(GH - 1, y1); cy++) for (let cx = Math.max(0, x0); cx <= Math.min(GW - 1, x1); cx++) {
+      const [px, pz] = cellCenter(cx, cy), idx = cy * GW + cx;
+      if (!blocked[idx] && Math.hypot(px - x, pz - z) < r * (0.85 + 0.25 * Z.fbm(cx / 20, cy / 20))) he3[idx] = 1;
+    }
+  }
+
   const tint = zone.tint;
   outerMat.color.setRGB(tint[0] / 255 * 0.86, tint[1] / 255 * 0.86, tint[2] / 255 * 0.86);
   outerMesh.position.y = 0.03 + zone.layers * 0.85 * HSCALE;
@@ -735,6 +775,7 @@ function cleanAt(x, z, r, pw, dt, capLeft, fx) {
     dust[i] -= amt;
     if (dust[i] < 0.01) { amt += dust[i]; dust[i] = 0; }
     removed += amt;
+    if (he3[i]) { heAcc += amt; if (dust[i] === 0) he3[i] = 0; }
     paintCell(i); markDirty(cx, cy);
     if (fx && !reduceMotion && Math.random() < 0.05) {
       spawnP(1, px + (Math.random() - .5) * C, getH(px, pz) + Math.min(before, 6) * HSCALE, pz + (Math.random() - .5) * C, 0, 0, 0, 0.45, zone.tint[0] / 255, zone.tint[1] / 255, zone.tint[2] / 255, 0.09);
@@ -813,6 +854,9 @@ const SFX = {
   full: () => { tone(330, 0.15, "square", 0.06); tone(247, 0.25, "square", 0.06, 0.15); },
   zone: () => [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, 0.35, "triangle", 0.1, i * 0.11)),
   spill: () => tone(300, 0.5, "sawtooth", 0.08, 0, 0.3),
+  turbo: () => { tone(180, 0.6, "sawtooth", 0.06, 0, 3.5); tone(360, 0.5, "triangle", 0.05, 0.1, 2.5); },
+  he3: () => { tone(1568, 0.12, "sine", 0.05); tone(2093, 0.18, "sine", 0.04, 0.06); },
+  contract: () => [659, 880, 1175].forEach((f, i) => tone(f, 0.3, "triangle", 0.1, i * 0.1)),
 };
 function setAudioLoop(cleaning, spFrac) {
   const c = AU.ctx; if (!c) return; const t0 = c.currentTime;
@@ -847,12 +891,19 @@ $("zoomIn").addEventListener("click", () => { zoomD = clamp(zoomD * 0.85, 11, 46
 $("zoomOut").addEventListener("click", () => { zoomD = clamp(zoomD * 1.18, 11, 46); });
 $("homeBtn").addEventListener("click", () => { audioInit(); autopilot = true; moved = true; });
 $("soundBtn").addEventListener("click", () => { audioInit(); setMuted(!AU.muted); });
+function turboGo() {
+  if (turboT > 0 || turboCD > 0) return;
+  audioInit(); turboT = upg("turbo").val(S.lv.turbo); turboCD = turboT + TURBO_REST; moved = true;
+  SFX.turbo(); toast("Turbo : brosse plus large, aspiration ×2,5", "ok");
+}
+$("turboBtn").addEventListener("click", turboGo);
 setMuted(AU.muted);
 const KEYMAP = { arrowup: "u", w: "u", z: "u", arrowdown: "d", s: "d", arrowleft: "l", a: "l", q: "l", arrowright: "r", d: "r" };
 addEventListener("keydown", e => {
   if (e.target.closest && e.target.closest("button, input")) return;
   const key = e.key.toLowerCase();
   if (key === "b") { audioInit(); autopilot = true; moved = true; return; }
+  if (key === " ") { e.preventDefault(); turboGo(); return; }
   if (key === "+" || key === "=") { zoomD = clamp(zoomD * 0.88, 11, 46); return; }
   if (key === "-" || key === "_") { zoomD = clamp(zoomD * 1.14, 11, 46); return; }
   const k = KEYMAP[key]; if (!k) return;
@@ -918,7 +969,7 @@ function impact(m) {
       addDust(R.x, R.z, 2.6, Math.min(zone.layers, lost / 13));
       toast(`Impact ! Le réservoir s'est renversé (−${fmtN(lost)} g)`, "warn"); SFX.spill();
     } else toast("Impact sur le robot, réservoir vide : rien de perdu", "warn");
-  }
+  } else if (Math.hypot(R.x - x, R.z - z) < IMPACT_R + 3.5) S.stats.dodged++;
   for (const d of drones) if (Math.hypot(d.x - x, d.z - z) < IMPACT_R) d.stun = 2.5;
   removeMeteor(m);
 }
@@ -949,6 +1000,7 @@ function updateMeteors(dt) {
 }
 
 // ---------- boucle ----------
+let heChime = 0;
 let t = 0, shake = 0, fullWarned = false, sellAcc = 0, sellK = 0, wasSelling = false, cleaningNow = false;
 const camT = new T.Vector3(START.x, 0, START.z);
 function update(dt) {
@@ -994,7 +1046,7 @@ function update(dt) {
   const atBase = Math.hypot(R.x - BASE.x, R.z - BASE.z) < BASE.r;
   if (S.tank > 0 && atBase) {
     const u = Math.min(S.tank, Math.max(c * 0.9, 250) * dt);
-    S.tank -= u; S.credits += u * price(); wasSelling = true;
+    S.tank -= u; S.credits += u * price(); S.stats.sold += u; wasSelling = true;
     sellAcc += dt; if (sellAcc > 0.09) { sellAcc = 0; SFX.sellTick(sellK++); }
     if (S.tank < 0.01) S.tank = 0;
   } else if (wasSelling) { wasSelling = false; sellK = 0; if (S.tank === 0) SFX.sold(); }
@@ -1022,6 +1074,25 @@ function update(dt) {
   }
 
   updateMeteors(dt);
+
+  // hélium-3 extrait (robot + mini-robots) : payé tout de suite, ×5 au total
+  if (heAcc > 0) {
+    S.credits += heAcc * price() * 4; S.stats.he3 += heAcc;
+    heChime += heAcc; if (heChime > 6) { heChime = 0; SFX.he3(); }
+    if (!S.stats.heSeen) { S.stats.heSeen = true; toast("Hélium-3 ! Cette poussière vaut cinq fois plus.", "ok"); }
+    heAcc = 0;
+  }
+  if (!reduceMotion) for (const hp of he3Patches) if (Math.random() < dt * 4) {
+    const a = Math.random() * TAU, dd = Math.random() * hp.r, x = hp.x + Math.cos(a) * dd, z = hp.z + Math.sin(a) * dd, [cx, cy] = cellOf(x, z);
+    if (cx >= 0 && cx < GW && cy >= 0 && cy < GH && he3[cy * GW + cx] && dust[cy * GW + cx] > 0.05) spawnP(3, x, dustTop(x, z) + 0.05, z, 0, 0.5 + Math.random() * 0.6, 0, 1.4, 0.55, 0.88, 1, 0.1);
+  }
+  // turbo
+  if (turboT > 0) {
+    turboT -= dt;
+    if (!reduceMotion && Math.random() < 0.8) spawnP(3, R.x - Math.cos(R.yaw) * 1.1, R.y + 0.6, R.z + Math.sin(R.yaw) * 1.1, Math.random() - .5, 0.5 + Math.random(), Math.random() - .5, 0.6, 0.5, 0.85, 1, 0.14);
+    if (turboT <= 0) toast("Turbo terminé, recharge en cours");
+  }
+  if (turboCD > 0) turboCD = Math.max(0, turboCD - dt);
   updateParticles(dt);
 
   // trouvailles
@@ -1039,7 +1110,7 @@ function update(dt) {
     if (dustAround(f.x, f.z, 0.8) < 0.08) {
       f.found = true;
       const bonus = Math.round(40 * (1 + S.zone) * (1 + 0.6 * S.zone));
-      S.credits += bonus; SFX.find();
+      S.credits += bonus; SFX.find(); S.stats.finds++;
       toast(`Trouvaille : ${f.name} (+${fmtN(bonus)} cr)`, "ok");
       renderFinds(); save();
     }
@@ -1073,6 +1144,11 @@ function update(dt) {
   const sx = (Math.random() - .5) * shake, sy = (Math.random() - .5) * shake;
   camera.position.set(camT.x + sx, camT.y + Math.sin(pitch) * zoomD + sy, camT.z + Math.cos(pitch) * zoomD);
   camera.lookAt(camT.x, camT.y + 0.6, camT.z - 1.2);
+  const fovT = turboT > 0 ? 57 : 50;
+  if (Math.abs(camera.fov - fovT) > 0.05) {
+    camera.fov += (fovT - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix();
+    pMat.uniforms.scale.value = cv.clientHeight * renderer.getPixelRatio() / 2 / Math.tan(camera.fov * Math.PI / 360);
+  }
   sun.position.copy(camT).addScaledVector(sunDir, 80); sun.target.position.copy(camT);
 
   setAudioLoop(cleaningNow, clamp(v / sp, 0, 1));
@@ -1127,7 +1203,44 @@ function renderFinds() {
 function renderZone() {
   $("zNum").textContent = S.zone + 1; $("zName").textContent = zone.name;
   $("banner").hidden = !S.zoneDone || S.bannerSeen;
-  renderFinds();
+  renderFinds(); renderContracts();
+}
+// contrats : trois objectifs tirés au sort pour chaque zone
+const CT = {
+  sell: { label: n => `Vendre ${fmtN(n)} g de poussière à la base`, target: z => Math.round(1200 * (1 + 0.8 * z)), get: () => S.stats.sold },
+  clean: { label: n => `Dégager ${n} % de la zone`, target: () => 60, get: () => (1 - remaining / total) * 100 },
+  he3: { label: n => `Extraire ${fmtN(n)} g d'hélium-3`, target: z => Math.round(150 * zoneDef(z).layers), get: () => S.stats.he3 },
+  finds: { label: n => `Déterrer ${n} objets enfouis`, target: () => 2, get: () => S.stats.finds },
+  dodge: { label: n => `Esquiver ${n} impacts de justesse`, target: z => 3 + z, get: () => S.stats.dodged },
+};
+function newZoneState() {
+  S.stats = { sold: 0, he3: 0, finds: 0, dodged: 0, heSeen: false };
+  const r = mulberry32(300 + S.zone * 17), keys = Object.keys(CT);
+  for (let i = keys.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [keys[i], keys[j]] = [keys[j], keys[i]]; }
+  S.contracts = keys.slice(0, 3).map(type => ({ type, target: CT[type].target(S.zone), done: false }));
+}
+const ctReward = () => Math.round(70 * (1 + S.zone) * (1 + 0.6 * S.zone));
+function renderContracts() {
+  const box = $("contracts"); box.textContent = "";
+  S.contracts.forEach((c, i) => {
+    const el = document.createElement("div"); el.className = "ct"; el.id = "ct-" + i;
+    el.innerHTML = '<p></p><div class="bar"><i></i></div><div class="statRow"><span class="ctp"></span><span class="reward"></span></div>';
+    el.querySelector("p").textContent = CT[c.type].label(c.target);
+    el.querySelector(".reward").textContent = "+" + fmtN(ctReward()) + " cr";
+    box.appendChild(el);
+  });
+  refreshContracts();
+}
+function refreshContracts() {
+  S.contracts.forEach((c, i) => {
+    const el = $("ct-" + i); if (!el) return;
+    const v = Math.max(0, Math.min(c.target, CT[c.type].get()));
+    if (!c.done && v >= c.target) { c.done = true; const rw = ctReward(); S.credits += rw; SFX.contract(); toast(`Contrat rempli : +${fmtN(rw)} cr`, "ok"); save(); }
+    el.classList.toggle("done", c.done);
+    const shown = c.done ? c.target : v;
+    el.querySelector("i").style.width = (shown / c.target * 100) + "%";
+    el.querySelector(".ctp").textContent = c.type === "clean" ? `${Math.floor(shown)} / ${c.target} %` : `${fmtN(shown)} / ${fmtN(c.target)}`;
+  });
 }
 const mm = $("minimap"), mctx = mm.getContext("2d");
 function drawMinimap() {
@@ -1158,7 +1271,10 @@ function refreshHud() {
   const pct = clamp((1 - remaining / total) * 100, 0, 100);
   $("pct").textContent = pct.toFixed(1).replace(".", ",") + " %";
   $("pctBar").style.width = pct + "%";
-  refreshShop(); drawMinimap();
+  const tb = $("turboBtn");
+  tb.classList.toggle("on", turboT > 0); tb.disabled = turboT <= 0 && turboCD > 0;
+  tb.textContent = turboT > 0 ? "Turbo " + Math.ceil(turboT) + " s" : turboCD > 0 ? "Recharge " + Math.ceil(turboCD) + " s" : "Turbo";
+  refreshShop(); refreshContracts(); drawMinimap();
 }
 function clearMeteors() {
   meteors.forEach(removeMeteor);
@@ -1172,7 +1288,7 @@ function resetRobot() {
 }
 $("next").addEventListener("click", () => {
   S.credits += S.tank * price(); S.tank = 0;
-  S.zone++; S.zoneDone = false; S.bannerSeen = false;
+  S.zone++; S.zoneDone = false; S.bannerSeen = false; newZoneState();
   clearMeteors(); buildZone(S.zone); resetRobot(); renderZone(); save();
   toast("Nouvelle zone : " + zone.name);
 });
@@ -1187,7 +1303,7 @@ $("reset").addEventListener("click", () => {
   }
   clearTimeout(armedTimer); b.classList.remove("armed"); b.textContent = "Recommencer la mission";
   try { localStorage.removeItem(KEY); } catch (_) {}
-  S = freshState();
+  S = freshState(); newZoneState(); turboT = turboCD = 0;
   drones.forEach(d => scene.remove(d.m.g)); drones = [];
   clearMeteors(); buildZone(0); resetRobot(); renderZone(); refreshHud();
   moved = false; $("hint").hidden = false;
@@ -1198,6 +1314,7 @@ $("reset").addEventListener("click", () => {
 function encode(arr) { const q = new Uint8Array(arr.length); for (let i = 0; i < arr.length; i++) q[i] = Math.min(255, Math.round(arr[i] * 40)); let s = ""; for (let i = 0; i < q.length; i += 8192) s += String.fromCharCode.apply(null, q.subarray(i, i + 8192)); return btoa(s); }
 function decode(str) { const s = atob(str), out = new Float32Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) / 40; return out; }
 function save() {
+  S.lastSeen = Date.now();
   try { localStorage.setItem(KEY, JSON.stringify({ v: 1, S, dust: encode(dust), found: finds.map(f => f.found), rx: R.x, rz: R.z })); } catch (_) {}
 }
 function load() {
@@ -1205,6 +1322,7 @@ function load() {
     const raw = localStorage.getItem(KEY); if (!raw) return false;
     const d = JSON.parse(raw); if (d.v !== 1) return false;
     S = Object.assign(freshState(), d.S); S.lv = Object.assign(freshState().lv, d.S.lv);
+    if (!S.contracts || !S.stats) newZoneState();
     buildZone(S.zone);
     const saved = decode(d.dust);
     if (saved.length === dust.length) { dust = saved; remaining = 0; for (let i = 0; i < dust.length; i++) { if (blocked[i]) dust[i] = 0; remaining += dust[i]; } repaintAll(); }
@@ -1228,7 +1346,16 @@ function resize() {
 new ResizeObserver(resize).observe(cv); resize();
 
 S = freshState();
-if (!load()) { buildZone(0); resetRobot(); }
+if (!load()) { newZoneState(); buildZone(0); resetRobot(); }
+else if (S.lv.drone > 0 && S.lastSeen) {
+  // gains hors ligne : les mini-robots continuent (à mi-régime, 2 h max)
+  const away = Math.min(7200, (Date.now() - S.lastSeen) / 1000);
+  if (away > 60) {
+    const gain = away * S.lv.drone * 0.9 * price() * 0.6;
+    S.credits += gain;
+    setTimeout(() => toast(`Pendant ton absence (${Math.round(away / 60)} min), tes mini-robots ont gagné ${fmtN(gain)} cr`, "ok"), 600);
+  }
+}
 renderShop(); renderZone(); refreshHud();
 
 let last = performance.now(), hudT = 0;
@@ -1240,7 +1367,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__balayeur = { get S() { return S; }, get R() { return R; }, meteorsIn: s => { shower.next = s; }, get pct() { return 1 - remaining / total; } };
+window.__balayeur = { get S() { return S; }, get R() { return R; }, meteorsIn: s => { shower.next = s; }, get pct() { return 1 - remaining / total; }, get he3() { return he3Patches; } };
 })();
 </script>
 </body>
