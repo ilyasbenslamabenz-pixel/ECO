@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Balayeur Lunaire</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>
+/* Layout : terrain de jeu à gauche, console de mission à droite ; tout s'empile sous 860px. Look unique, sombre (espace). */
+:root {
+  --void: #0b0d13;
+  --panel: #151923;
+  --line: #272d3b;
+  --fg: #ebe6dc;
+  --muted: #8f95a5;
+  --regolith: #d3cab8;
+  --lamp: #f0b44c;
+  --ok: #72d3a6;
+  --warn: #f2805f;
+  --f-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { min-height: 100%; }
+body { background: var(--void); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+.app {
+  display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px;
+  max-width: 1320px; margin: 0 auto; padding-block: 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); } }
+.play { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.eyebrow { margin: 0; font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--lamp); }
+h1 { margin: 2px 0 0; font-family: var(--f-display); font-weight: 700; font-size: clamp(22px, 3.2vw, 32px); line-height: 1.1; text-wrap: balance; }
+.prog { flex: 1 1 220px; max-width: 360px; display: grid; gap: 4px; }
+.progLabel { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.progLabel b { font-family: var(--f-mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+.prog small { color: var(--muted); font-size: 11px; }
+.bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; position: relative; }
+.bar i { display: block; height: 100%; width: 0; background: var(--regolith); transition: width .2s linear; }
+.bar.goal::after { content: ""; position: absolute; top: -2px; bottom: -2px; left: 97%; width: 2px; background: var(--lamp); }
+.stage { position: relative; user-select: none; -webkit-user-select: none; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #1d1f25; }
+canvas { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 10; touch-action: none; cursor: crosshair; }
+.toasts { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: grid; gap: 6px; justify-items: center; pointer-events: none; width: min(92%, 420px); }
+.toast { background: rgba(11, 13, 19, .88); border: 1px solid var(--line); border-left: 3px solid var(--lamp); padding: 6px 12px; border-radius: 6px; font-size: 13px; animation: pop .25s ease-out; }
+.toast.ok { border-left-color: var(--ok); }
+.toast.warn { border-left-color: var(--warn); }
+@keyframes pop { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+.banner { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; background: rgba(8, 10, 15, .72); padding: 24px; }
+.banner h2 { margin: 0; font-family: var(--f-display); font-size: clamp(24px, 4vw, 40px); }
+.banner p { margin: 0; max-width: 46ch; color: var(--muted); }
+.help { margin: 0; color: var(--muted); font-size: 13px; max-width: 75ch; }
+kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--fg); }
+.console { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 12px; }
+.panel h2 { margin: 0; font-family: var(--f-display); font-size: 16px; letter-spacing: .02em; }
+.stat { display: grid; gap: 4px; }
+.stat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+.stat b { font-family: var(--f-mono); font-size: 22px; font-variant-numeric: tabular-nums; }
+.stat .credits { color: var(--lamp); font-size: 28px; }
+.tank i { background: var(--lamp); }
+.tank.full i { background: var(--warn); }
+.statRow { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--muted); }
+.statRow b { font-family: var(--f-mono); font-size: 12px; color: var(--fg); }
+#shop { display: grid; gap: 8px; }
+.up {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; text-align: left; width: 100%;
+  background: #1b2030; color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px;
+  font: inherit; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.up:hover:not(:disabled) { border-color: var(--lamp); background: #20263a; }
+.up:focus-visible, button:focus-visible { outline: 2px solid var(--lamp); outline-offset: 2px; }
+.up:disabled { cursor: not-allowed; opacity: .55; }
+.up .n { font-weight: 600; font-size: 13px; }
+.up .c { font-family: var(--f-mono); font-size: 13px; color: var(--lamp); text-align: right; }
+.up .d { font-size: 12px; color: var(--muted); }
+.up .l { font-family: var(--f-mono); font-size: 11px; color: var(--muted); text-align: right; }
+.up.max .c { color: var(--ok); }
+.btn { font: inherit; font-weight: 600; background: var(--lamp); color: #1a1408; border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; }
+.ghost { font: inherit; font-size: 12px; background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+.ghost.armed { color: var(--warn); border-color: var(--warn); }
+.finds { display: flex; flex-wrap: wrap; gap: 6px; }
+.find { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px dashed var(--line); color: var(--muted); }
+.find.got { border-style: solid; border-color: var(--ok); color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } .bar i { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <main class="play">
+    <header class="top">
+      <div>
+        <p class="eyebrow">Mission de nettoyage · Zone <span id="zNum">1</span></p>
+        <h1 id="zName">Mer de la Tranquillité</h1>
+      </div>
+      <div class="prog">
+        <div class="progLabel"><span>Surface dégagée</span><b id="pct">0 %</b></div>
+        <div class="bar goal"><i id="pctBar"></i></div>
+        <small>Objectif : 97 % pour ouvrir la zone suivante</small>
+      </div>
+    </header>
+    <div class="stage">
+      <canvas id="game" aria-label="Terrain lunaire couvert de poussière"></canvas>
+      <div class="toasts" id="toasts"></div>
+      <div class="banner" id="banner" hidden>
+        <p class="eyebrow">Zone dégagée</p>
+        <h2 id="bTitle">Bravo</h2>
+        <p id="bText"></p>
+        <button class="btn" id="next" type="button">Zone suivante</button>
+      </div>
+    </div>
+    <p class="help">Maintiens le clic (ou le doigt) sur le terrain pour guider le robot, ou utilise <kbd>←↑↓→</kbd>, <kbd>ZQSD</kbd> ou <kbd>WASD</kbd>. Il aspire la poussière tout seul. Quand le réservoir est plein, ramène-le à la <b>base</b> pour vendre la poussière, puis améliore ton matériel à l'atelier. Des objets sont enfouis sous la poussière : dégage-les pour toucher une prime.</p>
+  </main>
+
+  <aside class="console">
+    <section class="panel">
+      <div class="stat"><span>Crédits</span><b class="credits" id="credits">0</b></div>
+      <div class="stat">
+        <div class="statRow"><span>Réservoir</span><b id="tankTxt">0 / 400 g</b></div>
+        <div class="bar tank" id="tankBar"><i id="tankFill"></i></div>
+      </div>
+      <div class="statRow"><span>Prix de vente</span><b id="price">0,10 cr/g</b></div>
+      <div class="stat">
+        <div class="statRow"><span>Trouvailles de la zone</span><b id="findCount">0 / 3</b></div>
+        <div class="finds" id="finds"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Atelier</h2>
+      <div id="shop"></div>
+    </section>
+    <button id="reset" class="ghost" type="button">Recommencer la mission</button>
+  </aside>
+</div>
+
+<script>
+(() => {
+"use strict";
+const W = 960, H = 600, C = 6, GW = W / C, GH = H / C, TAU = Math.PI * 2;
+const KEY = "balayeur-lunaire-v1";
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const ZONES = [
+  { name: "Mer de la Tranquillité", layers: 1.0, tint: [206, 199, 185] },
+  { name: "Mer de la Sérénité", layers: 1.4, tint: [199, 193, 183] },
+  { name: "Cratère Copernic", layers: 1.9, tint: [213, 201, 179] },
+  { name: "Océan des Tempêtes", layers: 2.4, tint: [190, 186, 179] },
+  { name: "Mer des Pluies", layers: 3.0, tint: [205, 197, 190] },
+  { name: "Cratère Shackleton", layers: 3.6, tint: [212, 215, 222] },
+];
+function zoneDef(i) {
+  if (i < ZONES.length) return ZONES[i];
+  const k = i - ZONES.length + 1;
+  return { name: "Secteur lointain " + k, layers: Math.min(6, 3.6 + 0.4 * k), tint: ZONES[k % ZONES.length].tint };
+}
+const FIND_NAMES = [
+  "Boulon de train d'atterrissage", "Gant de combinaison", "Météorite ferreuse", "Bille de verre orange",
+  "Caméra d'arpentage", "Sonde sismique", "Cristal d'olivine", "Badge de mission", "Clé dynamométrique",
+  "Rétroréflecteur", "Carotte d'échantillon", "Marteau de géologue", "Antenne pliante", "Éclat d'anorthosite",
+  "Thermomètre de sol", "Pellicule photo", "Plaque de bouclier thermique", "Glace ancienne",
+];
+
+const UPG = [
+  { id: "brosse", name: "Brosse élargie", base: 30, k: 1.6, max: 12, val: l => 20 + 5 * l, fmt: v => v + " px" },
+  { id: "aspi", name: "Aspiration renforcée", base: 40, k: 1.65, max: 12, val: l => 2.5 * (1 + 0.35 * l), fmt: v => v.toFixed(1) + " g/s" },
+  { id: "vitesse", name: "Chenilles rapides", base: 25, k: 1.5, max: 10, val: l => 140 + 22 * l, fmt: v => v + " px/s" },
+  { id: "reservoir", name: "Grand réservoir", base: 35, k: 1.55, max: 12, val: l => Math.round(400 * (1 + 0.6 * l)), fmt: v => fmtN(v) + " g" },
+  { id: "prix", name: "Contrat de raffinage", base: 60, k: 1.7, max: 12, val: l => 1 + 0.25 * l, fmt: v => "×" + v.toFixed(2) },
+  { id: "drone", name: "Mini-robot autonome", base: 150, k: 2, max: 6, val: l => l, fmt: v => v + (v > 1 ? " robots" : " robot") },
+];
+const costOf = (u, l) => Math.round(u.base * Math.pow(u.k, l));
+
+// ---------- état ----------
+let S;
+function freshState() {
+  return { credits: 0, zone: 0, lv: { brosse: 0, aspi: 0, vitesse: 0, reservoir: 0, prix: 0, drone: 0 }, tank: 0, zoneDone: false };
+}
+const LANDER = { x: 74, y: H - 74, r: 50 };
+const R = { x: 130, y: H - 120, vx: 0, vy: 0, a: -0.6, spin: 0 };
+let dust, grain, total = 1, remaining = 0, finds = [], drones = [], particles = [], ground, zone;
+let moved = false, fullWarned = false, t = 0;
+
+const radius = () => UPG[0].val(S.lv.brosse);
+const power = () => UPG[1].val(S.lv.aspi);
+const speed = () => UPG[2].val(S.lv.vitesse);
+const cap = () => UPG[3].val(S.lv.reservoir);
+const price = () => 0.1 * UPG[4].val(S.lv.prix) * (1 + 0.6 * S.zone);
+
+// ---------- aléatoire et bruit ----------
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function lattice(rng, s) {
+  const g = new Float32Array(s * s); for (let i = 0; i < g.length; i++) g[i] = rng();
+  const at = (x, y) => g[((y % s + s) % s) * s + ((x % s + s) % s)];
+  return (x, y) => {
+    x *= s; y *= s; const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const a = at(xi, yi), b = at(xi + 1, yi), c = at(xi, yi + 1), d = at(xi + 1, yi + 1);
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+}
+
+// ---------- construction d'une zone ----------
+const dustCv = document.createElement("canvas"); dustCv.width = GW; dustCv.height = GH;
+const dctx = dustCv.getContext("2d");
+const img = dctx.createImageData(GW, GH);
+
+function buildZone(i) {
+  zone = zoneDef(i);
+  const rng = mulberry32(1000 + i * 7919);
+  const n1 = lattice(rng, 4), n2 = lattice(rng, 9), n3 = lattice(rng, 23);
+  const fbm = (x, y) => 0.5 * n1(x, y) + 0.32 * n2(x, y) + 0.18 * n3(x, y);
+
+  // cratères
+  const craters = [];
+  const nc = 9 + Math.floor(rng() * 6);
+  for (let k = 0; k < nc; k++) {
+    const r = k < 2 ? 50 + rng() * 45 : 10 + rng() * 34;
+    craters.push({ x: rng() * W, y: rng() * H, r });
+  }
+
+  // sol (basalte sombre)
+  ground = document.createElement("canvas"); ground.width = W; ground.height = H;
+  const g = ground.getContext("2d");
+  const gi = g.createImageData(W, H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const n = fbm(x / W, y / H);
+    const v = 46 + n * 46 + (rng() - 0.5) * 14;
+    const p = (y * W + x) * 4;
+    gi.data[p] = v - 2; gi.data[p + 1] = v; gi.data[p + 2] = v + 5; gi.data[p + 3] = 255;
+  }
+  g.putImageData(gi, 0, 0);
+  for (const c of craters) {
+    const grd = g.createRadialGradient(c.x + c.r * .3, c.y + c.r * .3, c.r * .1, c.x, c.y, c.r);
+    grd.addColorStop(0, "rgba(0,0,0,0.38)"); grd.addColorStop(1, "rgba(0,0,0,0.05)");
+    g.fillStyle = grd; g.beginPath(); g.arc(c.x, c.y, c.r, 0, TAU); g.fill();
+    g.lineWidth = Math.max(1.5, c.r * 0.12);
+    g.strokeStyle = "rgba(255,255,255,0.13)"; g.beginPath(); g.arc(c.x, c.y, c.r, Math.PI * 1.05, Math.PI * 1.85); g.stroke();
+    g.strokeStyle = "rgba(255,255,255,0.08)"; g.beginPath(); g.arc(c.x, c.y, c.r * 0.82, Math.PI * 0.1, Math.PI * 0.75); g.stroke();
+  }
+  // petits cailloux
+  for (let k = 0; k < 260; k++) {
+    const x = rng() * W, y = rng() * H, r = 0.6 + rng() * 2.2;
+    g.fillStyle = "rgba(0,0,0,0.35)"; g.beginPath(); g.arc(x + 1, y + 1, r, 0, TAU); g.fill();
+    g.fillStyle = `rgba(${150 + rng() * 60 | 0},${150 + rng() * 60 | 0},${155 + rng() * 60 | 0},0.7)`; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+
+  // poussière : plus épaisse au fond des cratères
+  dust = new Float32Array(GW * GH); grain = new Int8Array(GW * GH);
+  total = 0;
+  for (let cy = 0; cy < GH; cy++) for (let cx = 0; cx < GW; cx++) {
+    const idx = cy * GW + cx, px = cx * C + C / 2, py = cy * C + C / 2;
+    let d = 0.55 + 0.6 * fbm(cx / GW + 0.37, cy / GH + 0.71);
+    for (const c of craters) { const dd = Math.hypot(px - c.x, py - c.y); if (dd < c.r) d += 0.35 * (1 - dd / c.r); }
+    d = Math.max(0.3, d * zone.layers);
+    dust[idx] = d; total += d;
+    grain[idx] = Math.round((rng() - 0.5) * 22);
+  }
+  remaining = total;
+
+  // trouvailles enfouies
+  finds = [];
+  const pool = FIND_NAMES.slice();
+  while (finds.length < 3) {
+    const x = 40 + rng() * (W - 80), y = 40 + rng() * (H - 80);
+    if (Math.hypot(x - LANDER.x, y - LANDER.y) < 140) continue;
+    if (finds.some(f => Math.hypot(f.x - x, f.y - y) < 160)) continue;
+    const name = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+    finds.push({ x, y, name, found: false, kind: Math.floor(rng() * 3) });
+  }
+  repaintAll();
+}
+
+function paintCell(i) {
+  const a = dust[i], p = i * 4, d = img.data;
+  if (a <= 0.003) { d[p + 3] = 0; return; }
+  const L = zone.layers;
+  const thick = L > 1 ? Math.min(1, Math.max(0, (a - 1) / (L - 1))) : 0;
+  const g = grain[i];
+  d[p] = zone.tint[0] + g - thick * 48;
+  d[p + 1] = zone.tint[1] + g - thick * 52;
+  d[p + 2] = zone.tint[2] + g - thick * 58;
+  d[p + 3] = a >= 1 ? 252 : Math.round(252 * Math.pow(a, 0.55));
+}
+function repaintAll() { for (let i = 0; i < dust.length; i++) paintCell(i); dirty = true; }
+let dirty = true;
+
+// ---------- nettoyage ----------
+function cleanAt(x, y, r, pw, dt, capLeft) {
+  let removed = 0;
+  const x0 = Math.max(0, Math.floor((x - r) / C)), x1 = Math.min(GW - 1, Math.floor((x + r) / C));
+  const y0 = Math.max(0, Math.floor((y - r) / C)), y1 = Math.min(GH - 1, Math.floor((y + r) / C));
+  for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+    const i = cy * GW + cx;
+    if (dust[i] <= 0) continue;
+    const dd = Math.hypot(cx * C + C / 2 - x, cy * C + C / 2 - y);
+    if (dd > r) continue;
+    const f = 1 - (dd / r) * (dd / r);
+    let amt = Math.min(dust[i], pw * dt * (0.3 + 0.7 * f));
+    if (removed + amt > capLeft) amt = capLeft - removed;
+    if (amt <= 0) return removed;
+    dust[i] -= amt;
+    if (dust[i] < 0.01) { amt += dust[i]; dust[i] = 0; }
+    removed += amt;
+    paintCell(i);
+  }
+  if (removed > 0) { dirty = true; remaining = Math.max(0, remaining - removed); }
+  return removed;
+}
+function dustAround(x, y, r) {
+  let s = 0, n = 0;
+  const x0 = Math.max(0, Math.floor((x - r) / C)), x1 = Math.min(GW - 1, Math.floor((x + r) / C));
+  const y0 = Math.max(0, Math.floor((y - r) / C)), y1 = Math.min(GH - 1, Math.floor((y + r) / C));
+  for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) { s += dust[cy * GW + cx]; n++; }
+  return n ? s / n : 0;
+}
+
+// ---------- entrées ----------
+const cv = document.getElementById("game"), ctx = cv.getContext("2d");
+const input = { held: false, tx: 0, ty: 0, keys: new Set() };
+function toWorld(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H]; }
+cv.addEventListener("pointerdown", e => { input.held = true; [input.tx, input.ty] = toWorld(e); try { cv.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+cv.addEventListener("pointermove", e => { if (input.held) [input.tx, input.ty] = toWorld(e); });
+const release = () => { input.held = false; };
+cv.addEventListener("pointerup", release); cv.addEventListener("pointercancel", release); cv.addEventListener("lostpointercapture", release);
+const KEYMAP = { arrowup: "u", w: "u", z: "u", arrowdown: "d", s: "d", arrowleft: "l", a: "l", q: "l", arrowright: "r", d: "r" };
+addEventListener("keydown", e => { const k = KEYMAP[e.key.toLowerCase()]; if (!k || e.target.closest("button")) return; input.keys.add(k); e.preventDefault(); });
+addEventListener("keyup", e => { const k = KEYMAP[e.key.toLowerCase()]; if (k) input.keys.delete(k); });
+addEventListener("blur", () => input.keys.clear());
+
+// ---------- boucle ----------
+function update(dt) {
+  t += dt;
+  // déplacement
+  let dx = 0, dy = 0, sp = speed();
+  if (input.keys.size) {
+    if (input.keys.has("u")) dy -= 1; if (input.keys.has("d")) dy += 1;
+    if (input.keys.has("l")) dx -= 1; if (input.keys.has("r")) dx += 1;
+    const m = Math.hypot(dx, dy) || 1; R.vx = dx / m * sp; R.vy = dy / m * sp;
+    if (dx || dy) moved = true;
+  } else if (input.held) {
+    const ex = input.tx - R.x, ey = input.ty - R.y, m = Math.hypot(ex, ey);
+    const v = m > 3 ? Math.min(sp, m * 6) : 0;
+    R.vx = m ? ex / m * v : 0; R.vy = m ? ey / m * v : 0; moved = true;
+  } else { R.vx *= 0.8; R.vy *= 0.8; }
+  R.x = Math.min(W - 12, Math.max(12, R.x + R.vx * dt));
+  R.y = Math.min(H - 12, Math.max(12, R.y + R.vy * dt));
+  const v = Math.hypot(R.vx, R.vy);
+  if (v > 8) { const ta = Math.atan2(R.vy, R.vx); let da = ta - R.a; da = Math.atan2(Math.sin(da), Math.cos(da)); R.a += da * Math.min(1, dt * 10); }
+  R.spin += dt * 14;
+
+  // aspiration
+  const c = cap(), free = c - S.tank;
+  if (free > 0.01) {
+    const got = cleanAt(R.x, R.y, radius(), power(), dt, free);
+    S.tank += got;
+    if (got > 0 && !reduceMotion && particles.length < 160) {
+      const n = Math.min(4, 1 + got * 2 | 0);
+      for (let k = 0; k < n; k++) { const a = Math.random() * TAU, d = radius() * (0.5 + Math.random() * 0.5); particles.push({ x: R.x + Math.cos(a) * d, y: R.y + Math.sin(a) * d, life: 0.35, max: 0.35, tx: 0 }); }
+    }
+    fullWarned = false;
+  } else if (!fullWarned) { fullWarned = true; toast("Réservoir plein : retourne à la base pour vendre la poussière.", "warn"); }
+
+  // vente à la base
+  if (S.tank > 0 && Math.hypot(R.x - LANDER.x, R.y - LANDER.y) < LANDER.r) {
+    const u = Math.min(S.tank, Math.max(c * 0.9, 250) * dt);
+    S.tank -= u; S.credits += u * price();
+    if (S.tank < 0.01) { S.tank = 0; }
+  }
+
+  // mini-robots
+  while (drones.length < S.lv.drone) drones.push({ x: LANDER.x + 20, y: LANDER.y - 20, tx: 0, ty: 0, a: 0, spin: 0, wait: 0 });
+  for (const d of drones) {
+    if (d.wait <= 0 || Math.hypot(d.tx - d.x, d.ty - d.y) < 4 || dustAround(d.tx, d.ty, 10) < 0.02) {
+      let best = -1, bx = d.x, by = d.y;
+      for (let k = 0; k < 40; k++) {
+        const i = Math.random() * dust.length | 0, val = dust[i] - Math.hypot((i % GW) * C - d.x, ((i / GW) | 0) * C - d.y) / 900;
+        if (val > best) { best = val; bx = (i % GW) * C + C / 2; by = ((i / GW) | 0) * C + C / 2; }
+      }
+      d.tx = bx; d.ty = by; d.wait = 4;
+    }
+    d.wait -= dt;
+    const ex = d.tx - d.x, ey = d.ty - d.y, m = Math.hypot(ex, ey) || 1, sp2 = 80;
+    d.x += ex / m * Math.min(sp2 * dt, m); d.y += ey / m * Math.min(sp2 * dt, m);
+    d.a = Math.atan2(ey, ex); d.spin += dt * 12;
+    const got = cleanAt(d.x, d.y, 15, 1.1, dt, 999);
+    S.credits += got * price() * 0.6;
+  }
+
+  // particules aspirées vers le robot
+  for (const p of particles) { p.life -= dt; if (p.spark) continue; const k = Math.min(1, dt * 9); p.x += (R.x - p.x) * k; p.y += (R.y - p.y) * k; }
+  particles = particles.filter(p => p.life > 0);
+
+  // trouvailles
+  for (const f of finds) {
+    if (f.found) continue;
+    if (dustAround(f.x, f.y, 9) < 0.06) {
+      f.found = true;
+      const bonus = Math.round(40 * (1 + S.zone) * (1 + 0.6 * S.zone));
+      S.credits += bonus;
+      toast(`Trouvaille : ${f.name} (+${fmtN(bonus)} cr)`, "ok");
+      for (let k = 0; k < 18 && !reduceMotion; k++) { const a = k / 18 * TAU; particles.push({ x: f.x, y: f.y, life: 0.7, max: 0.7, spark: 1, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90 }); }
+      renderFinds(); save();
+    }
+  }
+
+  // fin de zone
+  const pct = 1 - remaining / total;
+  if (!S.zoneDone && pct >= 0.97) {
+    S.zoneDone = true;
+    const bonus = Math.round(120 * (1 + S.zone) * (1 + 0.6 * S.zone));
+    S.credits += bonus;
+    document.getElementById("bTitle").textContent = zone.name + " est propre";
+    document.getElementById("bText").textContent = `Prime de fin de zone : +${fmtN(bonus)} crédits. La zone suivante a une couche de poussière plus épaisse, mais elle se vend plus cher.`;
+    document.getElementById("banner").hidden = false;
+    save();
+  }
+}
+
+function draw() {
+  ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(ground, 0, 0);
+
+  // objets enfouis (visibles quand la poussière s'amincit)
+  for (const f of finds) if (!f.found) drawFind(f);
+
+  if (dirty) { dctx.putImageData(img, 0, 0); dirty = false; }
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(dustCv, 0, 0, W, H);
+
+  drawLander();
+  for (const d of drones) drawDrone(d);
+  drawRobot();
+
+  for (const p of particles) {
+    const a = p.life / p.max;
+    if (p.spark) {
+      const k = 1 - a; ctx.fillStyle = `rgba(240,200,110,${a})`;
+      ctx.beginPath(); ctx.arc(p.x + p.vx * k * 0.5, p.y + p.vy * k * 0.5, 2.2, 0, TAU); ctx.fill();
+    } else { ctx.fillStyle = `rgba(222,214,198,${a * 0.9})`; ctx.fillRect(p.x - 1.2, p.y - 1.2, 2.4, 2.4); }
+  }
+
+  // flèche vers la base si plein
+  if (S.tank >= cap() - 0.01) {
+    const ex = LANDER.x - R.x, ey = LANDER.y - R.y, m = Math.hypot(ex, ey);
+    if (m > LANDER.r) {
+      const ux = ex / m, uy = ey / m, ox = R.x + ux * 34, oy = R.y + uy * 34;
+      ctx.save(); ctx.translate(ox, oy); ctx.rotate(Math.atan2(uy, ux));
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 6);
+      ctx.fillStyle = "#f2805f"; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-6, -7); ctx.lineTo(-2, 0); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  if (!moved) {
+    ctx.fillStyle = "rgba(11,13,19,0.75)"; roundRect(W / 2 - 190, H / 2 - 24, 380, 48, 10); ctx.fill();
+    ctx.fillStyle = "#ebe6dc"; ctx.font = "600 17px 'IBM Plex Sans', system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("Maintiens le clic pour guider le robot", W / 2, H / 2);
+  }
+}
+
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+function drawFind(f) {
+  ctx.save(); ctx.translate(f.x, f.y);
+  const glint = 0.5 + 0.5 * Math.sin(t * 3 + f.x);
+  if (f.kind === 0) { ctx.fillStyle = "#b9bfc9"; ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; ctx.lineTo(Math.cos(a) * 7, Math.sin(a) * 7); } ctx.fill(); ctx.fillStyle = "#555b66"; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, TAU); ctx.fill(); }
+  else if (f.kind === 1) { ctx.fillStyle = "#e3a23a"; ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(7, 0); ctx.lineTo(0, 9); ctx.lineTo(-7, 0); ctx.closePath(); ctx.fill(); }
+  else { ctx.fillStyle = "#8fd0c2"; ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fill(); ctx.fillStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.arc(-2, -2, 2, 0, TAU); ctx.fill(); }
+  ctx.strokeStyle = `rgba(255,240,200,${0.4 + 0.6 * glint})`; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(12, 0); ctx.moveTo(0, -12); ctx.lineTo(0, 12); ctx.stroke();
+  ctx.restore();
+}
+
+function drawLander() {
+  const { x, y, r } = LANDER;
+  ctx.save(); ctx.translate(x, y);
+  ctx.setLineDash([6, 6]); ctx.lineDashOffset = -t * 12;
+  ctx.strokeStyle = S.tank >= cap() - 0.01 ? "rgba(242,128,95,0.85)" : "rgba(240,180,76,0.5)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(5, 7, 26, 22, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = "#9aa0ab"; ctx.lineWidth = 2.5;
+  for (let k = 0; k < 4; k++) { const a = Math.PI / 4 + k * Math.PI / 2; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 10, Math.sin(a) * 10); ctx.lineTo(Math.cos(a) * 27, Math.sin(a) * 27); ctx.stroke(); ctx.fillStyle = "#c6cad2"; ctx.beginPath(); ctx.arc(Math.cos(a) * 27, Math.sin(a) * 27, 4, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = "#c9a245"; ctx.beginPath(); for (let k = 0; k < 8; k++) { const a = k / 8 * TAU + Math.PI / 8; ctx.lineTo(Math.cos(a) * 16, Math.sin(a) * 16); } ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "#8a6c25"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = "#e8e6e1"; ctx.beginPath(); ctx.arc(-1, -1, 9, 0, TAU); ctx.fill();
+  ctx.fillStyle = "#2c3954"; ctx.beginPath(); ctx.arc(-1, -1, 4, 0, TAU); ctx.fill();
+  const on = Math.sin(t * 4) > 0;
+  ctx.fillStyle = on ? "#f0b44c" : "#5a4520"; ctx.beginPath(); ctx.arc(9, -10, 2.6, 0, TAU); ctx.fill();
+  ctx.fillStyle = "rgba(235,230,220,0.85)"; ctx.font = "600 11px 'IBM Plex Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText("BASE", 0, r - 16);
+  ctx.restore();
+}
+
+function drawBrush(spin, n, rIn, rOut) {
+  ctx.strokeStyle = "#a59c8a"; ctx.lineWidth = 1.6;
+  for (let k = 0; k < n; k++) { const a = spin + k / n * TAU; ctx.beginPath(); ctx.moveTo(Math.cos(a) * rIn, Math.sin(a) * rIn); ctx.lineTo(Math.cos(a) * rOut, Math.sin(a) * rOut); ctx.stroke(); }
+}
+
+function drawRobot() {
+  const rad = radius();
+  ctx.save(); ctx.translate(R.x, R.y);
+  ctx.setLineDash([4, 7]); ctx.lineDashOffset = -t * 20;
+  ctx.strokeStyle = "rgba(240,180,76,0.35)"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(0, 0, rad, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(0,0,0,0.38)"; ctx.beginPath(); ctx.ellipse(3, 5, 17, 13, 0, 0, TAU); ctx.fill();
+  ctx.rotate(R.a);
+  drawBrush(R.spin, 10, 9, 18);
+  // chenilles
+  ctx.fillStyle = "#3b3f48"; roundRect(-14, -14, 26, 6, 3); ctx.fill(); roundRect(-14, 8, 26, 6, 3); ctx.fill();
+  ctx.strokeStyle = "#5c616c"; ctx.lineWidth = 1;
+  const off = (R.spin * 2) % 4;
+  for (let k = -14 + off; k < 12; k += 4) { ctx.beginPath(); ctx.moveTo(k, -14); ctx.lineTo(k, -8); ctx.moveTo(k, 8); ctx.lineTo(k, 14); ctx.stroke(); }
+  // corps
+  ctx.fillStyle = "#ece7db"; roundRect(-12, -9, 24, 18, 5); ctx.fill();
+  ctx.strokeStyle = "#7a7f8a"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = "#2b3c63"; ctx.fillRect(-9, -6, 11, 12);
+  ctx.strokeStyle = "rgba(160,190,255,0.35)"; ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(2, 0); ctx.moveTo(-3.5, -6); ctx.lineTo(-3.5, 6); ctx.stroke();
+  // phare
+  const cone = ctx.createRadialGradient(12, 0, 1, 12, 0, 46);
+  cone.addColorStop(0, "rgba(255,225,160,0.32)"); cone.addColorStop(1, "rgba(255,225,160,0)");
+  ctx.fillStyle = cone; ctx.beginPath(); ctx.moveTo(12, 0); ctx.arc(12, 0, 46, -0.45, 0.45); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#f0b44c"; ctx.beginPath(); ctx.arc(10, 0, 2.6, 0, TAU); ctx.fill();
+  ctx.restore();
+  // jauge du réservoir au-dessus du robot
+  const fill = S.tank / cap();
+  if (fill > 0.01) {
+    ctx.fillStyle = "rgba(11,13,19,0.7)"; ctx.fillRect(R.x - 15, R.y - 27, 30, 5);
+    ctx.fillStyle = fill >= 0.999 ? "#f2805f" : "#f0b44c"; ctx.fillRect(R.x - 14, R.y - 26, 28 * fill, 3);
+  }
+}
+
+function drawDrone(d) {
+  ctx.save(); ctx.translate(d.x, d.y);
+  ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.beginPath(); ctx.ellipse(2, 3, 10, 8, 0, 0, TAU); ctx.fill();
+  ctx.rotate(d.a);
+  drawBrush(d.spin, 7, 5, 11);
+  ctx.fillStyle = "#c4ccd9"; roundRect(-7, -6, 14, 12, 4); ctx.fill();
+  ctx.fillStyle = "#72d3a6"; ctx.beginPath(); ctx.arc(4, 0, 1.8, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- interface ----------
+const $ = id => document.getElementById(id);
+function fmtN(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(2).replace(".", ",") + " G";
+  if (n >= 1e6) return (n / 1e6).toFixed(2).replace(".", ",") + " M";
+  return Math.floor(n).toLocaleString("fr-FR");
+}
+function toast(msg, kind) {
+  const el = document.createElement("div"); el.className = "toast " + (kind || ""); el.textContent = msg;
+  const box = $("toasts"); box.appendChild(el);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => el.remove(), 3200);
+}
+function renderShop() {
+  const box = $("shop"); box.textContent = "";
+  for (const u of UPG) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "up"; b.id = "up-" + u.id;
+    b.innerHTML = '<span class="n"></span><span class="c"></span><span class="d"></span><span class="l"></span>';
+    b.querySelector(".n").textContent = u.name;
+    b.addEventListener("click", () => buy(u));
+    box.appendChild(b);
+  }
+  refreshShop();
+}
+function refreshShop() {
+  for (const u of UPG) {
+    const b = $("up-" + u.id), l = S.lv[u.id], max = l >= u.max, cost = costOf(u, l);
+    b.classList.toggle("max", max);
+    b.querySelector(".c").textContent = max ? "MAX" : fmtN(cost) + " cr";
+    b.querySelector(".d").textContent = max ? u.fmt(u.val(l)) : u.fmt(u.val(l)) + " → " + u.fmt(u.val(l + 1));
+    b.querySelector(".l").textContent = "niv. " + l + "/" + u.max;
+    b.disabled = max || S.credits < cost;
+  }
+}
+function buy(u) {
+  const l = S.lv[u.id], cost = costOf(u, l);
+  if (l >= u.max || S.credits < cost) return;
+  S.credits -= cost; S.lv[u.id]++;
+  toast(`${u.name} : niveau ${S.lv[u.id]}`);
+  refreshShop(); save();
+}
+function renderFinds() {
+  const box = $("finds"); box.textContent = "";
+  for (const f of finds) { const s = document.createElement("span"); s.className = "find" + (f.found ? " got" : ""); s.textContent = f.found ? f.name : "Objet enfoui"; box.appendChild(s); }
+  $("findCount").textContent = finds.filter(f => f.found).length + " / " + finds.length;
+}
+function renderZone() {
+  $("zNum").textContent = S.zone + 1; $("zName").textContent = zone.name;
+  $("banner").hidden = !S.zoneDone || S.bannerSeen;
+  renderFinds();
+}
+function refreshHud() {
+  $("credits").textContent = fmtN(S.credits);
+  const c = cap(), full = S.tank >= c - 0.01;
+  $("tankTxt").textContent = fmtN(S.tank) + " / " + fmtN(c) + " g";
+  $("tankFill").style.width = (S.tank / c * 100).toFixed(1) + "%";
+  $("tankBar").classList.toggle("full", full);
+  $("price").textContent = price().toFixed(2).replace(".", ",") + " cr/g";
+  const pct = Math.min(100, (1 - remaining / total) * 100);
+  $("pct").textContent = pct.toFixed(1).replace(".", ",") + " %";
+  $("pctBar").style.width = pct + "%";
+  refreshShop();
+}
+
+$("next").addEventListener("click", () => {
+  S.credits += S.tank * price(); S.tank = 0;
+  S.zone++; S.zoneDone = false; S.bannerSeen = false;
+  buildZone(S.zone);
+  R.x = 130; R.y = H - 120; drones.forEach(d => { d.x = LANDER.x + 20; d.y = LANDER.y - 20; d.wait = 0; });
+  renderZone(); save();
+  toast("Nouvelle zone : " + zone.name);
+});
+$("banner").addEventListener("click", e => { if (e.target.id === "banner") { S.bannerSeen = true; $("banner").hidden = true; } });
+
+let armedTimer = 0;
+$("reset").addEventListener("click", () => {
+  const b = $("reset");
+  if (!b.classList.contains("armed")) {
+    b.classList.add("armed"); b.textContent = "Clique encore pour tout effacer";
+    clearTimeout(armedTimer); armedTimer = setTimeout(() => { b.classList.remove("armed"); b.textContent = "Recommencer la mission"; }, 3000);
+    return;
+  }
+  clearTimeout(armedTimer); b.classList.remove("armed"); b.textContent = "Recommencer la mission";
+  try { localStorage.removeItem(KEY); } catch (_) {}
+  S = freshState(); drones = []; particles = []; moved = false;
+  buildZone(0); R.x = 130; R.y = H - 120; renderZone(); refreshHud();
+  toast("Mission réinitialisée");
+});
+
+// ---------- sauvegarde ----------
+function encode(arr) { const q = new Uint8Array(arr.length); for (let i = 0; i < arr.length; i++) q[i] = Math.min(255, Math.round(arr[i] * 40)); let s = ""; for (let i = 0; i < q.length; i += 8192) s += String.fromCharCode.apply(null, q.subarray(i, i + 8192)); return btoa(s); }
+function decode(str) { const s = atob(str), out = new Float32Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) / 40; return out; }
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify({ v: 1, S, dust: encode(dust), found: finds.map(f => f.found), rx: R.x, ry: R.y })); } catch (_) {}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY); if (!raw) return false;
+    const d = JSON.parse(raw); if (d.v !== 1) return false;
+    S = Object.assign(freshState(), d.S); S.lv = Object.assign(freshState().lv, d.S.lv);
+    buildZone(S.zone);
+    const saved = decode(d.dust);
+    if (saved.length === dust.length) { dust = saved; remaining = 0; for (let i = 0; i < dust.length; i++) remaining += dust[i]; repaintAll(); }
+    (d.found || []).forEach((v, i) => { if (finds[i]) finds[i].found = v; });
+    R.x = d.rx || R.x; R.y = d.ry || R.y; moved = true;
+    return true;
+  } catch (_) { return false; }
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+setInterval(save, 5000);
+
+// ---------- démarrage ----------
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+  cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.width * 10 / 16 * dpr));
+}
+new ResizeObserver(resize).observe(cv); resize();
+
+S = freshState();
+if (!load()) buildZone(0);
+renderShop(); renderZone(); refreshHud();
+
+let last = performance.now(), hudT = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  update(dt); draw();
+  hudT += dt; if (hudT > 0.1) { hudT = 0; refreshHud(); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
