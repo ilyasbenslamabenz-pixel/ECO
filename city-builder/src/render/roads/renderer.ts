@@ -37,7 +37,10 @@ export const DECOR_ASSETS: Record<DecorKind, string[]> = {
 };
 
 /** Distance (m) caméra-chunk au-delà de laquelle le décor passe au LOD le plus léger. */
-const DECOR_NEAR = 260;
+/** Distances (m, du bord approximatif du chunk) : LOD0 -> LOD1 -> LOD2 -> masqué. Réglées par l'intégration :
+ *  les arbres d'alignement Poly Haven font 16-20 k triangles au LOD0 (mesure de la scène de démo). */
+const DECOR_LOD0 = 40;
+const DECOR_NEAR = 300;
 const DECOR_HIDE = 1400;
 
 interface DecorBatch { meshes: THREE.InstancedMesh[][]; } // [lod][sous-maillage]
@@ -419,11 +422,11 @@ export class RoadNetworkRenderer implements IRoadRenderer {
   }
 
   private applyLod(c: Chunk): void {
-    const d = Math.hypot(this.cam.x - c.cx, this.cam.z - c.cz) - CHUNK_SIZE * 0.7;
-    const lod = d > DECOR_HIDE ? 2 : d > DECOR_NEAR ? 1 : 0;
+    const d = Math.max(0, Math.hypot(this.cam.x - c.cx, this.cam.z - c.cz) - CHUNK_SIZE * 0.5);
+    const lod = d > DECOR_HIDE ? 3 : d > DECOR_NEAR ? 2 : d > DECOR_LOD0 ? 1 : 0;
     if (lod === c.lod) return;
     c.lod = lod;
-    for (const b of c.batches) b.meshes.forEach((list, i) => { for (const m of list) m.visible = lod < 2 && i === lod; });
+    for (const b of c.batches) b.meshes.forEach((list, i) => { const want = Math.min(lod, b.meshes.length - 1); for (const m of list) m.visible = lod < 3 && i === want; });
   }
 
   private disposeChunk(c: Chunk): void {

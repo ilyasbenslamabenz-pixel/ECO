@@ -362,7 +362,8 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       for (let l = 0; l < nl; l++) {
         const slot = b.lods[l]!;
         if (slot.state !== 2) continue;
-        for (let p = 0; p < slot.parts.length; p++) slot.parts[p]!.mesh.count = slot.count;
+        // Un InstancedMesh à 0 instance coûte quand même un appel de rendu (et un dans la carte d'ombre) : masqué.
+        for (let p = 0; p < slot.parts.length; p++) { const m = slot.parts[p]!.mesh; m.count = slot.count; m.visible = slot.count > 0; }
         if (slot.count > 0) {
           slot.matrices!.needsUpdate = true;
           slot.colors!.needsUpdate = true;
