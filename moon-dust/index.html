@@ -2305,7 +2305,7 @@ function makeAstro() {
   for (const s of [-1, 1]) P(B, new T.CylinderGeometry(0.055, 0.055, 0.42, 10), METAL, -0.34, 1.18, s * 0.21);
   P(B, new T.CylinderGeometry(0.008, 0.008, 0.36, 5), METAL, -0.25, 1.62, -0.14);
   P(B, new T.BoxGeometry(0.02, 0.36, 0.06), DARK, -0.375, 1.18, 0);
-  P(B, new T.TubeGeometry(new T.CatmullRomCurve3([new T.Vector3(-0.3, 1.0, 0.18), new T.Vector3(-0.15, 0.78, 0.36), new T.Vector3(0.15, 0.7, 0.34), new T.Vector3(0.22, 0.72, 0.28)]), 14, 0.022, 6, false), JOINT);
+  P(B, new T.TubeGeometry(new T.CatmullRomCurve3([new T.Vector3(-0.3, 1.0, 0.18), new T.Vector3(-0.15, 0.78, 0.36), new T.Vector3(0.0, 0.66, 0.38), new T.Vector3(0.03, 0.74, 0.32)]), 14, 0.022, 6, false), JOINT);
   build(B, body);
   const tip = mesh(new T.SphereGeometry(0.025, 8, 6), M.green, -0.25, 1.81, -0.14, body); tip.castShadow = false;
   const fill = mesh(new T.BoxGeometry(0.025, 0.34, 0.045), M.amber, -0.38, 1.18, 0, body); fill.castShadow = false;
@@ -2317,12 +2317,16 @@ function makeAstro() {
   const vz = mesh(new T.SphereGeometry(0.205, 22, 14, Math.PI - 0.95, 1.9, 0.9, 1.05), visor, 0, 0, 0, head); vz.castShadow = false;
   const lens = mesh(new T.CylinderGeometry(0.022, 0.022, 0.02, 10), M.lens, 0.168, 0.16, 0.08, head); lens.rotation.z = Math.PI / 2; lens.castShadow = false;
   // aspirateur à main
-  const vac = new T.Group(); vac.position.set(0.32, 0.72, 0.28); body.add(vac);
-  B = []; P(B, new T.CylinderGeometry(0.03, 0.035, 0.75, 8), METAL, 0.18, -0.2, 0, 0, 0, -1.0); P(B, new T.CylinderGeometry(0.05, 0.05, 0.16, 10), ORANGE, -0.12, 0, 0, 0, 0, -1.0);
-  P(B, new T.CylinderGeometry(0.12, 0.09, 0.06, 12), DARK, 0.5, -0.42, 0);
-  for (let k = 0; k < 3; k++) P(B, new T.BoxGeometry(0.16, 0.025, 0.02), BRISTLE, 0.5, -0.45, 0, 0, k / 3 * Math.PI, 0);
+  // tenu dans la main droite : accroché à l'avant-bras, il suit le bras ; la buse frôle le sol devant l'astronaute
+  const vac = new T.Group(); vac.position.set(0, -0.31, 0); arms[1].el.add(vac);
+  const WD = 0.303, WL = 0.88, ex = Math.sin(WD) * WL, ey = -Math.cos(WD) * WL;
+  B = [];
+  P(B, new T.CylinderGeometry(0.045, 0.045, 0.15, 10), ORANGE, 0, 0, 0, 0, 0, WD);                       // poignée dans le gant
+  P(B, new T.CylinderGeometry(0.022, 0.028, WL, 8), METAL, ex / 2, ey / 2, 0, 0, 0, WD);                  // tube
+  P(B, new T.CylinderGeometry(0.12, 0.08, 0.06, 12), DARK, ex, ey, 0, 0, 0, -0.35);                       // buse, à plat au sol
+  for (let k = 0; k < 3; k++) P(B, new T.BoxGeometry(0.16, 0.025, 0.02), BRISTLE, ex + Math.sin(-0.35) * 0.03, ey - 0.03, 0, 0, k / 3 * Math.PI, -0.35);
   build(B, vac);
-  const brush = new T.Group(); brush.position.set(0.5, -0.42, 0); vac.add(brush);
+  const brush = new T.Group(); brush.position.set(ex, ey, 0); vac.add(brush);
   g.scale.setScalar(1.08);
   scene.add(g);
   const tread = { offset: { x: 0 } };   // interface commune avec les véhicules (pas de chenilles)
