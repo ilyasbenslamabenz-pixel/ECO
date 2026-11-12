@@ -12,6 +12,7 @@ import type { DeltaMessage } from '../shared/protocol';
 import type { BuildingOccupancy, CitizenInfo, DemographyReport } from './demography';
 import { TAX_SECTORS, type Forecast, type Loan, type LoanOffer, type MonthRecord, type TaxSector } from './economy';
 import type { Season } from './clock';
+import type { CityBuildResult } from './city-builder';
 
 export interface SimNotice {
   /** Minute de jeu de l'événement. */
@@ -65,6 +66,11 @@ export interface ExtCommandMap {
   setFocus: { args: { x: number; z: number }; result: { detailed: number; simplified: number; statistical: number } };
   /** Peuplement accéléré (scène de démonstration) : N vagues d'immigration + recherche d'emploi immédiates. */
   settle: { args: { waves: number }; result: { population: number; households: number } };
+  /**
+   * Construit une ville (scène de démonstration ou test de charge) avec les opérations du joueur
+   * (src/sim/city-builder.ts). Suivi d'un instantané complet.
+   */
+  buildCity: { args: { preset: 'demo' | 'stress'; maxBuildings?: number; settleWaves?: number; vehicles?: number }; result: CityBuildResult & { vehicles: number } };
 }
 
 export type ExtCommandName = keyof ExtCommandMap;
@@ -75,7 +81,7 @@ export type ExtCommandMessage = { [K in ExtCommandName]: { kind: 'cmd'; reqId: n
 /** Delta enrichi : `report` présent environ une fois par seconde. */
 export type DeltaMessageExt = DeltaMessage & { report?: SimReport };
 
-export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle'];
+export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity'];
 
 export function isExtCommandName(name: unknown): name is ExtCommandName {
   return typeof name === 'string' && (EXT_COMMANDS as readonly string[]).includes(name);
@@ -109,5 +115,11 @@ export function validateExtCommand(msg: unknown): CommandError | null {
       return isNum(a.x) && isNum(a.z) ? null : bad('Point focal invalide');
     case 'settle':
       return isNum(a.waves) && a.waves >= 1 && a.waves <= 200 ? null : bad('Nombre de vagues invalide (1..200)');
+    case 'buildCity':
+      if (a.preset !== 'demo' && a.preset !== 'stress') return bad('Préréglage de ville inconnu');
+      if (a.maxBuildings !== undefined && (!isNum(a.maxBuildings) || a.maxBuildings < 1 || a.maxBuildings > 5000)) return bad('Nombre de bâtiments invalide (1..5000)');
+      if (a.vehicles !== undefined && (!isNum(a.vehicles) || a.vehicles < 0 || a.vehicles > 5000)) return bad('Nombre de véhicules invalide (0..5000)');
+      if (a.settleWaves !== undefined && (!isNum(a.settleWaves) || a.settleWaves < 0 || a.settleWaves > 200)) return bad('Nombre de vagues invalide (0..200)');
+      return null;
   }
 }

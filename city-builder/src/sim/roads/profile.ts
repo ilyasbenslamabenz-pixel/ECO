@@ -11,6 +11,18 @@ export type HeightFn = (x: number, z: number) => number;
 export interface ProfileEnv {
   heightAt: HeightFn;
   waterLevel: number;
+  /**
+   * Surface d'eau locale (rivières, lacs d'altitude) ou -Infinity si sec. Facultatif : sans elle, seule la mer
+   * (`waterLevel`) compte comme eau. Ajouté par l'intégration pour les ponts au-dessus des rivières.
+   */
+  waterAt?: HeightFn;
+}
+
+/** Niveau d'eau local en (x, z) : max(mer, surface locale). */
+export function localWaterLevel(env: ProfileEnv, x: number, z: number): number {
+  if (!env.waterAt) return env.waterLevel;
+  const w = env.waterAt(x, z);
+  return w > env.waterLevel ? w : env.waterLevel;
 }
 
 /** Tirant d'air minimal d'un pont au-dessus de l'eau (m). */
@@ -57,10 +69,12 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
   const count = Math.max(2, Math.ceil(length / PROFILE_STEP) + 1);
   const step = length / (count - 1);
   const ground = new Float32Array(count);
+  const wl = new Float64Array(count);
   const p = new Float64Array(2);
   for (let i = 0; i < count; i++) {
     evalCubic(curve, arc.tAt(i * step), p);
     ground[i] = env.heightAt(p[0]!, p[1]!);
+    wl[i] = localWaterLevel(env, p[0]!, p[1]!);
   }
   // 1) Lissage du terrain (moyenne glissante pondérée sur ~±16 m) : la route n'épouse pas chaque bosse.
   const radius = Math.max(1, Math.round(16 / step));
@@ -77,7 +91,7 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
   // 2) Bornes basses : au-dessus de l'eau, tirant d'air du pont ; propagées en rampes de pente maxGrade.
   const g = maxGrade * step * 0.98;
   const lower = new Float64Array(count).fill(-Infinity);
-  for (let i = 0; i < count; i++) if (ground[i]! < env.waterLevel + 0.4) lower[i] = env.waterLevel + BRIDGE_CLEARANCE;
+  for (let i = 0; i < count; i++) if (ground[i]! < wl[i]! + 0.4) lower[i] = wl[i]! + BRIDGE_CLEARANCE;
   for (let i = 1; i < count; i++) lower[i] = Math.max(lower[i]!, lower[i - 1]! - g);
   for (let i = count - 2; i >= 0; i--) lower[i] = Math.max(lower[i]!, lower[i + 1]! - g);
   // Hors eau, la chaussée ne descend pas sous l'eau.
@@ -113,13 +127,13 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
     heights[i] = h[i]!;
     if (i > 0) maxG = Math.max(maxG, Math.abs(h[i]! - h[i - 1]!) / step);
     const gi = ground[i]!;
-    if (gi < env.waterLevel + 0.4 || h[i]! - gi > BRIDGE_MIN_HEIGHT) bridge[i] = 1;
+    if (gi < wl[i]! + 0.4 || h[i]! - gi > BRIDGE_MIN_HEIGHT) bridge[i] = 1;
   }
   // Pont : on comble les trous d'un échantillon et on supprime les ponts d'un seul échantillon (remblai).
   for (let i = 1; i < count - 1; i++) if (!bridge[i] && bridge[i - 1] && bridge[i + 1]) bridge[i] = 1;
   for (let i = 0; i < count; i++) {
-    if (bridge[i] && !(bridge[i - 1] ?? 0) && !(bridge[i + 1] ?? 0) && ground[i]! >= env.waterLevel + 0.4) bridge[i] = 0;
-    if (!bridge[i] && ground[i]! < env.waterLevel + 0.4) wet = true;
+    if (bridge[i] && !(bridge[i - 1] ?? 0) && !(bridge[i + 1] ?? 0) && ground[i]! >= wl[i]! + 0.4) bridge[i] = 0;
+    if (!bridge[i] && ground[i]! < wl[i]! + 0.4) wet = true;
   }
   const { bridgeLength, longest, piers } = spans(bridge, step, length);
   return { length, count, step, heights, ground, bridge, maxGrade: maxG, bridgeLength, longestBridge: longest, piers, wet };

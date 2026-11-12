@@ -38,7 +38,8 @@ export function townCatalog(): AssetCatalog {
 export function newTownSim(money = 50_000_000, seed = 1234): Simulation {
   const s = new Simulation();
   s.setCatalog(townCatalog());
-  s.newGame({ seed, mapChunks: 4, startMoney: money, cityName: 'Bourg-Test' });
+  // Carte sans eau intérieure : les scénarios posent la ville à des positions fixes autour du centre.
+  s.newGame({ seed, mapChunks: 4, startMoney: money, cityName: 'Bourg-Test', terrain: { hydrology: 'aucune', rivers: 0 } });
   return s;
 }
 

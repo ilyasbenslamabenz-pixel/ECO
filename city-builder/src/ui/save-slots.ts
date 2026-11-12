@@ -34,7 +34,33 @@ export function describeSave(slot: string, s: SaveFile): SlotInfo {
   };
 }
 
-export function listSlots(): SlotInfo[] {
+/**
+ * Source des emplacements : par défaut localStorage (ancienne API) ; main.ts branche le SaveStore
+ * (IndexedDB + gzip, src/save/store.ts) avec `setSlotProvider`.
+ */
+export interface SlotProvider {
+  list(): Promise<SlotInfo[]>;
+  remove(slot: string): Promise<boolean>;
+}
+
+let provider: SlotProvider = {
+  list: () => Promise.resolve(listLocalSlots()),
+  remove: (slot) => Promise.resolve(deleteSlot(slot)),
+};
+
+export function setSlotProvider(p: SlotProvider): void { provider = p; }
+export function listSlotsAsync(): Promise<SlotInfo[]> { return provider.list().catch(() => []); }
+export function removeSlotAsync(slot: string): Promise<boolean> { return provider.remove(slot).catch(() => false); }
+
+/** Date de jeu lisible à partir des minutes écoulées. */
+export function gameDateLabel(minutes: number): string {
+  const days = Math.floor(minutes / 1440);
+  return `an ${Math.floor(days / 360) + 1}, ${MONTHS[Math.floor((days % 360) / 30)] ?? ''}`;
+}
+
+export function listSlots(): SlotInfo[] { return listLocalSlots(); }
+
+function listLocalSlots(): SlotInfo[] {
   const out: SlotInfo[] = [];
   try {
     for (let i = 0; i < localStorage.length; i++) {

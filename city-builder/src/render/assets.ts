@@ -17,13 +17,16 @@ export async function fetchCatalog(assetsBase: URL): Promise<AssetCatalog> {
 }
 
 /**
- * Convertit en float32 les attributs quantifiés (KHR_mesh_quantization / meshopt : entiers normalisés ou non).
+ * Convertit en float32 les attributs géométriques quantifiés (positions, normales, tangentes) (KHR_mesh_quantization / meshopt : entiers normalisés ou non).
  * Les transformations de nœud (échelle/translation de déquantification) sont conservées : les consommateurs
  * qui « cuisent » `matrixWorld` dans la géométrie (applyMatrix4) obtiennent ainsi des valeurs exactes, sans
  * saturation d'un entier normalisé. Coût mémoire assumé (les géométries sont partagées par instanciation).
  */
 export function dequantizeGeometry(g: THREE.BufferGeometry): void {
   for (const name of Object.keys(g.attributes)) {
+    // Les UV restent telles quelles : applyMatrix4 ne les touche pas, et le rendu des bâtiments applique lui-même
+    // la plage `uvq` du kit aux UV quantifiées.
+    if (name.startsWith('uv')) continue;
     const a = g.attributes[name] as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
     const isIL = (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute === true;
     if (!isIL && (a as THREE.BufferAttribute).array instanceof Float32Array && !a.normalized) continue;

@@ -14,6 +14,11 @@ import type { AssetCatalog } from './catalog';
 /* ------------------------------------------------------------------ */
 
 export type RoadTypeId = 'street' | 'avenue' | 'boulevard';
+/**
+ * Les 6 types de routes du module routier (src/sim/roads/types.ts : largeurs, voies, vitesses, coûts en données).
+ * `RoadTypeId` reste le type « hérité » (sauvegardes v1, outils simples) ; chaque tronçon porte son `kind`.
+ */
+export type RoadKindId = 'street' | 'avenue' | 'boulevard' | 'oneway' | 'pedestrian' | 'highway';
 
 export interface RoadTypeDef {
   id: RoadTypeId;
@@ -40,6 +45,21 @@ export interface NewGameParams {
   cityName: string;
   /** Si vrai, la simulation pré-construit la ville de démonstration (fournie par le rendu/demo). */
   demo?: boolean;
+  /** Paramètres de génération de la carte (src/sim/terrain WorldGenParams) ; valeurs par défaut sinon. */
+  terrain?: MapGenOptions;
+  /** Heure de départ de l'horloge (0..23,99) ; défaut 0 h. */
+  startHour?: number;
+}
+
+/** Options de carte exposées à l'écran « Nouvelle partie » (sous-ensemble de WorldGenParams). */
+export interface MapGenOptions {
+  hydrology?: 'mer' | 'lac' | 'aucune';
+  relief?: number;
+  forest?: number;
+  rivers?: number;
+  maxAltitude?: number;
+  erosion?: number;
+  resources?: number;
 }
 
 /** Carte de hauteurs : grille (samplesX x samplesZ) de hauteurs en mètres, espacement `spacing`. */
@@ -106,8 +126,18 @@ export interface RoadEdgeRecord {
   id: number;
   a: number;
   b: number;
+  /** Type hérité le plus proche (consommateurs simples). */
   type: RoadTypeId;
   length: number;
+  /** Type exact (6 types). Absent = `type`. */
+  kind?: RoadKindId;
+  /** Points de contrôle de la Bézier cubique (extrémités = nœuds a et b). Absents = tronçon droit. */
+  c1?: [number, number];
+  c2?: [number, number];
+  /** Profil en long validé par la simulation : hauteurs de chaussée (m, au cm) au pas régulier de 4 m. */
+  profile?: number[];
+  /** Plages de pont [début, fin[ en mètres le long du tronçon. */
+  bridgeRuns?: number[];
 }
 
 /** Sauvegarde JSON versionnée (indépendante du moteur). */

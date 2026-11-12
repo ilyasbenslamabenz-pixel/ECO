@@ -29,7 +29,8 @@ export function handleCommand(sim: Simulation, raw: unknown): HandlerOutput {
     if (e) return failure(e);
     const m = raw as ExtCommandMessage;
     const r = sim.runExt(m.name, m.args as never);
-    return r.ok ? success(r.data) : failure(r.error);
+    // Une ville construite d'un coup : instantané complet plutôt qu'un delta géant.
+    return r.ok ? success(r.data, m.name === 'buildCity') : failure(r.error);
   }
 
   const err = validateCommandMessage(raw);

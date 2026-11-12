@@ -15,6 +15,7 @@ import type {
   SnapshotMessage,
   WorkerToMain,
 } from '../shared/protocol';
+import type { ExtCommandArgs, ExtCommandName, ExtCommandResult } from '../sim/sim-protocol';
 
 export class SimCommandError extends Error {
   constructor(public readonly error: CommandError) {
@@ -87,6 +88,11 @@ export class SimBridge {
       this.pending.set(reqId, { resolve: resolve as (v: unknown) => void, reject });
       this.worker.postMessage({ kind: 'cmd', reqId, name, args });
     });
+  }
+
+  /** Commandes étendues (économie, démographie, LOD de simulation, génération de ville) : mêmes enveloppes. */
+  sendExt<K extends ExtCommandName>(name: K, args: ExtCommandArgs<K>): Promise<ExtCommandResult<K>> {
+    return this.send(name as never, args as never) as unknown as Promise<ExtCommandResult<K>>;
   }
 
   onSnapshot(l: Listener<SnapshotMessage>): void { this.snapshotListeners.push(l); }

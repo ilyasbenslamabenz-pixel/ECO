@@ -40,7 +40,7 @@ export const MAX_ROAD_SLOPE = 0.12;
 export const DEFAULT_START_MONEY = 500_000;
 
 /** Version du format de sauvegarde (incrémenter à chaque changement incompatible). */
-export const SAVE_FORMAT_VERSION = 1;
+export const SAVE_FORMAT_VERSION = 2;
 /** Version du protocole de messages main <-> worker. */
 export const PROTOCOL_VERSION = 1;
 /** Version du schéma du catalogue d'assets. */

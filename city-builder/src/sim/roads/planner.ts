@@ -6,7 +6,7 @@
  */
 import { ArcTable, derivCubic, evalCubic, intersectCubics, minRadius, quadraticToCubic, splitCubic, straightCubic, type Cubic } from './bezier';
 import type { RoadNetwork } from './network';
-import { MAX_BRIDGE_LENGTH, computeProfile, profileHeightAt, profileIsBridge, type RoadProfile } from './profile';
+import { MAX_BRIDGE_LENGTH, computeProfile, localWaterLevel, profileHeightAt, profileIsBridge, type RoadProfile } from './profile';
 import { ROAD_KINDS, halfWidth, type RoadKindId } from './types';
 
 export interface Point2 { x: number; z: number }
@@ -260,7 +260,7 @@ export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions =
   }
   // Extrémités libres dans l'eau.
   for (const s of [start, end]) {
-    if (s.type === 'free' && net.env.heightAt(s.x, s.z) < net.env.waterLevel + 0.3) return err('UNDER_WATER', 'Une route ne peut pas commencer ou finir dans l\'eau');
+    if (s.type === 'free' && net.env.heightAt(s.x, s.z) < localWaterLevel(net.env, s.x, s.z) + 0.3) return err('UNDER_WATER', 'Une route ne peut pas commencer ou finir dans l\'eau');
   }
 
   // Chevauchement d'une route existante (hors voisinage des points de raccord).

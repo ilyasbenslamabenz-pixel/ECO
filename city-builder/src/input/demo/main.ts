@@ -33,7 +33,7 @@ async function main(): Promise<void> {
   const mock = new MockSim(catalog, Number(params.get('seed') ?? 7), 4, 20_000_000, 'Clair-Vallon');
 
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
-  const render = initRender(canvas, lib);
+  const render = await initRender(canvas, lib, catalog, assetsBase);
   const input = initInput(render.ctx.camera, canvas, (x, z) => render.terrain.heightAt(x, z));
   const ui = initUI({
     onNewGame: () => ui.hideMenu(),
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   render.ctx.onFrame.unshift((dt) => {
     input.camera.update(dt);
     const p = input.camera.getPose();
-    render.env.follow(p.targetX, p.targetZ);
+    render.followView(p);
     cons.update(dt);
   });
   applyGraphicsOptions(loadOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera });

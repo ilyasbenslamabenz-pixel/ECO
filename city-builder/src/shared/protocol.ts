@@ -6,6 +6,8 @@
  */
 import { PROTOCOL_VERSION, SIM_SPEEDS, type SimSpeed } from './constants';
 import type { AssetCatalog } from './catalog';
+// Type pur (aucun code) : le rapport périodique est défini avec les commandes étendues de la simulation.
+import type { SimReport } from '../sim/sim-protocol';
 import {
   ROAD_TYPES,
   type BuildingRecord,
@@ -13,6 +15,7 @@ import {
   type NewGameParams,
   type RoadEdgeRecord,
   type RoadNodeRecord,
+  type RoadKindId,
   type RoadTypeId,
   type SaveFile,
   type SimStats,
@@ -28,7 +31,15 @@ export interface CommandMap {
   newGame: { args: NewGameParams; result: { seed: number } };
   buildRoad: {
     /** points = [x0, z0, x1, z1, ...] (m), au moins 2 points. dryRun : valide et chiffre sans construire. */
-    args: { type: RoadTypeId; points: number[]; dryRun?: boolean };
+    args: {
+      type: RoadTypeId;
+      points: number[];
+      dryRun?: boolean;
+      /** Type exact (6 types) ; prioritaire sur `type`. */
+      kind?: RoadKindId;
+      /** Point de contrôle d'une courbe (quadratique) quand `points` contient exactement 2 points. */
+      control?: [number, number];
+    };
     result: { edgeIds: number[]; cost: number };
   };
   removeRoad: { args: { edgeId: number }; result: { refund: number } };
@@ -84,6 +95,23 @@ export interface VehicleFrame {
   count: number;
   positions: Float32Array;
   assetIndices: Uint16Array;
+  /** Identifiants stables (interpolation entre deux ticks). */
+  ids?: Uint32Array;
+  /** Variante de peinture. */
+  variants?: Uint8Array;
+  /** Drapeaux : 1 freinage, 8 urgence. */
+  flags?: Uint8Array;
+}
+
+/** Zone de la carte de hauteurs modifiée par la simulation (nivellement sous les routes, terraformation). */
+export interface TerrainPatchMsg {
+  i0: number;
+  j0: number;
+  i1: number;
+  j1: number;
+  /** (i1-i0+1) * (j1-j0+1) hauteurs, ligne par ligne (transférées). */
+  heights: Float32Array;
+  waterSurface: Float32Array;
 }
 
 /** Delta par tick (ou groupe de ticks) : uniquement ce qui a changé. */
@@ -97,6 +125,10 @@ export interface DeltaMessage {
   roadEdgesRemoved: number[];
   vehicles: VehicleFrame | null;
   stats: SimStats;
+  /** Zone de terrain modifiée depuis le dernier delta (transférée). */
+  terrainPatch?: TerrainPatchMsg;
+  /** Rapport économie / démographie / trafic (≈ 1 fois/s) : type SimReport de src/sim/sim-protocol.ts. */
+  report?: SimReport;
 }
 
 export interface LogMessage {
@@ -109,11 +141,19 @@ export type WorkerToMain = ReadyMessage | ResultMessage | SnapshotMessage | Delt
 
 /** Liste des buffers à transférer pour un message worker -> main. */
 export function collectTransferables(msg: WorkerToMain): Transferable[] {
-  if (msg.kind === 'snapshot') return [msg.terrain.heights.buffer as ArrayBuffer];
-  if (msg.kind === 'delta' && msg.vehicles) {
-    return [msg.vehicles.positions.buffer as ArrayBuffer, msg.vehicles.assetIndices.buffer as ArrayBuffer];
+  const out = new Set<ArrayBuffer>();
+  const add = (v: unknown): void => { if (ArrayBuffer.isView(v) && v.buffer instanceof ArrayBuffer) out.add(v.buffer); };
+  if (msg.kind === 'snapshot') {
+    // Carte de hauteurs + couches d'un WorldTerrain (eau, humidité, forêt, ressources, rivières), toutes copiées par la simulation.
+    for (const v of Object.values(msg.terrain)) add(v);
+    const rivers = (msg.terrain as { rivers?: { points?: unknown }[] }).rivers;
+    if (Array.isArray(rivers)) for (const r of rivers) add(r.points);
+  } else if (msg.kind === 'delta') {
+    const v = msg.vehicles;
+    if (v) { add(v.positions); add(v.assetIndices); add(v.ids); add(v.variants); add(v.flags); }
+    if (msg.terrainPatch) { add(msg.terrainPatch.heights); add(msg.terrainPatch.waterSurface); }
   }
-  return [];
+  return [...out];
 }
 
 /* ------------------------------------------------------------------ */
@@ -121,6 +161,7 @@ export function collectTransferables(msg: WorkerToMain): Transferable[] {
 /* ------------------------------------------------------------------ */
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const ROAD_KIND_IDS: readonly RoadKindId[] = ['street', 'avenue', 'boulevard', 'oneway', 'pedestrian', 'highway'];
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const bad = (message: string): CommandError => ({ code: 'INVALID_ARGS', message });
 
@@ -139,11 +180,18 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
     case 'newGame':
       if (!isNum(a.seed) || !isNum(a.mapChunks) || !isNum(a.startMoney) || typeof a.cityName !== 'string') return bad('Paramètres de partie invalides');
       if (a.mapChunks < 1 || a.mapChunks > 32) return bad('Taille de carte hors limites (1..32 chunks)');
+      if (a.startHour !== undefined && (!isNum(a.startHour) || a.startHour < 0 || a.startHour >= 24)) return bad('Heure de départ invalide');
+      if (a.terrain !== undefined && (typeof a.terrain !== 'object' || a.terrain === null)) return bad('Paramètres de carte invalides');
       return null;
     case 'buildRoad': {
       if (typeof a.type !== 'string' || !(a.type in ROAD_TYPES)) return bad('Type de route inconnu');
+      if (a.kind !== undefined && !ROAD_KIND_IDS.includes(a.kind as RoadKindId)) return bad('Type de route inconnu');
       const p = a.points;
       if (!Array.isArray(p) || p.length < 4 || p.length % 2 !== 0 || !p.every(isNum)) return bad('Tracé de route invalide');
+      if (a.control !== undefined) {
+        const c = a.control;
+        if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum) || p.length !== 4) return bad('Point de contrôle de courbe invalide');
+      }
       return null;
     }
     case 'removeRoad':

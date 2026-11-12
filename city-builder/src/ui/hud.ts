@@ -24,7 +24,7 @@ import { FinanceChart, FinanceHistory } from './finance';
 import { toast as showToast } from './notify';
 import { loadOptions, sanitizeOptions, saveOptions, type GraphicsOptions } from './options';
 import { InfoPanel } from './panels';
-import { deleteSlot, listSlots, slotId } from './save-slots';
+import { listSlotsAsync, removeSlotAsync, slotId } from './save-slots';
 import type { ThumbnailSource } from './thumbnails';
 import { initTooltips } from './tooltips';
 
@@ -112,7 +112,7 @@ export function initUI(h: UIHandlers): UIHandle {
     btnDemo.addEventListener('click', () => h.onDemo?.());
   }
   const btnLoad = $<HTMLButtonElement>('btn-load');
-  if (h.onLoadSlot) { btnLoad.classList.remove('hidden'); btnLoad.addEventListener('click', () => { renderLoadList(); showScreen('load'); }); }
+  if (h.onLoadSlot) { btnLoad.classList.remove('hidden'); btnLoad.addEventListener('click', () => { void renderLoadList(); showScreen('load'); }); }
   const btnOptions = $<HTMLButtonElement>('btn-options');
   if (h.onOptions) { btnOptions.classList.remove('hidden'); btnOptions.addEventListener('click', () => { fillOptions(); showScreen('options'); }); }
   const btnQuit = $<HTMLButtonElement>('btn-quit');
@@ -129,15 +129,15 @@ export function initUI(h: UIHandlers): UIHandle {
   });
 
   /* ---------- Chargement ---------- */
-  const renderLoadList = (): void => {
+  const renderLoadList = async (): Promise<void> => {
     const ul = $('load-list');
+    const slots = await listSlotsAsync();
     ul.replaceChildren();
-    const slots = listSlots();
     if (!slots.length) { ul.append(el('li', { cls: 'slot-empty', text: 'Aucune sauvegarde dans ce navigateur.' })); return; }
     for (const s of slots) {
       const load = el('button', { cls: 'primary', text: 'Charger' });
       load.addEventListener('click', () => h.onLoadSlot?.(s.slot));
-      const del = deleteButton(s.slot, renderLoadList);
+      const del = deleteButton(s.slot, () => { void renderLoadList(); });
       ul.append(el('li', { cls: 'slot' }, el('div', { cls: 'meta' }, el('div', { cls: 'name', text: `${s.cityName} — ${s.slot === 'auto' ? 'sauvegarde rapide' : s.slot}` }),
         el('div', { cls: 'sub', text: `${s.gameDate} · ${money(s.money)} · ${fmt(s.buildings)} bâtiments · ${formatSavedAt(s.savedAt)}` })), load, del));
     }
@@ -148,8 +148,10 @@ export function initUI(h: UIHandlers): UIHandle {
     let armed = false;
     del.addEventListener('click', () => {
       if (!armed) { armed = true; del.textContent = 'Confirmer ?'; setTimeout(() => { armed = false; if (del.isConnected) del.textContent = '🗑'; }, 2500); return; }
-      if (deleteSlot(slot)) showToast('Sauvegarde supprimée', 'ok'); else showToast('Suppression impossible', 'error');
-      after();
+      void removeSlotAsync(slot).then((ok) => {
+        if (ok) showToast('Sauvegarde supprimée', 'ok'); else showToast('Suppression impossible', 'error');
+        after();
+      });
     });
     return del;
   };
@@ -176,20 +178,20 @@ export function initUI(h: UIHandlers): UIHandle {
   /* ---------- Barre supérieure ---------- */
   $('btn-camera').addEventListener('click', () => h.onToggleCamera());
   const savePanel = $('save-panel');
-  const renderSaveList = (): void => {
+  const renderSaveList = async (): Promise<void> => {
     const ul = $('save-list');
+    const slots = await listSlotsAsync();
     ul.replaceChildren();
-    const slots = listSlots();
     if (!slots.length) ul.append(el('li', { cls: 'slot-empty', text: 'Aucun emplacement : créez-en un ci-dessous.' }));
     for (const s of slots) {
       const over = el('button', { text: 'Écraser' });
-      over.addEventListener('click', () => { void Promise.resolve(h.onSaveSlot?.(s.slot)).then(renderSaveList); });
+      over.addEventListener('click', () => { void Promise.resolve(h.onSaveSlot?.(s.slot)).then(() => renderSaveList()); });
       ul.append(el('li', { cls: 'slot' }, el('div', { cls: 'meta' }, el('div', { cls: 'name', text: s.slot === 'auto' ? 'Sauvegarde rapide' : s.slot }),
-        el('div', { cls: 'sub', text: `${s.cityName} · ${s.gameDate} · ${formatSavedAt(s.savedAt)}` })), over, deleteButton(s.slot, renderSaveList)));
+        el('div', { cls: 'sub', text: `${s.cityName} · ${s.gameDate} · ${formatSavedAt(s.savedAt)}` })), over, deleteButton(s.slot, () => { void renderSaveList(); })));
     }
   };
   $('btn-save').addEventListener('click', () => {
-    if (h.onSaveSlot) { renderSaveList(); savePanel.classList.remove('hidden'); } else h.onSave();
+    if (h.onSaveSlot) { void renderSaveList(); savePanel.classList.remove('hidden'); } else h.onSave();
   });
   $('save-close').addEventListener('click', () => savePanel.classList.add('hidden'));
   $<HTMLFormElement>('form-save').addEventListener('submit', (e) => {
@@ -197,7 +199,7 @@ export function initUI(h: UIHandlers): UIHandle {
     const input = $<HTMLInputElement>('save-name');
     const id = slotId(input.value);
     input.value = '';
-    void Promise.resolve(h.onSaveSlot?.(id)).then(renderSaveList);
+    void Promise.resolve(h.onSaveSlot?.(id)).then(() => renderSaveList());
   });
   $('btn-menu').addEventListener('click', () => h.onMenu());
   const speedButtons = Array.from(hud.querySelectorAll<HTMLButtonElement>('[data-speed]'));

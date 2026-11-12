@@ -12,7 +12,7 @@ import { testCatalog } from '../fixtures/catalog';
 function newSim(money = 1_000_000): Simulation {
   const s = new Simulation();
   s.setCatalog(testCatalog());
-  s.newGame({ seed: 1234, mapChunks: 4, startMoney: money, cityName: 'Test' });
+  s.newGame({ seed: 1234, mapChunks: 4, startMoney: money, cityName: 'Test', terrain: { rivers: 0 } });
   return s;
 }
 
@@ -86,7 +86,7 @@ test('routes : construction, coût, collision avec bâtiment, suppression', () =
   const money0 = s.economy.money;
   const road = s.buildRoad({ type: 'street', points: [x - 40, z + 40, x + 40, z + 40] });
   assert.ok(road.ok, JSON.stringify(road));
-  assert.equal(s.roads.edgeCount, 1);
+  assert.equal(s.net.segCount, 1);
   assert.ok(s.economy.money < money0);
   // Bâtiment sur la route -> collision
   const b = s.placeBuilding({ assetId: 'maison_test', x, z: z + 40, rot: 0 });
@@ -97,11 +97,11 @@ test('routes : construction, coût, collision avec bâtiment, suppression', () =
   assert.equal(!r2.ok && r2.error.code, 'COLLISION');
   // Raccordement : un 2e tronçon partant de l'extrémité réutilise le nœud.
   assert.ok(s.buildRoad({ type: 'street', points: [x + 40, z + 40, x + 40, z + 90] }).ok);
-  assert.equal(s.roads.nodeCount, 3);
+  assert.equal(s.net.nodeCount, 3);
   const edgeId = road.ok ? road.data.edgeIds[0]! : -1;
   assert.ok(s.removeRoad({ edgeId }).ok);
-  assert.equal(s.roads.edgeCount, 1);
-  assert.equal(s.roads.nodeCount, 2);
+  assert.equal(s.net.segCount, 1);
+  assert.equal(s.net.nodeCount, 2);
 });
 
 test('horloge et économie : entretien prélevé au changement de mois', () => {

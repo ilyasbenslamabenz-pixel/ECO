@@ -15,7 +15,7 @@ function cmd(s: Simulation, name: string, args: unknown): ResultMessage {
 function started(): Simulation {
   const s = new Simulation();
   assert.ok(cmd(s, 'init', { protocolVersion: PROTOCOL_VERSION, catalog: townCatalog() }).ok);
-  assert.ok(cmd(s, 'newGame', { seed: 1234, mapChunks: 4, startMoney: 50_000_000, cityName: 'Proto' }).ok);
+  assert.ok(cmd(s, 'newGame', { seed: 1234, mapChunks: 4, startMoney: 50_000_000, cityName: 'Proto', terrain: { hydrology: 'aucune', rivers: 0 } }).ok);
   return s;
 }
 

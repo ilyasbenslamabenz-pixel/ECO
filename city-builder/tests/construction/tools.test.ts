@@ -56,7 +56,7 @@ test('géométrie : Bézier échantillonnée, extrémités exactes, segments ≥
 test('géométrie : empreinte grille identique à Simulation.footprintFor', () => {
   const sim = new Simulation();
   sim.setCatalog(testCatalog());
-  sim.newGame({ seed: 3, mapChunks: 2, startMoney: 1e6, cityName: 't' });
+  sim.newGame({ seed: 3, mapChunks: 2, startMoney: 1e6, cityName: 't', terrain: { hydrology: 'aucune', rivers: 0 } });
   const t = sim.terrain!;
   const a = sim.getAsset('grand_test')!;
   for (const [x, z, rot] of [[13.2, -7.9, 0], [3, 3, 1], [-41.7, 22.2, 2], [0.1, 0.1, 3]] as const) {
@@ -285,7 +285,7 @@ test('machine (VRAIE simulation) : snapping façade-route accepté, routes, refu
   const cat = testCatalog();
   const { m, tools, notes } = setup(port, cat);
   await port.send('init', { protocolVersion: PROTOCOL_VERSION, catalog: cat });
-  await port.send('newGame', { seed: 11, mapChunks: 4, startMoney: 2_000_000, cityName: 'Réelle' });
+  await port.send('newGame', { seed: 11, mapChunks: 4, startMoney: 2_000_000, cityName: 'Réelle', terrain: { hydrology: 'aucune', rivers: 0 } });
   // Trouver une zone plate et sèche près du centre.
   const t = m.terrain!;
   const h = (x: number, z: number): number => terrainHeightAt(port.sim.terrain!, x, z);

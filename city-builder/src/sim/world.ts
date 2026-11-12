@@ -21,29 +21,32 @@ import {
 } from '../shared/constants';
 import { buildAssetIndex, isBuildingCategory, type AssetCatalog, type CatalogAsset } from '../shared/catalog';
 import {
-  ROAD_TYPES,
   type BuildingRecord,
   type CommandError,
   type NewGameParams,
   type RoadEdgeRecord,
   type RoadNodeRecord,
-  type RoadTypeId,
   type SaveFile,
   type SimStats,
   type TerrainData,
 } from '../shared/contracts';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage } from '../shared/protocol';
 import { dist2 } from '../shared/math';
-import { generateTerrain, terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
+import { terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
 import { GameClock, MINUTES_PER_DAY, MINUTES_PER_MONTH, MINUTES_PER_YEAR, formatDateFr } from './clock';
-import { DEMOLISH_REFUND_RATE, Economy, roadCost, roadUpkeep } from './economy';
-import { BuildingStore, ChunkIndex, RoadGraph, VehicleStore } from './ecs';
+import { DEMOLISH_REFUND_RATE, Economy } from './economy';
+import { BuildingStore, ChunkIndex, VehicleStore } from './ecs';
 import { DemographySystem, ROAD_ACCESS_MARGIN_M } from './demography';
-import { TrafficSystem, inputFromRoadGraph, buildingsFromStore } from './traffic';
-import { ROAD_TYPE_ORDER } from './pathfinding';
+import { TrafficSystem, inputFromRoadNetwork, buildingsFromStore } from './traffic';
+import {
+  ROAD_KINDS, RoadNetwork, commitRoadPlan, cubic, cubicBounds, gradeTerrainForRoads, halfWidth, isRoadKind,
+  networkRecords, planRoad, polyline, SLOPE_WIDTH, type ProfileEnv, type RoadKindId, type RoadRequest,
+} from './roads';
+import { NO_WATER, extractPatch, generateWorld, type WorldTerrain } from './terrain';
 import { Rng } from './rng';
 import { EventScheduler, SimEvent } from './scheduler';
 import { CURRENT_SAVE_VERSION, SAVE_FORMAT_ID, validateSave, type SaveFileV2 } from './save-format';
+import { buildCity } from './city-builder';
 import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimReport } from './sim-protocol';
 
 export type CmdOutcome<K extends CommandName> = { ok: true; data: CommandResult<K> } | { ok: false; error: CommandError };
@@ -53,7 +56,7 @@ const fail = (code: CommandError['code'], message: string, phase?: number): { ok
   ({ ok: false, error: phase === undefined ? { code, message } : { code, message, phase } });
 
 /** Demi-largeur maximale d'une route (m) : marge des requêtes spatiales. */
-const MAX_ROAD_HALF_WIDTH = Math.max(...Object.values(ROAD_TYPES).map((t) => t.width / 2));
+const MAX_ROAD_HALF_WIDTH = Math.max(...(Object.keys(ROAD_KINDS) as RoadKindId[]).map((k) => halfWidth(k)));
 /** Trajets individuels transmis au trafic au plus par tick. */
 const TRIPS_PER_TICK = 8;
 const MAX_NOTICES = 30;
@@ -95,11 +98,15 @@ export class Simulation {
   catalog: AssetCatalog | null = null;
   private assetIndex = new Map<string, number>();
   params: NewGameParams | null = null;
-  terrain: TerrainData | null = null;
+  /** Terrain de la simulation (WorldTerrain : hauteurs NIVELÉES sous les routes + couches eau/forêt/ressources). */
+  terrain: WorldTerrain | null = null;
+  /** Hauteurs naturelles (avant nivellement) : base stable des profils en long et du re-nivellement. */
+  private naturalHeights = new Float32Array(0);
   readonly clock = new GameClock();
   readonly economy = new Economy();
   readonly buildings = new BuildingStore(INITIAL_BUILDING_CAPACITY);
-  readonly roads = new RoadGraph(INITIAL_ROAD_NODE_CAPACITY, INITIAL_ROAD_EDGE_CAPACITY);
+  /** Réseau routier (module src/sim/roads : tronçons courbes, carrefours automatiques, ponts). */
+  net: RoadNetwork = new RoadNetwork({ heightAt: () => 0, waterLevel: 0 }, INITIAL_ROAD_NODE_CAPACITY);
   /** Conservé pour compatibilité ; les véhicules sont gérés par `traffic`. */
   readonly vehicles = new VehicleStore(INITIAL_VEHICLE_CAPACITY);
   readonly scheduler = new EventScheduler();
@@ -113,7 +120,8 @@ export class Simulation {
   /** Index spatiaux par chunk (bâtiments : empreinte ; tronçons : boîte + demi-largeur ; nœuds : point). */
   buildingIndex = new ChunkIndex(0, 0, CHUNK_SIZE, CHUNK_SIZE);
   private edgeIndex = new ChunkIndex(0, 0, CHUNK_SIZE, CHUNK_SIZE);
-  private nodeIndex = new ChunkIndex(0, 0, CHUNK_SIZE, CHUNK_SIZE);
+  /** Polylignes des tronçons (x, z alternés) pour les distances route / emprise. */
+  private segPolys = new Map<number, Float64Array>();
   private readonly q: number[] = [];
   private readonly q2: number[] = [];
 
@@ -121,10 +129,11 @@ export class Simulation {
   private occupancy = new Int32Array(0);
   private tilesPerSide = 0;
   private nextBuildingId = 1;
-  private nextNodeId = 1;
-  private nextEdgeId = 1;
   private roadLength = 0;
-  private edgeTypeById = new Map<number, RoadTypeId>();
+  /** Longueur et type par tronçon (pour entretien / remboursement après découpe). */
+  private segInfo = new Map<number, { kind: RoadKindId; length: number }>();
+  /** Zone de terrain modifiée depuis le dernier delta (union). */
+  private pendingPatch: { i0: number; j0: number; i1: number; j1: number } | null = null;
   private trafficBuildingsDirty = true;
   private tripsToTraffic = 0;
   private jobsCache = 0;
@@ -164,24 +173,24 @@ export class Simulation {
 
   newGame(p: NewGameParams): void {
     this.params = { ...p };
-    this.terrain = generateTerrain(p.seed, p.mapChunks);
+    this.terrain = generateWorld({ ...(p.terrain ?? {}), seed: p.seed, mapChunks: p.mapChunks, samplesPerTile: 1 });
+    this.naturalHeights = new Float32Array(this.terrain.heights);
+    this.net = new RoadNetwork(this.profileEnv(), INITIAL_ROAD_NODE_CAPACITY);
+    this.segPolys.clear();
+    this.segInfo.clear();
+    this.pendingPatch = null;
     this.tilesPerSide = this.terrain.samplesX - 1;
     this.occupancy = new Int32Array(this.tilesPerSide * this.tilesPerSide);
     const size = this.tilesPerSide * TILE_SIZE;
     this.buildingIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
     this.edgeIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
-    this.nodeIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
     if (this.catalog) this.setCatalog(this.catalog);
-    this.clock.totalMinutes = 0;
+    this.clock.totalMinutes = Math.round(Math.max(0, Math.min(23.99, p.startHour ?? 0)) * 60);
     this.economy.reset(p.startMoney);
     this.buildings.clear();
-    this.roads.clear();
     this.vehicles.clear();
-    this.edgeTypeById.clear();
     this.roadLength = 0;
     this.nextBuildingId = 1;
-    this.nextNodeId = 1;
-    this.nextEdgeId = 1;
     this.tickCount = 0;
     this.rng.setState(new Rng((p.seed ^ 0x5bd1e995) >>> 0).getState());
     this.demography?.reset();
@@ -190,9 +199,83 @@ export class Simulation {
     this.jobsDirty = true;
     this.scheduleRecurring();
     this.traffic.clear();
-    this.traffic.setNetwork(inputFromRoadGraph(this.roads));
+    this.traffic.setNetwork(inputFromRoadNetwork(this.net));
     this.trafficBuildingsDirty = true;
     this.clearPending();
+  }
+
+  /** Environnement des profils en long : terrain NATUREL, mer et surfaces d'eau locales (rivières, lacs). */
+  private profileEnv(): ProfileEnv {
+    const t = this.terrain!;
+    const nat: TerrainData = { ...t, heights: this.naturalHeights };
+    const W = t.samplesX, H = t.samplesZ, sp = t.spacing;
+    return {
+      heightAt: (x, z) => terrainHeightAt(nat, x, z),
+      waterLevel: t.waterLevel,
+      waterAt: (x, z) => {
+        // Échantillon le plus proche ; une rivière est une surface d'eau au-dessus du terrain.
+        const i = Math.round((x - t.originX) / sp), j = Math.round((z - t.originZ) / sp);
+        if (i < 0 || j < 0 || i >= W || j >= H) return -Infinity;
+        const k = j * W + i;
+        const w = t.waterSurface[k]!;
+        return w > NO_WATER / 2 && w > this.naturalHeights[k]! ? w : -Infinity;
+      },
+    };
+  }
+
+  /**
+   * Test de charge : crée jusqu'à `n` trajets réels (itinéraires A*) entre bâtiments reliés, en plus de la demande.
+   * Renvoie le nombre de véhicules en circulation.
+   */
+  seedTraffic(n: number): number {
+    this.traffic.step(0, this.clock.hourOfDay); // reconstruit réseau et accès
+    const m = this.traffic.accessCount;
+    if (m < 2) return this.traffic.actCount;
+    const target = this.traffic.actCount + n;
+    const usages = ['prive', 'prive', 'prive', 'prive', 'livraison', 'bus', 'prive'] as const;
+    for (let tries = 0; tries < n * 30 && this.traffic.actCount < target; tries++) {
+      const a = Math.floor(this.rng.next() * m), b = Math.floor(this.rng.next() * m);
+      this.traffic.spawnTrip(a, b, usages[tries % usages.length]!);
+      // Les véhicules partent du trottoir : on avance de temps en temps pour libérer les voies d'accès.
+      if (tries % 400 === 399) this.traffic.step(0.5, this.clock.hourOfDay);
+    }
+    return this.traffic.actCount;
+  }
+
+  /** Hauteur du terrain (nivelé) en (x, z) ; NaN hors de la carte. */
+  groundHeight(x: number, z: number): number {
+    const t = this.terrain;
+    if (!t) return NaN;
+    const b = terrainBounds(t);
+    if (x < b.minX || z < b.minZ || x > b.maxX || z > b.maxZ) return NaN;
+    return terrainHeightAt(t, x, z);
+  }
+
+  /** Vrai si de l'eau recouvre le terrain en (x, z). */
+  isWet(x: number, z: number): boolean { return !!this.terrain && this.wetAt(x, z); }
+
+  /** Emplacement libre pour un décor non simulé (ni eau, ni bâtiment, ni chaussée). */
+  canHostDecor(x: number, z: number): boolean {
+    const t = this.terrain;
+    if (!t || !Number.isFinite(this.groundHeight(x, z)) || this.wetAt(x, z)) return false;
+    const i = Math.floor((x - t.originX) / TILE_SIZE), j = Math.floor((z - t.originZ) / TILE_SIZE);
+    if (i < 0 || j < 0 || i >= this.tilesPerSide || j >= this.tilesPerSide || this.occupancy[j * this.tilesPerSide + i] !== 0) return false;
+    return this.roadClearance(x - 0.5, z - 0.5, x + 0.5, z + 0.5, MAX_ROAD_HALF_WIDTH) > 0.3;
+  }
+
+  /** Vrai si de l'eau recouvre le terrain en (x, z) (mer, lac, rivière ; échantillons voisins). */
+  private wetAt(x: number, z: number): boolean {
+    const t = this.terrain!;
+    const fx = (x - t.originX) / t.spacing, fz = (z - t.originZ) / t.spacing;
+    const i0 = Math.floor(fx), j0 = Math.floor(fz);
+    for (let dj = 0; dj <= 1; dj++) {
+      for (let di = 0; di <= 1; di++) {
+        const i = Math.min(t.samplesX - 1, Math.max(0, i0 + di)), j = Math.min(t.samplesZ - 1, Math.max(0, j0 + dj));
+        const k = j * t.samplesX + i;
+        if (t.waterSurface[k]! > t.heights[k]! + 0.05) return true;
+      }
+    }
+    return false;
   }
 
   /** Événements récurrents de base (planifiés au démarrage d'une partie). */
@@ -213,6 +296,7 @@ export class Simulation {
     this.pendingNodesAdded.length = 0;
     this.pendingEdgesAdded.length = 0;
     this.pendingEdgesRemoved.length = 0;
+    this.pendingPatch = null;
   }
 
   notify(level: SimNotice['level'], message: string): void {
@@ -233,25 +317,19 @@ export class Simulation {
     return { cx: t.originX + (i0 + tx / 2) * TILE_SIZE, cz: t.originZ + (j0 + tz / 2) * TILE_SIZE, tx, tz, i0, j0 };
   }
 
-  private edgeEndpoints(edgeId: number): [number, number, number, number] | null {
-    const e = this.roads.edgeIndex(edgeId);
-    if (e < 0) return null;
-    const na = this.roads.nodeIndex(this.roads.edgeA[e]!);
-    const nb = this.roads.nodeIndex(this.roads.edgeB[e]!);
-    if (na < 0 || nb < 0) return null;
-    return [this.roads.nodeX[na]!, this.roads.nodeZ[na]!, this.roads.nodeX[nb]!, this.roads.nodeZ[nb]!];
-  }
-
-  /** Plus petite marge (distance - demi-largeur) entre un rectangle et les routes voisines. */
+  /** Plus petite marge (distance - demi-largeur) entre un rectangle et les routes voisines (tronçons courbes). */
   private roadClearance(minX: number, minZ: number, maxX: number, maxZ: number, reach: number): number {
     let best = Infinity;
     this.edgeIndex.query(minX - reach, minZ - reach, maxX + reach, maxZ + reach, this.q2);
     for (const id of this.q2) {
-      const p = this.edgeEndpoints(id);
-      if (!p) continue;
-      const half = ROAD_TYPES[this.edgeTypeById.get(id) ?? 'street'].width / 2;
-      const d = distSegmentRect(p[0], p[1], p[2], p[3], minX, minZ, maxX, maxZ) - half;
-      if (d < best) best = d;
+      const poly = this.segPolys.get(id);
+      const info = this.segInfo.get(id);
+      if (!poly || !info) continue;
+      const half = halfWidth(info.kind);
+      for (let k = 0; k + 3 < poly.length; k += 2) {
+        const d = distSegmentRect(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, minX, minZ, maxX, maxZ) - half;
+        if (d < best) best = d;
+      }
     }
     return best;
   }
@@ -293,6 +371,11 @@ export class Simulation {
       }
     }
     if (hMin < t.waterLevel + 0.3) return fail('UNDER_WATER', 'Impossible de construire dans l\'eau');
+    for (let j = 0; j <= f.tz; j++) {
+      for (let i = 0; i <= f.tx; i++) {
+        if (this.wetAt(minX + i * TILE_SIZE, minZ + j * TILE_SIZE)) return fail('UNDER_WATER', 'Impossible de construire sur une rivière ou un lac');
+      }
+    }
     const span = Math.max(f.tx, f.tz) * TILE_SIZE;
     if ((hMax - hMin) / span > MAX_BUILDING_SLOPE) return fail('TOO_STEEP', 'Terrain trop pentu pour ce bâtiment');
     if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
@@ -371,133 +454,169 @@ export class Simulation {
 
   /* ------------------------------ Routes ------------------------------ */
 
-  private findNodeNear(x: number, z: number, radius: number): number {
-    let best = -1;
-    let bestD = radius;
-    this.nodeIndex.query(x - radius, z - radius, x + radius, z + radius, this.q);
+  /** Obstacles du planificateur : emprises des bâtiments (polyligne du tracé courbe). */
+  private readonly roadBlocked = (curve: Float64Array, half: number): string | null => {
+    const [x0, z0, x1, z1] = cubicBounds(curve);
+    this.buildingIndex.query(x0 - half, z0 - half, x1 + half, z1 + half, this.q);
+    if (this.q.length === 0) return null;
+    const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 6));
+    const poly = polyline(curve, n);
     for (const id of this.q) {
-      const i = this.roads.nodeIndex(id);
+      const i = this.buildings.indexOf(id);
       if (i < 0) continue;
-      const d = dist2(x, z, this.roads.nodeX[i]!, this.roads.nodeZ[i]!);
-      if (d <= bestD) { bestD = d; best = id; }
+      const hx = (this.buildings.tilesX[i]! * TILE_SIZE) / 2;
+      const hz = (this.buildings.tilesZ[i]! * TILE_SIZE) / 2;
+      const cx = this.buildings.x[i]!, cz = this.buildings.z[i]!;
+      for (let k = 0; k + 3 < poly.length; k += 2) {
+        if (distSegmentRect(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, cx - hx, cz - hz, cx + hx, cz + hz) < half) {
+          return 'Le tracé traverse un bâtiment';
+        }
+      }
     }
-    return best;
+    return null;
+  };
+
+  private planOptions(): { bounds: { minX: number; minZ: number; maxX: number; maxZ: number }; blocked: (c: Float64Array, h: number) => string | null } {
+    const b = terrainBounds(this.terrain!);
+    const m = 24;
+    return { bounds: { minX: b.minX + m, minZ: b.minZ + m, maxX: b.maxX - m, maxZ: b.maxZ - m }, blocked: this.roadBlocked };
+  }
+
+  /** Découpe la commande en requêtes du planificateur (2 points + contrôle = courbe ; polyligne = tronçons droits). */
+  private roadRequests(a: CommandArgs<'buildRoad'>, kind: RoadKindId): RoadRequest[] {
+    const pts = a.points;
+    if (pts.length === 4) {
+      const req: RoadRequest = { kind, start: { x: pts[0]!, z: pts[1]! }, end: { x: pts[2]!, z: pts[3]! } };
+      if (a.control) req.control = { x: a.control[0], z: a.control[1] };
+      return [req];
+    }
+    const out: RoadRequest[] = [];
+    for (let k = 0; k + 3 < pts.length; k += 2) {
+      if (dist2(pts[k]!, pts[k + 1]!, pts[k + 2]!, pts[k + 3]!) < 1) continue;
+      out.push({ kind, start: { x: pts[k]!, z: pts[k + 1]! }, end: { x: pts[k + 2]!, z: pts[k + 3]! } });
+    }
+    return out;
   }
 
   buildRoad(a: CommandArgs<'buildRoad'>): CmdOutcome<'buildRoad'> {
     if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
-    const t = this.terrain;
-    const def = ROAD_TYPES[a.type];
-    const b = terrainBounds(t);
-    const pts = a.points;
-    let total = 0;
-    const segs: [number, number, number, number][] = [];
-    for (let k = 0; k + 3 < pts.length; k += 2) {
-      const ax = pts[k]!, az = pts[k + 1]!, bx = pts[k + 2]!, bz = pts[k + 3]!;
-      const len = dist2(ax, az, bx, bz);
-      if (len < 4) continue;
-      for (const [px, pz] of [[ax, az], [bx, bz]] as const) {
-        if (px < b.minX + def.width || pz < b.minZ + def.width || px > b.maxX - def.width || pz > b.maxZ - def.width) {
-          return fail('OUT_OF_BOUNDS', 'Tracé hors de la carte');
-        }
-      }
-      const ha = terrainHeightAt(t, ax, az);
-      const hb = terrainHeightAt(t, bx, bz);
-      if (Math.abs(hb - ha) / len > MAX_ROAD_SLOPE) return fail('TOO_STEEP', 'Pente trop forte pour une route');
-      const steps = Math.ceil(len / 4);
-      for (let s = 0; s <= steps; s++) {
-        const h = terrainHeightAt(t, ax + ((bx - ax) * s) / steps, az + ((bz - az) * s) / steps);
-        if (h < t.waterLevel + 0.2) return fail('UNDER_WATER', 'Les ponts arrivent en phase 3', 3);
-      }
-      const half = def.width / 2;
-      this.buildingIndex.query(Math.min(ax, bx) - half, Math.min(az, bz) - half, Math.max(ax, bx) + half, Math.max(az, bz) + half, this.q);
-      for (const id of this.q) {
-        const i = this.buildings.indexOf(id);
-        if (i < 0) continue;
-        const hx = (this.buildings.tilesX[i]! * TILE_SIZE) / 2;
-        const hz = (this.buildings.tilesZ[i]! * TILE_SIZE) / 2;
-        const cx = this.buildings.x[i]!;
-        const cz = this.buildings.z[i]!;
-        if (distSegmentRect(ax, az, bx, bz, cx - hx, cz - hz, cx + hx, cz + hz) < half) {
-          return fail('COLLISION', 'Le tracé traverse un bâtiment');
-        }
-      }
-      segs.push([ax, az, bx, bz]);
-      total += len;
+    const kind: RoadKindId = a.kind && isRoadKind(a.kind) ? a.kind : a.type;
+    const reqs = this.roadRequests(a, kind);
+    if (reqs.length === 0) return fail('INVALID_ARGS', 'Tracé trop court');
+    const opts = this.planOptions();
+    // 1) Validation de chaque morceau sur le réseau actuel (dryRun : rien n'est modifié).
+    let cost = 0;
+    for (const r of reqs) {
+      const p = planRoad(this.net, r, opts);
+      if (!p.ok) return fail(p.error.code, p.error.message, p.error.phase);
+      cost += p.plan.cost;
     }
-    if (segs.length === 0) return fail('INVALID_ARGS', 'Tracé trop court (4 m minimum)');
-    const cost = roadCost(a.type, total);
     if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
     if (!this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
     if (a.dryRun) return { ok: true, data: { edgeIds: [], cost } };
-
+    // 2) Construction : chaque morceau est re-planifié sur le réseau modifié par le précédent.
     const edgeIds: number[] = [];
-    const typeIdx = ROAD_TYPE_ORDER.indexOf(a.type);
-    const snap = Math.min(4, def.width / 2);
-    const nodeAt = (x: number, z: number): number => {
-      const existing = this.findNodeNear(x, z, snap);
-      if (existing >= 0) return existing;
-      const id = this.nextNodeId++;
-      const y = terrainHeightAt(t, x, z);
-      this.insertNode({ id, x, y, z });
-      this.pendingNodesAdded.push({ id, x, y, z });
-      return id;
+    let spent = 0;
+    for (const r of reqs) {
+      const p = planRoad(this.net, r, opts);
+      if (!p.ok) {
+        if (edgeIds.length === 0) return fail(p.error.code, p.error.message, p.error.phase);
+        this.notify('warn', `Tracé interrompu : ${p.error.message}`);
+        break;
+      }
+      const c = commitRoadPlan(this.net, p.plan);
+      edgeIds.push(...c.segmentIds);
+      spent += p.plan.cost;
+    }
+    this.economy.spend(spent);
+    this.applyNetworkChanges(true);
+    return { ok: true, data: { edgeIds, cost: spent } };
+  }
+
+  /**
+   * Répercute le journal du réseau : index spatiaux, entretien, longueur, accès route des bâtiments,
+   * nivellement du terrain, trafic et deltas pour le rendu. `withDelta` = faux au chargement.
+   */
+  private applyNetworkChanges(withDelta: boolean): void {
+    const ch = this.net.takeChanges();
+    const t = this.terrain!;
+    let bx0 = Infinity, bz0 = Infinity, bx1 = -Infinity, bz1 = -Infinity;
+    const grow = (x0: number, z0: number, x1: number, z1: number): void => {
+      bx0 = Math.min(bx0, x0); bz0 = Math.min(bz0, z0); bx1 = Math.max(bx1, x1); bz1 = Math.max(bz1, z1);
     };
-    for (const [ax, az, bx, bz] of segs) {
-      const na = nodeAt(ax, az);
-      const nb = nodeAt(bx, bz);
-      if (na === nb) continue;
-      const len = dist2(ax, az, bx, bz);
-      const id = this.nextEdgeId++;
-      this.insertEdge({ id, a: na, b: nb, type: a.type, length: len }, typeIdx);
-      edgeIds.push(id);
+    for (const id of ch.segmentsRemoved) {
+      const info = this.segInfo.get(id);
+      if (info) {
+        this.roadLength -= info.length;
+        this.economy.removeUpkeep(ROAD_KINDS[info.kind].upkeepPerMeterMonth * info.length, 'roads');
+        this.segInfo.delete(id);
+      }
+      const poly = this.segPolys.get(id);
+      if (poly) {
+        for (let k = 0; k < poly.length; k += 2) grow(poly[k]!, poly[k + 1]!, poly[k]!, poly[k + 1]!);
+        this.segPolys.delete(id);
+      }
+      this.edgeIndex.remove(id);
+      if (withDelta && !ch.segmentsAdded.includes(id)) this.pendingEdgesRemoved.push(id);
     }
-    this.economy.spend(cost);
-    this.traffic.setNetwork(inputFromRoadGraph(this.roads));
-    return { ok: true, data: { edgeIds, cost } };
-  }
-
-  private insertNode(n: RoadNodeRecord): void {
-    this.roads.addNode(n.id, n.x, n.y, n.z);
-    this.nodeIndex.insert(n.id, n.x, n.z, n.x, n.z);
-  }
-
-  private insertEdge(e: RoadEdgeRecord, typeIdx: number, silent = false): void {
-    this.roads.addEdge(e.id, e.a, e.b, typeIdx, e.length);
-    this.edgeTypeById.set(e.id, e.type);
-    this.roadLength += e.length;
-    this.economy.addUpkeep(roadUpkeep(e.type, e.length), 'roads');
-    const p = this.edgeEndpoints(e.id);
-    if (p) {
-      const half = ROAD_TYPES[e.type].width / 2;
-      const minX = Math.min(p[0], p[2]) - half, minZ = Math.min(p[1], p[3]) - half;
-      const maxX = Math.max(p[0], p[2]) + half, maxZ = Math.max(p[1], p[3]) + half;
-      this.edgeIndex.insert(e.id, minX, minZ, maxX, maxZ);
-      if (!silent) this.refreshRoadAccessNear(minX, minZ, maxX, maxZ);
+    const added = ch.segmentsAdded.filter((id) => this.net.hasSegment(id));
+    for (const id of added) {
+      const kind = this.net.kindOf(id);
+      const length = this.net.length(id);
+      this.segInfo.set(id, { kind, length });
+      this.roadLength += length;
+      this.economy.addUpkeep(ROAD_KINDS[kind].upkeepPerMeterMonth * length, 'roads');
+      const curve = this.net.curve(id);
+      const poly = polyline(curve, Math.max(2, Math.ceil(length / 8)));
+      this.segPolys.set(id, poly);
+      const [x0, z0, x1, z1] = cubicBounds(curve);
+      const half = halfWidth(kind);
+      this.edgeIndex.insert(id, x0 - half, z0 - half, x1 + half, z1 + half);
+      grow(x0 - half, z0 - half, x1 + half, z1 + half);
     }
-    if (!silent) this.pendingEdgesAdded.push({ ...e });
+    if (bx0 <= bx1) {
+      // Nivellement : hauteurs naturelles + plateforme/talus de TOUTES les routes (résultat indépendant de l'ordre
+      // de construction, donc identique après chargement d'une sauvegarde). Zone modifiée = différence.
+      const before = t.heights;
+      const graded = new Float32Array(this.naturalHeights);
+      t.heights = graded;
+      if (this.net.segCount > 0) gradeTerrainForRoads(t, this.net);
+      let i0 = t.samplesX, j0 = t.samplesZ, i1 = -1, j1 = -1;
+      for (let j = 0; j < t.samplesZ; j++) {
+        const row = j * t.samplesX;
+        for (let i = 0; i < t.samplesX; i++) {
+          if (graded[row + i] !== before[row + i]) {
+            if (i < i0) i0 = i; if (i > i1) i1 = i; if (j < j0) j0 = j; if (j > j1) j1 = j;
+          }
+        }
+      }
+      if (withDelta && i1 >= 0) {
+        const p = this.pendingPatch;
+        this.pendingPatch = p ? { i0: Math.min(p.i0, i0), j0: Math.min(p.j0, j0), i1: Math.max(p.i1, i1), j1: Math.max(p.j1, j1) } : { i0, j0, i1, j1 };
+      }
+      if (withDelta) this.refreshRoadAccessNear(bx0, bz0, bx1, bz1);
+    }
+    if (withDelta) {
+      const rec = networkRecords(this.net, ch.nodesAdded, added);
+      this.pendingNodesAdded.push(...rec.nodes);
+      this.pendingEdgesAdded.push(...rec.edges);
+    }
+    this.traffic.setNetwork(inputFromRoadNetwork(this.net));
   }
 
   removeRoad(a: CommandArgs<'removeRoad'>): CmdOutcome<'removeRoad'> {
     if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
-    const ei = this.roads.edgeIndex(a.edgeId);
-    if (ei < 0) return fail('NOT_FOUND', 'Tronçon introuvable');
-    const type = this.edgeTypeById.get(a.edgeId) ?? 'street';
-    const len = this.roads.edgeLength[ei]!;
-    const p = this.edgeEndpoints(a.edgeId);
-    const orphans = this.roads.removeEdge(a.edgeId);
-    for (const n of orphans) this.nodeIndex.remove(n);
-    this.edgeIndex.remove(a.edgeId);
-    this.edgeTypeById.delete(a.edgeId);
-    this.roadLength -= len;
-    this.economy.removeUpkeep(roadUpkeep(type, len), 'roads');
-    const refund = Math.round(roadCost(type, len) * DEMOLISH_REFUND_RATE);
+    const info = this.segInfo.get(a.edgeId);
+    if (!info || !this.net.hasSegment(a.edgeId)) return fail('NOT_FOUND', 'Tronçon introuvable');
+    const refund = Math.round(ROAD_KINDS[info.kind].costPerMeter * info.length * DEMOLISH_REFUND_RATE);
+    this.net.removeSegment(a.edgeId);
     this.economy.refund(refund);
-    this.pendingEdgesRemoved.push(a.edgeId);
-    if (p) this.refreshRoadAccessNear(Math.min(p[0], p[2]), Math.min(p[1], p[3]), Math.max(p[0], p[2]), Math.max(p[1], p[3]));
-    this.traffic.setNetwork(inputFromRoadGraph(this.roads));
+    this.applyNetworkChanges(true);
     return { ok: true, data: { refund } };
   }
+
+  /** Marge de recherche autour d'une route pour l'accès des bâtiments et le talus. */
+  static readonly ROAD_REACH = MAX_ROAD_HALF_WIDTH + SLOPE_WIDTH;
 
   /* ------------------------------ Tick ------------------------------ */
 
@@ -613,7 +732,7 @@ export class Simulation {
 
   hasPendingChanges(): boolean {
     return this.pendingBuildingsAdded.length + this.pendingBuildingsRemoved.length + this.pendingNodesAdded.length
-      + this.pendingEdgesAdded.length + this.pendingEdgesRemoved.length > 0;
+      + this.pendingEdgesAdded.length + this.pendingEdgesRemoved.length > 0 || this.pendingPatch !== null;
   }
 
   /** Construit le message delta et vide les files d'attente. Les buffers véhicules sont neufs (ils seront transférés). */
@@ -630,6 +749,10 @@ export class Simulation {
       vehicles,
       stats: { ...this.getStats(), date: { ...this.stats.date } },
     };
+    if (this.pendingPatch && this.terrain) {
+      msg.terrainPatch = extractPatch(this.terrain, this.pendingPatch);
+      this.pendingPatch = null;
+    }
     return msg;
   }
 
@@ -640,7 +763,12 @@ export class Simulation {
     return {
       kind: 'snapshot',
       params: { ...this.params! },
-      terrain: { ...t, heights: new Float32Array(t.heights) },
+      // Toutes les couches sont COPIÉES : les copies sont transférées (collectTransferables).
+      terrain: {
+        ...t, heights: new Float32Array(t.heights), waterSurface: new Float32Array(t.waterSurface), moisture: new Uint8Array(t.moisture),
+        forest: new Uint8Array(t.forest), resources: new Uint8Array(t.resources),
+        rivers: t.rivers.map((r) => ({ ...r, points: new Float32Array(r.points) })),
+      } as WorldTerrain,
       buildings: this.buildingRecords(),
       roads: this.roadRecords(),
       stats: { ...this.getStats(), date: { ...this.stats.date } },
@@ -657,15 +785,10 @@ export class Simulation {
   }
 
   roadRecords(): { nodes: RoadNodeRecord[]; edges: RoadEdgeRecord[] } {
-    const r = this.roads;
-    const nodes: RoadNodeRecord[] = [];
-    const edges: RoadEdgeRecord[] = [];
-    for (let i = 0; i < r.nodeCount; i++) nodes.push({ id: r.nodeId[i]!, x: r.nodeX[i]!, y: r.nodeY[i]!, z: r.nodeZ[i]! });
-    for (let i = 0; i < r.edgeCount; i++) {
-      const id = r.edgeId[i]!;
-      edges.push({ id, a: r.edgeA[i]!, b: r.edgeB[i]!, type: this.edgeTypeById.get(id) ?? 'street', length: r.edgeLength[i]! });
-    }
-    return { nodes, edges };
+    const r = networkRecords(this.net);
+    r.nodes.sort((a, b) => a.id - b.id);
+    r.edges.sort((a, b) => a.id - b.id);
+    return r;
   }
 
   /* --------------------------- Commandes étendues --------------------------- */
@@ -752,6 +875,17 @@ export class Simulation {
           this.trafficBuildingsDirty = true;
           return ok({ population: this.demo.population, households: this.demo.households.count });
         }
+        case 'buildCity': {
+          const a = args as ExtCommandArgs<'buildCity'>;
+          const r = buildCity(this, a.maxBuildings === undefined ? { preset: a.preset } : { preset: a.preset, maxBuildings: a.maxBuildings });
+          const waves = a.settleWaves ?? (a.preset === 'demo' ? 30 : 40);
+          if (waves > 0) this.runExt('settle', { waves });
+          // Le trafic voit tout de suite les occupants (sinon : à la prochaine synchronisation horaire).
+          this.trafficBuildingsDirty = true;
+          this.onEvent(SimEvent.TrafficSync);
+          const vehicles = a.vehicles ? this.seedTraffic(a.vehicles) : 0;
+          return ok({ ...r, vehicles });
+        }
       }
       return fail('INVALID_ARGS', 'Commande inconnue');
     })();
@@ -770,7 +904,7 @@ export class Simulation {
       economy: this.economy.toJSON(),
       buildings: this.buildingRecords(),
       roads: this.roadRecords(),
-      nextIds: { building: this.nextBuildingId, roadNode: this.nextNodeId, roadEdge: this.nextEdgeId },
+      nextIds: { building: this.nextBuildingId, roadNode: this.net.nextNodeId, roadEdge: this.net.nextSegId },
       population: this.demo.toJSON(),
       sim: { rng: this.rng.getState(), scheduler: this.scheduler.toJSON() },
     };
@@ -810,8 +944,20 @@ export class Simulation {
   private applySave(s: SaveFileV2): CommandError | null {
     this.newGame(s.params);
     this.clock.totalMinutes = s.clock.totalMinutes;
-    for (const n of s.roads.nodes) this.insertNode(n);
-    for (const e of s.roads.edges) this.insertEdge(e, ROAD_TYPE_ORDER.indexOf(e.type), true);
+    // Réseau routier : nœuds et tronçons avec leurs identifiants et courbes (absentes en v1 = tronçons droits).
+    for (const n of s.roads.nodes) this.net.addNode(n.x, n.z, n.y, n.id);
+    for (const e of s.roads.edges) {
+      const kind: RoadKindId = e.kind && isRoadKind(e.kind) ? e.kind : e.type;
+      const a = this.net.nodePos(e.a), b = this.net.nodePos(e.b);
+      const c1 = e.c1 ?? [a.x + (b.x - a.x) / 3, a.z + (b.z - a.z) / 3];
+      const c2 = e.c2 ?? [a.x + ((b.x - a.x) * 2) / 3, a.z + ((b.z - a.z) * 2) / 3];
+      if (![...c1, ...c2].every(Number.isFinite)) return { code: 'BAD_SAVE', message: `Tronçon ${e.id} : courbe invalide` };
+      this.net.addSegment(e.a, e.b, kind, cubic(a.x, a.z, c1[0], c1[1], c2[0], c2[1], b.x, b.z), e.id);
+    }
+    for (const id of this.net.nodeIds()) if (this.net.incident(id).length === 0) return { code: 'BAD_SAVE', message: `Nœud routier ${id} isolé` };
+    this.net.nextNodeId = Math.max(this.net.nextNodeId, s.nextIds.roadNode);
+    this.net.nextSegId = Math.max(this.net.nextSegId, s.nextIds.roadEdge);
+    this.applyNetworkChanges(false);
     for (const b of s.buildings) {
       const a = this.getAsset(b.assetId)!;
       const f = this.footprintFor(a, b.x, b.z, b.rot);
@@ -827,8 +973,6 @@ export class Simulation {
     }
     this.economy.fromJSON(s.economy);
     this.nextBuildingId = s.nextIds.building;
-    this.nextNodeId = s.nextIds.roadNode;
-    this.nextEdgeId = s.nextIds.roadEdge;
     this.demo.fromJSON(s.population, s.clock.totalMinutes);
     if (s.sim) {
       this.rng.setState(s.sim.rng);
@@ -840,7 +984,6 @@ export class Simulation {
     const tb = this.demo.computeTaxBase(false);
     Object.assign(this.economy.taxBase, tb.taxBase);
     this.economy.serviceWorkers = tb.serviceWorkers;
-    this.traffic.setNetwork(inputFromRoadGraph(this.roads));
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;
     this.clearPending();

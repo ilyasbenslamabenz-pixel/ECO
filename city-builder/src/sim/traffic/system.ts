@@ -413,6 +413,9 @@ export class TrafficSystem {
     return v;
   }
 
+  /** Nombre de bâtiments reliés au réseau (index d'accès 0..n-1). */
+  get accessCount(): number { return this.access.length; }
+
   /** Index d'accès d'un bâtiment relié (−1 si non relié à la route). */
   accessIndexOf(buildingId: number): number { return this.access.findIndex((a) => a.b.id === buildingId); }
 
