@@ -53,6 +53,9 @@ interface DebugInfo {
   cameraPose?: () => unknown;
   /** Diagnostic de performance : masque / affiche un groupe de la scène par son nom (ex. « vegetation »). */
   setLayerVisible?: (name: string, visible: boolean) => string[];
+  /** Rend une image de façon synchrone (lecture d'un pixel) et renvoie sa durée, ses appels et triangles. */
+  benchFrame?: () => { ms: number; calls: number; triangles: number };
+  pauseRender?: (paused: boolean) => void;
 }
 declare global { interface Window { __aube: DebugInfo } }
 
@@ -134,6 +137,15 @@ async function boot(): Promise<void> {
   const input = initInput(render.ctx.camera, canvas, (x, z) => render.terrain.heightAt(x, z));
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
+  debug.benchFrame = () => {
+    const r = render.ctx.renderer;
+    const t0 = performance.now();
+    r.render(render.ctx.scene, render.ctx.camera);
+    const gl = r.getContext();
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    return { ms: Math.round(performance.now() - t0), calls: r.info.render.calls, triangles: r.info.render.triangles };
+  };
+  debug.pauseRender = (p) => { if (p) render.ctx.stop(); else render.ctx.start(); };
   debug.setLayerVisible = (name, visible) => {
     const names: string[] = [];
     for (const o of render.ctx.scene.children) { names.push(o.name || o.type); if (o.name === name) o.visible = visible; }
