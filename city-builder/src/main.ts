@@ -48,6 +48,8 @@ interface DebugInfo {
   constructionApplied?: () => number;
   validate?: () => Promise<unknown>;
   lastReport?: unknown;
+  /** État détaillé de la scène (porte visuelle) : modèles chargés, erreurs, décor, terrain, eau. */
+  sceneCheck?: () => unknown;
 }
 declare global { interface Window { __aube: DebugInfo } }
 
@@ -120,6 +122,12 @@ async function boot(): Promise<void> {
   debug.frames = () => render.ctx.frames;
   debug.renderStats = () => render.stats();
   const props = new PropLayer(render.ctx.scene, lib);
+  debug.sceneCheck = () => ({
+    buildings: render.buildings.count, buildingErrors: render.buildings.errors.slice(0, 20), buildingsLoading: render.buildings.loading,
+    buildingsVisibleByLod: Array.from(render.buildings.visible), vehicles: render.vehicles.stats(), vehicleErrors: render.vehicles.loadErrors.slice(0, 20),
+    vegetation: render.veg.stats(), props: Object.fromEntries(props.counts), terrain: render.terrain.stats(), water: render.water.stats(),
+    roads: { segments: render.roads.net.segCount, nodes: render.roads.net.nodeCount }, camera: input.camera.mode,
+  });
   const input = initInput(render.ctx.camera, canvas, (x, z) => render.terrain.heightAt(x, z));
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera });
@@ -141,7 +149,6 @@ async function boot(): Promise<void> {
     const { validateAllAssets } = await import('./render/validation');
     debug.validate = () => validateAllAssets(lib);
     debug.ready = true;
-    render.ctx.start();
     ui.hideLoading();
     return;
   }
