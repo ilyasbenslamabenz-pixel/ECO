@@ -25,10 +25,15 @@ const assetsDir = join(root, 'assets');
 const MB = 1024 * 1024;
 const FILE_LIMIT = 15 * MB;
 const FILE_WARN = 4 * MB;
-/** Budget de l'ensemble des assets distribués (le code et le HTML occupent le reste des 60 Mo). */
-const ASSETS_BUDGET = 55 * MB;
+/**
+ * Budget des assets SOURCES (non compressés). Le budget distribué réel (dist ≤ 60 Mo) est contrôlé par
+ * scripts/build.mjs APRÈS compression EXT_meshopt_compression des GLB (scripts/optimize-glb.mjs) :
+ * ici on borne seulement la croissance des sources (intégration).
+ */
+const ASSETS_BUDGET = 75 * MB;
 /** Budget de la part Poly Haven (exigence de l'étape pipeline). */
-const POLYHAVEN_BUDGET = 35 * MB;
+/** Part Poly Haven des sources (les GLB sont ensuite compressés meshopt dans dist). */
+const POLYHAVEN_BUDGET = 40 * MB;
 
 /** Plages plausibles (m) : [hauteur min, hauteur max, plus grande dimension horizontale max]. */
 const PLAUSIBLE: Record<AssetCategory, [number, number, number]> = {
@@ -48,7 +53,7 @@ function checkLicense(id: string, lic: AssetLicense | undefined, licensesMd: str
   if (lic.spdx !== 'CC0-1.0') err(id, `licence ${lic.spdx} non autorisée (CC0-1.0 attendu)`);
   if (!lic.author) err(id, 'auteur absent');
   const ph = /^https:\/\/polyhaven\.com\/a\/[A-Za-z0-9_-]+$/.test(lic.source);
-  const gen = /^tools\/generators\//.test(lic.source);
+  const gen = /^tools\/(generators|buildings|vehicles)\//.test(lic.source);
   if (!ph && !gen) err(id, `source non autorisée ou imprécise : « ${lic.source} »`);
   if (!licensesMd.includes(`\`${id}\``)) err(id, 'absent de assets/LICENSES.md');
 }

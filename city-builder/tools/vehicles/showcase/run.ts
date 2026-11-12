@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     const st = await page.evaluate('({ error: window.__vs.error, report: window.__vs.report })') as { error: string | null; report: { ok: boolean; errors: string[] } | null };
     if (st.error) throw new Error(st.error);
     const shot: Buffer = await page.screenshot({ clip: { x: 0, y: 0, width: cols * cw, height: rows * ch } });
-    const comps: sharp.OverlayOptions[] = assets.map((a, k) => {
+    const comps: { input: Buffer; left: number; top: number }[] = assets.map((a, k) => {
       const t = a.lods.map((l) => l.triangles ?? 0).join('/');
       const svg = `<svg width="${cw}" height="38"><rect width="${cw}" height="38" fill="rgba(10,12,16,0.72)"/><text x="7" y="16" font-family="DejaVu Sans, sans-serif" font-size="14" fill="#fff">${esc(a.nameFr)}</text><text x="7" y="32" font-family="DejaVu Sans, sans-serif" font-size="11" fill="#cfd6df">${esc(`${a.id} · ${a.dimensions.depth.toFixed(2)} m · tri ${t}`)}</text></svg>`;
       return { input: Buffer.from(svg), left: (k % cols) * cw, top: Math.floor(k / cols) * ch + ch - 38 };

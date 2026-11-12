@@ -1,7 +1,13 @@
-/** Point d'entrée du module entrées : caméra + outils. */
+/**
+ * Point d'entrée du module entrées : caméra + outils.
+ * `initInput` garde la signature de la fondation ; les outils de construction s'activent
+ * ensuite avec `initConstruction()` (./construction.ts).
+ */
 import type * as THREE from 'three';
 import { CameraController } from './camera';
 import { ToolController } from './tools';
+
+export { initConstruction, type ConstructionHandle, type ConstructionOptions } from './construction';
 
 export interface InputHandle {
   camera: CameraController;

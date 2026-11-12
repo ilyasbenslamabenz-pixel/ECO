@@ -1,10 +1,13 @@
 /**
  * Répartiteur de commandes : message validé -> appel de Simulation -> réponse.
  * Séparé du worker pour être testé en Node. TypeScript pur.
+ * Gère les commandes du protocole de base (shared/protocol.ts) et les commandes étendues
+ * économie/démographie (sim-protocol.ts, mêmes enveloppes).
  */
 import { PROTOCOL_VERSION } from '../shared/constants';
 import type { CommandError } from '../shared/contracts';
 import { validateCommandMessage, type MainToWorker, type WorkerToMain } from '../shared/protocol';
+import { isExtCommandName, validateExtCommand, type ExtCommandMessage } from './sim-protocol';
 import type { Simulation } from './world';
 
 export interface HandlerOutput {
@@ -17,9 +20,19 @@ export interface HandlerOutput {
 export function handleCommand(sim: Simulation, raw: unknown): HandlerOutput {
   const reqId = typeof raw === 'object' && raw !== null && typeof (raw as { reqId?: unknown }).reqId === 'number'
     ? (raw as { reqId: number }).reqId : -1;
-  const err = validateCommandMessage(raw);
   const failure = (error: CommandError): HandlerOutput => ({ result: { kind: 'result', reqId, ok: false, error }, snapshot: false });
   const success = (data: unknown, snapshot = false): HandlerOutput => ({ result: { kind: 'result', reqId, ok: true, data }, snapshot });
+
+  // Commandes étendues (économie, démographie, LOD de simulation).
+  if (typeof raw === 'object' && raw !== null && isExtCommandName((raw as { name?: unknown }).name)) {
+    const e = validateExtCommand(raw);
+    if (e) return failure(e);
+    const m = raw as ExtCommandMessage;
+    const r = sim.runExt(m.name, m.args as never);
+    return r.ok ? success(r.data) : failure(r.error);
+  }
+
+  const err = validateCommandMessage(raw);
   if (err) return failure(err);
   const msg = raw as MainToWorker;
   switch (msg.name) {

@@ -13,7 +13,7 @@ export type RimStyle = 'alliage' | 'alliage_sport' | 'acier' | 'pl';
 /** Roue centrée en (cx, cy, cz) ; side = +1 (droite, +X) ou −1 (gauche). */
 export function wheel(mb: VMesh, cx: number, cy: number, cz: number, R: number, W: number, side: 1 | -1, style: RimStyle, dual = false): void {
   const lod = mb.lod;
-  const seg = lod === 0 ? (R > 0.45 ? 18 : 16) : lod === 1 ? 10 : 6;
+  const seg = lod === 0 ? (R > 0.45 ? 16 : 14) : lod === 1 ? 8 : 6;
   mb.push().translate(cx, cy, cz).scale(side, 1, 1);
   const heavy = style === 'pl';
   const rimR = R * (heavy ? 0.56 : style === 'alliage_sport' ? 0.7 : 0.64);
@@ -25,8 +25,8 @@ export function wheel(mb: VMesh, cx: number, cy: number, cz: number, R: number, 
     mb.push().translate(off, 0, 0);
     if (lod < 2) {
       mb.latheX('atlas', lod === 0 ? [[R * 0.93, -hw], [R * 0.985, -hw * 0.78], [R, -hw * 0.4], [R, hw * 0.4], [R * 0.985, hw * 0.78], [R * 0.93, hw]] : [[R * 0.93, -hw], [R, -hw * 0.6], [R, hw * 0.6], [R * 0.93, hw]], seg, tread, 'band', 50);
-      mb.latheX('atlas', [[R * 0.93, hw], [R * 0.86, hw * 1.04], [rimR * 1.08, hw * 0.98], [rimR, hw * 0.9]], seg, outer ? 'flanc' : 'caoutchouc', 'radial', 60, R);
-      mb.latheX('atlas', [[rimR, -hw * 0.9], [rimR * 1.08, -hw * 0.98], [R * 0.86, -hw * 1.04], [R * 0.93, -hw]], seg, 'caoutchouc', 'radial', 60, R);
+      mb.latheX('atlas', lod === 0 ? [[R * 0.93, hw], [R * 0.86, hw * 1.04], [rimR * 1.08, hw * 0.98], [rimR, hw * 0.9]] : [[R * 0.93, hw], [rimR, hw * 0.92]], seg, outer ? 'flanc' : 'caoutchouc', 'radial', 60, R);
+      mb.latheX('atlas', [[rimR, -hw * 0.9], [R * 0.93, -hw]], seg, 'caoutchouc', 'radial', 60, R);
     } else {
       mb.latheX('atlas', [[R * 0.95, -hw], [R, -hw * 0.5], [R, hw * 0.5], [R * 0.95, hw]], seg, tread, 'band', 50);
     }
@@ -38,7 +38,7 @@ export function wheel(mb: VMesh, cx: number, cy: number, cz: number, R: number, 
     mb.latheX('atlas', [[R * 0.95, xo], [rimR, xo + 0.002], [0.001, xo + 0.004]], seg, heavy ? 'jante_pl' : 'jante_disque', 'radial', 80, R * 0.95);
   } else if (lod === 1 || style === 'acier' || heavy) {
     const region: RegionName = heavy ? 'jante_pl' : style === 'acier' ? 'jante_pl' : 'jante_disque';
-    mb.latheX('atlas', [[rimR, xo * 0.9], [rimR * 0.97, xo * 0.88 - 0.01], [rimR * 0.6, xo * 0.78 - 0.02], [rimR * 0.2, xo * 0.8 - 0.01], [0.001, xo * 0.82]], seg, region, 'radial', 30, rimR);
+    mb.latheX('atlas', lod === 0 ? [[rimR, xo * 0.9], [rimR * 0.97, xo * 0.88 - 0.01], [rimR * 0.6, xo * 0.78 - 0.02], [rimR * 0.2, xo * 0.8 - 0.01], [0.001, xo * 0.82]] : [[rimR, xo * 0.9], [rimR * 0.6, xo * 0.8 - 0.02], [0.001, xo * 0.82]], seg, region, 'radial', 30, rimR);
     if (lod === 0) {
       // écrous / moyeu en relief
       const nuts = heavy ? 10 : 5;
@@ -46,7 +46,7 @@ export function wheel(mb: VMesh, cx: number, cy: number, cz: number, R: number, 
         const a = (k / nuts) * Math.PI * 2;
         const r = rimR * (heavy ? 0.42 : 0.3);
         mb.push().translate(xo * 0.82, Math.sin(a) * r, Math.cos(a) * r);
-        mb.latheX('atlas', [[0.016, 0], [0.016, 0.02], [0.001, 0.024]], 6, 'chrome', 'radial', 40);
+        mb.latheX('atlas', [[0.016, 0], [0.016, 0.02], [0.001, 0.024]], 5, 'chrome', 'radial', 40);
         mb.pop();
       }
       mb.latheX('atlas', [[rimR * 0.18, xo * 0.82], [rimR * 0.14, xo * 0.82 + 0.03], [0.001, xo * 0.82 + 0.035]], 10, heavy ? 'noir_mat' : 'chrome', 'radial', 40);
@@ -57,7 +57,7 @@ export function wheel(mb: VMesh, cx: number, cy: number, cz: number, R: number, 
     // LOD0 alliage : lèvre, rayons, cache-moyeu, disque et étrier de frein
     const xf = hw * 0.9;
     mb.latheX('atlas', [[rimR, xf], [rimR * 0.98, xf + 0.01], [rimR * 0.9, xf + 0.008], [rimR * 0.86, xf - 0.015]], seg, 'alu', 'radial', 40, rimR);
-    mb.latheX('atlas', [[rimR * 0.86, xf - 0.015], [rimR * 0.85, -hw * 0.7], [0.001, -hw * 0.7]], seg, 'noir_mat', 'radial', 60);
+    mb.latheX('atlas', [[rimR * 0.86, xf - 0.015], [0.001, -hw * 0.5]], seg, 'noir_mat', 'radial', 60);
     const spokes = style === 'alliage_sport' ? 10 : 5;
     const sw = style === 'alliage_sport' ? 0.022 : 0.045;
     for (let k = 0; k < spokes; k++) {
@@ -73,11 +73,11 @@ export function wheel(mb: VMesh, cx: number, cy: number, cz: number, R: number, 
       mb.quad('atlas', [a1![0], a1![1], a1![2]], [a1![0] - back, a1![1], a1![2]], [b1![0] - back, b1![1], b1![2]], [b1![0], b1![1], b1![2]], 'alu');
       mb.pop();
     }
-    mb.latheX('atlas', [[rimR * 0.24, xf - 0.01], [rimR * 0.2, xf + 0.012], [rimR * 0.08, xf + 0.02], [0.001, xf + 0.021]], 12, 'chrome', 'radial', 35);
+    mb.latheX('atlas', [[rimR * 0.24, xf - 0.01], [rimR * 0.2, xf + 0.012], [0.001, xf + 0.021]], 8, 'chrome', 'radial', 35);
     // disque de frein et étrier
-    mb.latheX('atlas', [[rimR * 0.82, -0.01], [rimR * 0.82, 0.01], [rimR * 0.3, 0.012]], 16, 'alu', 'radial', 40);
+    mb.latheX('atlas', [[rimR * 0.82, 0.01], [rimR * 0.3, 0.012]], 12, 'alu', 'radial', 40);
     mb.push().translate(0.0, rimR * 0.62, -rimR * 0.35).rotX(-0.5);
-    mb.roundedBox(() => ({ mat: 'atlas', region: 'bande_rouge' }), 0, 0, 0, 0.06, rimR * 0.35, 0.09, 0.012, 1, 'bande_rouge');
+    mb.box('atlas', -0.03, -rimR * 0.17, -0.045, 0.03, rimR * 0.17, 0.045, 'bande_rouge', 'nx');
     mb.pop();
   }
   mb.pop();
@@ -101,9 +101,9 @@ export function plate(mb: VMesh, y: number, z: number, sign: 1 | -1, scale = 1):
 /** Quad d'atlas plaqué sur un flanc latéral (x = ±sx), entre z0..z1 et y0..y1. */
 export function sideDecal(mb: VMesh, region: RegionName, side: 1 | -1, x: number, z0: number, z1: number, y0: number, y1: number, uvRect?: [number, number, number, number]): void {
   const X = side * x;
-  // lecture dans le sens de la marche du côté droit (+X : l'avant est à droite vu de l'extérieur)
-  if (side > 0) mb.quad('atlas', [X, y0, z0], [X, y0, z1], [X, y1, z1], [X, y1, z0], region, uvRect);
-  else mb.quad('atlas', [X, y0, z1], [X, y0, z0], [X, y1, z0], [X, y1, z1], region, uvRect);
+  // vu de l'extérieur, le texte se lit de gauche à droite : vers −Z sur le flanc +X, vers +Z sur le flanc −X
+  if (side > 0) mb.quad('atlas', [X, y0, z1], [X, y0, z0], [X, y1, z0], [X, y1, z1], region, uvRect);
+  else mb.quad('atlas', [X, y0, z0], [X, y0, z1], [X, y1, z1], [X, y1, z0], region, uvRect);
 }
 
 /** Quad sur un flanc de caisse galbée : suit sideX(z, y) du corps (décalé de `off`). */
@@ -114,14 +114,15 @@ export function bodySideStrip(mb: VMesh, body: CarBody, region: RegionName, side
     const y = y0 + ((y1 - y0) * a) / ny;
     const row: V3[] = [];
     for (let k = 0; k <= n; k++) {
-      const z = side > 0 ? z0 + ((z1 - z0) * k) / n : z1 - ((z1 - z0) * k) / n;
+      // sens de lecture (vu de l'extérieur) : vers −Z sur le flanc +X, vers +Z sur le flanc −X
+      const z = side > 0 ? z1 - ((z1 - z0) * k) / n : z0 + ((z1 - z0) * k) / n;
       const x = body.sideX(z, y);
       row.push([side * (x + off), y, z]);
     }
     rows.push(row);
   }
   // rows[a][k] : i = hauteur (bas -> haut), j = longueur (sens lecture)
-  mb.surface(rows, { mat: () => ({ mat: 'atlas', region }), smoothAngle: 70, uv: (_p, _n, i, j) => [j / n, 1 - i / ny] });
+  mb.surface(rows, { mat: () => ({ mat: 'atlas', region }), smoothAngle: 70, flip: true, uv: (_p, _n, i, j) => [j / n, 1 - i / ny] });
 }
 
 /** Élargisseur d'aile (protection plastique) suivant le passage de roue, sur le flanc galbé. */

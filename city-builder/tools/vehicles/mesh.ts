@@ -243,7 +243,7 @@ export class VMesh {
     const zs: [number, number][] = []; // (z, inset)
     for (let k = 0; k <= seg; k++) { const a = (k / seg) * (Math.PI / 2); zs.push([-hz + r - Math.sin(a) * r, r - Math.cos(a) * r]); }
     zs.reverse();
-    const front: [number, number][] = zs.map(([z, ins]) => [-z, ins]).reverse();
+    const front: [number, number][] = zs.map(([z, ins]): [number, number] => [-z, ins]).reverse();
     const all = [...zs, ...front];
     // collapse des extrémités : premier et dernier anneau réduits au rectangle intérieur
     for (const [z, ins] of all) {

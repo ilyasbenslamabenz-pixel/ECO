@@ -163,7 +163,7 @@ export class CarBody {
   private lowerStations(lod: number): number[] {
     const s = this.lower;
     const L = s.noseZ - s.tailZ;
-    const n = lod === 0 ? Math.max(12, Math.round(L / 0.3)) : lod === 1 ? Math.max(6, Math.round(L / 0.65)) : Math.max(3, Math.round(L / 1.5));
+    const n = lod === 0 ? Math.max(11, Math.round(L / 0.36)) : lod === 1 ? Math.max(6, Math.round(L / 0.65)) : Math.max(3, Math.round(L / 1.5));
     const set = new Set<number>();
     for (let k = 0; k <= n; k++) set.add(+(s.tailZ + (L * k) / n).toFixed(4));
     const nr = lod === 0 ? 3 : lod === 1 ? 2 : 1;
@@ -173,7 +173,7 @@ export class CarBody {
       set.add(+(s.tailZ + s.planR * (1 - t)).toFixed(4));
     }
     if (lod < 2) for (const a of s.arches) {
-      const na = lod === 0 ? 8 : 4;
+      const na = lod === 0 ? 6 : 3;
       for (let k = 0; k <= na; k++) set.add(+(a.z - a.r + (2 * a.r * k) / na).toFixed(4));
     }
     if (this.cabin) for (const z of [this.cabin.zWs0, this.cabin.zRw1]) set.add(+z.toFixed(4));
@@ -239,9 +239,9 @@ export class CarBody {
     const lod = mb.lod;
     const set = new Set<number>([c.zWs0, c.zWs1, c.zRf1, c.zRw1]);
     for (const [a, b] of c.sideGlass) { set.add(a); set.add(b); }
-    const nWs = lod === 0 ? 5 : lod === 1 ? 3 : 1;
+    const nWs = lod === 0 ? 4 : lod === 1 ? 2 : 1;
     for (let k = 1; k < nWs; k++) { set.add(c.zWs0 + ((c.zWs1 - c.zWs0) * k) / nWs); set.add(c.zRw1 + ((c.zRf1 - c.zRw1) * k) / nWs); }
-    const nRoof = lod === 0 ? 6 : lod === 1 ? 3 : 1;
+    const nRoof = lod === 0 ? 4 : lod === 1 ? 2 : 1;
     for (let k = 1; k < nRoof; k++) set.add(c.zRf1 + ((c.zWs1 - c.zRf1) * k) / nRoof);
     const zs = [...set].map((z) => +z.toFixed(4)).filter((z) => z <= c.zWs0 && z >= c.zRw1).sort((a, b) => a - b);
     const uniq = zs.filter((z, i) => i === 0 || z - zs[i - 1]! > 1e-3);

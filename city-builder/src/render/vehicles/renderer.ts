@@ -98,8 +98,8 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
   private pending = new Set<Promise<unknown>>();
 
   // trames
-  private curPos = new Float32Array(0);
-  private curAsset = new Uint16Array(0);
+  private curPos: Float32Array = new Float32Array(0);
+  private curAsset: Uint16Array = new Uint16Array(0);
   private curIds = new Uint32Array(0);
   private curVar = new Uint8Array(0);
   private curFlags = new Uint8Array(0);
@@ -355,7 +355,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     if (id < this.prevX.length) return;
     let cap = this.prevX.length;
     while (cap <= id) cap *= 2;
-    const g = (a: Float32Array): Float32Array => { const b = new Float32Array(cap); b.set(a); return b; };
+    const g = (a: Float32Array): Float32Array<ArrayBuffer> => { const b = new Float32Array(cap); b.set(a); return b; };
     this.prevX = g(this.prevX); this.prevY = g(this.prevY); this.prevZ = g(this.prevZ); this.prevH = g(this.prevH);
     const s = new Uint32Array(cap); s.set(this.prevSeen); this.prevSeen = s;
   }

@@ -10,44 +10,188 @@
 
 <div id="main-menu" class="overlay hidden">
   <div class="menu-card">
-    <h1 class="brand">Aube Urbaine</h1>
-    <p class="tagline">Bâtissez la ville de vos rêves</p>
-    <button id="btn-new" class="primary">Nouvelle partie</button>
-    <button id="btn-continue">Continuer</button>
-    <button id="btn-demo" disabled title="Scène de démonstration — Phase 1">Scène de démonstration <span class="phase">Phase 1</span></button>
-    <p class="menu-foot" id="menu-foot"></p>
+    <section class="menu-screen" data-screen="home">
+      <h1 class="brand">Aube Urbaine</h1>
+      <p class="tagline">Bâtissez la ville de vos rêves</p>
+      <button id="btn-new" class="primary"><span class="ico" aria-hidden="true">✦</span>Nouvelle partie</button>
+      <button id="btn-continue"><span class="ico" aria-hidden="true">▶</span>Continuer</button>
+      <button id="btn-load" class="hidden"><span class="ico" aria-hidden="true">⤒</span>Charger une partie</button>
+      <button id="btn-demo" disabled title="Scène de démonstration — Phase 1"><span class="ico" aria-hidden="true">◈</span>Scène de démonstration <span class="phase">Phase 1</span></button>
+      <button id="btn-options" class="hidden"><span class="ico" aria-hidden="true">⚙</span>Options</button>
+      <button id="btn-quit" class="hidden"><span class="ico" aria-hidden="true">⏻</span>Quitter la partie</button>
+      <p class="menu-foot" id="menu-foot"></p>
+    </section>
+
+    <section class="menu-screen hidden" data-screen="new">
+      <h2>Nouvelle partie</h2>
+      <form id="form-new" class="form">
+        <label>Nom de la ville<input id="new-name" name="cityName" maxlength="40" value="Nouvelle-Aube" required autocomplete="off"></label>
+        <div class="row2">
+          <label>Taille de la carte
+            <select id="new-size" name="mapChunks">
+              <option value="4">Petite — 1 km</option>
+              <option value="8" selected>Moyenne — 2 km</option>
+              <option value="12">Grande — 3 km</option>
+              <option value="16">Immense — 4 km</option>
+            </select>
+          </label>
+          <label>Budget de départ
+            <select id="new-money" name="startMoney">
+              <option value="250000">Serré — 250 000 ¢</option>
+              <option value="500000" selected>Normal — 500 000 ¢</option>
+              <option value="2000000">Confortable — 2 000 000 ¢</option>
+              <option value="20000000">Bac à sable — 20 000 000 ¢</option>
+            </select>
+          </label>
+        </div>
+        <label>Graine du relief
+          <span class="inline"><input id="new-seed" name="seed" inputmode="numeric" pattern="-?[0-9]{1,10}" required autocomplete="off"><button type="button" id="new-seed-dice" class="icon-btn" title="Graine aléatoire" aria-label="Graine aléatoire">⟳</button></span>
+        </label>
+        <div class="form-actions">
+          <button type="button" data-back>Retour</button>
+          <button type="submit" class="primary">Fonder la ville</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="menu-screen hidden" data-screen="load">
+      <h2>Charger une partie</h2>
+      <ul id="load-list" class="slot-list" aria-label="Sauvegardes"></ul>
+      <div class="form-actions"><button type="button" data-back>Retour</button></div>
+    </section>
+
+    <section class="menu-screen hidden" data-screen="options">
+      <h2>Options graphiques</h2>
+      <form id="form-options" class="form">
+        <label>Qualité d'image
+          <select name="quality"><option value="basse">Basse (résolution réduite)</option><option value="moyenne">Moyenne</option><option value="haute">Haute (écran Retina)</option></select>
+        </label>
+        <label>Ombres
+          <select name="shadows"><option value="off">Désactivées</option><option value="low">Douces 1K</option><option value="high">Fines 2K</option><option value="ultra">Très fines 4K</option></select>
+        </label>
+        <label>Distance d'affichage <output id="opt-dist-out"></output>
+          <input type="range" name="viewDistance" min="1500" max="8000" step="250">
+        </label>
+        <p class="hint">Les réglages s'appliquent immédiatement et sont mémorisés dans ce navigateur.</p>
+        <div class="form-actions"><button type="button" data-back>Retour</button></div>
+      </form>
+    </section>
   </div>
 </div>
 
 <header id="hud" class="hidden">
   <div class="hud-group">
     <span id="hud-city" class="city"></span>
-    <span id="hud-date" class="pill" title="Date"></span>
+    <span id="hud-date" class="pill" data-tip="Date de la partie (calendrier de 30 jours par mois)"></span>
   </div>
   <div class="hud-group stats">
-    <span class="pill" title="Trésorerie"><span class="lbl">Budget</span> <b id="hud-money"></b></span>
-    <span class="pill" title="Bilan mensuel (entretien ; recettes fiscales en phase 2)"><span class="lbl">Bilan/mois</span> <b id="hud-balance"></b></span>
-    <span class="pill" title="Population (démographie : phase 2)"><span class="lbl">Habitants</span> <b id="hud-pop"></b></span>
+    <button class="pill pill-btn" id="hud-money-btn" data-tip="Trésorerie — ouvrir les finances"><span class="lbl">Budget</span> <b id="hud-money"></b></button>
+    <span class="pill pill-balance" data-tip="Bilan mensuel prévisionnel : recettes − entretien (recettes fiscales en phase 2)"><span class="lbl">Bilan/mois</span> <b id="hud-balance"></b></span>
+    <span class="pill pill-pop" data-tip="Population (démographie : phase 2)"><span class="lbl">Habitants</span> <b id="hud-pop"></b></span>
   </div>
   <div class="hud-group">
     <div class="seg" role="group" aria-label="Vitesse">
-      <button data-speed="0" title="Pause (Espace)">❚❚</button>
-      <button data-speed="1" title="Vitesse 1 (touche 1)">▶</button>
-      <button data-speed="2" title="Vitesse 2 (touche 2)">▶▶</button>
-      <button data-speed="4" title="Vitesse 4 (touche 3)">▶▶▶</button>
+      <button data-speed="0" data-tip="Pause (Espace)" aria-label="Pause">❚❚</button>
+      <button data-speed="1" data-tip="Vitesse ×1 (touche 1)" aria-label="Vitesse 1">▶</button>
+      <button data-speed="2" data-tip="Vitesse ×2 (touche 2)" aria-label="Vitesse 2">▶▶</button>
+      <button data-speed="4" data-tip="Vitesse ×4 (touche 3)" aria-label="Vitesse 4">▶▶▶</button>
     </div>
-    <button id="btn-camera" title="Basculer vue aérienne / vue rue (touche V)">Vue rue</button>
-    <button id="btn-save" title="Sauvegarder (emplacement local)">Sauvegarder</button>
-    <button id="btn-menu" title="Menu (Échap)">Menu</button>
+    <button id="btn-camera" data-tip="Basculer vue aérienne / vue rue (touche V)" aria-label="Basculer la caméra"><span class="ico" aria-hidden="true">◉</span><span class="tl">Vue rue</span></button>
+    <button id="btn-cinematic" class="hidden" data-tip="Survol cinématique (touche C)" aria-pressed="false"><span class="ico" aria-hidden="true">✈</span><span class="tl">Survol</span></button>
+    <button id="btn-finance" class="hidden" data-tip="Finances"><span class="ico" aria-hidden="true">¢</span><span class="tl">Finances</span></button>
+    <button id="btn-save" data-tip="Sauvegarder (emplacement local)" aria-label="Sauvegarder"><span class="ico" aria-hidden="true">⤓</span><span class="tl">Sauvegarder</span></button>
+    <button id="btn-menu" data-tip="Menu (Échap)" aria-label="Menu"><span class="ico" aria-hidden="true">☰</span><span class="tl">Menu</span></button>
   </div>
 </header>
 
+<div id="build-drawer" class="hidden" role="region" aria-label="Catalogue de construction">
+  <div class="drawer-head">
+    <div id="drawer-tabs" class="tabs" role="tablist"></div>
+    <button id="drawer-close" class="icon-btn" aria-label="Fermer le catalogue" data-tip="Fermer">✕</button>
+  </div>
+  <div id="drawer-body" class="drawer-body"></div>
+</div>
+
+<div id="tool-options" class="hidden" aria-live="polite">
+  <span id="tool-hint" class="tool-hint"></span>
+  <span id="tool-actions" class="tool-actions"></span>
+</div>
+
 <nav id="toolbar" class="hidden" aria-label="Outils">
-  <button data-tool="select" class="active">Sélection</button>
-  <button data-tool="road" disabled>Routes <span class="phase">Phase 1</span></button>
-  <button data-tool="building" disabled>Bâtiments <span class="phase">Phase 1</span></button>
-  <button data-tool="bulldoze" disabled>Démolir <span class="phase">Phase 1</span></button>
-  <button data-tool="terraform" disabled>Terrain <span class="phase">Phase 2</span></button>
+  <button data-tool="select" class="active" data-tip="Sélection : cliquer un bâtiment, une route ou un véhicule"><span class="ico">⌖</span><span class="tl">Sélection</span></button>
+  <button data-tool="road" disabled data-tip="Routes — Phase 1"><span class="ico">⛙</span><span class="tl">Routes</span> <span class="phase">Phase 1</span></button>
+  <button data-cat="zones" disabled data-tip="Zonage résidentiel / commercial / industriel — Phase 2"><span class="ico">▦</span><span class="tl">Zones</span> <span class="phase">Phase 2</span></button>
+  <button data-tool="building" disabled data-tip="Bâtiments — Phase 1"><span class="ico">⌂</span><span class="tl">Bâtiments</span> <span class="phase">Phase 1</span></button>
+  <button data-cat="services" disabled data-tip="Services publics — Phase 1"><span class="ico">✚</span><span class="tl">Services</span> <span class="phase">Phase 1</span></button>
+  <button data-cat="environment" disabled data-tip="Environnement — Phase 1"><span class="ico">❦</span><span class="tl">Environnement</span> <span class="phase">Phase 1</span></button>
+  <button data-tool="terraform" disabled data-tip="Terraformation — Phase 2"><span class="ico">⛰</span><span class="tl">Terrain</span> <span class="phase">Phase 2</span></button>
+  <button data-tool="bulldoze" disabled data-tip="Bulldozer — Phase 1"><span class="ico">⛏</span><span class="tl">Démolir</span> <span class="phase">Phase 1</span></button>
+  <button id="btn-undo" disabled data-tip="Annuler la dernière action (Ctrl+Z)"><span class="ico">↶</span><span class="tl">Annuler</span></button>
 </nav>
 
+<aside id="info-panel" class="panel hidden" aria-live="polite">
+  <div class="panel-head">
+    <div><div id="info-kicker" class="kicker"></div><h3 id="info-title"></h3></div>
+    <span class="panel-btns">
+      <button id="info-fold" class="icon-btn" aria-label="Replier" data-tip="Replier">▾</button>
+      <button id="info-close" class="icon-btn" aria-label="Fermer" data-tip="Fermer (Échap)">✕</button>
+    </span>
+  </div>
+  <div class="panel-body">
+    <img id="info-thumb" class="info-thumb hidden" alt="">
+    <dl id="info-rows" class="rows"></dl>
+    <div id="info-actions" class="panel-actions"></div>
+  </div>
+</aside>
+
+<aside id="finance-panel" class="panel hidden" aria-label="Finances">
+  <div class="panel-head">
+    <div><div class="kicker">Ville</div><h3>Finances</h3></div>
+    <span class="panel-btns">
+      <button id="finance-fold" class="icon-btn" aria-label="Replier" data-tip="Replier">▾</button>
+      <button id="finance-close" class="icon-btn" aria-label="Fermer" data-tip="Fermer">✕</button>
+    </span>
+  </div>
+  <div class="panel-body">
+    <div class="fin-hero"><span class="lbl">Trésorerie</span><b id="fin-money"></b></div>
+    <dl class="rows">
+      <dt>Bilan mensuel prévisionnel</dt><dd id="fin-balance"></dd>
+      <dt>Entretien des bâtiments</dt><dd id="fin-upkeep-b"></dd>
+      <dt>Entretien des routes</dt><dd id="fin-upkeep-r"></dd>
+      <dt>Recettes fiscales</dt><dd><span class="phase">Phase 2</span></dd>
+      <dt>Habitants</dt><dd id="fin-pop"></dd>
+      <dt>Bâtiments · routes</dt><dd id="fin-counts"></dd>
+    </dl>
+    <div class="chart-wrap">
+      <div class="chart-title">Trésorerie — historique de la partie <span id="fin-range" class="muted"></span></div>
+      <canvas id="fin-chart" height="150" role="img" aria-label="Évolution de la trésorerie"></canvas>
+      <div id="fin-tip" class="chart-tip hidden"></div>
+    </div>
+    <div class="panel-actions">
+      <button disabled data-tip="Emprunts bancaires — Phase 2">Emprunter <span class="phase">Phase 2</span></button>
+      <button disabled data-tip="Taux d'imposition — Phase 2">Impôts <span class="phase">Phase 2</span></button>
+    </div>
+  </div>
+</aside>
+
+<div id="save-panel" class="overlay hidden">
+  <div class="menu-card">
+    <h2>Sauvegarder</h2>
+    <ul id="save-list" class="slot-list" aria-label="Emplacements"></ul>
+    <form id="form-save" class="form inline-form">
+      <input id="save-name" maxlength="32" placeholder="Nom du nouvel emplacement" autocomplete="off" required>
+      <button type="submit" class="primary">Créer</button>
+    </form>
+    <div class="form-actions"><button type="button" id="save-close">Fermer</button></div>
+  </div>
+</div>
+
+<div id="touch-confirm" class="hidden" role="toolbar" aria-label="Confirmer l'action">
+  <button id="tc-cancel" aria-label="Annuler">✕</button>
+  <button id="tc-rotate" aria-label="Pivoter">↻</button>
+  <button id="tc-ok" class="primary">Construire</button>
+</div>
+
+<div id="cursor-tag" class="hidden" aria-hidden="true"></div>
+<div id="tooltip" class="hidden" role="tooltip"></div>
 <div id="toasts" aria-live="polite"></div>

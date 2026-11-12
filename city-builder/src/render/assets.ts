@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import type { AssetCatalog, CatalogAsset } from '../shared/catalog';
 import type { IAssetLibrary } from '../shared/contracts';
 
@@ -15,8 +16,31 @@ export async function fetchCatalog(assetsBase: URL): Promise<AssetCatalog> {
   return (await res.json()) as AssetCatalog;
 }
 
+/**
+ * Convertit en float32 les attributs quantifiés (KHR_mesh_quantization / meshopt : entiers normalisés ou non).
+ * Les transformations de nœud (échelle/translation de déquantification) sont conservées : les consommateurs
+ * qui « cuisent » `matrixWorld` dans la géométrie (applyMatrix4) obtiennent ainsi des valeurs exactes, sans
+ * saturation d'un entier normalisé. Coût mémoire assumé (les géométries sont partagées par instanciation).
+ */
+export function dequantizeGeometry(g: THREE.BufferGeometry): void {
+  for (const name of Object.keys(g.attributes)) {
+    const a = g.attributes[name] as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+    const isIL = (a as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute === true;
+    if (!isIL && (a as THREE.BufferAttribute).array instanceof Float32Array && !a.normalized) continue;
+    const n = a.count, s = a.itemSize;
+    const out = new Float32Array(n * s);
+    for (let i = 0; i < n; i++) {
+      out[i * s] = a.getX(i);
+      if (s > 1) out[i * s + 1] = a.getY(i);
+      if (s > 2) out[i * s + 2] = a.getZ(i);
+      if (s > 3) out[i * s + 3] = a.getW(i);
+    }
+    g.setAttribute(name, new THREE.BufferAttribute(out, s, false));
+  }
+}
+
 export class AssetLibrary implements IAssetLibrary<THREE.Group> {
-  private loader = new GLTFLoader();
+  private loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   private cache = new Map<string, Promise<THREE.Group>>();
   private loaded = new Set<string>();
   private byId: Map<string, CatalogAsset>;
@@ -43,7 +67,7 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
         root.name = `${assetId}_lod${lod}`;
         root.traverse((o) => {
           const m = o as THREE.Mesh;
-          if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+          if (m.isMesh) { dequantizeGeometry(m.geometry); m.castShadow = true; m.receiveShadow = true; }
         });
         this.loaded.add(key);
         return root;

@@ -8,12 +8,12 @@
         {
           "file": "vehicles/vehicule_citadine_lod0.glb",
           "maxDistance": 90,
-          "triangles": 7638
+          "triangles": 6058
         },
         {
           "file": "vehicles/vehicule_citadine_lod1.glb",
           "maxDistance": 320,
-          "triangles": 3014
+          "triangles": 2218
         },
         {
           "file": "vehicles/vehicule_citadine_lod2.glb",
@@ -24,7 +24,7 @@
       "dimensions": {
         "width": 2.03,
         "depth": 3.88,
-        "height": 1.504
+        "height": 1.496
       },
       "footprint": {
         "tilesX": 0,
@@ -122,12 +122,12 @@
         {
           "file": "vehicles/vehicule_berline_lod0.glb",
           "maxDistance": 100,
-          "triangles": 7786
+          "triangles": 6158
         },
         {
           "file": "vehicles/vehicule_berline_lod1.glb",
           "maxDistance": 340,
-          "triangles": 3054
+          "triangles": 2258
         },
         {
           "file": "vehicles/vehicule_berline_lod2.glb",
@@ -138,7 +138,7 @@
       "dimensions": {
         "width": 2.13,
         "depth": 4.854,
-        "height": 1.484
+        "height": 1.476
       },
       "footprint": {
         "tilesX": 0,
@@ -236,12 +236,12 @@
         {
           "file": "vehicles/vehicule_break_lod0.glb",
           "maxDistance": 100,
-          "triangles": 7814
+          "triangles": 6342
         },
         {
           "file": "vehicles/vehicule_break_lod1.glb",
           "maxDistance": 340,
-          "triangles": 3170
+          "triangles": 2374
         },
         {
           "file": "vehicles/vehicule_break_lod2.glb",
@@ -252,7 +252,7 @@
       "dimensions": {
         "width": 2.13,
         "depth": 4.872,
-        "height": 1.55
+        "height": 1.542
       },
       "footprint": {
         "tilesX": 0,
@@ -341,12 +341,12 @@
         {
           "file": "vehicles/vehicule_suv_lod0.glb",
           "maxDistance": 110,
-          "triangles": 8026
+          "triangles": 6442
         },
         {
           "file": "vehicles/vehicule_suv_lod1.glb",
           "maxDistance": 360,
-          "triangles": 3222
+          "triangles": 2426
         },
         {
           "file": "vehicles/vehicule_suv_lod2.glb",
@@ -357,7 +357,7 @@
       "dimensions": {
         "width": 2.17,
         "depth": 4.676,
-        "height": 1.765
+        "height": 1.756
       },
       "footprint": {
         "tilesX": 0,
@@ -455,12 +455,12 @@
         {
           "file": "vehicles/vehicule_coupe_lod0.glb",
           "maxDistance": 100,
-          "triangles": 7622
+          "triangles": 6018
         },
         {
           "file": "vehicles/vehicule_coupe_lod1.glb",
           "maxDistance": 330,
-          "triangles": 2998
+          "triangles": 2202
         },
         {
           "file": "vehicles/vehicule_coupe_lod2.glb",
@@ -471,7 +471,7 @@
       "dimensions": {
         "width": 2.17,
         "depth": 4.522,
-        "height": 1.314
+        "height": 1.305
       },
       "footprint": {
         "tilesX": 0,
@@ -560,12 +560,12 @@
         {
           "file": "vehicles/vehicule_monospace_lod0.glb",
           "maxDistance": 110,
-          "triangles": 7862
+          "triangles": 6226
         },
         {
           "file": "vehicles/vehicule_monospace_lod1.glb",
           "maxDistance": 360,
-          "triangles": 3114
+          "triangles": 2318
         },
         {
           "file": "vehicles/vehicule_monospace_lod2.glb",
@@ -576,7 +576,7 @@
       "dimensions": {
         "width": 2.15,
         "depth": 4.716,
-        "height": 1.764
+        "height": 1.756
       },
       "footprint": {
         "tilesX": 0,
@@ -665,12 +665,12 @@
         {
           "file": "vehicles/vehicule_pickup_lod0.glb",
           "maxDistance": 110,
-          "triangles": 7798
+          "triangles": 6730
         },
         {
           "file": "vehicles/vehicule_pickup_lod1.glb",
           "maxDistance": 380,
-          "triangles": 3230
+          "triangles": 2434
         },
         {
           "file": "vehicles/vehicule_pickup_lod2.glb",
@@ -681,7 +681,7 @@
       "dimensions": {
         "width": 2.19,
         "depth": 5.372,
-        "height": 1.844
+        "height": 1.834
       },
       "footprint": {
         "tilesX": 0,
@@ -770,12 +770,12 @@
         {
           "file": "vehicles/vehicule_taxi_lod0.glb",
           "maxDistance": 100,
-          "triangles": 7894
+          "triangles": 6314
         },
         {
           "file": "vehicles/vehicule_taxi_lod1.glb",
           "maxDistance": 340,
-          "triangles": 3130
+          "triangles": 2334
         },
         {
           "file": "vehicles/vehicule_taxi_lod2.glb",
@@ -786,7 +786,7 @@
       "dimensions": {
         "width": 2.07,
         "depth": 4.713,
-        "height": 1.685
+        "height": 1.677
       },
       "footprint": {
         "tilesX": 0,
@@ -857,12 +857,12 @@
         {
           "file": "vehicles/vehicule_police_lod0.glb",
           "maxDistance": 110,
-          "triangles": 8356
+          "triangles": 6724
         },
         {
           "file": "vehicles/vehicule_police_lod1.glb",
           "maxDistance": 360,
-          "triangles": 3400
+          "triangles": 2604
         },
         {
           "file": "vehicles/vehicule_police_lod2.glb",
@@ -873,7 +873,7 @@
       "dimensions": {
         "width": 2.11,
         "depth": 4.418,
-        "height": 1.714
+        "height": 1.705
       },
       "footprint": {
         "tilesX": 0,
@@ -935,12 +935,12 @@
         {
           "file": "vehicles/vehicule_utilitaire_lod0.glb",
           "maxDistance": 120,
-          "triangles": 6798
+          "triangles": 5678
         },
         {
           "file": "vehicles/vehicule_utilitaire_lod1.glb",
           "maxDistance": 400,
-          "triangles": 2986
+          "triangles": 2190
         },
         {
           "file": "vehicles/vehicule_utilitaire_lod2.glb",
@@ -951,7 +951,7 @@
       "dimensions": {
         "width": 2.652,
         "depth": 5.584,
-        "height": 2.484
+        "height": 2.475
       },
       "footprint": {
         "tilesX": 0,
@@ -1040,12 +1040,12 @@
         {
           "file": "vehicles/vehicule_ambulance_lod0.glb",
           "maxDistance": 120,
-          "triangles": 9034
+          "triangles": 7818
         },
         {
           "file": "vehicles/vehicule_ambulance_lod1.glb",
           "maxDistance": 400,
-          "triangles": 4198
+          "triangles": 3202
         },
         {
           "file": "vehicles/vehicule_ambulance_lod2.glb",
@@ -1056,7 +1056,7 @@
       "dimensions": {
         "width": 2.652,
         "depth": 6.264,
-        "height": 2.759
+        "height": 2.75
       },
       "footprint": {
         "tilesX": 0,
@@ -1118,12 +1118,12 @@
         {
           "file": "vehicles/vehicule_camion_lod0.glb",
           "maxDistance": 150,
-          "triangles": 10142
+          "triangles": 8978
         },
         {
           "file": "vehicles/vehicule_camion_lod1.glb",
           "maxDistance": 500,
-          "triangles": 4354
+          "triangles": 3418
         },
         {
           "file": "vehicles/vehicule_camion_lod2.glb",
@@ -1134,7 +1134,7 @@
       "dimensions": {
         "width": 3.092,
         "depth": 8.8,
-        "height": 3.542
+        "height": 3.55
       },
       "footprint": {
         "tilesX": 0,
@@ -1223,12 +1223,12 @@
         {
           "file": "vehicles/vehicule_bus_lod0.glb",
           "maxDistance": 160,
-          "triangles": 10836
+          "triangles": 9500
         },
         {
           "file": "vehicles/vehicule_bus_lod1.glb",
           "maxDistance": 550,
-          "triangles": 4848
+          "triangles": 3852
         },
         {
           "file": "vehicles/vehicule_bus_lod2.glb",
@@ -1239,7 +1239,7 @@
       "dimensions": {
         "width": 3.062,
         "depth": 12.049,
-        "height": 3.244
+        "height": 3.252
       },
       "footprint": {
         "tilesX": 0,
@@ -1319,12 +1319,12 @@
         {
           "file": "vehicles/vehicule_pompiers_lod0.glb",
           "maxDistance": 150,
-          "triangles": 9570
+          "triangles": 8402
         },
         {
           "file": "vehicles/vehicule_pompiers_lod1.glb",
           "maxDistance": 500,
-          "triangles": 4086
+          "triangles": 3150
         },
         {
           "file": "vehicles/vehicule_pompiers_lod2.glb",
@@ -1335,7 +1335,7 @@
       "dimensions": {
         "width": 3.112,
         "depth": 8.45,
-        "height": 3.392
+        "height": 3.4
       },
       "footprint": {
         "tilesX": 0,
@@ -1397,12 +1397,12 @@
         {
           "file": "vehicles/vehicule_benne_ordures_lod0.glb",
           "maxDistance": 150,
-          "triangles": 12766
+          "triangles": 10990
         },
         {
           "file": "vehicles/vehicule_benne_ordures_lod1.glb",
           "maxDistance": 500,
-          "triangles": 5258
+          "triangles": 3818
         },
         {
           "file": "vehicles/vehicule_benne_ordures_lod2.glb",
@@ -1413,7 +1413,7 @@
       "dimensions": {
         "width": 3.112,
         "depth": 9.17,
-        "height": 3.342
+        "height": 3.35
       },
       "footprint": {
         "tilesX": 0,

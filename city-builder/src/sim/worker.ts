@@ -1,11 +1,14 @@
 /**
  * Point d'entrée du Web Worker de simulation (bundle dist/sim.worker.js).
- * Boucle à pas fixe ; envoie un delta par pas d'horloge (100 ms) avec les
- * buffers véhicules en Transferable. Aucun import de three ni du DOM.
+ * Boucle à pas fixe découplée du rendu (loop.ts) ; un delta par pas exécuté, buffers
+ * véhicules en Transferable ; rapport économie/démographie joint au delta ≈ 1 fois/s
+ * (clé `report`, cf. sim-protocol.ts). Aucun import de three ni du DOM.
  */
 import { PROTOCOL_VERSION, SIM_TICKS_PER_SECOND } from '../shared/constants';
 import { collectTransferables, type WorkerToMain } from '../shared/protocol';
 import { handleCommand } from './handler';
+import { FixedStepLoop, STEP_MS } from './loop';
+import type { DeltaMessageExt } from './sim-protocol';
 import { Simulation } from './world';
 
 interface WorkerScope {
@@ -14,6 +17,8 @@ interface WorkerScope {
 }
 const scope = self as unknown as WorkerScope;
 const sim = new Simulation();
+const loop = new FixedStepLoop(sim, () => performance.now());
+let deltasSinceReport = SIM_TICKS_PER_SECOND;
 
 function post(msg: WorkerToMain): void {
   scope.postMessage(msg, collectTransferables(msg));
@@ -30,16 +35,27 @@ scope.onmessage = (ev) => {
     return;
   }
   post(out.result);
-  if (out.snapshot) post(sim.snapshot());
+  if (out.snapshot) { post(sim.snapshot()); deltasSinceReport = SIM_TICKS_PER_SECOND; }
 };
 
-const STEP_MS = 1000 / SIM_TICKS_PER_SECOND;
 setInterval(() => {
   if (!sim.terrain) return;
-  const t0 = performance.now();
-  for (let i = 0; i < sim.speed; i++) sim.tick();
-  if (sim.speed > 0) sim.tickMs = sim.tickMs * 0.9 + ((performance.now() - t0) / sim.speed) * 0.1;
-  post(sim.takeDelta());
-}, STEP_MS);
+  let steps = 0;
+  try {
+    steps = loop.pump();
+  } catch (e) {
+    post({ kind: 'log', level: 'error', message: `Erreur de tick : ${e instanceof Error ? e.message : String(e)}` });
+    return;
+  }
+  if (steps === 0) return;
+  const d: DeltaMessageExt = sim.takeDelta();
+  if (++deltasSinceReport >= SIM_TICKS_PER_SECOND && sim.demography) {
+    deltasSinceReport = 0;
+    try { d.report = sim.report(false); } catch (e) {
+      post({ kind: 'log', level: 'warn', message: `Rapport indisponible : ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+  post(d);
+}, STEP_MS / 2);
 
 post({ kind: 'ready', protocolVersion: PROTOCOL_VERSION });

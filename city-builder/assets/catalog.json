@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T18:39:07.313Z",
+  "generatedAt": "2026-11-12T21:57:17.932Z",
   "assets": [
     {
       "id": "arbre_jacaranda",
@@ -1485,6 +1485,6566 @@
         "arbuste",
         "massif"
       ]
+    },
+    {
+      "id": "maison_pavillon_enduit",
+      "nameFr": "Pavillon enduit à toit quatre pans",
+      "category": "house",
+      "lods": [
+        {
+          "file": "buildings/residential/maison_pavillon_enduit_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 2267
+        },
+        {
+          "file": "buildings/residential/maison_pavillon_enduit_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 785
+        },
+        {
+          "file": "buildings/residential/maison_pavillon_enduit_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 341
+        }
+      ],
+      "dimensions": {
+        "width": 14.7,
+        "depth": 10.11,
+        "height": 7.55
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 42000,
+      "upkeepPerMonth": 60,
+      "capacity": {
+        "residents": 4,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 5.05,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": 5.55,
+          "z": 4.29,
+          "nx": 0,
+          "nz": 1,
+          "kind": "vehicle"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Enduit blanc, volets bleu pastel"
+        },
+        {
+          "id": "ocre",
+          "nameFr": "Enduit ocre, volets vert basque",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_creme",
+              "color": "#e9cf9f"
+            },
+            "cheminee": {
+              "textureSet": "enduit_creme",
+              "color": "#e9cf9f"
+            },
+            "volet": {
+              "color": "#3f6b4a"
+            },
+            "porte": {
+              "color": "#3f6b4a"
+            }
+          }
+        },
+        {
+          "id": "ardoise",
+          "nameFr": "Toit d’ardoise, volets anthracite",
+          "materialOverrides": {
+            "toiture": {
+              "textureSet": "toit_ardoise",
+              "color": "#8a929c"
+            },
+            "poterie": {
+              "textureSet": "toit_ardoise",
+              "color": "#6b6f74"
+            },
+            "volet": {
+              "color": "#3b3f43"
+            },
+            "porte": {
+              "color": "#3b3f43"
+            },
+            "facade": {
+              "textureSet": "enduit_peint",
+              "color": "#e6e1d6"
+            }
+          }
+        },
+        {
+          "id": "rose",
+          "nameFr": "Enduit rosé, tuiles grises",
+          "materialOverrides": {
+            "facade": {
+              "color": "#e8c2b0"
+            },
+            "cheminee": {
+              "color": "#e8c2b0"
+            },
+            "toiture": {
+              "textureSet": "toit_tuiles_grises"
+            },
+            "volet": {
+              "color": "#f4f3ef"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "enduit_blanc",
+        "enduit_creme",
+        "enduit_peint",
+        "metal_larme",
+        "pierre_rustique",
+        "porte_garage",
+        "terrain_gravier",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles",
+        "toit_tuiles_grises"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/houses.ts#pavillonEnduit",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "maison",
+        "garage",
+        "tuiles",
+        "style:pavillon",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "maison_brique_pignon",
+      "nameFr": "Maison de briques à pignon sur rue",
+      "category": "house",
+      "lods": [
+        {
+          "file": "buildings/residential/maison_brique_pignon_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 1590
+        },
+        {
+          "file": "buildings/residential/maison_brique_pignon_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 846
+        },
+        {
+          "file": "buildings/residential/maison_brique_pignon_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 314
+        }
+      ],
+      "dimensions": {
+        "width": 8.34,
+        "depth": 14.59,
+        "height": 11.15
+      },
+      "footprint": {
+        "tilesX": 1,
+        "tilesZ": 2
+      },
+      "cost": 48000,
+      "upkeepPerMonth": 65,
+      "capacity": {
+        "residents": 5,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.3,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique rouge sombre, porte bordeaux"
+        },
+        {
+          "id": "orangee",
+          "nameFr": "Brique orangée, porte verte",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange"
+            },
+            "cheminee": {
+              "textureSet": "brique_orange"
+            },
+            "porte": {
+              "color": "#3f6b4a"
+            }
+          }
+        },
+        {
+          "id": "chaulee",
+          "nameFr": "Brique peinte en blanc, tuiles",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_parement",
+              "color": "#f3f1ec"
+            },
+            "toiture": {
+              "textureSet": "toit_tuiles",
+              "color": "#ffffff"
+            },
+            "poterie": {
+              "textureSet": "toit_tuiles",
+              "color": "#c77a52"
+            },
+            "porte": {
+              "color": "#2a2c2e"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "brique_orange",
+        "brique_parement",
+        "brique_rouge",
+        "metal_larme",
+        "pierre_rustique",
+        "pierre_taille",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/houses.ts#maisonBriquePignon",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "maison",
+        "brique",
+        "ardoise",
+        "bow-window",
+        "style:brique_nord",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "maison_chalet_bois",
+      "nameFr": "Chalet bois et pierre",
+      "category": "house",
+      "lods": [
+        {
+          "file": "buildings/residential/maison_chalet_bois_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 3016
+        },
+        {
+          "file": "buildings/residential/maison_chalet_bois_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 864
+        },
+        {
+          "file": "buildings/residential/maison_chalet_bois_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 226
+        }
+      ],
+      "dimensions": {
+        "width": 11.73,
+        "depth": 11.68,
+        "height": 8.92
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 56000,
+      "upkeepPerMonth": 70,
+      "capacity": {
+        "residents": 5,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 5.84,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -4.6,
+          "z": 0,
+          "nx": -1,
+          "nz": 0,
+          "kind": "vehicle"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Mélèze doré, tuiles grises"
+        },
+        {
+          "id": "vieilli",
+          "nameFr": "Bois vieilli gris, lauzes",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "bardage_blanc",
+              "color": "#9d9488"
+            },
+            "rive": {
+              "textureSet": "bardage_blanc",
+              "color": "#8f867a"
+            },
+            "bois": {
+              "textureSet": "bardage_blanc",
+              "color": "#948a7e"
+            },
+            "toiture": {
+              "textureSet": "toit_ardoise",
+              "color": "#8a929c"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Bois lasuré rouge, volets verts",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "bardage_blanc",
+              "color": "#a85a45"
+            },
+            "volet": {
+              "textureSet": "bardage_blanc",
+              "color": "#3f6b4a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "bois_volet",
+        "metal_larme",
+        "pierre_rustique",
+        "porte_garage",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles_grises"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/houses.ts#chaletBois",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "maison",
+        "bois",
+        "montagne",
+        "balcon",
+        "style:chalet",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "maison_villa_moderne",
+      "nameFr": "Villa contemporaine à toits plats",
+      "category": "house",
+      "lods": [
+        {
+          "file": "buildings/residential/maison_villa_moderne_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 1344
+        },
+        {
+          "file": "buildings/residential/maison_villa_moderne_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 732
+        },
+        {
+          "file": "buildings/residential/maison_villa_moderne_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 230
+        }
+      ],
+      "dimensions": {
+        "width": 14.72,
+        "depth": 12.13,
+        "height": 8.22
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 98000,
+      "upkeepPerMonth": 120,
+      "capacity": {
+        "residents": 4,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 6.07,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Enduit blanc et bardage bois"
+        },
+        {
+          "id": "sombre",
+          "nameFr": "Enduit blanc et panneaux sombres",
+          "materialOverrides": {
+            "facade_b": {
+              "textureSet": "panneaux_facade_sombres",
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "beton",
+          "nameFr": "Béton brut et bois",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "beton_facade",
+              "color": "#d6d3cc"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "enduit_blanc",
+        "metal_larme",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "terrain_gravier"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/houses.ts#villaModerne",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "maison",
+        "piscine",
+        "toit-terrasse",
+        "baies",
+        "style:contemporain",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "maison_longere_pierre",
+      "nameFr": "Longère en pierre à lucarnes",
+      "category": "house",
+      "lods": [
+        {
+          "file": "buildings/residential/maison_longere_pierre_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 2467
+        },
+        {
+          "file": "buildings/residential/maison_longere_pierre_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 1113
+        },
+        {
+          "file": "buildings/residential/maison_longere_pierre_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 243
+        }
+      ],
+      "dimensions": {
+        "width": 15.34,
+        "depth": 7.09,
+        "height": 7.49
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 1
+      },
+      "cost": 52000,
+      "upkeepPerMonth": 70,
+      "capacity": {
+        "residents": 4,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 3.55,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Moellons, volets gris-vert"
+        },
+        {
+          "id": "blanche",
+          "nameFr": "Enduit à la chaux, volets bleus",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_creme",
+              "color": "#f1eadb"
+            },
+            "volet": {
+              "color": "#5d7f96"
+            }
+          }
+        },
+        {
+          "id": "tuiles",
+          "nameFr": "Pierre, toit de tuiles, volets rouges",
+          "materialOverrides": {
+            "toiture": {
+              "textureSet": "toit_tuiles",
+              "color": "#ffffff"
+            },
+            "poterie": {
+              "textureSet": "toit_tuiles",
+              "color": "#c77a52"
+            },
+            "volet": {
+              "color": "#8a2f2a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "bois_volet",
+        "enduit_creme",
+        "metal_larme",
+        "pierre_moellons",
+        "pierre_rustique",
+        "pierre_taille",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/houses.ts#longerePierre",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "maison",
+        "pierre",
+        "ardoise",
+        "lucarnes",
+        "rural",
+        "style:longere",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "maison_ville_etroite",
+      "nameFr": "Maison de ville étroite",
+      "category": "house",
+      "lods": [
+        {
+          "file": "buildings/residential/maison_ville_etroite_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 2679
+        },
+        {
+          "file": "buildings/residential/maison_ville_etroite_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 879
+        },
+        {
+          "file": "buildings/residential/maison_ville_etroite_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 251
+        }
+      ],
+      "dimensions": {
+        "width": 6.12,
+        "depth": 11.44,
+        "height": 15.15
+      },
+      "footprint": {
+        "tilesX": 1,
+        "tilesZ": 2
+      },
+      "cost": 46000,
+      "upkeepPerMonth": 55,
+      "capacity": {
+        "residents": 5,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 5.72,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Enduit rosé, volets blancs"
+        },
+        {
+          "id": "vert",
+          "nameFr": "Enduit vert d’eau, porte rouge",
+          "materialOverrides": {
+            "facade": {
+              "color": "#c6d6c8"
+            },
+            "cheminee": {
+              "color": "#c6d6c8"
+            },
+            "porte": {
+              "color": "#8a2f2a"
+            }
+          }
+        },
+        {
+          "id": "ocre",
+          "nameFr": "Enduit ocre jaune, volets gris",
+          "materialOverrides": {
+            "facade": {
+              "color": "#e2c58e"
+            },
+            "cheminee": {
+              "color": "#e2c58e"
+            },
+            "volet": {
+              "color": "#3b3f43"
+            }
+          }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique et pierre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange",
+              "color": "#ffffff"
+            },
+            "cheminee": {
+              "textureSet": "brique_orange",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "brique_orange",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "pierre_taille",
+        "toit_ardoise",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/houses.ts#maisonVilleEtroite",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "maison",
+        "ville",
+        "balconnets",
+        "ardoise",
+        "style:faubourg",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "maison_mas_provencal",
+      "nameFr": "Mas provençal en L",
+      "category": "house",
+      "lods": [
+        {
+          "file": "buildings/residential/maison_mas_provencal_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 5824
+        },
+        {
+          "file": "buildings/residential/maison_mas_provencal_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 964
+        },
+        {
+          "file": "buildings/residential/maison_mas_provencal_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 384
+        }
+      ],
+      "dimensions": {
+        "width": 12.86,
+        "depth": 12.51,
+        "height": 7.86
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 64000,
+      "upkeepPerMonth": 75,
+      "capacity": {
+        "residents": 6,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 6.25,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Ocre clair, volets lavande"
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Ocre rouge, volets vert olive",
+          "materialOverrides": {
+            "facade": {
+              "color": "#d29a74"
+            },
+            "cheminee": {
+              "color": "#d29a74"
+            },
+            "rive": {
+              "color": "#d29a74"
+            },
+            "volet": {
+              "color": "#7c8a5a"
+            },
+            "porte": {
+              "color": "#7c8a5a"
+            }
+          }
+        },
+        {
+          "id": "pierre",
+          "nameFr": "Pierre apparente, volets bleus",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "pierre_moellons",
+              "color": "#f3e7d2"
+            },
+            "volet": {
+              "color": "#5d7f96"
+            },
+            "porte": {
+              "color": "#5d7f96"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "enduit_blanc",
+        "enduit_creme",
+        "metal_larme",
+        "pierre_moellons",
+        "pierre_rustique",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/houses.ts#masProvencal",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "maison",
+        "tuiles",
+        "genoise",
+        "pergola",
+        "sud",
+        "style:provencal",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "mitoyennes_brique",
+      "nameFr": "Rangée de maisons mitoyennes en brique",
+      "category": "townhouse",
+      "lods": [
+        {
+          "file": "buildings/residential/mitoyennes_brique_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 4070
+        },
+        {
+          "file": "buildings/residential/mitoyennes_brique_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 2168
+        },
+        {
+          "file": "buildings/residential/mitoyennes_brique_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 776
+        }
+      ],
+      "dimensions": {
+        "width": 22.14,
+        "depth": 12.3,
+        "height": 11.27
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 2
+      },
+      "cost": 150000,
+      "upkeepPerMonth": 210,
+      "capacity": {
+        "residents": 18,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 6.15,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique orangée, portes bleue et bordeaux"
+        },
+        {
+          "id": "sombre",
+          "nameFr": "Brique rouge sombre, portes noires",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_rouge",
+              "color": "#ffffff"
+            },
+            "cheminee": {
+              "textureSet": "brique_rouge",
+              "color": "#ffffff"
+            },
+            "porte": {
+              "color": "#2a2c2e"
+            },
+            "porte2": {
+              "color": "#3f6b4a"
+            }
+          }
+        },
+        {
+          "id": "tuiles",
+          "nameFr": "Brique et tuiles rouges",
+          "materialOverrides": {
+            "toiture": {
+              "textureSet": "toit_tuiles",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "brique_orange",
+        "brique_rouge",
+        "metal_larme",
+        "pierre_rustique",
+        "pierre_taille",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/collective.ts#mitoyennesBrique",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "mitoyen",
+        "brique",
+        "ardoise",
+        "bow-window",
+        "jardinets",
+        "style:brique_nord",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "mitoyennes_modernes",
+      "nameFr": "Maisons de ville contemporaines mitoyennes",
+      "category": "townhouse",
+      "lods": [
+        {
+          "file": "buildings/residential/mitoyennes_modernes_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 2346
+        },
+        {
+          "file": "buildings/residential/mitoyennes_modernes_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 1124
+        },
+        {
+          "file": "buildings/residential/mitoyennes_modernes_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 396
+        }
+      ],
+      "dimensions": {
+        "width": 19.7,
+        "depth": 14.67,
+        "height": 12.33
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 2
+      },
+      "cost": 165000,
+      "upkeepPerMonth": 220,
+      "capacity": {
+        "residents": 14,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.33,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Blanc, bois et brique"
+        },
+        {
+          "id": "gris",
+          "nameFr": "Béton, composite et brique sombre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "beton_facade",
+              "color": "#e0ddd6"
+            },
+            "facade_b": {
+              "textureSet": "bardage_composite",
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "clair",
+          "nameFr": "Blanc, bois blanchi, carreaux",
+          "materialOverrides": {
+            "facade_b": {
+              "textureSet": "bardage_blanc",
+              "color": "#e9e3d8"
+            },
+            "facade_c": {
+              "textureSet": "carreaux_facade",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "bardage_composite",
+        "beton_facade",
+        "brique_parement",
+        "carreaux_facade",
+        "enduit_blanc",
+        "metal_larme",
+        "metal_rideau",
+        "terrain_gravier",
+        "terrain_herbe"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/collective.ts#mitoyennesModernes",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "mitoyen",
+        "toit-terrasse",
+        "bardage",
+        "brique",
+        "style:contemporain",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "immeuble_petit_enduit",
+      "nameFr": "Petit immeuble enduit à balcons",
+      "category": "apartment_low",
+      "lods": [
+        {
+          "file": "buildings/residential/immeuble_petit_enduit_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 9690
+        },
+        {
+          "file": "buildings/residential/immeuble_petit_enduit_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 2804
+        },
+        {
+          "file": "buildings/residential/immeuble_petit_enduit_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 928
+        }
+      ],
+      "dimensions": {
+        "width": 16.19,
+        "depth": 12.95,
+        "height": 16.86
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 260000,
+      "upkeepPerMonth": 380,
+      "capacity": {
+        "residents": 28,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 6.48,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Enduit crème, garde-corps blancs"
+        },
+        {
+          "id": "saumon",
+          "nameFr": "Enduit saumon, garde-corps sombres",
+          "materialOverrides": {
+            "facade": {
+              "color": "#f0c9ae"
+            },
+            "garde_corps": {
+              "color": "#33373b"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Enduit gris clair, tuiles grises",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_peint",
+              "color": "#e2e2de"
+            },
+            "toiture": {
+              "textureSet": "toit_tuiles_grises",
+              "color": "#ffffff"
+            },
+            "poterie": {
+              "textureSet": "toit_tuiles_grises",
+              "color": "#8c8c88"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "enduit_blanc",
+        "enduit_creme",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "toit_tole_ondulee",
+        "toit_tuiles",
+        "toit_tuiles_grises"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/collective.ts#petitImmeubleEnduit",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "immeuble",
+        "balcons",
+        "tuiles",
+        "volets-roulants",
+        "style:residence_1960",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "immeuble_brique_1930",
+      "nameFr": "Immeuble de briques années 1930",
+      "category": "apartment_low",
+      "lods": [
+        {
+          "file": "buildings/residential/immeuble_brique_1930_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 5382
+        },
+        {
+          "file": "buildings/residential/immeuble_brique_1930_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 2316
+        },
+        {
+          "file": "buildings/residential/immeuble_brique_1930_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 676
+        }
+      ],
+      "dimensions": {
+        "width": 14.68,
+        "depth": 12.52,
+        "height": 15.6
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 280000,
+      "upkeepPerMonth": 400,
+      "capacity": {
+        "residents": 30,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 6.26,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique orangée et pierre"
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Brique rouge sombre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_rouge"
+            }
+          }
+        },
+        {
+          "id": "blond",
+          "nameFr": "Brique de parement blonde",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_parement",
+              "color": "#f2ddc4"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "brique_orange",
+        "brique_parement",
+        "brique_rouge",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "terrain_gravier",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/collective.ts#immeubleBrique30",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "immeuble",
+        "brique",
+        "bow-windows",
+        "toit-terrasse",
+        "style:art_deco",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "immeuble_haussmannien",
+      "nameFr": "Immeuble haussmannien à commerces",
+      "category": "apartment_mid",
+      "lods": [
+        {
+          "file": "buildings/residential/immeuble_haussmannien_lod0.glb",
+          "maxDistance": 180,
+          "triangles": 17428
+        },
+        {
+          "file": "buildings/residential/immeuble_haussmannien_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 4486
+        },
+        {
+          "file": "buildings/residential/immeuble_haussmannien_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 978
+        }
+      ],
+      "dimensions": {
+        "width": 21.6,
+        "depth": 14.85,
+        "height": 26.28
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 2
+      },
+      "cost": 620000,
+      "upkeepPerMonth": 900,
+      "capacity": {
+        "residents": 46,
+        "jobs": 12
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.43,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -6,
+          "z": 6.18,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Pierre blonde, devantures vert et bordeaux"
+        },
+        {
+          "id": "creme",
+          "nameFr": "Pierre crème, devantures noires",
+          "materialOverrides": {
+            "facade": {
+              "color": "#ede0c9"
+            },
+            "enseigne": {
+              "color": "#1e2224"
+            },
+            "enseigne2": {
+              "color": "#3d4a6b"
+            }
+          }
+        },
+        {
+          "id": "patine",
+          "nameFr": "Pierre patinée, toit de zinc",
+          "materialOverrides": {
+            "facade": {
+              "color": "#ddd2bf"
+            },
+            "encadrement": {
+              "color": "#e6dccb"
+            },
+            "toiture": {
+              "textureSet": "toit_tole_ondulee",
+              "color": "#a9aeb3"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bois_volet",
+        "enduit_blanc",
+        "enduit_creme",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/collective.ts#haussmannien",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "immeuble",
+        "pierre-de-taille",
+        "commerces",
+        "balcons-filants",
+        "mansarde",
+        "style:haussmannien",
+        "densite:forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "immeuble_commerces_moderne",
+      "nameFr": "Immeuble contemporain à commerces et loggias",
+      "category": "apartment_mid",
+      "lods": [
+        {
+          "file": "buildings/residential/immeuble_commerces_moderne_lod0.glb",
+          "maxDistance": 180,
+          "triangles": 11504
+        },
+        {
+          "file": "buildings/residential/immeuble_commerces_moderne_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 3734
+        },
+        {
+          "file": "buildings/residential/immeuble_commerces_moderne_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 716
+        }
+      ],
+      "dimensions": {
+        "width": 22.24,
+        "depth": 14.45,
+        "height": 23.8
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 2
+      },
+      "cost": 680000,
+      "upkeepPerMonth": 950,
+      "capacity": {
+        "residents": 58,
+        "jobs": 18
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.23,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -8,
+          "z": -6.82,
+          "nx": 0,
+          "nz": -1,
+          "kind": "vehicle"
+        },
+        {
+          "x": 7,
+          "z": 5.98,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Blanc, loggias ocre"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Blanc, loggias bleu ardoise",
+          "materialOverrides": {
+            "accent": {
+              "color": "#5b7a99"
+            },
+            "enseigne": {
+              "color": "#8a3b2e"
+            }
+          }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique et composite, loggias vertes",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_parement",
+              "color": "#ffffff"
+            },
+            "accent": {
+              "color": "#7d9a6a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_composite",
+        "beton_facade",
+        "brique_parement",
+        "carreaux_facade",
+        "enduit_blanc",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "porte_garage",
+        "terrain_gravier",
+        "terrain_herbe"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/collective.ts#immeubleCommercesModerne",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "immeuble",
+        "commerces",
+        "loggias",
+        "attique",
+        "toit-terrasse",
+        "style:contemporain",
+        "densite:forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "barre_logements_r9",
+      "nameFr": "Barre de logements R+9",
+      "category": "apartment_high",
+      "lods": [
+        {
+          "file": "buildings/residential/barre_logements_r9_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 15578
+        },
+        {
+          "file": "buildings/residential/barre_logements_r9_lod1.glb",
+          "maxDistance": 800,
+          "triangles": 6612
+        },
+        {
+          "file": "buildings/residential/barre_logements_r9_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 3202
+        }
+      ],
+      "dimensions": {
+        "width": 38.16,
+        "depth": 13.45,
+        "height": 33.08
+      },
+      "footprint": {
+        "tilesX": 5,
+        "tilesZ": 2
+      },
+      "cost": 1450000,
+      "upkeepPerMonth": 1900,
+      "capacity": {
+        "residents": 210,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 6.73,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Enduit clair, panneaux terre cuite"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Enduit clair, panneaux bleus",
+          "materialOverrides": {
+            "facade_b": {
+              "color": "#4f7aa0"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Béton brut, panneaux vert d’eau",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "beton_facade",
+              "color": "#e3e6e8"
+            },
+            "facade_b": {
+              "color": "#7fae9b"
+            }
+          }
+        },
+        {
+          "id": "haute",
+          "nameFr": "Enduit clair, panneaux jaunes (R+11)",
+          "heightScale": 1.18,
+          "materialOverrides": {
+            "facade_b": {
+              "color": "#d9b44a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "carreaux_facade",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "terrain_gravier",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/towers.ts#barreModerne",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "immeuble",
+        "barre",
+        "balcons",
+        "toit-terrasse",
+        "style:grand_ensemble",
+        "densite:tres_forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "residence_gradins",
+      "nameFr": "Résidence en gradins à terrasses plantées",
+      "category": "apartment_high",
+      "lods": [
+        {
+          "file": "buildings/residential/residence_gradins_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 11300
+        },
+        {
+          "file": "buildings/residential/residence_gradins_lod1.glb",
+          "maxDistance": 800,
+          "triangles": 4496
+        },
+        {
+          "file": "buildings/residential/residence_gradins_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 2164
+        }
+      ],
+      "dimensions": {
+        "width": 36.11,
+        "depth": 15.66,
+        "height": 29.41
+      },
+      "footprint": {
+        "tilesX": 5,
+        "tilesZ": 2
+      },
+      "cost": 1300000,
+      "upkeepPerMonth": 1700,
+      "capacity": {
+        "residents": 170,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.83,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique sombre et béton blanc"
+        },
+        {
+          "id": "claire",
+          "nameFr": "Brique orangée",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange"
+            }
+          }
+        },
+        {
+          "id": "bois",
+          "nameFr": "Bardage bois et béton",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "bardage_bois",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "brique_orange",
+        "brique_parement",
+        "enduit_blanc",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "terrain_gravier",
+        "terrain_herbe",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/towers.ts#residenceGradins",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "immeuble",
+        "gradins",
+        "terrasses",
+        "vegetalisation",
+        "brique",
+        "style:contemporain",
+        "densite:tres_forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "tour_residentielle_balcons",
+      "nameFr": "Tour résidentielle à balcons d’angle (R+17)",
+      "category": "apartment_high",
+      "lods": [
+        {
+          "file": "buildings/residential/tour_residentielle_balcons_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 25188
+        },
+        {
+          "file": "buildings/residential/tour_residentielle_balcons_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 11614
+        },
+        {
+          "file": "buildings/residential/tour_residentielle_balcons_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 5988
+        }
+      ],
+      "dimensions": {
+        "width": 24.2,
+        "depth": 24.2,
+        "height": 64.63
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 3
+      },
+      "cost": 2600000,
+      "upkeepPerMonth": 3200,
+      "capacity": {
+        "residents": 300,
+        "jobs": 4
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 12.1,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Blanc et panneaux anthracite"
+        },
+        {
+          "id": "sable",
+          "nameFr": "Enduit sable et bois",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_creme",
+              "color": "#efe2cc"
+            },
+            "facade_b": {
+              "textureSet": "bardage_bois",
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "beton",
+          "nameFr": "Béton et panneaux sombres (R+20)",
+          "heightScale": 1.15,
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "beton_facade",
+              "color": "#e2ded6"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "carreaux_facade",
+        "enduit_blanc",
+        "enduit_creme",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "terrain_gravier",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/towers.ts#tourBalcons",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "tour",
+        "balcons",
+        "verre",
+        "couronnement",
+        "style:tour_contemporaine",
+        "densite:tres_forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "tour_brique_gradins",
+      "nameFr": "Tour de logements en brique à gradins (R+13)",
+      "category": "apartment_high",
+      "lods": [
+        {
+          "file": "buildings/residential/tour_brique_gradins_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 18392
+        },
+        {
+          "file": "buildings/residential/tour_brique_gradins_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 6470
+        },
+        {
+          "file": "buildings/residential/tour_brique_gradins_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 2296
+        }
+      ],
+      "dimensions": {
+        "width": 23.64,
+        "depth": 15.65,
+        "height": 58.03
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 2
+      },
+      "cost": 2100000,
+      "upkeepPerMonth": 2600,
+      "capacity": {
+        "residents": 220,
+        "jobs": 10
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.83,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -7.6,
+          "z": -7.42,
+          "nx": 0,
+          "nz": -1,
+          "kind": "vehicle"
+        },
+        {
+          "x": 7,
+          "z": 6.58,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique rouge, piliers clairs"
+        },
+        {
+          "id": "blonde",
+          "nameFr": "Brique blonde",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_parement",
+              "color": "#f6dcc0"
+            },
+            "facade_b": {
+              "textureSet": "pierre_taille",
+              "color": "#f4efe6"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Brique orangée, couronnement cuivre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange",
+              "color": "#ffffff"
+            },
+            "zinc": {
+              "color": "#b0764a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "brique_orange",
+        "brique_parement",
+        "brique_rouge",
+        "enduit_blanc",
+        "metal_larme",
+        "pierre_taille",
+        "porte_garage",
+        "terrain_gravier",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/residential/towers.ts#tourBrique",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "tour",
+        "brique",
+        "gradins",
+        "pierre",
+        "commerces",
+        "style:art_deco",
+        "densite:tres_forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "commerce_boulangerie",
+      "nameFr": "Boulangerie de quartier",
+      "category": "commercial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/commerce_boulangerie_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 3644
+        },
+        {
+          "file": "buildings/nonresidential/commerce_boulangerie_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 1157
+        },
+        {
+          "file": "buildings/nonresidential/commerce_boulangerie_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 403
+        }
+      ],
+      "dimensions": {
+        "width": 8.04,
+        "depth": 8.15,
+        "height": 10.9
+      },
+      "footprint": {
+        "tilesX": 1,
+        "tilesZ": 1
+      },
+      "cost": 42000,
+      "upkeepPerMonth": 90,
+      "capacity": {
+        "residents": 2,
+        "jobs": 5
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 4.07,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Enduit crème, store bordeaux"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Devanture bleu nuit, store bleu",
+          "materialOverrides": {
+            "enseigne": {
+              "color": "#1f3550"
+            },
+            "menuiserie": {
+              "color": "#1f3550"
+            },
+            "store_a": {
+              "color": "#2f5f8f"
+            },
+            "porte": {
+              "color": "#1f3550"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Façade ocre, devanture vert sapin",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_peint",
+              "color": "#e2b977"
+            },
+            "enseigne": {
+              "color": "#2d4a35"
+            },
+            "menuiserie": {
+              "color": "#2d4a35"
+            },
+            "store_a": {
+              "color": "#3f7a4c"
+            }
+          }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique rouge, devanture noire",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_rouge",
+              "color": "#ffffff"
+            },
+            "enseigne": {
+              "color": "#1e1e1e"
+            },
+            "menuiserie": {
+              "color": "#1e1e1e"
+            },
+            "store_a": {
+              "color": "#6f6f6f"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "brique_rouge",
+        "enduit_blanc",
+        "enduit_creme",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "pierre_taille",
+        "terrain_herbe",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/commerce.ts#boulangerie",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "commerce",
+        "commerce_de_proximite",
+        "boulangerie",
+        "vitrine",
+        "store_banne",
+        "service:alimentation",
+        "rayon:250",
+        "style:faubourg",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "commerce_supermarche",
+      "nameFr": "Supermarché et son parking",
+      "category": "commercial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/commerce_supermarche_lod0.glb",
+          "maxDistance": 180,
+          "triangles": 4453
+        },
+        {
+          "file": "buildings/nonresidential/commerce_supermarche_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 1627
+        },
+        {
+          "file": "buildings/nonresidential/commerce_supermarche_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 613
+        }
+      ],
+      "dimensions": {
+        "width": 31.32,
+        "depth": 31.32,
+        "height": 9.9
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 4
+      },
+      "cost": 680000,
+      "upkeepPerMonth": 1300,
+      "capacity": {
+        "residents": 0,
+        "jobs": 65
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.66,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": 0.06,
+          "z": 15.66,
+          "nx": 0,
+          "nz": 1,
+          "kind": "vehicle"
+        },
+        {
+          "x": 15.66,
+          "z": -9.94,
+          "nx": 1,
+          "nz": 0,
+          "kind": "delivery"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Vert et orange"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu et jaune",
+          "materialOverrides": {
+            "enseigne": {
+              "color": "#1d4f8f"
+            },
+            "logo": {
+              "color": "#f2c230"
+            },
+            "logo_b": {
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Rouge, bardage bois",
+          "materialOverrides": {
+            "enseigne": {
+              "color": "#b02a2a"
+            },
+            "facade_b": {
+              "textureSet": "bardage_bois",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "bardage_composite",
+        "beton_facade",
+        "bordure_granit",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "terrain_herbe",
+        "toit_tole_ondulee",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/commerce.ts#supermarche",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "commerce",
+        "grande_surface",
+        "parking",
+        "quai_livraison",
+        "service:alimentation",
+        "rayon:900",
+        "style:grande_surface",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "commerce_cafe_terrasse",
+      "nameFr": "Café-brasserie à terrasse",
+      "category": "commercial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/commerce_cafe_terrasse_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 12359
+        },
+        {
+          "file": "buildings/nonresidential/commerce_cafe_terrasse_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 3484
+        },
+        {
+          "file": "buildings/nonresidential/commerce_cafe_terrasse_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1045
+        }
+      ],
+      "dimensions": {
+        "width": 14.7,
+        "depth": 15.7,
+        "height": 15.03
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 160000,
+      "upkeepPerMonth": 260,
+      "capacity": {
+        "residents": 8,
+        "jobs": 12
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.85,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Pierre, devanture vert anglais, stores bordeaux"
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Devanture rouge, stores rayés rouges",
+          "materialOverrides": {
+            "enseigne": {
+              "color": "#7c1f1c"
+            },
+            "menuiserie": {
+              "color": "#7c1f1c"
+            },
+            "store_a": {
+              "color": "#b3302a"
+            }
+          }
+        },
+        {
+          "id": "noir",
+          "nameFr": "Brique et devanture noire, stores gris",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange",
+              "color": "#ffffff"
+            },
+            "enseigne": {
+              "color": "#1b1b1b"
+            },
+            "menuiserie": {
+              "color": "#1b1b1b"
+            },
+            "store_a": {
+              "color": "#4a4f55"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "brique_orange",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "pierre_taille",
+        "terrain_herbe",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/commerce.ts#cafe",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "commerce",
+        "restaurant",
+        "cafe",
+        "terrasse",
+        "mansarde",
+        "service:restauration",
+        "rayon:400",
+        "style:brasserie",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "commerce_station_service",
+      "nameFr": "Station-service et boutique",
+      "category": "commercial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/commerce_station_service_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 7200
+        },
+        {
+          "file": "buildings/nonresidential/commerce_station_service_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 2456
+        },
+        {
+          "file": "buildings/nonresidential/commerce_station_service_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 800
+        }
+      ],
+      "dimensions": {
+        "width": 24,
+        "depth": 24,
+        "height": 7.22
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 3
+      },
+      "cost": 220000,
+      "upkeepPerMonth": 420,
+      "capacity": {
+        "residents": 0,
+        "jobs": 8
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 12,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -6,
+          "z": 12,
+          "nx": 0,
+          "nz": 1,
+          "kind": "vehicle"
+        },
+        {
+          "x": 6,
+          "z": 12,
+          "nx": 0,
+          "nz": 1,
+          "kind": "vehicle"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Bleu pétrole et jaune"
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert et blanc",
+          "materialOverrides": {
+            "enseigne": {
+              "color": "#1f7a43"
+            },
+            "logo": {
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Rouge et gris",
+          "materialOverrides": {
+            "enseigne": {
+              "color": "#b3261e"
+            },
+            "logo": {
+              "color": "#d9d9d9"
+            },
+            "logo_b": {
+              "color": "#f2b32a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "terrain_herbe"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/commerce.ts#stationService",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "commerce",
+        "carburant",
+        "auvent",
+        "totem",
+        "service:carburant",
+        "rayon:1500",
+        "style:station",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "commerce_centre_commercial",
+      "nameFr": "Centre commercial",
+      "category": "commercial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/commerce_centre_commercial_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 6142
+        },
+        {
+          "file": "buildings/nonresidential/commerce_centre_commercial_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 2483
+        },
+        {
+          "file": "buildings/nonresidential/commerce_centre_commercial_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 822
+        }
+      ],
+      "dimensions": {
+        "width": 39.38,
+        "depth": 31.32,
+        "height": 17.95
+      },
+      "footprint": {
+        "tilesX": 5,
+        "tilesZ": 4
+      },
+      "cost": 2400000,
+      "upkeepPerMonth": 4200,
+      "capacity": {
+        "residents": 0,
+        "jobs": 320
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.66,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Panneaux gris, cinéma bleu nuit"
+        },
+        {
+          "id": "chaud",
+          "nameFr": "Brique et bois",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange",
+              "color": "#ffffff"
+            },
+            "enseigne": {
+              "color": "#4a2a1f"
+            }
+          }
+        },
+        {
+          "id": "clair",
+          "nameFr": "Béton clair, enseignes vertes",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "beton_facade",
+              "color": "#f2efe8"
+            },
+            "enseigne": {
+              "color": "#1f5c46"
+            },
+            "logo": {
+              "color": "#9ccb3b"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "brique_orange",
+        "brique_parement",
+        "carreaux_facade",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "terrain_gravier",
+        "terrain_herbe",
+        "toit_tole_ondulee",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/commerce.ts#centreCommercial",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "commerce",
+        "galerie_marchande",
+        "cinema",
+        "verriere",
+        "service:commerces",
+        "rayon:2500",
+        "style:centre_commercial",
+        "densite:forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "bureaux_brise_soleil",
+      "nameFr": "Immeuble de bureaux à brise-soleil",
+      "category": "commercial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/bureaux_brise_soleil_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 5410
+        },
+        {
+          "file": "buildings/nonresidential/bureaux_brise_soleil_lod1.glb",
+          "maxDistance": 800,
+          "triangles": 2534
+        },
+        {
+          "file": "buildings/nonresidential/bureaux_brise_soleil_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 676
+        }
+      ],
+      "dimensions": {
+        "width": 24.15,
+        "depth": 15.5,
+        "height": 27.37
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 2
+      },
+      "cost": 1150000,
+      "upkeepPerMonth": 1500,
+      "capacity": {
+        "residents": 0,
+        "jobs": 240
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.75,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Béton clair, lames bois"
+        },
+        {
+          "id": "sombre",
+          "nameFr": "Béton anthracite, lames claires",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "panneaux_facade_sombres",
+              "color": "#ffffff"
+            },
+            "lame": {
+              "color": "#f2e8d8"
+            }
+          }
+        },
+        {
+          "id": "terre",
+          "nameFr": "Brique, lames aluminium",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_parement",
+              "color": "#ffffff"
+            },
+            "lame": {
+              "textureSet": "metal_rideau",
+              "color": "#c8ccd0"
+            }
+          }
+        },
+        {
+          "id": "basse",
+          "nameFr": "Version R+4",
+          "heightScale": 0.78
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "brique_parement",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "terrain_gravier",
+        "terrain_herbe",
+        "toit_tole_ondulee",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/offices.ts#bureaux",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "bureaux",
+        "tertiaire",
+        "brise_soleil",
+        "attique",
+        "service:emplois_tertiaires",
+        "style:tertiaire_contemporain",
+        "densite:forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "tour_vitree_mur_rideau",
+      "nameFr": "Tour de bureaux vitrée",
+      "category": "skyscraper",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/tour_vitree_mur_rideau_lod0.glb",
+          "maxDistance": 280,
+          "triangles": 10838
+        },
+        {
+          "file": "buildings/nonresidential/tour_vitree_mur_rideau_lod1.glb",
+          "maxDistance": 1200,
+          "triangles": 4866
+        },
+        {
+          "file": "buildings/nonresidential/tour_vitree_mur_rideau_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1330
+        }
+      ],
+      "dimensions": {
+        "width": 23.36,
+        "depth": 23.32,
+        "height": 116.15
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 3
+      },
+      "cost": 6800000,
+      "upkeepPerMonth": 7200,
+      "capacity": {
+        "residents": 0,
+        "jobs": 1400
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 11.66,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Verre bleu, aluminium clair"
+        },
+        {
+          "id": "bronze",
+          "nameFr": "Verre bronze, montants sombres",
+          "materialOverrides": {
+            "verre_mr": {
+              "color": "#6e5a45"
+            },
+            "meneau": {
+              "color": "#3a3532"
+            },
+            "allege": {
+              "color": "#4a3c33"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Verre vert d’eau",
+          "materialOverrides": {
+            "verre_mr": {
+              "color": "#4f7a72"
+            },
+            "allege": {
+              "color": "#6d7c78"
+            }
+          }
+        },
+        {
+          "id": "haute",
+          "nameFr": "Verre bleu, R+33",
+          "heightScale": 1.3
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "enduit_blanc",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "terrain_gravier",
+        "terrain_herbe",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/offices.ts#tourVitree",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "gratte_ciel",
+        "bureaux",
+        "mur_rideau",
+        "socle",
+        "service:emplois_tertiaires",
+        "style:international",
+        "densite:tres_forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "gratte_ciel_retraits",
+      "nameFr": "Gratte-ciel à étages en retrait",
+      "category": "skyscraper",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/gratte_ciel_retraits_lod0.glb",
+          "maxDistance": 320,
+          "triangles": 8594
+        },
+        {
+          "file": "buildings/nonresidential/gratte_ciel_retraits_lod1.glb",
+          "maxDistance": 1400,
+          "triangles": 6881
+        },
+        {
+          "file": "buildings/nonresidential/gratte_ciel_retraits_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 767
+        }
+      ],
+      "dimensions": {
+        "width": 30.2,
+        "depth": 32.1,
+        "height": 169.7
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 4
+      },
+      "cost": 9800000,
+      "upkeepPerMonth": 9800,
+      "capacity": {
+        "residents": 0,
+        "jobs": 2100
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 16.05,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Pierre claire, ornements dorés"
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique et pierre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange",
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Granit gris, ornements argent",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "beton_facade",
+              "color": "#c9c9c6"
+            },
+            "ornement": {
+              "color": "#d4d8db"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "brique_orange",
+        "enduit_blanc",
+        "metal_rideau",
+        "pierre_taille",
+        "terrain_gravier"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/offices.ts#gratteCielRetraits",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "gratte_ciel",
+        "bureaux",
+        "art_deco",
+        "retraits",
+        "fleche",
+        "service:emplois_tertiaires",
+        "style:art_deco",
+        "densite:tres_forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "tour_iconique_couronne",
+      "nameFr": "Tour iconique torsadée à couronne",
+      "category": "skyscraper",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/tour_iconique_couronne_lod0.glb",
+          "maxDistance": 350,
+          "triangles": 7240
+        },
+        {
+          "file": "buildings/nonresidential/tour_iconique_couronne_lod1.glb",
+          "maxDistance": 1600,
+          "triangles": 4227
+        },
+        {
+          "file": "buildings/nonresidential/tour_iconique_couronne_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1657
+        }
+      ],
+      "dimensions": {
+        "width": 24,
+        "depth": 24,
+        "height": 233
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 3
+      },
+      "cost": 14500000,
+      "upkeepPerMonth": 12500,
+      "capacity": {
+        "residents": 0,
+        "jobs": 2600
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 12,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Verre bleu, nez de dalle blancs"
+        },
+        {
+          "id": "or",
+          "nameFr": "Verre doré, nez de dalle champagne",
+          "materialOverrides": {
+            "verre_mr": {
+              "color": "#8a7350"
+            },
+            "nez": {
+              "color": "#d8c39a"
+            },
+            "verre_couronne": {
+              "color": "#e0c98f"
+            }
+          }
+        },
+        {
+          "id": "nuit",
+          "nameFr": "Verre sombre, nez de dalle anthracite",
+          "materialOverrides": {
+            "verre_mr": {
+              "color": "#2c3a46"
+            },
+            "nez": {
+              "color": "#3a3f44"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "enduit_blanc",
+        "metal_larme",
+        "metal_rideau",
+        "terrain_gravier",
+        "terrain_herbe",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/offices.ts#tourIconique",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "gratte_ciel",
+        "bureaux",
+        "tour_torsadee",
+        "couronne",
+        "monument",
+        "service:emplois_tertiaires",
+        "attractivite:3",
+        "style:contemporain_iconique",
+        "densite:tres_forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "industrie_manufacture_sheds",
+      "nameFr": "Manufacture à sheds et cheminée",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/industrie_manufacture_sheds_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 9037
+        },
+        {
+          "file": "buildings/nonresidential/industrie_manufacture_sheds_lod1.glb",
+          "maxDistance": 800,
+          "triangles": 1865
+        },
+        {
+          "file": "buildings/nonresidential/industrie_manufacture_sheds_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 783
+        }
+      ],
+      "dimensions": {
+        "width": 31.62,
+        "depth": 23.52,
+        "height": 35.35
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 3
+      },
+      "cost": 520000,
+      "upkeepPerMonth": 900,
+      "capacity": {
+        "residents": 0,
+        "jobs": 140
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 11.76,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -4.01,
+          "z": 12.16,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        },
+        {
+          "x": 10.99,
+          "z": 12.16,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique rouge, menuiseries vert-de-gris"
+        },
+        {
+          "id": "claire",
+          "nameFr": "Brique orangée, menuiseries noires",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange"
+            },
+            "menuiserie": {
+              "color": "#2a2a2a"
+            }
+          }
+        },
+        {
+          "id": "enduit",
+          "nameFr": "Enduit ocre et brique",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_peint",
+              "color": "#d9b98a"
+            },
+            "menuiserie": {
+              "color": "#4f6f8f"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "brique_orange",
+        "brique_rouge",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "paves_granit",
+        "pierre_taille",
+        "toit_tole_ondulee",
+        "toit_tuiles_grises"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/industry.ts#manufacture",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "industrie",
+        "usine",
+        "sheds",
+        "cheminee",
+        "brique",
+        "pollution:2",
+        "service:emplois_industriels",
+        "style:industriel_brique",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "industrie_entrepot_logistique",
+      "nameFr": "Entrepôt logistique à quais",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/industrie_entrepot_logistique_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 2861
+        },
+        {
+          "file": "buildings/nonresidential/industrie_entrepot_logistique_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 1481
+        },
+        {
+          "file": "buildings/nonresidential/industrie_entrepot_logistique_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 519
+        }
+      ],
+      "dimensions": {
+        "width": 39.32,
+        "depth": 31.32,
+        "height": 11.02
+      },
+      "footprint": {
+        "tilesX": 5,
+        "tilesZ": 4
+      },
+      "cost": 900000,
+      "upkeepPerMonth": 1100,
+      "capacity": {
+        "residents": 0,
+        "jobs": 110
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.66,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": 0,
+          "z": 16.06,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Bardage blanc, bandeau rouge, logo bleu"
+        },
+        {
+          "id": "gris",
+          "nameFr": "Bardage gris anthracite, bandeau orange",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "panneaux_facade_sombres",
+              "color": "#ffffff"
+            },
+            "enseigne": {
+              "color": "#e88a1f"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Bardage blanc, bandeau vert",
+          "materialOverrides": {
+            "facade_b": {
+              "textureSet": "enduit_peint",
+              "color": "#3f8a4f"
+            },
+            "enseigne": {
+              "color": "#245a34"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_composite",
+        "beton_facade",
+        "bordure_granit",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "terrain_herbe",
+        "toit_bac_acier",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/industry.ts#entrepot",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "industrie",
+        "entrepot",
+        "logistique",
+        "quais",
+        "trafic_poids_lourds",
+        "service:fret",
+        "style:logistique",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "industrie_chateau_eau",
+      "nameFr": "Château d'eau",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/industrie_chateau_eau_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 5536
+        },
+        {
+          "file": "buildings/nonresidential/industrie_chateau_eau_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 1870
+        },
+        {
+          "file": "buildings/nonresidential/industrie_chateau_eau_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 288
+        }
+      ],
+      "dimensions": {
+        "width": 15.6,
+        "depth": 15.6,
+        "height": 45.1
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 260000,
+      "upkeepPerMonth": 300,
+      "capacity": {
+        "residents": 0,
+        "jobs": 3
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Béton clair, cuve bleu ciel"
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Béton blanc, cuve blanche",
+          "materialOverrides": {
+            "facade_b": {
+              "color": "#f2f2ee"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Béton, cuve vert d'eau",
+          "materialOverrides": {
+            "facade_b": {
+              "color": "#a8cbb7"
+            },
+            "lettres": {
+              "color": "#2d5e45"
+            }
+          }
+        },
+        {
+          "id": "haut",
+          "nameFr": "Fût rehaussé",
+          "heightScale": 1.25
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "terrain_herbe"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/industry.ts#chateauEau",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "industrie",
+        "eau",
+        "reservoir",
+        "repere_visuel",
+        "service:eau",
+        "rayon:1800",
+        "capacite_service:12000",
+        "style:ouvrage_hydraulique",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "industrie_silos_cooperative",
+      "nameFr": "Silos de coopérative agricole",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/industrie_silos_cooperative_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 2514
+        },
+        {
+          "file": "buildings/nonresidential/industrie_silos_cooperative_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 1329
+        },
+        {
+          "file": "buildings/nonresidential/industrie_silos_cooperative_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 470
+        }
+      ],
+      "dimensions": {
+        "width": 23.55,
+        "depth": 22.27,
+        "height": 34.32
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 3
+      },
+      "cost": 410000,
+      "upkeepPerMonth": 520,
+      "capacity": {
+        "residents": 0,
+        "jobs": 24
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 11.13,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Béton, enseigne verte"
+        },
+        {
+          "id": "metal",
+          "nameFr": "Silos en tôle galvanisée",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "toit_tole_ondulee",
+              "color": "#e4e6e7"
+            }
+          }
+        },
+        {
+          "id": "ocre",
+          "nameFr": "Béton ocré, enseigne rouge",
+          "materialOverrides": {
+            "facade": {
+              "color": "#e2cba6"
+            },
+            "enseigne": {
+              "color": "#9a2f24"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/industry.ts#silos",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "industrie",
+        "silos",
+        "agriculture",
+        "stockage",
+        "repere_visuel",
+        "service:stockage_agricole",
+        "style:agro_industriel",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "industrie_atelier",
+      "nameFr": "Atelier artisanal",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/industrie_atelier_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 1728
+        },
+        {
+          "file": "buildings/nonresidential/industrie_atelier_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 745
+        },
+        {
+          "file": "buildings/nonresidential/industrie_atelier_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 390
+        }
+      ],
+      "dimensions": {
+        "width": 15.83,
+        "depth": 15.7,
+        "height": 7.77
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 95000,
+      "upkeepPerMonth": 160,
+      "capacity": {
+        "residents": 0,
+        "jobs": 14
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.85,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Bac acier rouge, bardage bois"
+        },
+        {
+          "id": "gris",
+          "nameFr": "Bac acier gris, enseigne bleue",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "toit_tole_ondulee",
+              "color": "#d0d3d5"
+            },
+            "enseigne": {
+              "color": "#1f4f8f"
+            },
+            "lettres": {
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "bois",
+          "nameFr": "Tout bois, enseigne verte",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "bardage_bois",
+              "color": "#ffffff"
+            },
+            "enseigne": {
+              "color": "#2d5a3a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "toit_bac_acier",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/industry.ts#atelier",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "industrie",
+        "artisanat",
+        "atelier",
+        "pme",
+        "service:emplois_industriels",
+        "style:atelier",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_hotel_de_ville",
+      "nameFr": "Hôtel de ville",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_hotel_de_ville_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 12592
+        },
+        {
+          "file": "buildings/nonresidential/public_hotel_de_ville_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 3880
+        },
+        {
+          "file": "buildings/nonresidential/public_hotel_de_ville_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1464
+        }
+      ],
+      "dimensions": {
+        "width": 30.04,
+        "depth": 22.02,
+        "height": 22.33
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 3
+      },
+      "cost": 1600000,
+      "upkeepPerMonth": 2400,
+      "capacity": {
+        "residents": 0,
+        "jobs": 85
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 11.01,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Pierre claire, toits d'ardoise"
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique et pierre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange",
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "ocre",
+          "nameFr": "Enduit ocre, toits de tuiles",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_peint",
+              "color": "#e7c98f"
+            },
+            "toiture": {
+              "textureSet": "toit_tuiles",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "brique_orange",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "paves_granit",
+        "pierre_taille",
+        "terrain_herbe",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#mairie",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "administration",
+        "mairie",
+        "colonnade",
+        "fronton",
+        "horloge",
+        "campanile",
+        "service:administration",
+        "rayon:3000",
+        "attractivite:2",
+        "style:neoclassique",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_ecole",
+      "nameFr": "École élémentaire",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_ecole_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 7073
+        },
+        {
+          "file": "buildings/nonresidential/public_ecole_lod1.glb",
+          "maxDistance": 800,
+          "triangles": 2584
+        },
+        {
+          "file": "buildings/nonresidential/public_ecole_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 633
+        }
+      ],
+      "dimensions": {
+        "width": 32.17,
+        "depth": 24.05,
+        "height": 11.53
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 3
+      },
+      "cost": 820000,
+      "upkeepPerMonth": 1500,
+      "capacity": {
+        "residents": 0,
+        "jobs": 28
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 12.02,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique et enduit, menuiseries bleues"
+        },
+        {
+          "id": "vert",
+          "nameFr": "Enduit blanc, menuiseries vertes",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_blanc",
+              "color": "#f3efe6"
+            },
+            "menuiserie": {
+              "color": "#3f7a4c"
+            },
+            "enseigne": {
+              "color": "#3f7a4c"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Brique rouge, menuiseries jaunes",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_rouge"
+            },
+            "menuiserie": {
+              "color": "#d9a52a"
+            },
+            "enseigne": {
+              "color": "#b0611e"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "brique_orange",
+        "brique_rouge",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "route_asphalte",
+        "terrain_herbe",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#ecole",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "education",
+        "ecole",
+        "cour",
+        "preau",
+        "service:education",
+        "rayon:900",
+        "capacite_service:300",
+        "style:groupe_scolaire",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_caserne_pompiers",
+      "nameFr": "Caserne de sapeurs-pompiers",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_caserne_pompiers_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 4500
+        },
+        {
+          "file": "buildings/nonresidential/public_caserne_pompiers_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 1799
+        },
+        {
+          "file": "buildings/nonresidential/public_caserne_pompiers_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 670
+        }
+      ],
+      "dimensions": {
+        "width": 23.32,
+        "depth": 23.32,
+        "height": 24.53
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 3
+      },
+      "cost": 740000,
+      "upkeepPerMonth": 1700,
+      "capacity": {
+        "residents": 0,
+        "jobs": 45
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 11.66,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -2.94,
+          "z": 12.06,
+          "nx": 0,
+          "nz": 1,
+          "kind": "vehicle"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique rouge et enduit blanc"
+        },
+        {
+          "id": "beton",
+          "nameFr": "Béton clair et rouge",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "beton_facade",
+              "color": "#eeeae2"
+            }
+          }
+        },
+        {
+          "id": "sombre",
+          "nameFr": "Panneaux anthracite et rouge",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "panneaux_facade_sombres",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "brique_rouge",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "sol_beton_brut",
+        "terrain_gravier"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#casernePompiers",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "secours",
+        "pompiers",
+        "tour_de_manoeuvre",
+        "service:incendie",
+        "rayon:1500",
+        "capacite_service:4",
+        "style:equipement_contemporain",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_commissariat",
+      "nameFr": "Commissariat de police",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_commissariat_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 3752
+        },
+        {
+          "file": "buildings/nonresidential/public_commissariat_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 1451
+        },
+        {
+          "file": "buildings/nonresidential/public_commissariat_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 406
+        }
+      ],
+      "dimensions": {
+        "width": 23.31,
+        "depth": 15.4,
+        "height": 19.05
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 2
+      },
+      "cost": 680000,
+      "upkeepPerMonth": 1600,
+      "capacity": {
+        "residents": 0,
+        "jobs": 60
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.7,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Béton clair et panneaux sombres"
+        },
+        {
+          "id": "pierre",
+          "nameFr": "Pierre et zinc",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "pierre_taille",
+              "color": "#efe8da"
+            },
+            "facade_b": {
+              "textureSet": "toit_tole_ondulee",
+              "color": "#9aa1a6"
+            }
+          }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique sombre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_parement",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "brique_parement",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "pierre_taille",
+        "porte_garage",
+        "terrain_gravier",
+        "terrain_herbe",
+        "toit_tole_ondulee",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#commissariat",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "securite",
+        "police",
+        "service:police",
+        "rayon:1500",
+        "capacite_service:6",
+        "style:equipement_contemporain",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_hopital",
+      "nameFr": "Centre hospitalier",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_hopital_lod0.glb",
+          "maxDistance": 240,
+          "triangles": 7808
+        },
+        {
+          "file": "buildings/nonresidential/public_hopital_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 3828
+        },
+        {
+          "file": "buildings/nonresidential/public_hopital_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 796
+        }
+      ],
+      "dimensions": {
+        "width": 39.3,
+        "depth": 31.25,
+        "height": 32.38
+      },
+      "footprint": {
+        "tilesX": 5,
+        "tilesZ": 4
+      },
+      "cost": 4200000,
+      "upkeepPerMonth": 6500,
+      "capacity": {
+        "residents": 0,
+        "jobs": 520
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.63,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": 0,
+          "z": 16.02,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": 16,
+          "z": 16.02,
+          "nx": 0,
+          "nz": 1,
+          "kind": "vehicle"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Blanc et bleu clair"
+        },
+        {
+          "id": "vert",
+          "nameFr": "Blanc et vert d'eau",
+          "materialOverrides": {
+            "facade_b": {
+              "color": "#a6cfb4"
+            },
+            "enseigne": {
+              "color": "#2a8a5a"
+            }
+          }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique et blanc",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_orange",
+              "color": "#ffffff"
+            },
+            "facade_b": {
+              "color": "#f0efe9"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_bois",
+        "bardage_composite",
+        "beton_facade",
+        "brique_orange",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "terrain_herbe",
+        "toit_tole_ondulee",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#hopital",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "sante",
+        "hopital",
+        "urgences",
+        "heliport",
+        "service:sante",
+        "rayon:3500",
+        "capacite_service:260",
+        "style:hospitalier",
+        "densite:forte",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_musee_bibliotheque",
+      "nameFr": "Musée-bibliothèque à coupole",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_musee_bibliotheque_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 7933
+        },
+        {
+          "file": "buildings/nonresidential/public_musee_bibliotheque_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 3405
+        },
+        {
+          "file": "buildings/nonresidential/public_musee_bibliotheque_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1247
+        }
+      ],
+      "dimensions": {
+        "width": 31.1,
+        "depth": 22.15,
+        "height": 26.07
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 3
+      },
+      "cost": 1350000,
+      "upkeepPerMonth": 1900,
+      "capacity": {
+        "residents": 0,
+        "jobs": 40
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 11.08,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Pierre blonde, coupole vert-de-gris"
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Pierre blanche, coupole ardoise",
+          "materialOverrides": {
+            "facade": {
+              "color": "#f7f4ee"
+            },
+            "dome_cuivre": {
+              "textureSet": "toit_ardoise",
+              "color": "#6a6f75"
+            }
+          }
+        },
+        {
+          "id": "rose",
+          "nameFr": "Grès rose, coupole dorée",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "pierre_taille",
+              "color": "#e9c7b6"
+            },
+            "dome_cuivre": {
+              "textureSet": "metal_rideau",
+              "color": "#d8b56a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "paves_granit",
+        "pierre_rustique",
+        "pierre_taille",
+        "terrain_herbe",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#musee",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "culture",
+        "musee",
+        "bibliotheque",
+        "coupole",
+        "colonnade",
+        "service:culture",
+        "rayon:2500",
+        "attractivite:3",
+        "style:neoclassique",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_eglise",
+      "nameFr": "Église à clocher-porche",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_eglise_lod0.glb",
+          "maxDistance": 240,
+          "triangles": 10954
+        },
+        {
+          "file": "buildings/nonresidential/public_eglise_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 2636
+        },
+        {
+          "file": "buildings/nonresidential/public_eglise_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1088
+        }
+      ],
+      "dimensions": {
+        "width": 15.2,
+        "depth": 30.64,
+        "height": 41.44
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 4
+      },
+      "cost": 900000,
+      "upkeepPerMonth": 700,
+      "capacity": {
+        "residents": 0,
+        "jobs": 4
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.32,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Moellons clairs, ardoise"
+        },
+        {
+          "id": "tuiles",
+          "nameFr": "Pierre ocre, tuiles",
+          "materialOverrides": {
+            "facade": {
+              "color": "#e8cfa2"
+            },
+            "toiture": {
+              "textureSet": "toit_tuiles",
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Granit gris, ardoise",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "pierre_rustique",
+              "color": "#cfcac2"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "enduit_blanc",
+        "metal_larme",
+        "metal_rideau",
+        "paves_granit",
+        "pierre_moellons",
+        "pierre_rustique",
+        "pierre_taille",
+        "terrain_herbe",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#eglise",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "culte",
+        "eglise",
+        "clocher",
+        "patrimoine",
+        "monument",
+        "service:patrimoine",
+        "attractivite:2",
+        "style:roman_gothique",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_gare",
+      "nameFr": "Gare de voyageurs",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_gare_lod0.glb",
+          "maxDistance": 240,
+          "triangles": 9325
+        },
+        {
+          "file": "buildings/nonresidential/public_gare_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 2663
+        },
+        {
+          "file": "buildings/nonresidential/public_gare_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 988
+        }
+      ],
+      "dimensions": {
+        "width": 36.29,
+        "depth": 24.2,
+        "height": 17.07
+      },
+      "footprint": {
+        "tilesX": 5,
+        "tilesZ": 3
+      },
+      "cost": 2100000,
+      "upkeepPerMonth": 2600,
+      "capacity": {
+        "residents": 0,
+        "jobs": 70
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 12.1,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Pierre et brique, fers vert sapin"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Pierre claire, fers bleu",
+          "materialOverrides": {
+            "menuiserie": {
+              "color": "#2f4a6f"
+            },
+            "meneau": {
+              "color": "#2f4a6f"
+            },
+            "lettres": {
+              "color": "#2f4a6f"
+            }
+          }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Tout brique, fers rouges",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_rouge",
+              "color": "#ffffff"
+            },
+            "menuiserie": {
+              "color": "#7a2a24"
+            },
+            "meneau": {
+              "color": "#7a2a24"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "brique_orange",
+        "brique_rouge",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_rustique",
+        "pierre_taille",
+        "terrain_gravier",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#gare",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "transport",
+        "gare",
+        "verriere",
+        "horloge",
+        "service:transport",
+        "rayon:2500",
+        "attractivite:2",
+        "style:gare_historique",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "public_parc_kiosque",
+      "nameFr": "Parc public à kiosque",
+      "category": "public",
+      "lods": [
+        {
+          "file": "buildings/nonresidential/public_parc_kiosque_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 8959
+        },
+        {
+          "file": "buildings/nonresidential/public_parc_kiosque_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 3723
+        },
+        {
+          "file": "buildings/nonresidential/public_parc_kiosque_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1260
+        }
+      ],
+      "dimensions": {
+        "width": 31.6,
+        "depth": 31.6,
+        "height": 7.8
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 4
+      },
+      "cost": 180000,
+      "upkeepPerMonth": 450,
+      "capacity": {
+        "residents": 0,
+        "jobs": 4
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Kiosque vert d'eau, massifs rouges et jaunes"
+        },
+        {
+          "id": "printemps",
+          "nameFr": "Massifs violets, kiosque blanc",
+          "materialOverrides": {
+            "fleurs_a": {
+              "color": "#b07ad8"
+            },
+            "fleurs_b": {
+              "color": "#f2f2f0"
+            },
+            "toiture": {
+              "color": "#4f5f6f"
+            }
+          }
+        },
+        {
+          "id": "automne",
+          "nameFr": "Gazon automnal, massifs orangés",
+          "materialOverrides": {
+            "gazon": {
+              "color": "#b9b06a"
+            },
+            "fleurs_a": {
+              "color": "#e07a2a"
+            },
+            "fleurs_b": {
+              "color": "#c0392b"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "enduit_peint",
+        "metal_larme",
+        "pierre_taille",
+        "terrain_gravier",
+        "terrain_herbe",
+        "terrain_sable",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/buildings/nonresidential/public.ts#parc",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "parc",
+        "loisirs",
+        "kiosque",
+        "fontaine",
+        "aire_de_jeux",
+        "espace_vert",
+        "service:loisirs",
+        "rayon:600",
+        "attractivite:2",
+        "style:jardin_public",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "vehicule_citadine",
+      "nameFr": "Citadine",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_citadine_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 6058
+        },
+        {
+          "file": "vehicles/vehicule_citadine_lod1.glb",
+          "maxDistance": 320,
+          "triangles": 2218
+        },
+        {
+          "file": "vehicles/vehicule_citadine_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 714
+        }
+      ],
+      "dimensions": {
+        "width": 2.03,
+        "depth": 3.88,
+        "height": 1.496
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "rouge",
+          "nameFr": "Rouge vif",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b3261e"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc nacré",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e9e7e2"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu azur",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2f6db3"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Jaune moutarde",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#d2a12a"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris clair",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#a7abb0"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert d'eau",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#7fb7a4"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_citadine",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 140,
+        "lengthM": 3.88
+      }
+    },
+    {
+      "id": "vehicule_berline",
+      "nameFr": "Berline",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_berline_lod0.glb",
+          "maxDistance": 100,
+          "triangles": 6158
+        },
+        {
+          "file": "vehicles/vehicule_berline_lod1.glb",
+          "maxDistance": 340,
+          "triangles": 2258
+        },
+        {
+          "file": "vehicles/vehicule_berline_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 710
+        }
+      ],
+      "dimensions": {
+        "width": 2.13,
+        "depth": 4.854,
+        "height": 1.476
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "noir",
+          "nameFr": "Noir profond",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1b1d21"
+            }
+          }
+        },
+        {
+          "id": "argent",
+          "nameFr": "Argent",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b9bdc2"
+            }
+          }
+        },
+        {
+          "id": "bleu_nuit",
+          "nameFr": "Bleu nuit",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1f2f4f"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#ecebe7"
+            }
+          }
+        },
+        {
+          "id": "bordeaux",
+          "nameFr": "Bordeaux",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#5d1a24"
+            }
+          }
+        },
+        {
+          "id": "gris_anthracite",
+          "nameFr": "Gris anthracite",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#3e4247"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_berline",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 190,
+        "lengthM": 4.854
+      }
+    },
+    {
+      "id": "vehicule_break",
+      "nameFr": "Break familial",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_break_lod0.glb",
+          "maxDistance": 100,
+          "triangles": 6342
+        },
+        {
+          "file": "vehicles/vehicule_break_lod1.glb",
+          "maxDistance": 340,
+          "triangles": 2374
+        },
+        {
+          "file": "vehicles/vehicule_break_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 758
+        }
+      ],
+      "dimensions": {
+        "width": 2.13,
+        "depth": 4.872,
+        "height": 1.542
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "vert_foret",
+          "nameFr": "Vert forêt",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2e4a3a"
+            }
+          }
+        },
+        {
+          "id": "argent",
+          "nameFr": "Argent",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b5b9be"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e8e6e1"
+            }
+          }
+        },
+        {
+          "id": "bleu_acier",
+          "nameFr": "Bleu acier",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#4a6378"
+            }
+          }
+        },
+        {
+          "id": "beige",
+          "nameFr": "Beige sable",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#c2b394"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_break",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 185,
+        "lengthM": 4.872
+      }
+    },
+    {
+      "id": "vehicule_suv",
+      "nameFr": "SUV",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_suv_lod0.glb",
+          "maxDistance": 110,
+          "triangles": 6442
+        },
+        {
+          "file": "vehicles/vehicule_suv_lod1.glb",
+          "maxDistance": 360,
+          "triangles": 2426
+        },
+        {
+          "file": "vehicles/vehicule_suv_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 762
+        }
+      ],
+      "dimensions": {
+        "width": 2.17,
+        "depth": 4.676,
+        "height": 1.756
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "gris_titane",
+          "nameFr": "Gris titane",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#5b6066"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#eeede9"
+            }
+          }
+        },
+        {
+          "id": "noir",
+          "nameFr": "Noir",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#16181b"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Orange cuivré",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b5602a"
+            }
+          }
+        },
+        {
+          "id": "kaki",
+          "nameFr": "Kaki",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#6b6a4b"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu profond",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#20406a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_suv",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 180,
+        "lengthM": 4.676
+      }
+    },
+    {
+      "id": "vehicule_coupe",
+      "nameFr": "Coupé sport",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_coupe_lod0.glb",
+          "maxDistance": 100,
+          "triangles": 6018
+        },
+        {
+          "file": "vehicles/vehicule_coupe_lod1.glb",
+          "maxDistance": 330,
+          "triangles": 2202
+        },
+        {
+          "file": "vehicles/vehicule_coupe_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 662
+        }
+      ],
+      "dimensions": {
+        "width": 2.17,
+        "depth": 4.522,
+        "height": 1.305
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "rouge_course",
+          "nameFr": "Rouge course",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#a3121a"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Jaune",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e2b318"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu électrique",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1d56c4"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#efefec"
+            }
+          }
+        },
+        {
+          "id": "gris_mat",
+          "nameFr": "Gris",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#585c61"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_coupe",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 250,
+        "lengthM": 4.522
+      }
+    },
+    {
+      "id": "vehicule_monospace",
+      "nameFr": "Monospace",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_monospace_lod0.glb",
+          "maxDistance": 110,
+          "triangles": 6226
+        },
+        {
+          "file": "vehicles/vehicule_monospace_lod1.glb",
+          "maxDistance": 360,
+          "triangles": 2318
+        },
+        {
+          "file": "vehicles/vehicule_monospace_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 762
+        }
+      ],
+      "dimensions": {
+        "width": 2.15,
+        "depth": 4.716,
+        "height": 1.756
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "bleu_gris",
+          "nameFr": "Bleu-gris",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#55708a"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#ebeae6"
+            }
+          }
+        },
+        {
+          "id": "argent",
+          "nameFr": "Argent",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b3b7bc"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Rouge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#8e2323"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert sauge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#7d9479"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_monospace",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 175,
+        "lengthM": 4.716
+      }
+    },
+    {
+      "id": "vehicule_pickup",
+      "nameFr": "Pick-up double cabine",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_pickup_lod0.glb",
+          "maxDistance": 110,
+          "triangles": 6730
+        },
+        {
+          "file": "vehicles/vehicule_pickup_lod1.glb",
+          "maxDistance": 380,
+          "triangles": 2434
+        },
+        {
+          "file": "vehicles/vehicule_pickup_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 830
+        }
+      ],
+      "dimensions": {
+        "width": 2.19,
+        "depth": 5.372,
+        "height": 1.834
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e8e7e3"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Rouge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#9a2219"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris acier",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#71777e"
+            }
+          }
+        },
+        {
+          "id": "noir",
+          "nameFr": "Noir",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1a1c1f"
+            }
+          }
+        },
+        {
+          "id": "sable",
+          "nameFr": "Sable",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b9a27a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_pickup",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 170,
+        "lengthM": 5.372
+      }
+    },
+    {
+      "id": "vehicule_taxi",
+      "nameFr": "Taxi (berline hybride)",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_taxi_lod0.glb",
+          "maxDistance": 100,
+          "triangles": 6314
+        },
+        {
+          "file": "vehicles/vehicule_taxi_lod1.glb",
+          "maxDistance": 340,
+          "triangles": 2334
+        },
+        {
+          "file": "vehicles/vehicule_taxi_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 786
+        }
+      ],
+      "dimensions": {
+        "width": 2.07,
+        "depth": 4.713,
+        "height": 1.677
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "noir",
+          "nameFr": "Noir",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1c1e22"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#ebeae6"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris perle",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#9fa4aa"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_taxi",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:taxi",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 180,
+        "lengthM": 4.713
+      }
+    },
+    {
+      "id": "vehicule_police",
+      "nameFr": "Voiture de police",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_police_lod0.glb",
+          "maxDistance": 110,
+          "triangles": 6724
+        },
+        {
+          "file": "vehicles/vehicule_police_lod1.glb",
+          "maxDistance": 360,
+          "triangles": 2604
+        },
+        {
+          "file": "vehicles/vehicule_police_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 818
+        }
+      ],
+      "dimensions": {
+        "width": 2.11,
+        "depth": 4.418,
+        "height": 1.705
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Sérigraphie blanche",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#f1f1ee"
+            }
+          }
+        },
+        {
+          "id": "bleu_nuit",
+          "nameFr": "Banalisée bleu nuit",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1c2a46"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_police",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:police",
+        "type:service",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 200,
+        "lengthM": 4.418
+      }
+    },
+    {
+      "id": "vehicule_utilitaire",
+      "nameFr": "Fourgon de livraison",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_utilitaire_lod0.glb",
+          "maxDistance": 120,
+          "triangles": 5678
+        },
+        {
+          "file": "vehicles/vehicule_utilitaire_lod1.glb",
+          "maxDistance": 400,
+          "triangles": 2190
+        },
+        {
+          "file": "vehicles/vehicule_utilitaire_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 698
+        }
+      ],
+      "dimensions": {
+        "width": 2.652,
+        "depth": 5.584,
+        "height": 2.475
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc utilitaire",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#eceae4"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#8e9399"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu artisan",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2b5a8c"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Jaune",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#d8b02b"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#3f6b45"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_utilitaire",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:livraison",
+        "type:van",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "van",
+        "maxSpeedKmh": 150,
+        "lengthM": 5.584
+      }
+    },
+    {
+      "id": "vehicule_ambulance",
+      "nameFr": "Ambulance",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_ambulance_lod0.glb",
+          "maxDistance": 120,
+          "triangles": 7818
+        },
+        {
+          "file": "vehicles/vehicule_ambulance_lod1.glb",
+          "maxDistance": 400,
+          "triangles": 3202
+        },
+        {
+          "file": "vehicles/vehicule_ambulance_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 908
+        }
+      ],
+      "dimensions": {
+        "width": 2.652,
+        "depth": 6.264,
+        "height": 2.75
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#f2f2ef"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Jaune sécurité",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e8d34a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_ambulance",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:ambulance",
+        "type:service",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 140,
+        "lengthM": 6.264
+      }
+    },
+    {
+      "id": "vehicule_camion",
+      "nameFr": "Camion porteur (caisse)",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_camion_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 8978
+        },
+        {
+          "file": "vehicles/vehicule_camion_lod1.glb",
+          "maxDistance": 500,
+          "triangles": 3418
+        },
+        {
+          "file": "vehicles/vehicule_camion_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 910
+        }
+      ],
+      "dimensions": {
+        "width": 3.092,
+        "depth": 8.8,
+        "height": 3.55
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#ecebe6"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Rouge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#a02a20"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#25528a"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2f6040"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Orange",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#d0681f"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_camion",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:fret",
+        "type:truck",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "truck",
+        "maxSpeedKmh": 90,
+        "lengthM": 8.8
+      }
+    },
+    {
+      "id": "vehicule_bus",
+      "nameFr": "Bus urbain",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_bus_lod0.glb",
+          "maxDistance": 160,
+          "triangles": 9500
+        },
+        {
+          "file": "vehicles/vehicule_bus_lod1.glb",
+          "maxDistance": 550,
+          "triangles": 3852
+        },
+        {
+          "file": "vehicles/vehicule_bus_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1414
+        }
+      ],
+      "dimensions": {
+        "width": 3.062,
+        "depth": 12.049,
+        "height": 3.252
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "vert_ville",
+          "nameFr": "Livrée verte",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2a7a68"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Livrée bleue",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2a5ea8"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Livrée rouge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b23a2e"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#efefea"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_bus",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:bus",
+        "type:bus",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "bus",
+        "maxSpeedKmh": 80,
+        "lengthM": 12.049
+      }
+    },
+    {
+      "id": "vehicule_pompiers",
+      "nameFr": "Fourgon pompe-tonne (pompiers)",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_pompiers_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 8402
+        },
+        {
+          "file": "vehicles/vehicule_pompiers_lod1.glb",
+          "maxDistance": 500,
+          "triangles": 3150
+        },
+        {
+          "file": "vehicles/vehicule_pompiers_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 954
+        }
+      ],
+      "dimensions": {
+        "width": 3.112,
+        "depth": 8.45,
+        "height": 3.4
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "rouge",
+          "nameFr": "Rouge incendie",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b0141c"
+            }
+          }
+        },
+        {
+          "id": "rouge_fonce",
+          "nameFr": "Rouge sombre",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#8a1016"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_pompiers",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:pompiers",
+        "type:service",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 100,
+        "lengthM": 8.45
+      }
+    },
+    {
+      "id": "vehicule_benne_ordures",
+      "nameFr": "Benne à ordures",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_benne_ordures_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 10990
+        },
+        {
+          "file": "vehicles/vehicule_benne_ordures_lod1.glb",
+          "maxDistance": 500,
+          "triangles": 3818
+        },
+        {
+          "file": "vehicles/vehicule_benne_ordures_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1228
+        }
+      ],
+      "dimensions": {
+        "width": 3.112,
+        "depth": 9.17,
+        "height": 3.35
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#eeede8"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert propreté",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#3d7a3a"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#8b9096"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_benne_ordures",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:proprete",
+        "type:service",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 85,
+        "lengthM": 9.17
+      }
+    },
+    {
+      "id": "arbre_epicea",
+      "nameFr": "Épicéa (conifère)",
+      "category": "tree",
+      "lods": [
+        {
+          "file": "models/nature/tree/arbre_epicea_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 1610
+        },
+        {
+          "file": "models/nature/tree/arbre_epicea_lod1.glb",
+          "maxDistance": 260,
+          "triangles": 714
+        },
+        {
+          "file": "models/nature/tree/arbre_epicea_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 116
+        }
+      ],
+      "dimensions": {
+        "width": 8.858,
+        "depth": 8.734,
+        "height": 22
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 450,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h75",
+          "nameFr": "Taille ×0,75",
+          "heightScale": 0.75
+        },
+        {
+          "id": "h120",
+          "nameFr": "Taille ×1,20",
+          "heightScale": 1.2
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/generators/environment.ts#arbre_epicea",
+        "author": "Aube Urbaine — générateur procédural (agent environnement)"
+      },
+      "tags": [
+        "procedural",
+        "arbre",
+        "conifere",
+        "foret",
+        "montagne",
+        "parc"
+      ]
+    },
+    {
+      "id": "arbre_peuplier",
+      "nameFr": "Peuplier d’Italie (alignement)",
+      "category": "tree",
+      "lods": [
+        {
+          "file": "models/nature/tree/arbre_peuplier_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 704
+        },
+        {
+          "file": "models/nature/tree/arbre_peuplier_lod1.glb",
+          "maxDistance": 260,
+          "triangles": 342
+        },
+        {
+          "file": "models/nature/tree/arbre_peuplier_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 132
+        }
+      ],
+      "dimensions": {
+        "width": 6.898,
+        "depth": 6.995,
+        "height": 20.839
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 400,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h85",
+          "nameFr": "Taille ×0,85",
+          "heightScale": 0.85
+        },
+        {
+          "id": "h115",
+          "nameFr": "Taille ×1,15",
+          "heightScale": 1.15
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/generators/environment.ts#arbre_peuplier",
+        "author": "Aube Urbaine — générateur procédural (agent environnement)"
+      },
+      "tags": [
+        "procedural",
+        "arbre",
+        "feuillu",
+        "rue",
+        "avenue",
+        "alignement",
+        "riviere"
+      ]
+    },
+    {
+      "id": "fontaine_place",
+      "nameFr": "Fontaine de place (vasque en granit)",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/nature/street_furniture/fontaine_place_lod0.glb",
+          "maxDistance": 60,
+          "triangles": 1064
+        },
+        {
+          "file": "models/nature/street_furniture/fontaine_place_lod1.glb",
+          "maxDistance": 180,
+          "triangles": 656
+        },
+        {
+          "file": "models/nature/street_furniture/fontaine_place_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 384
+        }
+      ],
+      "dimensions": {
+        "width": 6.24,
+        "depth": 6.24,
+        "height": 2.55
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 2500,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Granit clair"
+        },
+        {
+          "id": "sombre",
+          "nameFr": "Granit sombre",
+          "materialOverrides": {
+            "fontaine_pierre": {
+              "color": "#9a958e"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bordure_granit"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/generators/environment.ts#fontaine_place (texture Poly Haven granite_tile_03, CC0)",
+        "author": "Aube Urbaine — générateur procédural (agent environnement)"
+      },
+      "tags": [
+        "procedural",
+        "fontaine",
+        "place",
+        "parc",
+        "mobilier"
+      ]
+    },
+    {
+      "id": "rocher_mousse",
+      "nameFr": "Rochers moussus",
+      "category": "prop",
+      "lods": [
+        {
+          "file": "models/nature/prop/rocher_mousse_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 6000
+        },
+        {
+          "file": "models/nature/prop/rocher_mousse_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 2100
+        },
+        {
+          "file": "models/nature/prop/rocher_mousse_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 598
+        }
+      ],
+      "dimensions": {
+        "width": 8.005,
+        "depth": 6.944,
+        "height": 1.759
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h80",
+          "nameFr": "Taille ×0,80",
+          "heightScale": 0.8
+        },
+        {
+          "id": "h130",
+          "nameFr": "Taille ×1,30",
+          "heightScale": 1.3
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/rock_moss_set_01",
+        "author": "Kless Gyzen"
+      },
+      "tags": [
+        "rocher",
+        "nature",
+        "foret",
+        "polyhaven"
+      ]
+    },
+    {
+      "id": "rocher_granite",
+      "nameFr": "Rocher de granite",
+      "category": "prop",
+      "lods": [
+        {
+          "file": "models/nature/prop/rocher_granite_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 6000
+        },
+        {
+          "file": "models/nature/prop/rocher_granite_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 2100
+        },
+        {
+          "file": "models/nature/prop/rocher_granite_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 598
+        }
+      ],
+      "dimensions": {
+        "width": 2.518,
+        "depth": 2.494,
+        "height": 1.894
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h60",
+          "nameFr": "Taille ×0,60",
+          "heightScale": 0.6
+        },
+        {
+          "id": "h150",
+          "nameFr": "Taille ×1,50",
+          "heightScale": 1.5
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/namaqualand_boulder_04",
+        "author": "Jenelle van Heerden"
+      },
+      "tags": [
+        "rocher",
+        "nature",
+        "montagne",
+        "polyhaven"
+      ]
+    },
+    {
+      "id": "buisson_sauvage",
+      "nameFr": "Massif d’arbustes sauvages",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/nature/vegetation/buisson_sauvage_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 7982
+        },
+        {
+          "file": "models/nature/vegetation/buisson_sauvage_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 2687
+        },
+        {
+          "file": "models/nature/vegetation/buisson_sauvage_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 804
+        }
+      ],
+      "dimensions": {
+        "width": 6.054,
+        "depth": 2.285,
+        "height": 1.699
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h80",
+          "nameFr": "Taille ×0,80",
+          "heightScale": 0.8
+        },
+        {
+          "id": "h120",
+          "nameFr": "Taille ×1,20",
+          "heightScale": 1.2
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/shrub_02",
+        "author": "Rico Cilliers"
+      },
+      "tags": [
+        "arbuste",
+        "nature",
+        "lisiere",
+        "haie",
+        "polyhaven"
+      ]
+    },
+    {
+      "id": "fleurs_gazania",
+      "nameFr": "Massif de fleurs (gazanias)",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/nature/vegetation/fleurs_gazania_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 5149
+        },
+        {
+          "file": "models/nature/vegetation/fleurs_gazania_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1749
+        },
+        {
+          "file": "models/nature/vegetation/fleurs_gazania_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 431
+        }
+      ],
+      "dimensions": {
+        "width": 1.481,
+        "depth": 0.701,
+        "height": 0.165
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/flower_gazania",
+        "author": "James Ray Cock, Jenelle van Heerden"
+      },
+      "tags": [
+        "fleur",
+        "massif",
+        "parc",
+        "nature",
+        "polyhaven"
+      ]
+    },
+    {
+      "id": "herbes_hautes",
+      "nameFr": "Touffe d’herbes hautes",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/nature/vegetation/herbes_hautes_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 4999
+        },
+        {
+          "file": "models/nature/vegetation/herbes_hautes_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1750
+        },
+        {
+          "file": "models/nature/vegetation/herbes_hautes_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 498
+        }
+      ],
+      "dimensions": {
+        "width": 1.31,
+        "depth": 0.433,
+        "height": 0.405
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/grass_medium_02",
+        "author": "Rico Cilliers"
+      },
+      "tags": [
+        "fleur",
+        "herbe",
+        "prairie",
+        "nature",
+        "polyhaven"
+      ]
     }
   ],
   "textureSets": [
@@ -1889,6 +8449,110 @@
         "spdx": "CC0-1.0",
         "source": "https://polyhaven.com/a/metal_plate",
         "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "vehicules_atlas",
+      "nameFr": "Véhicules — atlas de détails (pneus, optiques, chromes, lettrages)",
+      "albedo": "vehicles/textures/vehicules_atlas_albedo.webp",
+      "normal": "vehicles/textures/vehicules_atlas_normal.webp",
+      "arm": "vehicles/textures/vehicules_atlas_arm.webp",
+      "tileSizeM": 1,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/textures.ts#writeVehicleTextures",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      }
+    },
+    {
+      "id": "vehicules_peinture",
+      "nameFr": "Véhicules — peinture carrosserie (teintée par variante)",
+      "albedo": "vehicles/textures/vehicules_peinture_albedo.webp",
+      "normal": "vehicles/textures/vehicules_peinture_normal.webp",
+      "arm": "vehicles/textures/vehicules_peinture_arm.webp",
+      "tileSizeM": 0.75,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/textures.ts#writeVehicleTextures",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      }
+    },
+    {
+      "id": "pierre_taille",
+      "nameFr": "Pierre de taille claire",
+      "albedo": "buildings/textures/pierre_taille/pierre_taille_albedo.webp",
+      "normal": "buildings/textures/pierre_taille/pierre_taille_normal.webp",
+      "arm": "buildings/textures/pierre_taille/pierre_taille_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/white_sandstone_blocks_02",
+        "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "pierre_moellons",
+      "nameFr": "Mur en moellons",
+      "albedo": "buildings/textures/pierre_moellons/pierre_moellons_albedo.webp",
+      "normal": "buildings/textures/pierre_moellons/pierre_moellons_normal.webp",
+      "arm": "buildings/textures/pierre_moellons/pierre_moellons_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/stone_wall",
+        "author": "Dario Barresi, Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "pierre_rustique",
+      "nameFr": "Pierre rustique appareillée",
+      "albedo": "buildings/textures/pierre_rustique/pierre_rustique_albedo.webp",
+      "normal": "buildings/textures/pierre_rustique/pierre_rustique_normal.webp",
+      "arm": "buildings/textures/pierre_rustique/pierre_rustique_arm.webp",
+      "tileSizeM": 1.52,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/rustic_stone_wall",
+        "author": "Dimitrios Savva"
+      }
+    },
+    {
+      "id": "bois_volet",
+      "nameFr": "Bois de volets (lames)",
+      "albedo": "buildings/textures/bois_volet/bois_volet_albedo.webp",
+      "normal": "buildings/textures/bois_volet/bois_volet_normal.webp",
+      "arm": "buildings/textures/bois_volet/bois_volet_arm.webp",
+      "tileSizeM": 1,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/wood_shutter",
+        "author": "Dimitrios Savva"
+      }
+    },
+    {
+      "id": "porte_garage",
+      "nameFr": "Porte de garage en bois",
+      "albedo": "buildings/textures/porte_garage/porte_garage_albedo.webp",
+      "normal": "buildings/textures/porte_garage/porte_garage_normal.webp",
+      "arm": "buildings/textures/porte_garage/porte_garage_arm.webp",
+      "tileSizeM": 1.98,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/wooden_garage_door",
+        "author": "Dimitrios Savva"
+      }
+    },
+    {
+      "id": "bois_terrasse",
+      "nameFr": "Lames de terrasse en bois",
+      "albedo": "buildings/textures/bois_terrasse/bois_terrasse_albedo.webp",
+      "normal": "buildings/textures/bois_terrasse/bois_terrasse_normal.webp",
+      "arm": "buildings/textures/bois_terrasse/bois_terrasse_arm.webp",
+      "tileSizeM": 1.8,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/wood_floor_deck",
+        "author": "Dimitrios Savva"
       }
     }
   ],

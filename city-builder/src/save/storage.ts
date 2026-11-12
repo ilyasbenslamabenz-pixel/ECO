@@ -1,6 +1,8 @@
 /**
- * Stockage local des sauvegardes (localStorage). Le contenu est le SaveFile JSON
- * versionné produit par la simulation ; ce module ne l'interprète pas.
+ * Ancienne API synchrone de sauvegarde (localStorage, JSON brut), conservée pour main.ts.
+ * Nouvelle API recommandée : src/save/index.ts (SaveStore : IndexedDB + gzip + emplacements
+ * multiples + export/import ; Autosaver). Le contenu est le SaveFile versionné de la simulation,
+ * revalidé par le worker au chargement.
  * Toute erreur de stockage (navigation privée, quota) est renvoyée proprement.
  */
 import type { SaveFile } from '../shared/contracts';

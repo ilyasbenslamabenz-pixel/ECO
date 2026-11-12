@@ -9,6 +9,7 @@ import * as esbuild from 'esbuild';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { optimizeGlbDir } from './optimize-glb.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -52,7 +53,7 @@ function html({ fragment }) {
 function copyAssets() {
   const src = join(root, 'assets');
   const dst = join(dist, 'assets');
-  if (existsSync(src)) cpSync(src, dst, { recursive: true, filter: (p) => !p.endsWith('.md') && !/[\/]_src([\/]|$)/.test(p) });
+  if (existsSync(src)) cpSync(src, dst, { recursive: true, filter: (p) => !p.endsWith('.md') && !/[\/]_src([\/]|$)/.test(p) && !/catalog\.[a-z.]+\.json$/.test(p) });
 }
 
 function walk(dir) {
@@ -93,6 +94,11 @@ if (watch) {
 } else {
   await Promise.all([esbuild.build(mainOpts), esbuild.build(workerOpts)]);
   copyAssets();
+  if (!process.argv.includes('--no-glb-opt')) {
+    const r = await optimizeGlbDir(join(dist, 'assets'), join(root, '.cache/glb-opt'));
+    const mb = (n) => (n / 1024 / 1024).toFixed(2);
+    console.log(`GLB compressés (meshopt) : ${r.files} fichiers (${r.fresh} recompressés), ${mb(r.before)} Mo -> ${mb(r.after)} Mo`);
+  }
   writePages();
   if (!checkBudget()) process.exit(1);
 }

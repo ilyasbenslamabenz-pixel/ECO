@@ -142,7 +142,7 @@ function passengerCar(mb: VMesh, p: CarParams): CarBody {
 /** Passages de roues : demi-tunnel sombre qui masque l'intérieur de la caisse. */
 function archLiners(mb: VMesh, body: CarBody, R: number, archR: number, axles: number[]): void {
   if (mb.lod === 2) return;
-  const n = mb.lod === 0 ? 10 : 6;
+  const n = mb.lod === 0 ? 8 : 4;
   for (const az of axles) for (const s of [1, -1]) {
     const hw = body.hwAt(az);
     const xs = [s * (hw - 0.02), s * (hw - 0.34)];

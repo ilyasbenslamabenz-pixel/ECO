@@ -28,6 +28,8 @@ export class BuildingStore {
   /** Habitants / emplois effectivement occupés (démographie, phase 2). */
   residents: Int32Array;
   workers: Int32Array;
+  /** 1 si une route passe devant la façade (accès véhicules/piétons), recalculé par le monde. */
+  roadAccess: Uint8Array;
   private idToIndex = new Map<number, number>();
 
   constructor(capacity: number) {
@@ -43,6 +45,7 @@ export class BuildingStore {
     this.tilesZ = new Uint16Array(capacity);
     this.residents = new Int32Array(capacity);
     this.workers = new Int32Array(capacity);
+    this.roadAccess = new Uint8Array(capacity);
   }
 
   private grow(): void {
@@ -58,6 +61,7 @@ export class BuildingStore {
     this.tilesZ = growU16(this.tilesZ, n);
     this.residents = growI32(this.residents, n);
     this.workers = growI32(this.workers, n);
+    this.roadAccess = growU8(this.roadAccess, n);
     this.capacity = n;
   }
 
@@ -75,6 +79,7 @@ export class BuildingStore {
     this.tilesZ[i] = tilesZ;
     this.residents[i] = 0;
     this.workers[i] = 0;
+    this.roadAccess[i] = 0;
     this.idToIndex.set(id, i);
     return i;
   }
@@ -99,6 +104,7 @@ export class BuildingStore {
       this.tilesZ[i] = this.tilesZ[last]!;
       this.residents[i] = this.residents[last]!;
       this.workers[i] = this.workers[last]!;
+      this.roadAccess[i] = this.roadAccess[last]!;
       this.idToIndex.set(this.id[i]!, i);
     }
     this.idToIndex.delete(id);
@@ -300,3 +306,87 @@ export class VehicleStore {
 
   clear(): void { this.count = 0; }
 }
+
+/**
+ * Index spatial par chunk (grille régulière, cellule = CHUNK_SIZE par défaut).
+ * Chaque entité (id) est rangée dans toutes les cellules couvertes par sa boîte englobante.
+ * Requêtes par rectangle sans allocation (tableau de sortie et tampon de marquage réutilisés).
+ * Remplace les parcours O(n) pour les collisions, l'accrochage des nœuds et les recherches
+ * de proximité (emplois, services).
+ */
+export class ChunkIndex {
+  readonly cols: number;
+  readonly rows: number;
+  private readonly cells: number[][];
+  /** id -> [c0, r0, c1, r1] (cellules couvertes). */
+  private readonly ranges = new Map<number, [number, number, number, number]>();
+  private readonly stamp = new Map<number, number>();
+  private stampValue = 0;
+
+  constructor(readonly originX: number, readonly originZ: number, readonly size: number, readonly cellSize: number) {
+    this.cols = Math.max(1, Math.ceil(size / cellSize));
+    this.rows = this.cols;
+    this.cells = [];
+    for (let i = 0; i < this.cols * this.rows; i++) this.cells.push([]);
+  }
+
+  get count(): number { return this.ranges.size; }
+
+  private col(x: number): number { const c = Math.floor((x - this.originX) / this.cellSize); return c < 0 ? 0 : c >= this.cols ? this.cols - 1 : c; }
+  private row(z: number): number { const r = Math.floor((z - this.originZ) / this.cellSize); return r < 0 ? 0 : r >= this.rows ? this.rows - 1 : r; }
+
+  insert(id: number, minX: number, minZ: number, maxX: number, maxZ: number): void {
+    if (this.ranges.has(id)) this.remove(id);
+    const c0 = this.col(minX), c1 = this.col(maxX), r0 = this.row(minZ), r1 = this.row(maxZ);
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) this.cells[r * this.cols + c]!.push(id);
+    this.ranges.set(id, [c0, r0, c1, r1]);
+  }
+
+  remove(id: number): boolean {
+    const rg = this.ranges.get(id);
+    if (!rg) return false;
+    for (let r = rg[1]; r <= rg[3]; r++) {
+      for (let c = rg[0]; c <= rg[2]; c++) {
+        const cell = this.cells[r * this.cols + c]!;
+        const k = cell.indexOf(id);
+        if (k >= 0) { cell[k] = cell[cell.length - 1]!; cell.pop(); }
+      }
+    }
+    this.ranges.delete(id);
+    return true;
+  }
+
+  /** Ids dont les cellules recoupent le rectangle (candidats, sans doublon). `out` est vidé puis rempli. */
+  query(minX: number, minZ: number, maxX: number, maxZ: number, out: number[]): number[] {
+    out.length = 0;
+    const s = ++this.stampValue;
+    const c0 = this.col(minX), c1 = this.col(maxX), r0 = this.row(minZ), r1 = this.row(maxZ);
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const cell = this.cells[r * this.cols + c]!;
+        for (let k = 0; k < cell.length; k++) {
+          const id = cell[k]!;
+          if (this.stamp.get(id) === s) continue;
+          this.stamp.set(id, s);
+          out.push(id);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Ids d'une seule cellule (col, row) — parcours en anneaux pour les recherches de proximité. */
+  cell(col: number, row: number): readonly number[] {
+    if (col < 0 || row < 0 || col >= this.cols || row >= this.rows) return EMPTY;
+    return this.cells[row * this.cols + col]!;
+  }
+
+  cellOf(x: number, z: number): [number, number] { return [this.col(x), this.row(z)]; }
+
+  clear(): void {
+    for (const c of this.cells) c.length = 0;
+    this.ranges.clear();
+    this.stamp.clear();
+  }
+}
+const EMPTY: readonly number[] = [];
