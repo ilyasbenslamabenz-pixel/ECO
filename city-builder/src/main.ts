@@ -51,6 +51,8 @@ interface DebugInfo {
   /** État détaillé de la scène (porte visuelle) : modèles chargés, erreurs, décor, terrain, eau. */
   sceneCheck?: () => unknown;
   cameraPose?: () => unknown;
+  /** Diagnostic de performance : masque / affiche un groupe de la scène par son nom (ex. « vegetation »). */
+  setLayerVisible?: (name: string, visible: boolean) => string[];
 }
 declare global { interface Window { __aube: DebugInfo } }
 
@@ -132,6 +134,11 @@ async function boot(): Promise<void> {
   const input = initInput(render.ctx.camera, canvas, (x, z) => render.terrain.heightAt(x, z));
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
+  debug.setLayerVisible = (name, visible) => {
+    const names: string[] = [];
+    for (const o of render.ctx.scene.children) { names.push(o.name || o.type); if (o.name === name) o.visible = visible; }
+    return names;
+  };
   applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera });
 
   // LOD de simulation : point focal envoyé quand la caméra s'est déplacée de plus de 50 m.
