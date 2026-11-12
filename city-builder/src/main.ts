@@ -50,6 +50,7 @@ interface DebugInfo {
   lastReport?: unknown;
   /** État détaillé de la scène (porte visuelle) : modèles chargés, erreurs, décor, terrain, eau. */
   sceneCheck?: () => unknown;
+  cameraPose?: () => unknown;
 }
 declare global { interface Window { __aube: DebugInfo } }
 
@@ -130,6 +131,7 @@ async function boot(): Promise<void> {
   });
   const input = initInput(render.ctx.camera, canvas, (x, z) => render.terrain.heightAt(x, z));
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
+  debug.cameraPose = () => input.camera.getPose();
   applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera });
 
   // LOD de simulation : point focal envoyé quand la caméra s'est déplacée de plus de 50 m.
@@ -299,6 +301,33 @@ async function boot(): Promise<void> {
     }
   }
 
+  /** Ville de test de charge (?stress) : 500 bâtiments et 1000 véhicules réels, mesures via __aube.renderStats(). */
+  async function startStress(): Promise<void> {
+    try {
+      demoRunning = true;
+      ui.hideMenu();
+      ui.setLoading(0.6, 'Test de charge : génération…');
+      let snap = waitSnapshot();
+      await b.send('newGame', { seed: Number(params.get('seed') ?? 7) | 0, mapChunks: 10, startMoney: 4_000_000_000, cityName: 'Test de charge', startHour: 11, terrain: { hydrology: 'lac', rivers: 0.2 } });
+      await snap;
+      snap = waitSnapshot();
+      const city = await b.sendExt('buildCity', { preset: 'stress', maxBuildings: Number(params.get('n') ?? 500), vehicles: Number(params.get('v') ?? 1000) });
+      await snap;
+      await render.whenReady(true);
+      const [ax, az] = city.views.aerial;
+      demoViews = { ax, az, street: city.views.street };
+      setDemoCamera('aerial');
+      input.camera.setPose({ distance: 1100 });
+      debug.demo = { ...city, decor: city.decor.length };
+      ui.hideLoading();
+      await b.send('setSpeed', { speed: 1 });
+      debug.demoReady = true;
+    } catch (e) {
+      ui.hideLoading();
+      debug.errors.push(`stress: ${errText(e)}`);
+    }
+  }
+
   let demoViews: { ax: number; az: number; street: CityBuildResult['views']['street'] } | null = null;
   const setDemoCamera = (m: 'aerial' | 'street'): void => {
     if (!demoViews) return;
@@ -322,7 +351,8 @@ async function boot(): Promise<void> {
   ui.setLoading(1, 'Prêt');
   ui.hideLoading();
   ui.setMenuFoot(`${GAME_NAME} · ${catalog.assets.length} modèles 3D au catalogue · sauvegardes : ${store.backend.kind}`);
-  if (params.has('demo')) await startDemo();
+  if (params.has('stress')) await startStress();
+  else if (params.has('demo')) await startDemo();
   else if (params.has('autostart')) await startNewGame();
   else await refreshMenu();
   debug.ready = true;
