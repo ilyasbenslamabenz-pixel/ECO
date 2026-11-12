@@ -279,12 +279,16 @@ async function boot(): Promise<void> {
       const city = await b.sendExt('buildCity', { preset: 'demo', vehicles: 140 });
       await snap;
       ui.setLoading(0.8, 'Chargement de tous les modèles 3D…');
+      // Pendant le chargement (écran de chargement opaque), on suspend le rendu : le thread principal
+      // décode les GLB au lieu de dessiner une scène encore incomplète.
+      render.ctx.stop();
       const H = (x: number, z: number): number => render.terrain.heightAt(x, z);
       const vegIds = new Set(render.veg.speciesList.map((sp) => sp.asset.id));
       props.clear();
       render.veg.plant(city.decor.filter((d) => vegIds.has(d.assetId)).map((d) => ({ x: d.x, z: d.z, assetId: d.assetId })));
       await props.add(city.decor.filter((d) => !vegIds.has(d.assetId)), H);
       await render.whenReady(true);
+      render.ctx.start();
       const [ax, az] = city.views.aerial;
       demoViews = { ax, az, street: city.views.street };
       setDemoCamera('aerial');
@@ -295,6 +299,7 @@ async function boot(): Promise<void> {
       await b.send('setSpeed', { speed: 1 });
       debug.demoReady = true;
     } catch (e) {
+      render.ctx.start();
       ui.hideLoading();
       ui.toast(`Scène de démonstration impossible : ${errText(e)}`, 'error');
       debug.errors.push(`demo: ${errText(e)}`);
@@ -310,10 +315,12 @@ async function boot(): Promise<void> {
       let snap = waitSnapshot();
       await b.send('newGame', { seed: Number(params.get('seed') ?? 7) | 0, mapChunks: 10, startMoney: 4_000_000_000, cityName: 'Test de charge', startHour: 11, terrain: { hydrology: 'lac', rivers: 0.2 } });
       await snap;
+      render.ctx.stop();
       snap = waitSnapshot();
       const city = await b.sendExt('buildCity', { preset: 'stress', maxBuildings: Number(params.get('n') ?? 500), vehicles: Number(params.get('v') ?? 1000) });
       await snap;
       await render.whenReady(true);
+      render.ctx.start();
       const [ax, az] = city.views.aerial;
       demoViews = { ax, az, street: city.views.street };
       setDemoCamera('aerial');

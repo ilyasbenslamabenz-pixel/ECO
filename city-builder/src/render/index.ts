@@ -67,7 +67,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
   const ctx = initScene(canvas);
   const sky = await SkySystem.create({
     renderer: ctx.renderer, scene: ctx.scene, sun: ctx.sun, hemi: ctx.hemi, catalog, assetsBase,
-    shadowMapSize: Math.min(window.innerWidth, window.innerHeight) > 700 ? 4096 : 2048,
+    shadowMapSize: Math.min(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1) > 1100 ? 4096 : 2048,
   });
   const terrain = new TerrainSystem(ctx.scene, { catalog, assetsBase });
   const water = new WaterSystem(ctx.scene);
