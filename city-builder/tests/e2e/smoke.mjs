@@ -22,8 +22,10 @@ async function run(label, path) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = collectErrors(page);
   await page.goto(`${base}${path}`, { waitUntil: 'load' });
-  await page.waitForFunction(() => window.__aube?.ready === true || (window.__aube?.errors.length ?? 0) > 0, null, { timeout: 60000 });
-  await page.waitForFunction(() => window.__aube.snapshotReceived && window.__aube.deltas >= 3 && window.__aube.frames() >= 3, null, { timeout: 60000 }).catch(() => undefined);
+  await page.waitForFunction(() => window.__aube?.ready === true || (window.__aube?.errors.length ?? 0) > 0, null, { timeout: 300000 });
+  await page.waitForFunction(() => window.__aube.snapshotReceived && window.__aube.deltas >= 3, null, { timeout: 300000 }).catch(() => undefined);
+  // ?norender : images rendues à la demande (rendu logiciel lent) ; ce sont les mêmes callbacks que la boucle.
+  await page.evaluate(() => window.__aube.renderNow(3));
   const info = await page.evaluate(() => ({ ...window.__aube, frames: window.__aube.frames() }));
   check(info.workerReady, `[${label}] worker prêt (message ready reçu)`);
   check(info.snapshotReceived, `[${label}] instantané initial reçu (terrain transféré)`);
@@ -39,20 +41,20 @@ async function run(label, path) {
   if (label === 'index') check(lang === 'fr', `[${label}] lang="fr"`);
   // Bascule caméra rue / aérienne par le bouton.
   await page.click('#btn-camera');
-  await page.waitForTimeout(800);
+  await page.evaluate(() => window.__aube.renderNow(2, 0.5));
   const camLabel = await page.textContent('#btn-camera');
   check(camLabel?.includes('aérienne') ?? false, `[${label}] bascule en vue rue (${camLabel})`);
-  await page.screenshot({ path: join(out, `smoke-${label}-rue.png`) });
+  await page.screenshot({ path: join(out, `smoke-${label}-rue.png`), timeout: 600000 });
   await page.keyboard.press('KeyV');
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: join(out, `smoke-${label}-aerien.png`) });
+  await page.evaluate(() => window.__aube.renderNow(2, 0.5));
+  await page.screenshot({ path: join(out, `smoke-${label}-aerien.png`), timeout: 600000 });
   check(errors.length === 0, `[${label}] aucune erreur de page${errors.length ? ' :\n   ' + errors.join('\n   ') : ''}`);
   await page.close();
 }
 
 try {
-  await run('index', '/index.html?autostart');
-  await run('artifact', '/__artifact_wrapped.html?autostart');
+  await run('index', '/index.html?autostart&norender');
+  await run('artifact', '/__artifact_wrapped.html?autostart&norender');
 } catch (e) {
   console.error('ÉCHEC', e);
   failed = true;

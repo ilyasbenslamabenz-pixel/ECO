@@ -66,24 +66,35 @@ try {
     const demo = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
     const demoErrors = collectErrors(demo);
     const t0 = Date.now();
-    await demo.goto(`${base}/index.html?demo`);
+    // ?norender : images rendues à la demande (une image de la démo coûte 1 à 4 min en rendu logiciel SwiftShader).
+    await demo.goto(`${base}/index.html?demo&norender`);
     const demoReady = await demo.waitForFunction(() => window.__aube?.demoReady === true || (window.__aube?.errors?.length ?? 0) > 0, null, { timeout: 900000 })
       .then(() => demo.evaluate(() => window.__aube.demoReady)).catch(() => false);
     if (!demoReady) {
       failures.push(`scène de démonstration indisponible : ${await demo.evaluate(() => JSON.stringify(window.__aube?.errors ?? [])).catch(() => '?')}`);
     } else {
       console.log(`Scène de démonstration prête en ${((Date.now() - t0) / 1000).toFixed(0)} s (rendu logiciel).`);
-      await demo.waitForTimeout(6000);
+      // Trafic en circulation pendant quelques secondes, puis pause (heure figée pour des captures de jour).
+      await demo.waitForTimeout(8000);
+      await demo.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
+      await demo.waitForTimeout(500);
+      const shoot = async (file) => {
+        await demo.evaluate(() => window.__aube.renderNow(2));
+        await demo.waitForTimeout(4000); // maillage des chunks de terrain dans le worker
+        const ms = await demo.evaluate(() => window.__aube.renderNow(1));
+        await demo.screenshot({ path: join(out, file), timeout: 900000 });
+        return ms;
+      };
+      const msAerial = await shoot('demo-aerien.png');
       const info = await demo.evaluate(() => ({ demo: window.__aube.demo, scene: window.__aube.sceneCheck(), stats: window.__aube.renderStats(), catalog: window.__aube.catalogAssets }));
-      await demo.screenshot({ path: join(out, 'demo-aerien.png') });
-      const aerialStats = info.stats;
+      const aerialStats = { ...info.stats, softwareFrameMs: msAerial };
       await demo.evaluate(() => window.__aube.setCamera('demo-street'));
-      await demo.waitForTimeout(6000);
-      await demo.screenshot({ path: join(out, 'demo-rue.png') });
+      const msStreet = await shoot('demo-rue.png');
       const street = await demo.evaluate(() => ({ scene: window.__aube.sceneCheck(), stats: window.__aube.renderStats() }));
+      street.stats.softwareFrameMs = msStreet;
       // Retour en vue aérienne par le bouton (vérifie aussi le basculement par l'interface).
-      await demo.click('#btn-camera');
-      await demo.waitForTimeout(1500);
+      await demo.click('#btn-camera', { timeout: 300000 });
+      await demo.waitForTimeout(500);
       const modeAfterButton = await demo.evaluate(() => window.__aube.sceneCheck().camera);
       const a = await imageStats(join(out, 'demo-aerien.png'));
       const r = await imageStats(join(out, 'demo-rue.png'));

@@ -26,7 +26,7 @@ try {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = collectErrors(page);
-  await page.goto(`${base}/index.html?autostart&seed=7`);
+  await page.goto(`${base}/index.html?autostart&seed=7&norender`);
   await page.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived, null, { timeout: 300000 });
   const send = (name, args) => page.evaluate(([n, a]) => window.__aube.send(n, a).then((r) => ({ ok: true, r }), (e) => ({ ok: false, e: e.message })), [name, args]);
   await send('setSpeed', { speed: 0 });
@@ -59,8 +59,9 @@ try {
   check(st.money < money0, `trésorerie débitée (${money0} -> ${st.money})`);
   check(st.buildings >= placed, `bâtiments dans la simulation : ${st.buildings}`);
   console.log(`     habitants : ${st.population}, emplois : ${st.jobs}, véhicules : ${st.vehicles}, date ${JSON.stringify(st.date)}`);
-  await page.evaluate(() => window.__aube.setCamera('aerial'));
-  await page.screenshot({ path: join(out, 'jeu-partie.png') });
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 220), at);
+  await page.evaluate(() => window.__aube.renderNow(2));
+  await page.screenshot({ path: join(out, 'jeu-partie.png'), timeout: 600000 });
 
   // Sauvegarde par l'interface.
   await send('setSpeed', { speed: 0 });
@@ -77,7 +78,7 @@ try {
   check(await page.evaluate(() => window.__aube.saveStoreKind) === 'indexeddb', 'sauvegarde stockée dans IndexedDB');
 
   // Rechargement de la page, puis chargement depuis le menu.
-  await page.goto(`${base}/index.html`);
+  await page.goto(`${base}/index.html?norender`);
   await page.waitForFunction(() => window.__aube?.ready === true, null, { timeout: 300000 });
   await page.click('#btn-load');
   await page.waitForSelector('#load-list .slot');
@@ -92,8 +93,8 @@ try {
   check(got.money === ref.money, `trésorerie identique (${got.money})`);
   check(Math.abs(got.minutes - ref.minutes) <= 4, `date identique (${ref.minutes} -> ${got.minutes} min)`);
   check(got.pop === ref.pop, `population identique (${got.pop})`);
-  await page.waitForTimeout(3000);
-  await page.screenshot({ path: join(out, 'jeu-recharge.png') });
+  await page.evaluate(() => window.__aube.renderNow(2));
+  await page.screenshot({ path: join(out, 'jeu-recharge.png'), timeout: 600000 });
   check(errors.length === 0, `aucune erreur de page${errors.length ? ' : ' + errors.slice(0, 5).join(' | ') : ''}`);
   await ctx.close();
 
@@ -102,10 +103,10 @@ try {
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
   const p2 = await ip.newPage();
   const errs2 = collectErrors(p2);
-  await p2.goto(`${base}/index.html?autostart&seed=7`);
+  await p2.goto(`${base}/index.html?autostart&seed=7&norender`);
   await p2.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived, null, { timeout: 300000 });
-  await p2.waitForTimeout(2000);
-  await p2.screenshot({ path: join(out, 'iphone-partie.png') });
+  await p2.evaluate(() => window.__aube.renderNow(2));
+  await p2.screenshot({ path: join(out, 'iphone-partie.png'), timeout: 600000 });
   const cdp = await ip.newCDPSession(p2);
   const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], i) => ({ x, y, id: i + 1, radiusX: 4, radiusY: 4, force: 1 })) });
   // Pincer (écarter les doigts = zoom avant).
@@ -113,19 +114,19 @@ try {
   await touch('touchStart', [[150, cy], [240, cy]]);
   for (let k = 1; k <= 10; k++) { await touch('touchMove', [[150 - k * 9, cy], [240 + k * 9, cy]]); await p2.waitForTimeout(30); }
   await touch('touchEnd', []);
-  await p2.waitForTimeout(1500);
+  await p2.evaluate(() => window.__aube.renderNow(4, 0.5)); // amortissement de la caméra
   const camAfterPinch = await p2.evaluate(() => window.__aube.cameraPose());
   // Glisser à deux doigts vers le haut (inclinaison) puis rotation.
   await touch('touchStart', [[160, 500], [230, 500]]);
   for (let k = 1; k <= 10; k++) { await touch('touchMove', [[160, 500 - k * 12], [230, 500 - k * 12]]); await p2.waitForTimeout(30); }
   await touch('touchEnd', []);
-  await p2.waitForTimeout(1500);
+  await p2.evaluate(() => window.__aube.renderNow(4, 0.5));
   const camAfterTilt = await p2.evaluate(() => window.__aube.cameraPose());
   console.log(`     iPhone : après pincer ${JSON.stringify(camAfterPinch)} ; après glisser ${JSON.stringify(camAfterTilt)}`);
   check(camAfterPinch.distance < 400, `pincer = zoom (distance 420 -> ${camAfterPinch.distance.toFixed(0)} m)`);
   check(Math.abs(camAfterTilt.pitch - camAfterPinch.pitch) > 0.05 || Math.hypot(camAfterTilt.targetX - camAfterPinch.targetX, camAfterTilt.targetZ - camAfterPinch.targetZ) > 2,
     'glisser à deux doigts = inclinaison ou déplacement');
-  await p2.screenshot({ path: join(out, 'iphone-gestes.png') });
+  await p2.screenshot({ path: join(out, 'iphone-gestes.png'), timeout: 600000 });
   const btnSizes = await p2.evaluate(() => [...document.querySelectorAll('#hud button')].filter((b) => b.offsetParent).map((b) => Math.min(b.getBoundingClientRect().width, b.getBoundingClientRect().height)));
   check(btnSizes.length > 0 && Math.min(...btnSizes) >= 40, `boutons tactiles ≥ 40 px (min ${Math.min(...btnSizes).toFixed(0)})`);
   check(errs2.length === 0, `iPhone : aucune erreur de page${errs2.length ? ' : ' + errs2.slice(0, 3).join(' | ') : ''}`);

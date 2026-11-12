@@ -112,3 +112,26 @@ Procédure : (1) importer `assets/` et le catalogue via un script d'éditeur ; (
 `shared` + `sim` et rejouer les tests unitaires (mêmes cas, mêmes valeurs attendues :
 le terrain et le PRNG sont déterministes) ; (3) implémenter les interfaces de rendu ;
 (4) vérifier qu'une sauvegarde JSON produite par la version web se charge à l'identique.
+
+## 8. Intégration phase 1 (directeur technique, 2026-11-12)
+
+- **Contrats fusionnés** (rétro-compatibles) : `RoadKindId` (6 types) et champs facultatifs de `RoadEdgeRecord`
+  (`kind`, `c1`/`c2` Bézier, `profile`, `bridgeRuns`) ; `buildRoad` accepte `kind` et `control` ; `NewGameParams`
+  accepte `terrain` (options de carte) et `startHour` ; `VehicleFrame` porte `ids`/`variants`/`flags` (transférés) ;
+  `DeltaMessage` porte `terrainPatch` (zone nivelée, transférée) et `report` (`SimReport`) ; l'instantané transfère toutes
+  les couches du `WorldTerrain` ; `SAVE_FORMAT_VERSION = 2`. Commandes étendues (`sim-protocol.ts`) appelées par
+  `SimBridge.sendExt`, dont `buildCity` (ville de démonstration / de charge construite par les opérations du joueur).
+- **Simulation** : `world.ts` utilise `generateWorld` (eau par `waterSurface`), le `RoadNetwork` du module routes
+  (planification, découpe, ponts ; profils calculés sur le terrain NATUREL), le nivellement `gradeTerrainForRoads`
+  recalculé depuis le terrain naturel pour TOUTES les routes (résultat indépendant de l'ordre : identique après
+  chargement), le trafic sur `inputFromRoadNetwork` (les véhicules suivent les courbes).
+- **Rendu** (`src/render/index.ts`) : SkySystem, TerrainSystem, WaterSystem, VegetationSystem, RoadNetworkRenderer
+  (avec la bibliothèque : textures PBR et décor), InstancedBuildingRenderer, InstancedVehicleRenderer, PropLayer (décor
+  de démonstration). L'ancien rendu de fondation (`terrain.ts`, `water.ts`, `environment.ts`, `buildings.ts`,
+  `vehicles.ts`) n'est plus utilisé par le jeu (conservé pour l'historique ; à supprimer).
+- **Build** : les GLB de `dist/assets` sont compressés `EXT_meshopt_compression` (`scripts/optimize-glb.mjs`, cache
+  `.cache/glb-opt`) : 44 → 26 Mo, textures partagées conservées par URI. `AssetLibrary` enregistre `MeshoptDecoder`
+  et convertit en float32 les attributs géométriques quantifiés (les UV restent quantifiées : le rendu des
+  bâtiments applique sa plage `uvq`).
+- **Tests en rendu logiciel** : `?norender` empêche la boucle d'affichage de démarrer ; les tests rendent les images à la
+  demande (`__aube.renderNow`), car une image de la démo coûte 1 à 4 minutes sous SwiftShader.

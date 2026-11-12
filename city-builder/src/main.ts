@@ -56,6 +56,9 @@ interface DebugInfo {
   /** Rend une image de façon synchrone (lecture d'un pixel) et renvoie sa durée, ses appels et triangles. */
   benchFrame?: () => { ms: number; calls: number; triangles: number };
   pauseRender?: (paused: boolean) => void;
+  /** Rend `n` images immédiatement (boucle suspendue : captures rapides en rendu logiciel). */
+  renderNow?: (n?: number, dt?: number) => number;
+  lookAt?: (x: number, z: number, distance: number) => void;
 }
 declare global { interface Window { __aube: DebugInfo } }
 
@@ -137,6 +140,10 @@ async function boot(): Promise<void> {
   const input = initInput(render.ctx.camera, canvas, (x, z) => render.terrain.heightAt(x, z));
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
+  debug.lookAt = (x, z, distance) => {
+    if (input.camera.mode === 'street') input.camera.setMode('aerial');
+    input.camera.setPose({ targetX: x, targetZ: z, targetY: render.terrain.heightAt(x, z), distance });
+  };
   debug.benchFrame = () => {
     const r = render.ctx.renderer;
     const t0 = performance.now();
@@ -145,7 +152,16 @@ async function boot(): Promise<void> {
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
     return { ms: Math.round(performance.now() - t0), calls: r.info.render.calls, triangles: r.info.render.triangles };
   };
+  // ?norender : la boucle d'affichage ne démarre jamais seule (tests en rendu logiciel : images à la demande via renderNow).
+  const startLoop = (): void => { if (!params.has('norender')) render.ctx.start(); };
   debug.pauseRender = (p) => { if (p) render.ctx.stop(); else render.ctx.start(); };
+  debug.renderNow = (n = 1, dt = 1 / 30) => {
+    const t0 = performance.now();
+    for (let i = 0; i < n; i++) render.ctx.renderNow(dt);
+    const gl = render.ctx.renderer.getContext();
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    return Math.round(performance.now() - t0);
+  };
   debug.setLayerVisible = (name, visible) => {
     const names: string[] = [];
     for (const o of render.ctx.scene.children) { names.push(o.name || o.type); if (o.name === name) o.visible = visible; }
@@ -307,7 +323,7 @@ async function boot(): Promise<void> {
       render.veg.plant(city.decor.filter((d) => vegIds.has(d.assetId)).map((d) => ({ x: d.x, z: d.z, assetId: d.assetId })));
       await props.add(city.decor.filter((d) => !vegIds.has(d.assetId)), H);
       await render.whenReady(true);
-      render.ctx.start();
+      startLoop();
       const [ax, az] = city.views.aerial;
       demoViews = { ax, az, street: city.views.street };
       setDemoCamera('aerial');
@@ -318,7 +334,7 @@ async function boot(): Promise<void> {
       await b.send('setSpeed', { speed: 1 });
       debug.demoReady = true;
     } catch (e) {
-      render.ctx.start();
+      startLoop();
       ui.hideLoading();
       ui.toast(`Scène de démonstration impossible : ${errText(e)}`, 'error');
       debug.errors.push(`demo: ${errText(e)}`);
@@ -339,7 +355,7 @@ async function boot(): Promise<void> {
       const city = await b.sendExt('buildCity', { preset: 'stress', maxBuildings: Number(params.get('n') ?? 500), vehicles: Number(params.get('v') ?? 1000) });
       await snap;
       await render.whenReady(true);
-      render.ctx.start();
+      startLoop();
       const [ax, az] = city.views.aerial;
       demoViews = { ax, az, street: city.views.street };
       setDemoCamera('aerial');
@@ -373,7 +389,7 @@ async function boot(): Promise<void> {
     else input.camera.setMode(m);
   };
 
-  render.ctx.start();
+  startLoop();
   ui.setLoading(1, 'Prêt');
   ui.hideLoading();
   ui.setMenuFoot(`${GAME_NAME} · ${catalog.assets.length} modèles 3D au catalogue · sauvegardes : ${store.backend.kind}`);

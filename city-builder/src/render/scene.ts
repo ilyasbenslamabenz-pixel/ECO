@@ -14,6 +14,8 @@ export interface RenderContext {
   onFrame: ((dt: number) => void)[];
   start(): void;
   stop(): void;
+  /** Une image immédiate (mêmes callbacks que la boucle), boucle arrêtée ou non : tests et captures. */
+  renderNow(dt?: number): void;
   /** Nombre de frames rendues (diagnostic / e2e). */
   readonly frames: number;
 }
@@ -77,6 +79,11 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
     renderer, scene, camera, sun, hemi, onFrame,
     start() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(loop); } },
     stop() { running = false; },
+    renderNow(dt = 1 / 30) {
+      for (const f of onFrame) f(dt);
+      renderer.render(scene, camera);
+      frames++;
+    },
     get frames() { return frames; },
   };
 }
