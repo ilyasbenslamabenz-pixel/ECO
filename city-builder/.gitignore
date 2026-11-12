@@ -3,3 +3,4 @@ dist
 tests/e2e/out
 .cache
 *.log
+tests/*/out

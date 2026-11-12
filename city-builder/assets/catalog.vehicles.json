@@ -1,0 +1,1508 @@
+{
+  "assets": [
+    {
+      "id": "vehicule_citadine",
+      "nameFr": "Citadine",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_citadine_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 8722
+        },
+        {
+          "file": "vehicles/vehicule_citadine_lod1.glb",
+          "maxDistance": 320,
+          "triangles": 3606
+        },
+        {
+          "file": "vehicles/vehicule_citadine_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 894
+        }
+      ],
+      "dimensions": {
+        "width": 2.03,
+        "depth": 3.88,
+        "height": 1.504
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "rouge",
+          "nameFr": "Rouge vif",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b3261e"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc nacré",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e9e7e2"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu azur",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2f6db3"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Jaune moutarde",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#d2a12a"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris clair",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#a7abb0"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert d'eau",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#7fb7a4"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_citadine",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 140,
+        "lengthM": 3.88
+      }
+    },
+    {
+      "id": "vehicule_berline",
+      "nameFr": "Berline",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_berline_lod0.glb",
+          "maxDistance": 100,
+          "triangles": 8922
+        },
+        {
+          "file": "vehicles/vehicule_berline_lod1.glb",
+          "maxDistance": 340,
+          "triangles": 3646
+        },
+        {
+          "file": "vehicles/vehicule_berline_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 890
+        }
+      ],
+      "dimensions": {
+        "width": 2.13,
+        "depth": 4.854,
+        "height": 1.484
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "noir",
+          "nameFr": "Noir profond",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1b1d21"
+            }
+          }
+        },
+        {
+          "id": "argent",
+          "nameFr": "Argent",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b9bdc2"
+            }
+          }
+        },
+        {
+          "id": "bleu_nuit",
+          "nameFr": "Bleu nuit",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1f2f4f"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#ecebe7"
+            }
+          }
+        },
+        {
+          "id": "bordeaux",
+          "nameFr": "Bordeaux",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#5d1a24"
+            }
+          }
+        },
+        {
+          "id": "gris_anthracite",
+          "nameFr": "Gris anthracite",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#3e4247"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_berline",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 190,
+        "lengthM": 4.854
+      }
+    },
+    {
+      "id": "vehicule_break",
+      "nameFr": "Break familial",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_break_lod0.glb",
+          "maxDistance": 100,
+          "triangles": 9106
+        },
+        {
+          "file": "vehicles/vehicule_break_lod1.glb",
+          "maxDistance": 340,
+          "triangles": 3806
+        },
+        {
+          "file": "vehicles/vehicule_break_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 938
+        }
+      ],
+      "dimensions": {
+        "width": 2.13,
+        "depth": 4.872,
+        "height": 1.55
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "vert_foret",
+          "nameFr": "Vert forêt",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2e4a3a"
+            }
+          }
+        },
+        {
+          "id": "argent",
+          "nameFr": "Argent",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b5b9be"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e8e6e1"
+            }
+          }
+        },
+        {
+          "id": "bleu_acier",
+          "nameFr": "Bleu acier",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#4a6378"
+            }
+          }
+        },
+        {
+          "id": "beige",
+          "nameFr": "Beige sable",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#c2b394"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_break",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 185,
+        "lengthM": 4.872
+      }
+    },
+    {
+      "id": "vehicule_suv",
+      "nameFr": "SUV",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_suv_lod0.glb",
+          "maxDistance": 110,
+          "triangles": 9066
+        },
+        {
+          "file": "vehicles/vehicule_suv_lod1.glb",
+          "maxDistance": 360,
+          "triangles": 3766
+        },
+        {
+          "file": "vehicles/vehicule_suv_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 942
+        }
+      ],
+      "dimensions": {
+        "width": 2.17,
+        "depth": 4.676,
+        "height": 1.765
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "gris_titane",
+          "nameFr": "Gris titane",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#5b6066"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#eeede9"
+            }
+          }
+        },
+        {
+          "id": "noir",
+          "nameFr": "Noir",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#16181b"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Orange cuivré",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b5602a"
+            }
+          }
+        },
+        {
+          "id": "kaki",
+          "nameFr": "Kaki",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#6b6a4b"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu profond",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#20406a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_suv",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 180,
+        "lengthM": 4.676
+      }
+    },
+    {
+      "id": "vehicule_coupe",
+      "nameFr": "Coupé sport",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_coupe_lod0.glb",
+          "maxDistance": 100,
+          "triangles": 8706
+        },
+        {
+          "file": "vehicles/vehicule_coupe_lod1.glb",
+          "maxDistance": 330,
+          "triangles": 3590
+        },
+        {
+          "file": "vehicles/vehicule_coupe_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 842
+        }
+      ],
+      "dimensions": {
+        "width": 2.17,
+        "depth": 4.522,
+        "height": 1.314
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "rouge_course",
+          "nameFr": "Rouge course",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#a3121a"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Jaune",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e2b318"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu électrique",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1d56c4"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#efefec"
+            }
+          }
+        },
+        {
+          "id": "gris_mat",
+          "nameFr": "Gris",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#585c61"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_coupe",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 250,
+        "lengthM": 4.522
+      }
+    },
+    {
+      "id": "vehicule_monospace",
+      "nameFr": "Monospace",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_monospace_lod0.glb",
+          "maxDistance": 110,
+          "triangles": 8946
+        },
+        {
+          "file": "vehicles/vehicule_monospace_lod1.glb",
+          "maxDistance": 360,
+          "triangles": 3706
+        },
+        {
+          "file": "vehicles/vehicule_monospace_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 942
+        }
+      ],
+      "dimensions": {
+        "width": 2.15,
+        "depth": 4.716,
+        "height": 1.764
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "bleu_gris",
+          "nameFr": "Bleu-gris",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#55708a"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#ebeae6"
+            }
+          }
+        },
+        {
+          "id": "argent",
+          "nameFr": "Argent",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b3b7bc"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Rouge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#8e2323"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert sauge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#7d9479"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_monospace",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 175,
+        "lengthM": 4.716
+      }
+    },
+    {
+      "id": "vehicule_pickup",
+      "nameFr": "Pick-up double cabine",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_pickup_lod0.glb",
+          "maxDistance": 110,
+          "triangles": 8838
+        },
+        {
+          "file": "vehicles/vehicule_pickup_lod1.glb",
+          "maxDistance": 380,
+          "triangles": 3818
+        },
+        {
+          "file": "vehicles/vehicule_pickup_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 974
+        }
+      ],
+      "dimensions": {
+        "width": 2.19,
+        "depth": 5.372,
+        "height": 1.844
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e8e7e3"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Rouge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#9a2219"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris acier",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#71777e"
+            }
+          }
+        },
+        {
+          "id": "noir",
+          "nameFr": "Noir",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1a1c1f"
+            }
+          }
+        },
+        {
+          "id": "sable",
+          "nameFr": "Sable",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b9a27a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_pickup",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:prive",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 170,
+        "lengthM": 5.372
+      }
+    },
+    {
+      "id": "vehicule_taxi",
+      "nameFr": "Taxi (berline hybride)",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_taxi_lod0.glb",
+          "maxDistance": 100,
+          "triangles": 9030
+        },
+        {
+          "file": "vehicles/vehicule_taxi_lod1.glb",
+          "maxDistance": 340,
+          "triangles": 3722
+        },
+        {
+          "file": "vehicles/vehicule_taxi_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 966
+        }
+      ],
+      "dimensions": {
+        "width": 2.07,
+        "depth": 4.713,
+        "height": 1.685
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "noir",
+          "nameFr": "Noir",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1c1e22"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#ebeae6"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris perle",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#9fa4aa"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_taxi",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:taxi",
+        "type:car",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "car",
+        "maxSpeedKmh": 180,
+        "lengthM": 4.713
+      }
+    },
+    {
+      "id": "vehicule_police",
+      "nameFr": "Voiture de police",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_police_lod0.glb",
+          "maxDistance": 110,
+          "triangles": 9344
+        },
+        {
+          "file": "vehicles/vehicule_police_lod1.glb",
+          "maxDistance": 360,
+          "triangles": 3944
+        },
+        {
+          "file": "vehicles/vehicule_police_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 998
+        }
+      ],
+      "dimensions": {
+        "width": 2.11,
+        "depth": 4.418,
+        "height": 1.714
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Sérigraphie blanche",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#f1f1ee"
+            }
+          }
+        },
+        {
+          "id": "bleu_nuit",
+          "nameFr": "Banalisée bleu nuit",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#1c2a46"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_police",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:police",
+        "type:service",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 200,
+        "lengthM": 4.418
+      }
+    },
+    {
+      "id": "vehicule_utilitaire",
+      "nameFr": "Fourgon de livraison",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_utilitaire_lod0.glb",
+          "maxDistance": 120,
+          "triangles": 7938
+        },
+        {
+          "file": "vehicles/vehicule_utilitaire_lod1.glb",
+          "maxDistance": 400,
+          "triangles": 3626
+        },
+        {
+          "file": "vehicles/vehicule_utilitaire_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 882
+        }
+      ],
+      "dimensions": {
+        "width": 2.652,
+        "depth": 5.584,
+        "height": 2.484
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc utilitaire",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#eceae4"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#8e9399"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu artisan",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2b5a8c"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Jaune",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#d8b02b"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#3f6b45"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_utilitaire",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:livraison",
+        "type:van",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "van",
+        "maxSpeedKmh": 150,
+        "lengthM": 5.584
+      }
+    },
+    {
+      "id": "vehicule_ambulance",
+      "nameFr": "Ambulance",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_ambulance_lod0.glb",
+          "maxDistance": 120,
+          "triangles": 10470
+        },
+        {
+          "file": "vehicles/vehicule_ambulance_lod1.glb",
+          "maxDistance": 400,
+          "triangles": 5018
+        },
+        {
+          "file": "vehicles/vehicule_ambulance_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1100
+        }
+      ],
+      "dimensions": {
+        "width": 2.652,
+        "depth": 6.264,
+        "height": 2.759
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#f2f2ef"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Jaune sécurité",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#e8d34a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_ambulance",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:ambulance",
+        "type:service",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 140,
+        "lengthM": 6.264
+      }
+    },
+    {
+      "id": "vehicule_camion",
+      "nameFr": "Camion porteur (caisse)",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_camion_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 11142
+        },
+        {
+          "file": "vehicles/vehicule_camion_lod1.glb",
+          "maxDistance": 500,
+          "triangles": 5070
+        },
+        {
+          "file": "vehicles/vehicule_camion_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1114
+        }
+      ],
+      "dimensions": {
+        "width": 3.092,
+        "depth": 8.8,
+        "height": 3.545
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#ecebe6"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Rouge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#a02a20"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bleu",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#25528a"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2f6040"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Orange",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#d0681f"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_camion",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:fret",
+        "type:truck",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "truck",
+        "maxSpeedKmh": 90,
+        "lengthM": 8.8
+      }
+    },
+    {
+      "id": "vehicule_bus",
+      "nameFr": "Bus urbain",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_bus_lod0.glb",
+          "maxDistance": 160,
+          "triangles": 12876
+        },
+        {
+          "file": "vehicles/vehicule_bus_lod1.glb",
+          "maxDistance": 550,
+          "triangles": 5784
+        },
+        {
+          "file": "vehicles/vehicule_bus_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1654
+        }
+      ],
+      "dimensions": {
+        "width": 3.062,
+        "depth": 12.049,
+        "height": 3.247
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "vert_ville",
+          "nameFr": "Livrée verte",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2a7a68"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Livrée bleue",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#2a5ea8"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Livrée rouge",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b23a2e"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#efefea"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_bus",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:bus",
+        "type:bus",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "bus",
+        "maxSpeedKmh": 80,
+        "lengthM": 12.049
+      }
+    },
+    {
+      "id": "vehicule_pompiers",
+      "nameFr": "Fourgon pompe-tonne (pompiers)",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_pompiers_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 10570
+        },
+        {
+          "file": "vehicles/vehicule_pompiers_lod1.glb",
+          "maxDistance": 500,
+          "triangles": 4802
+        },
+        {
+          "file": "vehicles/vehicule_pompiers_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1158
+        }
+      ],
+      "dimensions": {
+        "width": 3.112,
+        "depth": 8.45,
+        "height": 3.395
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "rouge",
+          "nameFr": "Rouge incendie",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#b0141c"
+            }
+          }
+        },
+        {
+          "id": "rouge_fonce",
+          "nameFr": "Rouge sombre",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#8a1016"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_pompiers",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:pompiers",
+        "type:service",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 100,
+        "lengthM": 8.45
+      }
+    },
+    {
+      "id": "vehicule_benne_ordures",
+      "nameFr": "Benne à ordures",
+      "category": "vehicle",
+      "lods": [
+        {
+          "file": "vehicles/vehicule_benne_ordures_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 14198
+        },
+        {
+          "file": "vehicles/vehicule_benne_ordures_lod1.glb",
+          "maxDistance": 500,
+          "triangles": 6350
+        },
+        {
+          "file": "vehicles/vehicule_benne_ordures_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1528
+        }
+      ],
+      "dimensions": {
+        "width": 3.112,
+        "depth": 9.17,
+        "height": 3.345
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "blanc",
+          "nameFr": "Blanc",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#eeede8"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Vert propreté",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#3d7a3a"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Gris",
+          "materialOverrides": {
+            "peinture": {
+              "color": "#8b9096"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "vehicules_atlas",
+        "vehicules_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/models.ts#vehicule_benne_ordures",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      },
+      "tags": [
+        "vehicule",
+        "usage:proprete",
+        "type:service",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 85,
+        "lengthM": 9.17
+      }
+    }
+  ],
+  "textureSets": [
+    {
+      "id": "vehicules_atlas",
+      "nameFr": "Véhicules — atlas de détails (pneus, optiques, chromes, lettrages)",
+      "albedo": "vehicles/textures/vehicules_atlas_albedo.webp",
+      "normal": "vehicles/textures/vehicules_atlas_normal.webp",
+      "arm": "vehicles/textures/vehicules_atlas_arm.webp",
+      "tileSizeM": 1,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/textures.ts#writeVehicleTextures",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      }
+    },
+    {
+      "id": "vehicules_peinture",
+      "nameFr": "Véhicules — peinture carrosserie (teintée par variante)",
+      "albedo": "vehicles/textures/vehicules_peinture_albedo.webp",
+      "normal": "vehicles/textures/vehicules_peinture_normal.webp",
+      "arm": "vehicles/textures/vehicules_peinture_arm.webp",
+      "tileSizeM": 0.75,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/textures.ts#writeVehicleTextures",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      }
+    }
+  ]
+}

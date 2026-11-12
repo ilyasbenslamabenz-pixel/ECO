@@ -47,7 +47,7 @@ export function initEnvironment(ctx: RenderContext): EnvironmentHandle {
     envRT?.dispose();
     envRT = pmrem.fromScene(envScene as unknown as THREE.Scene);
     ctx.scene.environment = envRT.texture;
-    ctx.scene.environmentIntensity = 0.6;
+    ctx.scene.environmentIntensity = 0.35;
     ctx.sun.position.copy(ctx.sun.target.position).addScaledVector(sunDir, 800);
   };
   setSun(38, 140);

@@ -9,8 +9,8 @@ import type { IVehicleRenderer } from '../shared/contracts';
 
 export class VehicleRenderer implements IVehicleRenderer {
   count = 0;
-  private positions = new Float32Array(0);
-  private assetIndices = new Uint16Array(0);
+  private positions: Float32Array = new Float32Array(0);
+  private assetIndices: Uint16Array = new Uint16Array(0);
 
   setVehicles(positions: Float32Array, assetIndices: Uint16Array, count: number): void {
     this.positions = positions;

@@ -1,0 +1,1917 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-12T18:39:07.313Z",
+  "assets": [
+    {
+      "id": "arbre_jacaranda",
+      "nameFr": "Jacaranda (grand arbre d’avenue)",
+      "category": "tree",
+      "lods": [
+        {
+          "file": "models/polyhaven/tree/arbre_jacaranda_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 27672
+        },
+        {
+          "file": "models/polyhaven/tree/arbre_jacaranda_lod1.glb",
+          "maxDistance": 260,
+          "triangles": 14405
+        },
+        {
+          "file": "models/polyhaven/tree/arbre_jacaranda_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 4650
+        }
+      ],
+      "dimensions": {
+        "width": 24.186,
+        "depth": 18.664,
+        "height": 19.435
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 900,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h80",
+          "nameFr": "Taille ×0,80",
+          "heightScale": 0.8
+        },
+        {
+          "id": "h115",
+          "nameFr": "Taille ×1,15",
+          "heightScale": 1.15
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/jacaranda_tree",
+        "author": "Rob Tuytel, Rico Cilliers"
+      },
+      "tags": [
+        "polyhaven",
+        "arbre",
+        "feuillu",
+        "parc",
+        "avenue"
+      ]
+    },
+    {
+      "id": "arbre_feuillu_rond",
+      "nameFr": "Arbre feuillu à couronne ronde",
+      "category": "tree",
+      "lods": [
+        {
+          "file": "models/polyhaven/tree/arbre_feuillu_rond_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 19939
+        },
+        {
+          "file": "models/polyhaven/tree/arbre_feuillu_rond_lod1.glb",
+          "maxDistance": 260,
+          "triangles": 6929
+        },
+        {
+          "file": "models/polyhaven/tree/arbre_feuillu_rond_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1956
+        }
+      ],
+      "dimensions": {
+        "width": 4.718,
+        "depth": 4.783,
+        "height": 4.977
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 500,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h90",
+          "nameFr": "Taille ×0,90",
+          "heightScale": 0.9
+        },
+        {
+          "id": "h110",
+          "nameFr": "Taille ×1,10",
+          "heightScale": 1.1
+        },
+        {
+          "id": "h130",
+          "nameFr": "Taille ×1,30",
+          "heightScale": 1.3
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/island_tree_01",
+        "author": "Rob Tuytel, Rico Cilliers"
+      },
+      "tags": [
+        "polyhaven",
+        "arbre",
+        "feuillu",
+        "rue"
+      ]
+    },
+    {
+      "id": "arbre_feuillu_jeune",
+      "nameFr": "Jeune arbre feuillu",
+      "category": "tree",
+      "lods": [
+        {
+          "file": "models/polyhaven/tree/arbre_feuillu_jeune_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 15990
+        },
+        {
+          "file": "models/polyhaven/tree/arbre_feuillu_jeune_lod1.glb",
+          "maxDistance": 260,
+          "triangles": 5595
+        },
+        {
+          "file": "models/polyhaven/tree/arbre_feuillu_jeune_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1604
+        }
+      ],
+      "dimensions": {
+        "width": 3.89,
+        "depth": 4.053,
+        "height": 3.384
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 350,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h90",
+          "nameFr": "Taille ×0,90",
+          "heightScale": 0.9
+        },
+        {
+          "id": "h120",
+          "nameFr": "Taille ×1,20",
+          "heightScale": 1.2
+        },
+        {
+          "id": "h140",
+          "nameFr": "Taille ×1,40",
+          "heightScale": 1.4
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/island_tree_02",
+        "author": "Rob Tuytel, Rico Cilliers"
+      },
+      "tags": [
+        "polyhaven",
+        "arbre",
+        "feuillu",
+        "rue",
+        "jardin"
+      ]
+    },
+    {
+      "id": "arbre_petit_ornement",
+      "nameFr": "Petit arbre d’ornement",
+      "category": "tree",
+      "lods": [
+        {
+          "file": "models/polyhaven/tree/arbre_petit_ornement_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 16236
+        },
+        {
+          "file": "models/polyhaven/tree/arbre_petit_ornement_lod1.glb",
+          "maxDistance": 260,
+          "triangles": 6288
+        },
+        {
+          "file": "models/polyhaven/tree/arbre_petit_ornement_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1470
+        }
+      ],
+      "dimensions": {
+        "width": 2.859,
+        "depth": 4.208,
+        "height": 4.548
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 300,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h90",
+          "nameFr": "Taille ×0,90",
+          "heightScale": 0.9
+        },
+        {
+          "id": "h110",
+          "nameFr": "Taille ×1,10",
+          "heightScale": 1.1
+        },
+        {
+          "id": "h130",
+          "nameFr": "Taille ×1,30",
+          "heightScale": 1.3
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/tree_small_02",
+        "author": "Rico Cilliers"
+      },
+      "tags": [
+        "polyhaven",
+        "arbre",
+        "jardin",
+        "ornement"
+      ]
+    },
+    {
+      "id": "arbuste_searsia_a",
+      "nameFr": "Arbuste persistant (grand)",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_a_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 8872
+        },
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_a_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 3043
+        },
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_a_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 874
+        }
+      ],
+      "dimensions": {
+        "width": 1.731,
+        "depth": 1.892,
+        "height": 2.323
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 120,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h80",
+          "nameFr": "Taille ×0,80",
+          "heightScale": 0.8
+        },
+        {
+          "id": "h120",
+          "nameFr": "Taille ×1,20",
+          "heightScale": 1.2
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/searsia_lucida",
+        "author": "James Ray Cock, Jenelle van Heerden"
+      },
+      "tags": [
+        "polyhaven",
+        "arbuste",
+        "jardin",
+        "haie"
+      ]
+    },
+    {
+      "id": "arbuste_searsia_d",
+      "nameFr": "Arbuste persistant (moyen)",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_d_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 6930
+        },
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_d_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 2351
+        },
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_d_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 661
+        }
+      ],
+      "dimensions": {
+        "width": 1.08,
+        "depth": 0.944,
+        "height": 1.404
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 90,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h80",
+          "nameFr": "Taille ×0,80",
+          "heightScale": 0.8
+        },
+        {
+          "id": "h120",
+          "nameFr": "Taille ×1,20",
+          "heightScale": 1.2
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/searsia_lucida",
+        "author": "James Ray Cock, Jenelle van Heerden"
+      },
+      "tags": [
+        "polyhaven",
+        "arbuste",
+        "jardin"
+      ]
+    },
+    {
+      "id": "jardiniere_plante_a",
+      "nameFr": "Plante en pot (terrasse)",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/polyhaven/vegetation/jardiniere_plante_a_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 8497
+        },
+        {
+          "file": "models/polyhaven/vegetation/jardiniere_plante_a_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 2381
+        },
+        {
+          "file": "models/polyhaven/vegetation/jardiniere_plante_a_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 653
+        }
+      ],
+      "dimensions": {
+        "width": 0.579,
+        "depth": 0.595,
+        "height": 1.338
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 40,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/potted_plant_01",
+        "author": "Rico Cilliers"
+      },
+      "tags": [
+        "polyhaven",
+        "pot",
+        "terrasse",
+        "commerce"
+      ]
+    },
+    {
+      "id": "jardiniere_plante_b",
+      "nameFr": "Plante en pot basse",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/polyhaven/vegetation/jardiniere_plante_b_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 6026
+        },
+        {
+          "file": "models/polyhaven/vegetation/jardiniere_plante_b_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 2258
+        },
+        {
+          "file": "models/polyhaven/vegetation/jardiniere_plante_b_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 556
+        }
+      ],
+      "dimensions": {
+        "width": 0.753,
+        "depth": 0.567,
+        "height": 0.789
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 35,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/potted_plant_02",
+        "author": "Rico Cilliers"
+      },
+      "tags": [
+        "polyhaven",
+        "pot",
+        "terrasse",
+        "commerce"
+      ]
+    },
+    {
+      "id": "lampadaire_fonte",
+      "nameFr": "Lampadaire en fonte",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/lampadaire_fonte_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 8000
+        },
+        {
+          "file": "models/polyhaven/street_furniture/lampadaire_fonte_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 2798
+        },
+        {
+          "file": "models/polyhaven/street_furniture/lampadaire_fonte_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 797
+        }
+      ],
+      "dimensions": {
+        "width": 0.704,
+        "depth": 0.386,
+        "height": 3.87
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 250,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/street_lamp_01",
+        "author": "Josh Dean"
+      },
+      "tags": [
+        "polyhaven",
+        "éclairage",
+        "rue",
+        "parc"
+      ]
+    },
+    {
+      "id": "poteau_electrique_a",
+      "nameFr": "Poteau électrique avec transformateur",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/poteau_electrique_a_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 8906
+        },
+        {
+          "file": "models/polyhaven/street_furniture/poteau_electrique_a_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 3147
+        },
+        {
+          "file": "models/polyhaven/street_furniture/poteau_electrique_a_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 898
+        }
+      ],
+      "dimensions": {
+        "width": 1.2,
+        "depth": 1.954,
+        "height": 6.13
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 300,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/modular_electricity_poles",
+        "author": "James Ray Cock"
+      },
+      "tags": [
+        "polyhaven",
+        "réseau",
+        "électricité",
+        "périphérie"
+      ]
+    },
+    {
+      "id": "poteau_electrique_b",
+      "nameFr": "Poteau électrique à traverse",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/poteau_electrique_b_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 8947
+        },
+        {
+          "file": "models/polyhaven/street_furniture/poteau_electrique_b_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 3148
+        },
+        {
+          "file": "models/polyhaven/street_furniture/poteau_electrique_b_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 899
+        }
+      ],
+      "dimensions": {
+        "width": 1.2,
+        "depth": 0.852,
+        "height": 6.13
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 250,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/modular_electricity_poles",
+        "author": "James Ray Cock"
+      },
+      "tags": [
+        "polyhaven",
+        "réseau",
+        "électricité",
+        "périphérie"
+      ]
+    },
+    {
+      "id": "borne_incendie",
+      "nameFr": "Borne d’incendie",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/borne_incendie_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 4982
+        },
+        {
+          "file": "models/polyhaven/street_furniture/borne_incendie_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1744
+        },
+        {
+          "file": "models/polyhaven/street_furniture/borne_incendie_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 496
+        }
+      ],
+      "dimensions": {
+        "width": 0.256,
+        "depth": 0.317,
+        "height": 0.799
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 80,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/fire_hydrant",
+        "author": "Gonçalo Felício"
+      },
+      "tags": [
+        "polyhaven",
+        "pompiers",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "poubelle_metal",
+      "nameFr": "Poubelle métallique",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/poubelle_metal_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 4000
+        },
+        {
+          "file": "models/polyhaven/street_furniture/poubelle_metal_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1399
+        },
+        {
+          "file": "models/polyhaven/street_furniture/poubelle_metal_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 398
+        }
+      ],
+      "dimensions": {
+        "width": 0.777,
+        "depth": 0.554,
+        "height": 0.906
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 30,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/metal_trash_can",
+        "author": "GurJas Studios"
+      },
+      "tags": [
+        "polyhaven",
+        "propreté",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "banc_bois",
+      "nameFr": "Banc en bois peint",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/banc_bois_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 630
+        },
+        {
+          "file": "models/polyhaven/street_furniture/banc_bois_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 220
+        },
+        {
+          "file": "models/polyhaven/street_furniture/banc_bois_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 111
+        }
+      ],
+      "dimensions": {
+        "width": 1.165,
+        "depth": 0.497,
+        "height": 0.889
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 60,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/painted_wooden_bench",
+        "author": "Kirill Sannikov"
+      },
+      "tags": [
+        "polyhaven",
+        "assise",
+        "parc",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "table_pique_nique",
+      "nameFr": "Table de pique-nique",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/table_pique_nique_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 4997
+        },
+        {
+          "file": "models/polyhaven/street_furniture/table_pique_nique_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1748
+        },
+        {
+          "file": "models/polyhaven/street_furniture/table_pique_nique_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 578
+        }
+      ],
+      "dimensions": {
+        "width": 2.241,
+        "depth": 3.022,
+        "height": 0.746
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 90,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/wooden_picnic_table",
+        "author": "Ulan Cabanilla"
+      },
+      "tags": [
+        "polyhaven",
+        "parc",
+        "assise"
+      ]
+    },
+    {
+      "id": "terrasse_cafe",
+      "nameFr": "Table et chaises de terrasse",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/terrasse_cafe_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 6154
+        },
+        {
+          "file": "models/polyhaven/street_furniture/terrasse_cafe_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 2083
+        },
+        {
+          "file": "models/polyhaven/street_furniture/terrasse_cafe_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 674
+        }
+      ],
+      "dimensions": {
+        "width": 0.742,
+        "depth": 1.716,
+        "height": 0.858
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 70,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/outdoor_table_chair_set_01",
+        "author": "James Ray Cock"
+      },
+      "tags": [
+        "polyhaven",
+        "terrasse",
+        "commerce",
+        "café"
+      ]
+    },
+    {
+      "id": "armoire_electrique",
+      "nameFr": "Armoire électrique de rue",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/armoire_electrique_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 4000
+        },
+        {
+          "file": "models/polyhaven/street_furniture/armoire_electrique_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1400
+        },
+        {
+          "file": "models/polyhaven/street_furniture/armoire_electrique_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 400
+        }
+      ],
+      "dimensions": {
+        "width": 0.92,
+        "depth": 0.432,
+        "height": 1.12
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 120,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/utility_box_02",
+        "author": "James Ray Cock"
+      },
+      "tags": [
+        "polyhaven",
+        "réseau",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "coffret_technique",
+      "nameFr": "Coffret technique",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/coffret_technique_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 3000
+        },
+        {
+          "file": "models/polyhaven/street_furniture/coffret_technique_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1049
+        },
+        {
+          "file": "models/polyhaven/street_furniture/coffret_technique_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 299
+        }
+      ],
+      "dimensions": {
+        "width": 0.52,
+        "depth": 0.432,
+        "height": 1.12
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 80,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/utility_box_01",
+        "author": "James Ray Cock"
+      },
+      "tags": [
+        "polyhaven",
+        "réseau",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "separateur_beton",
+      "nameFr": "Séparateur de voie en béton",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/separateur_beton_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 2998
+        },
+        {
+          "file": "models/polyhaven/street_furniture/separateur_beton_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1050
+        },
+        {
+          "file": "models/polyhaven/street_furniture/separateur_beton_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 294
+        }
+      ],
+      "dimensions": {
+        "width": 1.544,
+        "depth": 0.639,
+        "height": 0.829
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 50,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/concrete_road_barrier",
+        "author": "Amal Kumar"
+      },
+      "tags": [
+        "polyhaven",
+        "chantier",
+        "voirie"
+      ]
+    },
+    {
+      "id": "caisse_bois",
+      "nameFr": "Caisse en bois",
+      "category": "prop",
+      "lods": [
+        {
+          "file": "models/polyhaven/prop/caisse_bois_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 2999
+        },
+        {
+          "file": "models/polyhaven/prop/caisse_bois_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1050
+        },
+        {
+          "file": "models/polyhaven/prop/caisse_bois_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 374
+        }
+      ],
+      "dimensions": {
+        "width": 0.824,
+        "depth": 0.407,
+        "height": 0.348
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/wooden_crate_01",
+        "author": "James Ray Cock"
+      },
+      "tags": [
+        "polyhaven",
+        "industrie",
+        "marché"
+      ]
+    },
+    {
+      "id": "tonneau_metal",
+      "nameFr": "Fût métallique",
+      "category": "prop",
+      "lods": [
+        {
+          "file": "models/polyhaven/prop/tonneau_metal_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 2500
+        },
+        {
+          "file": "models/polyhaven/prop/tonneau_metal_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 874
+        },
+        {
+          "file": "models/polyhaven/prop/tonneau_metal_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 292
+        }
+      ],
+      "dimensions": {
+        "width": 0.563,
+        "depth": 0.563,
+        "height": 0.88
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/Barrel_01",
+        "author": "Jorge Camacho"
+      },
+      "tags": [
+        "polyhaven",
+        "industrie"
+      ]
+    },
+    {
+      "id": "sac_poubelle",
+      "nameFr": "Sac poubelle",
+      "category": "prop",
+      "lods": [
+        {
+          "file": "models/polyhaven/prop/sac_poubelle_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 2000
+        },
+        {
+          "file": "models/polyhaven/prop/sac_poubelle_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 700
+        },
+        {
+          "file": "models/polyhaven/prop/sac_poubelle_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 200
+        }
+      ],
+      "dimensions": {
+        "width": 0.528,
+        "depth": 0.463,
+        "height": 0.573
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/trashbag",
+        "author": "Benny Weimer"
+      },
+      "tags": [
+        "polyhaven",
+        "propreté",
+        "ruelle"
+      ]
+    },
+    {
+      "id": "voiture_bachee",
+      "nameFr": "Voiture sous bâche (décor)",
+      "category": "prop",
+      "lods": [
+        {
+          "file": "models/polyhaven/prop/voiture_bachee_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 5997
+        },
+        {
+          "file": "models/polyhaven/prop/voiture_bachee_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 2097
+        },
+        {
+          "file": "models/polyhaven/prop/voiture_bachee_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 652
+        }
+      ],
+      "dimensions": {
+        "width": 1.788,
+        "depth": 4.38,
+        "height": 1.411
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/covered_car",
+        "author": "MP"
+      },
+      "tags": [
+        "polyhaven",
+        "stationnement",
+        "garage"
+      ]
+    },
+    {
+      "id": "arbuste_searsia_b",
+      "nameFr": "Arbuste persistant arrondi",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_b_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 8035
+        },
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_b_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 2720
+        },
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_b_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 813
+        }
+      ],
+      "dimensions": {
+        "width": 1.466,
+        "depth": 1.475,
+        "height": 1.973
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 110,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h80",
+          "nameFr": "Taille ×0,80",
+          "heightScale": 0.8
+        },
+        {
+          "id": "h120",
+          "nameFr": "Taille ×1,20",
+          "heightScale": 1.2
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/searsia_lucida",
+        "author": "James Ray Cock, Jenelle van Heerden"
+      },
+      "tags": [
+        "polyhaven",
+        "arbuste",
+        "jardin",
+        "haie"
+      ]
+    },
+    {
+      "id": "arbuste_searsia_e",
+      "nameFr": "Petit arbuste (massif)",
+      "category": "vegetation",
+      "lods": [
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_e_lod0.glb",
+          "maxDistance": 45,
+          "triangles": 5022
+        },
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_e_lod1.glb",
+          "maxDistance": 140,
+          "triangles": 1652
+        },
+        {
+          "file": "models/polyhaven/vegetation/arbuste_searsia_e_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 466
+        }
+      ],
+      "dimensions": {
+        "width": 1.027,
+        "depth": 0.726,
+        "height": 1.021
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 50,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h80",
+          "nameFr": "Taille ×0,80",
+          "heightScale": 0.8
+        },
+        {
+          "id": "h125",
+          "nameFr": "Taille ×1,25",
+          "heightScale": 1.25
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/searsia_lucida",
+        "author": "James Ray Cock, Jenelle van Heerden"
+      },
+      "tags": [
+        "polyhaven",
+        "arbuste",
+        "massif"
+      ]
+    }
+  ],
+  "textureSets": [
+    {
+      "id": "route_asphalte",
+      "nameFr": "Asphalte de chaussée",
+      "albedo": "textures/route_asphalte/route_asphalte_albedo.webp",
+      "normal": "textures/route_asphalte/route_asphalte_normal.webp",
+      "arm": "textures/route_asphalte/route_asphalte_arm.webp",
+      "tileSizeM": 4.04,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/asphalt_04",
+        "author": "Jenelle van Heerden, Sergej Majboroda"
+      }
+    },
+    {
+      "id": "route_asphalte_use",
+      "nameFr": "Asphalte usé (fissuré)",
+      "albedo": "textures/route_asphalte_use/route_asphalte_use_albedo.webp",
+      "normal": "textures/route_asphalte_use/route_asphalte_use_normal.webp",
+      "arm": "textures/route_asphalte_use/route_asphalte_use_arm.webp",
+      "tileSizeM": 3,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/asphalt_02",
+        "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "trottoir_dalles",
+      "nameFr": "Trottoir en dalles de béton",
+      "albedo": "textures/trottoir_dalles/trottoir_dalles_albedo.webp",
+      "normal": "textures/trottoir_dalles/trottoir_dalles_normal.webp",
+      "arm": "textures/trottoir_dalles/trottoir_dalles_arm.webp",
+      "tileSizeM": 1.8,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/concrete_pavement",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "paves_granit",
+      "nameFr": "Pavés de place",
+      "albedo": "textures/paves_granit/paves_granit_albedo.webp",
+      "normal": "textures/paves_granit/paves_granit_normal.webp",
+      "arm": "textures/paves_granit/paves_granit_arm.webp",
+      "tileSizeM": 2.5,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/cobblestone_pavement",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "bordure_granit",
+      "nameFr": "Bordure en granit",
+      "albedo": "textures/bordure_granit/bordure_granit_albedo.webp",
+      "normal": "textures/bordure_granit/bordure_granit_normal.webp",
+      "arm": "textures/bordure_granit/bordure_granit_arm.webp",
+      "tileSizeM": 1.802,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/granite_tile_03",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "sol_beton_brut",
+      "nameFr": "Béton brossé (parkings, cours)",
+      "albedo": "textures/sol_beton_brut/sol_beton_brut_albedo.webp",
+      "normal": "textures/sol_beton_brut/sol_beton_brut_normal.webp",
+      "arm": "textures/sol_beton_brut/sol_beton_brut_arm.webp",
+      "tileSizeM": 2.5,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/brushed_concrete",
+        "author": "Dario Barresi, Dimitrios Savva"
+      }
+    },
+    {
+      "id": "terrain_herbe",
+      "nameFr": "Herbe",
+      "albedo": "textures/terrain_herbe/terrain_herbe_albedo.webp",
+      "normal": "textures/terrain_herbe/terrain_herbe_normal.webp",
+      "arm": "textures/terrain_herbe/terrain_herbe_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/leafy_grass",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "terrain_terre",
+      "nameFr": "Terre",
+      "albedo": "textures/terrain_terre/terrain_terre_albedo.webp",
+      "normal": "textures/terrain_terre/terrain_terre_normal.webp",
+      "arm": "textures/terrain_terre/terrain_terre_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/dirt",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "terrain_roche",
+      "nameFr": "Roche",
+      "albedo": "textures/terrain_roche/terrain_roche_albedo.webp",
+      "normal": "textures/terrain_roche/terrain_roche_normal.webp",
+      "arm": "textures/terrain_roche/terrain_roche_arm.webp",
+      "tileSizeM": 2.38,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/rock_face",
+        "author": "Greg Zaal, Dario Barresi"
+      }
+    },
+    {
+      "id": "terrain_sable",
+      "nameFr": "Sable",
+      "albedo": "textures/terrain_sable/terrain_sable_albedo.webp",
+      "normal": "textures/terrain_sable/terrain_sable_normal.webp",
+      "arm": "textures/terrain_sable/terrain_sable_arm.webp",
+      "tileSizeM": 15,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/coast_sand_01",
+        "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "terrain_gravier",
+      "nameFr": "Gravier",
+      "albedo": "textures/terrain_gravier/terrain_gravier_albedo.webp",
+      "normal": "textures/terrain_gravier/terrain_gravier_normal.webp",
+      "arm": "textures/terrain_gravier/terrain_gravier_arm.webp",
+      "tileSizeM": 2.25,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/gravel_floor",
+        "author": "Jenelle van Heerden, Matterfield"
+      }
+    },
+    {
+      "id": "brique_rouge",
+      "nameFr": "Brique rouge sombre",
+      "albedo": "textures/brique_rouge/brique_rouge_albedo.webp",
+      "normal": "textures/brique_rouge/brique_rouge_normal.webp",
+      "arm": "textures/brique_rouge/brique_rouge_arm.webp",
+      "tileSizeM": 1,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/red_brick_03",
+        "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "brique_orange",
+      "nameFr": "Brique orangée",
+      "albedo": "textures/brique_orange/brique_orange_albedo.webp",
+      "normal": "textures/brique_orange/brique_orange_normal.webp",
+      "arm": "textures/brique_orange/brique_orange_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/large_red_bricks",
+        "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "brique_parement",
+      "nameFr": "Parement de briques moderne",
+      "albedo": "textures/brique_parement/brique_parement_albedo.webp",
+      "normal": "textures/brique_parement/brique_parement_normal.webp",
+      "arm": "textures/brique_parement/brique_parement_arm.webp",
+      "tileSizeM": 1.99,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/exterior_wall_cladding_02",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "enduit_blanc",
+      "nameFr": "Enduit blanc",
+      "albedo": "textures/enduit_blanc/enduit_blanc_albedo.webp",
+      "normal": "textures/enduit_blanc/enduit_blanc_normal.webp",
+      "arm": "textures/enduit_blanc/enduit_blanc_arm.webp",
+      "tileSizeM": 1.998,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/white_stucco",
+        "author": "Amal Kumar"
+      }
+    },
+    {
+      "id": "enduit_creme",
+      "nameFr": "Enduit crème",
+      "albedo": "textures/enduit_creme/enduit_creme_albedo.webp",
+      "normal": "textures/enduit_creme/enduit_creme_normal.webp",
+      "arm": "textures/enduit_creme/enduit_creme_arm.webp",
+      "tileSizeM": 3,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/beige_wall_001",
+        "author": "Dimitrios Savva, Rico Cilliers"
+      }
+    },
+    {
+      "id": "enduit_peint",
+      "nameFr": "Enduit peint",
+      "albedo": "textures/enduit_peint/enduit_peint_albedo.webp",
+      "normal": "textures/enduit_peint/enduit_peint_normal.webp",
+      "arm": "textures/enduit_peint/enduit_peint_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/painted_plaster_wall",
+        "author": "Amal Kumar"
+      }
+    },
+    {
+      "id": "bardage_bois",
+      "nameFr": "Bardage bois horizontal",
+      "albedo": "textures/bardage_bois/bardage_bois_albedo.webp",
+      "normal": "textures/bardage_bois/bardage_bois_normal.webp",
+      "arm": "textures/bardage_bois/bardage_bois_arm.webp",
+      "tileSizeM": 1.57,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/weathered_plank_siding",
+        "author": "Dimitrios Savva"
+      }
+    },
+    {
+      "id": "bardage_blanc",
+      "nameFr": "Bardage bois peint blanc",
+      "albedo": "textures/bardage_blanc/bardage_blanc_albedo.webp",
+      "normal": "textures/bardage_blanc/bardage_blanc_normal.webp",
+      "arm": "textures/bardage_blanc/bardage_blanc_arm.webp",
+      "tileSizeM": 1.8,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/white_planks_clean",
+        "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "bardage_composite",
+      "nameFr": "Bardage composite clair",
+      "albedo": "textures/bardage_composite/bardage_composite_albedo.webp",
+      "normal": "textures/bardage_composite/bardage_composite_normal.webp",
+      "arm": "textures/bardage_composite/bardage_composite_arm.webp",
+      "tileSizeM": 1.96,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/exterior_wall_cladding_03",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "beton_facade",
+      "nameFr": "Béton de façade lisse",
+      "albedo": "textures/beton_facade/beton_facade_albedo.webp",
+      "normal": "textures/beton_facade/beton_facade_normal.webp",
+      "arm": "textures/beton_facade/beton_facade_arm.webp",
+      "tileSizeM": 2.71,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/concrete_wall_008",
+        "author": "Dario Barresi, Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "panneaux_facade_sombres",
+      "nameFr": "Panneaux de façade sombres",
+      "albedo": "textures/panneaux_facade_sombres/panneaux_facade_sombres_albedo.webp",
+      "normal": "textures/panneaux_facade_sombres/panneaux_facade_sombres_normal.webp",
+      "arm": "textures/panneaux_facade_sombres/panneaux_facade_sombres_arm.webp",
+      "tileSizeM": 2.09,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/concrete_tile_facade",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "carreaux_facade",
+      "nameFr": "Carreaux de façade gris",
+      "albedo": "textures/carreaux_facade/carreaux_facade_albedo.webp",
+      "normal": "textures/carreaux_facade/carreaux_facade_normal.webp",
+      "arm": "textures/carreaux_facade/carreaux_facade_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/rectangular_facade_tiles",
+        "author": "Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "toit_tuiles",
+      "nameFr": "Tuiles de terre cuite",
+      "albedo": "textures/toit_tuiles/toit_tuiles_albedo.webp",
+      "normal": "textures/toit_tuiles/toit_tuiles_normal.webp",
+      "arm": "textures/toit_tuiles/toit_tuiles_arm.webp",
+      "tileSizeM": 2.5,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/clay_roof_tiles_02",
+        "author": "Amal Kumar"
+      }
+    },
+    {
+      "id": "toit_ardoise",
+      "nameFr": "Ardoise",
+      "albedo": "textures/toit_ardoise/toit_ardoise_albedo.webp",
+      "normal": "textures/toit_ardoise/toit_ardoise_normal.webp",
+      "arm": "textures/toit_ardoise/toit_ardoise_arm.webp",
+      "tileSizeM": 3,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/roof_slates_02",
+        "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "toit_tuiles_grises",
+      "nameFr": "Tuiles grises",
+      "albedo": "textures/toit_tuiles_grises/toit_tuiles_grises_albedo.webp",
+      "normal": "textures/toit_tuiles_grises/toit_tuiles_grises_normal.webp",
+      "arm": "textures/toit_tuiles_grises/toit_tuiles_grises_arm.webp",
+      "tileSizeM": 3,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/grey_roof_tiles",
+        "author": "Rob Tuytel"
+      }
+    },
+    {
+      "id": "toit_bac_acier",
+      "nameFr": "Bac acier rouge",
+      "albedo": "textures/toit_bac_acier/toit_bac_acier_albedo.webp",
+      "normal": "textures/toit_bac_acier/toit_bac_acier_normal.webp",
+      "arm": "textures/toit_bac_acier/toit_bac_acier_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/box_profile_metal_sheet",
+        "author": "Amal Kumar"
+      }
+    },
+    {
+      "id": "toit_tole_ondulee",
+      "nameFr": "Tôle ondulée (zinc)",
+      "albedo": "textures/toit_tole_ondulee/toit_tole_ondulee_albedo.webp",
+      "normal": "textures/toit_tole_ondulee/toit_tole_ondulee_normal.webp",
+      "arm": "textures/toit_tole_ondulee/toit_tole_ondulee_arm.webp",
+      "tileSizeM": 2.7,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/corrugated_iron_02",
+        "author": "Jenelle van Heerden, Sergej Majboroda"
+      }
+    },
+    {
+      "id": "metal_rideau",
+      "nameFr": "Rideau métallique",
+      "albedo": "textures/metal_rideau/metal_rideau_albedo.webp",
+      "normal": "textures/metal_rideau/metal_rideau_normal.webp",
+      "arm": "textures/metal_rideau/metal_rideau_arm.webp",
+      "tileSizeM": 2,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/painted_metal_shutter",
+        "author": "Dario Barresi, Rico Cilliers, Charlotte Baglioni"
+      }
+    },
+    {
+      "id": "metal_conteneur",
+      "nameFr": "Tôle de conteneur",
+      "albedo": "textures/metal_conteneur/metal_conteneur_albedo.webp",
+      "normal": "textures/metal_conteneur/metal_conteneur_normal.webp",
+      "arm": "textures/metal_conteneur/metal_conteneur_arm.webp",
+      "tileSizeM": 1.94,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/container_side",
+        "author": "Dimitrios Savva"
+      }
+    },
+    {
+      "id": "metal_larme",
+      "nameFr": "Tôle larmée",
+      "albedo": "textures/metal_larme/metal_larme_albedo.webp",
+      "normal": "textures/metal_larme/metal_larme_normal.webp",
+      "arm": "textures/metal_larme/metal_larme_arm.webp",
+      "tileSizeM": 0.5,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/metal_plate",
+        "author": "Rob Tuytel"
+      }
+    }
+  ],
+  "hdris": [
+    {
+      "id": "ciel_jour",
+      "nameFr": "Ciel de jour partiellement nuageux",
+      "file": "hdri/ciel_jour_1k.hdr",
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky",
+        "author": "Greg Zaal, Jarod Guest"
+      }
+    },
+    {
+      "id": "ciel_crepuscule",
+      "nameFr": "Ciel de crépuscule",
+      "file": "hdri/ciel_crepuscule_1k.hdr",
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/qwantani_dusk_2_puresky",
+        "author": "Greg Zaal, Jarod Guest"
+      }
+    }
+  ]
+}

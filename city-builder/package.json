@@ -16,7 +16,8 @@
     "validate:assets": "tsx tools/validate-models.ts",
     "validate:visual": "node tests/e2e/validate-visual.mjs",
     "e2e": "node tests/e2e/smoke.mjs",
-    "check": "npm run typecheck && npm test && npm run build && npm run e2e"
+    "check": "npm run typecheck && npm test && npm run build && npm run e2e && npm run e2e:gate",
+    "e2e:gate": "node tests/e2e/gate-selftest.mjs"
   },
   "dependencies": {
     "three": "0.187.0"

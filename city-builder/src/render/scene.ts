@@ -23,21 +23,21 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.9;
+  renderer.toneMappingExposure = 0.8;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fb8cf);
-  scene.fog = new THREE.Fog(0xb7c7d6, 900, 3200);
+  scene.fog = new THREE.Fog(0xa9bccd, 1400, 4200);
 
   const camera = new THREE.PerspectiveCamera(50, 1, 1, 6000);
   camera.position.set(0, 300, 400);
   camera.lookAt(0, 0, 0);
 
-  const hemi = new THREE.HemisphereLight(0xdfeaff, 0x5a5242, 0.9);
+  const hemi = new THREE.HemisphereLight(0xcfdcf0, 0x4a4436, 0.45);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
+  const sun = new THREE.DirectionalLight(0xfff1dc, 2.2);
   sun.position.set(400, 600, 250);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);

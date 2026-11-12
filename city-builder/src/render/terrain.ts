@@ -41,7 +41,7 @@ export class TerrainRenderer implements IRenderTerrain {
         normals[k] = nx / len; normals[k + 1] = ny / len; normals[k + 2] = nz / len;
       }
     }
-    const grass = new THREE.Color(0x5d7a3a);
+    const grass = new THREE.Color(0x4a6a2c);
     const grassDry = new THREE.Color(0x8a8a4a);
     const sand = new THREE.Color(0xc2b280);
     const rock = new THREE.Color(0x7a746b);
