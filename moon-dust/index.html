@@ -49,7 +49,11 @@ h1 { margin: 2px 0 0; font-family: var(--f-display); font-weight: 700; font-size
 .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; position: relative; }
 .bar i { display: block; height: 100%; width: 0; background-color: var(--regolith); transition: width .2s linear; }
 .bar.goal::after { content: ""; position: absolute; top: -2px; bottom: -2px; left: 97%; width: 2px; background: var(--lamp); }
-.stage { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #05060a; user-select: none; -webkit-user-select: none; }
+.stage { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #05060a; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.stage button { touch-action: manipulation; }
+.joy { position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid rgba(240, 180, 76, .55); background: radial-gradient(circle, rgba(240, 180, 76, .08), rgba(11, 13, 19, .35) 70%); pointer-events: none; z-index: 3; }
+.joy i { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%; background: rgba(240, 180, 76, .85); box-shadow: 0 0 0 4px rgba(240, 180, 76, .2), 0 4px 14px rgba(0, 0, 0, .5); }
+.joy.idle { opacity: .45; }
 canvas#game { display: block; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; touch-action: none; cursor: crosshair; }
 @media (max-width: 700px) { canvas#game { aspect-ratio: 4 / 5; } }
 .tools { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; }
@@ -200,6 +204,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line)
         <button class="tool act" id="shieldBtn" type="button" title="Bouclier anti-impact (touche F)" hidden>Bouclier</button>
         <button class="tool act" id="vehBtn" type="button" title="Changer de véhicule à la base (touche V)" hidden>Véhicule</button>
       </div>
+      <div class="joy" id="joy" hidden><i></i></div>
       <div class="hint" id="hint" role="status" aria-live="polite"><span class="step" id="hintStep">Guide · 1/4</span><span id="hintTxt">Maintiens le clic sur le sol pour guider le robot</span></div>
       <div class="toasts" id="toasts"></div>
       <div class="banner" id="banner" hidden>
@@ -220,7 +225,7 @@ kbd { font-family: var(--f-mono); font-size: 11px; border: 1px solid var(--line)
         <p>Ce navigateur n'a pas pu lancer WebGL ou charger le moteur 3D. Essaie avec une version récente de Chrome, Firefox, Safari ou Edge.</p>
       </div>
     </div>
-    <p class="help">Maintiens le clic (ou le doigt) sur le sol pour guider le robot, ou utilise <kbd>←↑↓→</kbd>, <kbd>ZQSD</kbd> ou <kbd>WASD</kbd>. Molette ou <kbd>+</kbd> <kbd>−</kbd> pour zoomer, <kbd>B</kbd> pour rentrer à la base en pilote automatique, <kbd>Espace</kbd> pour le turbo, <kbd>E</kbd> pour le canon à impulsion, <kbd>F</kbd> pour le bouclier, <kbd>V</kbd> pour changer de véhicule à la base. Le robot aspire tout seul. La poussière bleutée cache de l'hélium-3 : elle rapporte cinq fois plus. Réservoir plein : vends la poussière à la base, puis améliore ton matériel. Pendant les pluies de micrométéorites, sors des cercles rouges, sinon le réservoir se renverse.</p>
+    <p class="help">Maintiens le clic sur le sol pour guider le robot (au doigt : pose le pouce et glisse comme un joystick, tap = aller au point, pincer = zoom), ou utilise <kbd>←↑↓→</kbd>, <kbd>ZQSD</kbd> ou <kbd>WASD</kbd>. Molette ou <kbd>+</kbd> <kbd>−</kbd> pour zoomer, <kbd>B</kbd> pour rentrer à la base en pilote automatique, <kbd>Espace</kbd> pour le turbo, <kbd>E</kbd> pour le canon à impulsion, <kbd>F</kbd> pour le bouclier, <kbd>V</kbd> pour changer de véhicule à la base. Le robot aspire tout seul. La poussière bleutée cache de l'hélium-3 : elle rapporte cinq fois plus. Réservoir plein : vends la poussière à la base, puis améliore ton matériel. Pendant les pluies de micrométéorites, sors des cercles rouges, sinon le réservoir se renverse.</p>
   </main>
 
   <aside class="console">
@@ -1297,15 +1302,77 @@ function screenToGround(sx, sy) {
   ray.setFromCamera(ndc, camera);
   return ray.ray.intersectPlane(groundPlane, hitV);
 }
-cv.addEventListener("pointerdown", e => { audioInit(); input.held = true; input.sx = e.clientX; input.sy = e.clientY; try { cv.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-cv.addEventListener("pointermove", e => { if (input.held) { input.sx = e.clientX; input.sy = e.clientY; } });
+// souris : maintenir le clic sur le sol. Tactile (iPhone…) : joystick flottant là où le pouce se pose,
+// tap court = aller au point touché, pincer à deux doigts = zoom.
+const touchPts = new Map();
+const joy = { id: null, bx: 0, by: 0, x: 0, y: 0, t0: 0, moved: false, vx: 0, vy: 0 };
+const JOY_R = 58, JOY_DEAD = 0.14;
+let pinchD = 0, gotoP = null;
+const joyEl = $("joy"), joyKnob = joyEl.firstElementChild, stageEl = $("stage");
+function joyDraw() {
+  const r = stageEl.getBoundingClientRect();
+  joyEl.style.transform = `translate(${joy.bx - r.left}px, ${joy.by - r.top}px)`;
+  joyKnob.style.transform = `translate(${joy.x - joy.bx}px, ${joy.y - joy.by}px)`;
+  joyEl.classList.toggle("idle", !joy.moved);
+}
+function joyEnd() { joy.id = null; joy.vx = joy.vy = 0; setHid(joyEl, true); }
+function pinchDist() { const a = [...touchPts.values()]; return a.length < 2 ? 0 : Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); }
+cv.addEventListener("pointerdown", e => {
+  audioInit(); e.preventDefault();
+  try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+  if (e.pointerType === "mouse") { input.held = true; input.sx = e.clientX; input.sy = e.clientY; gotoP = null; return; }
+  touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touchPts.size >= 2) { joyEnd(); pinchD = pinchDist(); return; }
+  Object.assign(joy, { id: e.pointerId, bx: e.clientX, by: e.clientY, x: e.clientX, y: e.clientY, t0: performance.now(), moved: false, vx: 0, vy: 0 });
+  setHid(joyEl, false); joyDraw();
+});
+cv.addEventListener("pointermove", e => {
+  if (e.pointerType === "mouse") { if (input.held) { input.sx = e.clientX; input.sy = e.clientY; } return; }
+  if (!touchPts.has(e.pointerId)) return;
+  touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touchPts.size >= 2) {
+    const d = pinchDist();
+    if (pinchD > 0 && d > 0) zoomD = clamp(zoomD * pinchD / d, 11, 46);
+    pinchD = d; return;
+  }
+  if (e.pointerId !== joy.id) return;
+  joy.x = e.clientX; joy.y = e.clientY;
+  let ox = joy.x - joy.bx, oy = joy.y - joy.by, d = Math.hypot(ox, oy);
+  if (d > 10) joy.moved = true;
+  if (d > JOY_R) { joy.bx = joy.x - ox / d * JOY_R; joy.by = joy.y - oy / d * JOY_R; ox = joy.x - joy.bx; oy = joy.y - joy.by; d = JOY_R; }
+  const m = d / JOY_R, k = m < JOY_DEAD ? 0 : (m - JOY_DEAD) / (1 - JOY_DEAD) / m;
+  joy.vx = ox / JOY_R * k; joy.vy = oy / JOY_R * k;
+  if (joy.moved) { gotoP = null; autopilot = false; }
+  joyDraw();
+});
+function touchUp(e) {
+  if (e.pointerType === "mouse") { input.held = false; return; }
+  if (!touchPts.has(e.pointerId)) return;
+  touchPts.delete(e.pointerId);
+  if (touchPts.size < 2) pinchD = 0;
+  if (e.pointerId === joy.id) {
+    if (!joy.moved && performance.now() - joy.t0 < 280 && e.type === "pointerup") {
+      const p = screenToGround(joy.x, joy.y);
+      if (p) {
+        gotoP = { x: clamp(p.x, -W / 2 + 1, W / 2 - 1), z: clamp(p.z, -H / 2 + 1, H / 2 - 1) }; autopilot = false; moved = true;
+        const y = dustTop(gotoP.x, gotoP.z) + 0.2;
+        for (let n = 0; n < 10; n++) { const a = n / 10 * Math.PI * 2; spawnP(3, gotoP.x + Math.cos(a) * 0.6, y, gotoP.z + Math.sin(a) * 0.6, 0, 0.5, 0, 0.7, 0.94, 0.7, 0.3, 0.16); }
+      }
+    }
+    joyEnd();
+  }
+}
 const release = () => { input.held = false; };
-cv.addEventListener("pointerup", release); cv.addEventListener("pointercancel", release); cv.addEventListener("lostpointercapture", release);
+cv.addEventListener("pointerup", touchUp); cv.addEventListener("pointercancel", touchUp);
+cv.addEventListener("lostpointercapture", e => { if (e.pointerType === "mouse") release(); });
+// iOS Safari : pas de loupe, de défilement ni de zoom de page quand le doigt est sur le jeu
+["touchstart", "touchmove"].forEach(ev => cv.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+["gesturestart", "gesturechange"].forEach(ev => stageEl.addEventListener(ev, e => e.preventDefault()));
 let zoomD = 24;
 cv.addEventListener("wheel", e => { e.preventDefault(); zoomD = clamp(zoomD * (e.deltaY > 0 ? 1.1 : 0.9), 11, 46); }, { passive: false });
 $("zoomIn").addEventListener("click", () => { zoomD = clamp(zoomD * 0.85, 11, 46); });
 $("zoomOut").addEventListener("click", () => { zoomD = clamp(zoomD * 1.18, 11, 46); });
-$("homeBtn").addEventListener("click", () => { audioInit(); autopilot = true; moved = true; });
+$("homeBtn").addEventListener("click", () => { audioInit(); autopilot = true; gotoP = null; moved = true; });
 $("soundBtn").addEventListener("click", () => { audioInit(); setMuted(!AU.muted); });
 function turboGo() {
   if (turboT > 0 || turboCD > 0) return;
@@ -1343,7 +1410,7 @@ addEventListener("keydown", e => {
   audioInit(); input.keys.add(k); e.preventDefault();
 });
 addEventListener("keyup", e => { const k = KEYMAP[e.key.toLowerCase()]; if (k) input.keys.delete(k); });
-addEventListener("blur", () => { input.keys.clear(); input.held = false; });
+addEventListener("blur", () => { input.keys.clear(); input.held = false; touchPts.clear(); pinchD = 0; joyEnd(); });
 
 // ---------- mini-robots ----------
 let drones = [];
@@ -1829,11 +1896,16 @@ function update(dt) {
   if (input.keys.size) {
     if (input.keys.has("u")) dz -= 1; if (input.keys.has("d")) dz += 1;
     if (input.keys.has("l")) dx -= 1; if (input.keys.has("r")) dx += 1;
-    const m = Math.hypot(dx, dz); if (m) { dx /= m; dz /= m; moved = true; autopilot = false; }
+    const m = Math.hypot(dx, dz); if (m) { dx /= m; dz /= m; moved = true; autopilot = false; gotoP = null; }
+  } else if (joy.id !== null) {
+    dx = joy.vx; dz = joy.vy; if (dx || dz) moved = true;
   } else if (input.held) {
     const p = screenToGround(input.sx, input.sy);
     if (p) { const ex = p.x - R.x, ez = p.z - R.z, m = Math.hypot(ex, ez); if (m > 0.4) { const s = Math.min(1, m / 2); dx = ex / m * s; dz = ez / m * s; } }
     moved = true; autopilot = false;
+  } else if (gotoP) {
+    const ex = gotoP.x - R.x, ez = gotoP.z - R.z, m = Math.hypot(ex, ez);
+    if (m < 0.5) gotoP = null; else { const st = steerAround(R.x, R.z, ex / m, ez / m, m, Math.max(0.75, VD().track)); const s = Math.min(1, m / 1.5); dx = st[0] * s; dz = st[1] * s; }
   } else if (autopilot) {
     const ex = BASE.x - R.x, ez = BASE.z - R.z, m = Math.hypot(ex, ez);
     if (m < BASE.r - 0.6 || (S.tank <= 0 && m < BASE.r + 1)) autopilot = false; else { const st = steerAround(R.x, R.z, ex / m, ez / m, m, Math.max(0.75, VD().track)); dx = st[0]; dz = st[1]; }
@@ -2242,7 +2314,7 @@ function updateGuide() {
   if (S.tut === 2 && anyBought()) { S.tut = 3; tutT = 0; }
   const h = $("hint"), small = guideMQ.matches;
   let txt = "", click = false;
-  if (S.tut === 0) txt = small ? "Garde le doigt (ou le clic) sur le sol : le robot y va et aspire tout seul." : "Maintiens le clic sur le sol pour guider le robot, ou utilise les flèches / ZQSD / WASD. Il aspire tout seul.";
+  if (S.tut === 0) txt = small ? "Pose le pouce n'importe où sur la vue et glisse : joystick. Un simple tap envoie le robot à cet endroit. Pince pour zoomer." : "Maintiens le clic sur le sol pour guider le robot, ou utilise les flèches / ZQSD / WASD. Il aspire tout seul.";
   else if (S.tut === 1) { const how = small ? "bouton « Base »" : "bouton « Base » ou touche B"; txt = S.tank >= cap() - 0.01 ? `Réservoir plein ! Rentre vendre à la base : ${how}.` : `Remplis le réservoir, puis rentre vendre à la base (${how}).`; }
   else if (S.tut === 2) {
     const cheapest = Math.min(...UPG.map(u => costOf(u, S.lv[u.id])));
