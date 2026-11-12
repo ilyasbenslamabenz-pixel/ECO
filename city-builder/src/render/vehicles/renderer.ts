@@ -168,7 +168,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     };
     this.paintMat = new THREE.MeshPhysicalMaterial({ name: 'vehicule_peinture', color: 0xffffff, roughness: 1, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.12 });
     this.detailMat = new THREE.MeshStandardMaterial({ name: 'vehicule_details', color: 0xffffff, roughness: 1, metalness: 1, emissive: 0xffffff, emissiveIntensity: 0.3 });
-    this.glassMat = new THREE.MeshPhysicalMaterial({ name: 'vehicule_verre', color: 0x0b1015, roughness: 0.05, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.6 });
+    this.glassMat = new THREE.MeshPhysicalMaterial({ name: 'vehicule_verre', color: 0x18222b, roughness: 0.04, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.6 });
     const atlas = sets.get('vehicules_atlas');
     const paint = sets.get('vehicules_peinture');
     if (!atlas || !paint) { this.loadErrors.push('jeux de textures véhicules absents du catalogue'); return; }
@@ -178,7 +178,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
       load(atlas.albedo, true), load(atlas.normal, false), load(atlas.arm, false), load(emissiveFile, true),
     ]);
     Object.assign(this.paintMat, { map: pa, normalMap: pn, roughnessMap: parm, metalnessMap: parm, aoMap: parm });
-    this.paintMat.normalScale.set(0.5, 0.5);
+    this.paintMat.normalScale.set(0.25, 0.25);
     Object.assign(this.detailMat, { map: aa, normalMap: an, roughnessMap: aarm, metalnessMap: aarm, aoMap: aarm, emissiveMap: ae });
     for (const m of [this.paintMat, this.detailMat]) m.needsUpdate = true;
     this.setNight(this.night);

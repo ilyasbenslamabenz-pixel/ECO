@@ -139,7 +139,7 @@ export function archTrim(mb: VMesh, body: CarBody, side: 1 | -1, az: number, r: 
     }
     rows.push(row);
   }
-  mb.surface(rows, { mat: () => ({ mat: 'atlas', region: 'plastique' }), smoothAngle: 70, flip: side < 0, uv: (_p, _n, i, j) => [j / n, i] });
+  mb.surface(rows, { mat: () => ({ mat: 'atlas', region: 'plastique' }), smoothAngle: 70, flip: side > 0, uv: (_p, _n, i, j) => [j / n, i] });
 }
 
 /** Joint d'ouvrant vertical (trait sombre fin) sur le flanc galbé. */
