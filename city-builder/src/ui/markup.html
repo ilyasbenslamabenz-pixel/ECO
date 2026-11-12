@@ -1,0 +1,53 @@
+<canvas id="scene" aria-label="Vue 3D de la ville"></canvas>
+
+<div id="loading" class="overlay" role="status" aria-live="polite">
+  <div class="loading-card">
+    <div class="brand">Aube Urbaine</div>
+    <div class="progress"><div id="loading-bar"></div></div>
+    <div id="loading-text">Initialisation…</div>
+  </div>
+</div>
+
+<div id="main-menu" class="overlay hidden">
+  <div class="menu-card">
+    <h1 class="brand">Aube Urbaine</h1>
+    <p class="tagline">Bâtissez la ville de vos rêves</p>
+    <button id="btn-new" class="primary">Nouvelle partie</button>
+    <button id="btn-continue">Continuer</button>
+    <button id="btn-demo" disabled title="Scène de démonstration — Phase 1">Scène de démonstration <span class="phase">Phase 1</span></button>
+    <p class="menu-foot" id="menu-foot"></p>
+  </div>
+</div>
+
+<header id="hud" class="hidden">
+  <div class="hud-group">
+    <span id="hud-city" class="city"></span>
+    <span id="hud-date" class="pill" title="Date"></span>
+  </div>
+  <div class="hud-group stats">
+    <span class="pill" title="Trésorerie"><span class="lbl">Budget</span> <b id="hud-money"></b></span>
+    <span class="pill" title="Bilan mensuel (entretien ; recettes fiscales en phase 2)"><span class="lbl">Bilan/mois</span> <b id="hud-balance"></b></span>
+    <span class="pill" title="Population (démographie : phase 2)"><span class="lbl">Habitants</span> <b id="hud-pop"></b></span>
+  </div>
+  <div class="hud-group">
+    <div class="seg" role="group" aria-label="Vitesse">
+      <button data-speed="0" title="Pause (Espace)">❚❚</button>
+      <button data-speed="1" title="Vitesse 1 (touche 1)">▶</button>
+      <button data-speed="2" title="Vitesse 2 (touche 2)">▶▶</button>
+      <button data-speed="4" title="Vitesse 4 (touche 3)">▶▶▶</button>
+    </div>
+    <button id="btn-camera" title="Basculer vue aérienne / vue rue (touche V)">Vue rue</button>
+    <button id="btn-save" title="Sauvegarder (emplacement local)">Sauvegarder</button>
+    <button id="btn-menu" title="Menu (Échap)">Menu</button>
+  </div>
+</header>
+
+<nav id="toolbar" class="hidden" aria-label="Outils">
+  <button data-tool="select" class="active">Sélection</button>
+  <button data-tool="road" disabled>Routes <span class="phase">Phase 1</span></button>
+  <button data-tool="building" disabled>Bâtiments <span class="phase">Phase 1</span></button>
+  <button data-tool="bulldoze" disabled>Démolir <span class="phase">Phase 1</span></button>
+  <button data-tool="terraform" disabled>Terrain <span class="phase">Phase 2</span></button>
+</nav>
+
+<div id="toasts" aria-live="polite"></div>
