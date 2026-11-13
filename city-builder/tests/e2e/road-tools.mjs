@@ -6,7 +6,7 @@
  *   4. Améliorer : rue → avenue (différence facturée), refus motivé par un bâtiment riverain (resté en place) ;
  *   5. iPhone 13 au doigt : départ, arrivée, barre de confirmation avec le coût, enchaînement, « Terminer »
  *      bien visible (≥ 44 px, dans l'écran), options Routes dans l'écran.
- * Captures : docs/captures-outils-routes/*.png ; rapport : tests/e2e/out/road-tools.json.
+ * Captures : docs/captures-outils-routes/*.jpg ; rapport : tests/e2e/out/road-tools.json.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,7 +24,7 @@ let failed = false;
 const check = (ok, msg) => { R.checks.push({ ok: !!ok, msg }); console.log(`${ok ? 'OK  ' : 'ÉCHEC'} ${msg}`); if (!ok) failed = true; };
 const render = (page, n = 2) => page.evaluate((k) => window.__aube.renderNow(k), n);
 const settle = (page) => page.evaluate(() => window.__aube.renderNow(16, 0.5));
-const shot = async (page, name) => { if (NO_SHOTS) return; await render(page, 2); await page.screenshot({ path: join(caps, `${name}.png`), timeout: 600000 }); };
+const shot = async (page, name) => { if (NO_SHOTS) return; await render(page, 2); await page.screenshot({ path: join(caps, `${name}.jpg`), type: 'jpeg', quality: 80, timeout: 600000 }); };
 const scr = (page, x, z) => page.evaluate(([a, b]) => window.__aube.worldToScreen(a, b), [x, z]);
 const preview = (page) => page.evaluate(() => window.__aube.toolPreview());
 const send = (page, n, a) => page.evaluate(([n, a]) => window.__aube.send(n, a).then((r) => ({ ok: true, r }), (e) => ({ ok: false, e: e.message })), [n, a]);
@@ -88,7 +88,7 @@ try {
   p = await preview(page);
   const t1 = await tag(page);
   R.notes.chainTag = t1;
-  check(/m · 90° \/ route · [\d  ]+ ¢/.test(t1), `étiquette longueur · angle · coût pendant le tracé (« ${t1.replace(/\n/g, ' | ')} »)`);
+  check(/m · 90° \/ route · [\d\s\u202f\u00a0]+ (¢|CHF)/.test(t1), `étiquette longueur · angle · coût pendant le tracé (« ${t1.replace(/\n/g, ' | ')} »)`);
   let fin = await visibleBox(page, '#road-finish');
   check(!!fin, 'bouton « Terminer le tracé » visible pendant l\'enchaînement');
   await shot(page, '01-trace-continu');
@@ -113,18 +113,20 @@ try {
   const gtag = await tag(page);
   R.notes.grid = { preview: p, tag: gtag };
   check(p.kind === 'grid' && p.validity === 'ok' && p.cost > 0, `quadrillage ${p.nx}×${p.nz} validé par la simulation avant construction : ${p.cost} ¢ (${p.message || 'ok'})`);
-  check(/îlots? de 48 m/.test(gtag) && /¢/.test(gtag), `coût affiché avant validation (« ${gtag.replace(/\n/g, ' | ')} »)`);
+  check(/îlots? de 48 m/.test(gtag) && /¢|CHF/.test(gtag), `coût affiché avant validation (« ${gtag.replace(/\n/g, ' | ')} »)`);
   await shot(page, '02-quadrillage-apercu');
   const m0 = await money(page);
   const gp = await scr(page, cx + 150, cz + 80);
   await page.mouse.click(gp.x, gp.y);
-  const m1 = await waitMoney(page, m0);
+  // Les rues sont construites une à une : on attend que tout le quadrillage soit débité.
+  await page.waitForFunction(([a, c]) => a - window.__aube.lastStats.money >= c, [m0, p.cost], { timeout: 20000 }).catch(() => undefined);
+  await page.waitForTimeout(500);
+  const m1 = await money(page);
   await page.waitForTimeout(800);
   rd = await roads(page);
   check(m0 - m1 === p.cost, `coût débité = coût affiché (${m0 - m1} ¢ / ${p.cost} ¢)`);
   const gridEdges = rd.edges.length - 2;
   check(gridEdges >= p.lines && gridEdges >= 2 * p.nx * p.nz, `îlots construits avec leurs carrefours (${gridEdges} tronçons pour ${p.lines} rues)`);
-  await page.keyboard.press('Escape');
   await shot(page, '03-quadrillage-construit');
 
   // Bornes du quadrillage (nœuds créés à l'est de cx − 8).
@@ -142,11 +144,8 @@ try {
   R.notes.guide = { preview: p, tag: guideTag };
   check(/parallèle à la route · îlot 48 m/.test(p.guide ?? ''), `ligne guide parallèle à distance d'îlot (« ${p.guide} »)`);
   await shot(page, '04-ligne-guide');
-  await page.keyboard.press('Escape');
 
   // 4. Améliorer : rue sud du quadrillage → avenue.
-  await page.click('#toolbar button[data-tool=road]').catch(() => undefined);
-  if (await visibleBox(page, '#build-drawer')) await page.click('#drawer-close');
   await page.click('#tool-actions button:has-text("Améliorer")');
   await page.click('#tool-actions button:has-text("Gamme +")');
   const sx = x0 + 24, sz = z0;
@@ -212,12 +211,12 @@ try {
   check(box && box.x >= 0 && box.right <= box.W && box.bottom <= box.H, `options Routes dans l'écran (${box ? `${Math.round(box.w)}×${Math.round(box.h)}` : 'masquées'})`);
   await shot(P, '08-iphone-options-routes');
   // Le doigt est décalé de 70 px : on touche 70 px sous le point visé.
-  const tapWorld = async (x, z) => { const q = await scr(P, x, z); await P.touchscreen.tap(q.x, q.y + 70); await P.waitForTimeout(500); await P.evaluate(() => window.__aube.renderNow(1, 0.1)); };
+  const tapWorld = async (x, z) => { const q = await scr(P, x, z); R.notes.taps = [...(R.notes.taps ?? []), { x, z, sx: Math.round(q.x), sy: Math.round(q.y + 70), hit: await P.evaluate(([a, b]) => { const e = document.elementFromPoint(a, b); return e ? (e.id || e.tagName + '.' + e.className) : null; }, [q.x, q.y + 70]) }]; await P.touchscreen.tap(q.x, q.y + 70); await P.waitForTimeout(500); await P.evaluate(() => window.__aube.renderNow(1, 0.1)); };
   await tapWorld(cx - 120, cz + 10);
   await tapWorld(cx - 40, cz + 10);
   const tc = await P.evaluate(() => ({ shown: !document.querySelector('#touch-confirm').classList.contains('hidden'), label: document.querySelector('#tc-ok').textContent }));
   R.notes.iphoneConfirm = tc;
-  check(tc.shown && /Tracer · [\d  ]+ ¢/.test(tc.label), `barre de confirmation au doigt avec le coût (« ${tc.label} »)`);
+  check(tc.shown && /Tracer · [\d\s\u202f\u00a0]+ (¢|CHF)/.test(tc.label), `barre de confirmation au doigt avec le coût (« ${tc.label} »)`);
   await shot(P, '09-iphone-confirmation');
   await P.tap('#tc-ok');
   await P.waitForTimeout(800);
@@ -227,7 +226,7 @@ try {
   R.notes.iphoneFinish = box;
   check(box && box.h >= 44 && box.x >= 0 && box.right <= box.W && box.bottom <= box.H, `« Terminer le tracé » bien visible au doigt (${box ? `${Math.round(box.w)}×${Math.round(box.h)} à y=${Math.round(box.y)}` : 'absent'})`);
   // Enchaînement au doigt : un seul toucher pour l'arrivée suivante, puis confirmation.
-  await tapWorld(cx - 40, cz + 80);
+  await tapWorld(cx - 40, cz - 50);
   const tc2 = await P.evaluate(() => !document.querySelector('#touch-confirm').classList.contains('hidden'));
   box = await visibleBox(P, '#road-finish');
   check(tc2 && !!box, 'tronçon suivant : confirmation ET bouton Terminer visibles ensemble');
@@ -245,11 +244,15 @@ try {
   await P.waitForTimeout(300);
   box = await visibleBox(P, '#tool-options');
   check(box && box.right <= box.W && box.bottom <= box.H, 'options du quadrillage dans l\'écran (iPhone)');
-  await tapWorld(cx - 150, cz + 120);
-  await tapWorld(cx - 60, cz + 200);
+  await P.keyboard.press('KeyT');
+  await P.evaluate(([x, z]) => window.__aube.lookAt(x, z, 300), [cx - 150, cz - 60]);
+  await P.evaluate(() => window.__aube.renderNow(16, 0.5));
+  await P.waitForFunction(() => document.querySelectorAll('#toasts > *').length === 0, null, { timeout: 15000 }).catch(() => undefined);
+  await tapWorld(cx - 195, cz - 105);
+  await tapWorld(cx - 140, cz - 80);
   const tc3 = await P.evaluate(() => document.querySelector('#tc-ok').textContent);
   R.notes.iphoneGrid = { label: tc3, preview: await preview(P) };
-  check(/Construire l’îlot · [\d  ]+ ¢|Îlot refusé/.test(tc3), `quadrillage au doigt : coût dans la confirmation (« ${tc3} »)`);
+  check(/Construire l’îlot · [\d\s\u202f\u00a0]+ (¢|CHF)|Îlot refusé/.test(tc3), `quadrillage au doigt : coût dans la confirmation (« ${tc3} »)`);
   await shot(P, '11-iphone-quadrillage');
   await P.tap('#tc-cancel');
   check(ph.errors.length === 0, `aucune erreur de page (iPhone)${ph.errors.length ? ' : ' + ph.errors.slice(0, 4).join(' | ') : ''}`);

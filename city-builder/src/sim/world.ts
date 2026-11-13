@@ -821,6 +821,16 @@ export class Simulation {
   /** Construit le message delta et vide les files d'attente. Les buffers véhicules sont neufs (ils seront transférés). */
   takeDelta(): DeltaMessage {
     const vehicles: DeltaMessage['vehicles'] = this.traffic.actCount > 0 ? this.traffic.takeFrame() : null;
+    // Plusieurs commandes entre deux deltas (quadrillage, tracés enchaînés) : un tronçon créé puis découpé dans le
+    // même lot n'apparaît nulle part (sinon « supprimé puis ajouté » laisserait un tronçon fantôme chez le client).
+    if (this.pendingEdgesRemoved.length && this.pendingEdgesAdded.length) {
+      const removed = new Set(this.pendingEdgesRemoved);
+      const transient = new Set(this.pendingEdgesAdded.filter((e) => removed.has(e.id)).map((e) => e.id));
+      if (transient.size) {
+        this.pendingEdgesAdded = this.pendingEdgesAdded.filter((e) => !transient.has(e.id));
+        this.pendingEdgesRemoved = this.pendingEdgesRemoved.filter((id) => !transient.has(id));
+      }
+    }
     const msg: DeltaMessage = {
       kind: 'delta',
       tick: this.tickCount,

@@ -58,6 +58,7 @@ test('échelle de l\'outil : rue → avenue → boulevard → rue', () => {
 test('simulation : amélioration facturée à la différence, déclassement remboursé à 25 %', () => {
   const s = newTownSim();
   const id = seg(s, -200, 0, -40, 0);
+  s.takeDelta();
   const m0 = s.economy.money;
   const dry = s.upgradeRoad({ edgeId: id, kind: 'avenue', dryRun: true });
   assert.ok(dry.ok);
@@ -204,4 +205,18 @@ test('protocole : validation des arguments et aller-retour par le répartiteur',
   assert.equal((u.data as { kind: string }).kind, 'boulevard');
   const bad = cmd('upgradeRoad', { edgeId: id });
   assert.ok(!bad.ok && bad.error.code === 'INVALID_ARGS');
+});
+
+test('delta : tronçon créé puis découpé entre deux deltas absent des deux listes (pas de fantôme chez le client)', () => {
+  const s = newTownSim();
+  s.takeDelta();
+  const a = s.buildRoad({ type: 'street', points: [-200, 0, 0, 0] });
+  assert.ok(a.ok);
+  const first = a.data.edgeIds[0]!;
+  // Deuxième commande dans le même lot : coupe la première rue en carrefour.
+  assert.ok(s.buildRoad({ type: 'street', points: [-100, -80, -100, 80] }).ok);
+  const d = s.takeDelta();
+  assert.ok(!d.roadEdgesAdded.some((e) => e.id === first) && !d.roadEdgesRemoved.includes(first), 'tronçon transitoire omis');
+  const live = new Set(s.roadRecords().edges.map((e) => e.id));
+  assert.deepEqual(new Set(d.roadEdgesAdded.map((e) => e.id)), live, 'le delta décrit exactement le réseau final');
 });
