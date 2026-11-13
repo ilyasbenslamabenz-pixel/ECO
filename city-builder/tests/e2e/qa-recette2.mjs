@@ -18,7 +18,7 @@ const { server, base } = await serve();
 const browser = await launch();
 const R = { checks: [], notes: {} };
 const check = (ok, msg, extra) => { R.checks.push({ ok: !!ok, msg, extra }); console.log(`${ok ? 'OK  ' : 'ÉCHEC'} ${msg}${extra !== undefined ? ' ' + JSON.stringify(extra).slice(0, 300) : ''}`); };
-const shot = (page, name) => page.screenshot({ path: join(out, `qa2-${name}.png`), timeout: 600000 });
+const shot = (page, name) => page.screenshot({ path: join(out, `qa2-${name}.png`), timeout: 240000 }).catch((e) => { check(false, `capture ${name} impossible : ${e.message.split('\n')[0]}`); });
 const render = (page, n = 2) => page.evaluate((k) => window.__aube.renderNow?.(k), n);
 const send = (page, n, a) => page.evaluate(([n, a]) => window.__aube.send(n, a).then((r) => ({ ok: true, r }), (e) => ({ ok: false, e: e.message })), [n, a]);
 
@@ -44,7 +44,9 @@ try {
     await shot(page, 'menu');
     await page.click('#btn-demo');
     await page.waitForFunction(() => window.__aube.demoReady, null, { timeout: 600000, polling: 1000 });
-    await page.waitForTimeout(3000);
+    await page.evaluate(() => window.__aube.pauseRender(true));
+    await page.waitForTimeout(1000);
+    await render(page, 3);
     R.notes.demo = await page.evaluate(() => window.__aube.demo);
     const pose0 = await page.evaluate(() => window.__aube.cameraPose());
     R.notes.poseAerial = pose0;
@@ -64,37 +66,42 @@ try {
     await page.waitForTimeout(1500);
     const s3 = await page.evaluate(() => window.__aube.lastStats?.speed);
     check(s3 === 4, `bouton vitesse ×4 appliqué dans la simulation (speed=${s3})`);
-    await page.click('button[data-speed="1"]');
+    await page.$eval('button[data-speed="1"]', (b) => b.click());
     // Vue rue (touche V)
     await page.keyboard.press('KeyV');
-    await page.waitForTimeout(4000);
+    await page.evaluate(() => window.__aube.renderNow(4, 0.5));
     const pose1 = await page.evaluate(() => window.__aube.cameraPose());
     R.notes.poseStreet = pose1;
     await shot(page, 'demo-rue');
     check(JSON.stringify(pose0) !== JSON.stringify(pose1), 'touche V change la caméra', pose1);
     // Avancer en vue rue (ZQSD / flèches)
-    await page.keyboard.down('KeyW'); await page.waitForTimeout(2500); await page.keyboard.up('KeyW');
+    await page.keyboard.down('KeyW'); await page.evaluate(() => window.__aube.renderNow(6, 0.3)); await page.keyboard.up('KeyW');
+    await page.evaluate(() => window.__aube.renderNow(3, 0.1));
     const pose2 = await page.evaluate(() => window.__aube.cameraPose());
     R.notes.poseStreetWalk = pose2;
     check(JSON.stringify(pose2) !== JSON.stringify(pose1), 'déplacement au clavier en vue rue', pose2);
     await shot(page, 'demo-rue-marche');
     // Retour aérien par bouton
-    await page.click('#btn-camera');
-    await page.waitForTimeout(4000);
+    await page.$eval('#btn-camera', (b) => b.click());
+    await page.evaluate(() => window.__aube.renderNow(4, 0.5));
     const pose3 = await page.evaluate(() => window.__aube.cameraPose());
     R.notes.poseBack = pose3;
     await shot(page, 'demo-retour-aerien');
     // Zoom molette (gros plan)
     await page.mouse.move(720, 450);
-    for (let i = 0; i < 8; i++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(200); }
-    await page.waitForTimeout(3000);
+    for (let i = 0; i < 8; i++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(100); }
+    await page.evaluate(() => window.__aube.renderNow(4, 0.5));
     await shot(page, 'demo-zoom');
     // Clic sur un objet en mode sélection -> panneau info
     await page.mouse.click(720, 450);
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(1500); await render(page, 2);
     const info = await page.evaluate(() => { const p = document.querySelector('#info-panel, #info'); return p ? { visible: p.offsetParent !== null && !p.classList.contains('hidden'), text: p.textContent.trim().slice(0, 300) } : null; });
     R.notes.infoClick = info;
     await shot(page, 'demo-clic-info');
+    // Vue rue près d'un carrefour : feux visibles ?
+    await page.keyboard.press('KeyV');
+    await page.evaluate(() => window.__aube.renderNow(4, 0.5));
+    await shot(page, 'demo-rue-2');
     // Véhicules : positions qui changent
     const vstats = await page.evaluate(() => window.__aube.renderStats());
     R.notes.renderStats = vstats;
@@ -198,6 +205,8 @@ try {
     await page.waitForTimeout(20000);
     const stats = await page.evaluate(() => window.__aube.lastStats);
     R.notes.statsAfterRun = stats;
+    await send(page, 'setSpeed', { speed: 0 });
+    await page.waitForTimeout(1000);
     await render(page, 3);
     await shot(page, 'ville-apres');
     // Sauvegarde dans 2 emplacements nommés via l'interface
@@ -228,9 +237,9 @@ try {
       await shot(page, 'liste-sauvegardes');
       const slots = await page.evaluate(() => [...document.querySelectorAll('#load-list li, .slot, [data-slot]')].map((e) => e.textContent.trim().slice(0, 100)));
       R.notes.slots = slots;
-      check(slots.filter((s) => /Recette A|Recette B/.test(s)).length >= 2, `2 emplacements nommés listés (${slots.length} au total)`, slots);
+      check(slots.filter((s) => /recette-a|recette-b/i.test(s)).length >= 2, `2 emplacements nommés listés (${slots.length} au total)`, slots);
       check(slots.some((s) => /auto/i.test(s)) || true, 'info autosauvegarde', slots.filter((s) => /auto/i.test(s)));
-      const slotEl = await page.$('[data-slot*="Recette A"], li:has-text("Recette A") button, li:has-text("Recette A")');
+      const slotEl = await page.$('li:has-text("recette-a") button:has-text("Charger")');
       if (slotEl) {
         await slotEl.click();
         await page.waitForFunction(() => window.__aube.snapshotReceived && window.__aube.snapshotStats, null, { timeout: 300000, polling: 500 });
@@ -252,53 +261,45 @@ try {
   /* ---------------- 4 : iPhone 13 ---------------- */
   if (only === 'all' || only === 'iphone') {
     const { devices } = await import('/opt/node-tools/node_modules/playwright/index.js').catch(() => ({ devices: null }));
-    const dev = devices?.['iPhone 13'] ?? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1' };
+    const dev = devices?.['iPhone 13'] ?? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true };
     const ctx = await browser.newContext({ ...dev, deviceScaleFactor: 1 });
     const page = await ctx.newPage();
     const errors = collectErrors(page);
-    await page.goto(`${base}/index.html?demo`, { timeout: 300000, waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.__aube?.demoReady, null, { timeout: 600000, polling: 1000 });
-    await page.waitForTimeout(3000);
-    await shot(page, 'iphone-demo');
+    await page.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 300000, polling: 500 });
+    await render(page, 2);
+    await shot(page, 'iphone-partie');
     const cdp = await ctx.newCDPSession(page);
     const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], i) => ({ x, y, id: i })) });
-    const pose0 = await page.evaluate(() => window.__aube.cameraPose());
-    // Pincer (écarter = zoom avant)
+    const pose = async () => { await page.evaluate(() => window.__aube.renderNow(6, 0.3)); return page.evaluate(() => window.__aube.cameraPose()); };
+    const P = {}; R.notes.iphonePoses = P;
+    const save = () => writeFileSync(join(out, 'qa2-iphone.json'), JSON.stringify(R, null, 2));
+    P.p0 = await pose(); save();
     await touch('touchStart', [[150, 420], [240, 420]]);
-    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150 - i * 8, 420], [240 + i * 8, 420]]); await page.waitForTimeout(60); }
+    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150 - i * 8, 420], [240 + i * 8, 420]]); await page.evaluate(() => window.__aube.renderNow(1, 0.05)); }
     await touch('touchEnd', []);
-    await page.waitForTimeout(2500);
-    const pose1 = await page.evaluate(() => window.__aube.cameraPose());
-    // Rotation deux doigts
+    P.pinch = await pose(); save();
     await touch('touchStart', [[195, 330], [195, 510]]);
-    for (let i = 1; i <= 10; i++) { const a = i * 0.08; await touch('touchMove', [[195 + Math.sin(a) * 90, 420 - Math.cos(a) * 90], [195 - Math.sin(a) * 90, 420 + Math.cos(a) * 90]]); await page.waitForTimeout(60); }
+    for (let i = 1; i <= 10; i++) { const a = i * 0.08; await touch('touchMove', [[195 + Math.sin(a) * 90, 420 - Math.cos(a) * 90], [195 - Math.sin(a) * 90, 420 + Math.cos(a) * 90]]); await page.evaluate(() => window.__aube.renderNow(1, 0.05)); }
     await touch('touchEnd', []);
-    await page.waitForTimeout(2500);
-    const pose2 = await page.evaluate(() => window.__aube.cameraPose());
-    // Glisser deux doigts vers le haut (inclinaison)
+    P.rotate = await pose(); save();
     await touch('touchStart', [[150, 500], [240, 500]]);
-    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150, 500 - i * 12], [240, 500 - i * 12]]); await page.waitForTimeout(60); }
+    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150, 500 - i * 12], [240, 500 - i * 12]]); await page.evaluate(() => window.__aube.renderNow(1, 0.05)); }
     await touch('touchEnd', []);
-    await page.waitForTimeout(2500);
-    const pose3 = await page.evaluate(() => window.__aube.cameraPose());
-    // Un doigt = déplacement
+    P.twoDrag = await pose(); save();
     await touch('touchStart', [[195, 400]]);
-    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[195 + i * 10, 400 + i * 6]]); await page.waitForTimeout(60); }
+    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[195 + i * 10, 400 + i * 6]]); await page.evaluate(() => window.__aube.renderNow(1, 0.05)); }
     await touch('touchEnd', []);
-    await page.waitForTimeout(2500);
-    const pose4 = await page.evaluate(() => window.__aube.cameraPose());
-    R.notes.iphonePoses = { pose0, pose1, pose2, pose3, pose4 };
-    check(JSON.stringify(pose0) !== JSON.stringify(pose1), 'iPhone : pincement change la caméra');
-    check(JSON.stringify(pose1) !== JSON.stringify(pose2), 'iPhone : rotation deux doigts change la caméra');
-    check(JSON.stringify(pose2) !== JSON.stringify(pose3), 'iPhone : glisser deux doigts change la caméra');
-    check(JSON.stringify(pose3) !== JSON.stringify(pose4), 'iPhone : un doigt déplace la caméra');
-    await shot(page, 'iphone-apres-gestes');
-    // Bouton Vue rue au tactile
+    P.oneDrag = await pose(); save();
+    const d = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
+    check(d(P.p0, P.pinch), 'iPhone : pincement change la caméra', [P.p0, P.pinch]);
+    check(d(P.pinch, P.rotate), 'iPhone : rotation deux doigts change la caméra', P.rotate);
+    check(d(P.rotate, P.twoDrag), 'iPhone : glisser deux doigts change la caméra', P.twoDrag);
+    check(d(P.twoDrag, P.oneDrag), 'iPhone : un doigt déplace la caméra', P.oneDrag);
     await page.tap('#btn-camera').catch(() => undefined);
-    await page.waitForTimeout(4000);
+    await page.evaluate(() => window.__aube.renderNow(6, 0.3));
     await shot(page, 'iphone-rue');
     const overflow = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: innerWidth }));
-    R.notes.iphoneOverflow = overflow;
     check(overflow.sw <= overflow.w, `iPhone : pas de défilement horizontal (${overflow.sw}/${overflow.w})`);
     check(errors.length === 0, `aucune erreur de page (iPhone) : ${errors.length}`, errors.slice(0, 5));
     await ctx.close();
