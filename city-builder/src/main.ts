@@ -97,6 +97,8 @@ interface DebugInfo {
   gpuMemory?: () => { texturesMo: number; textures: number; geometriesMo: number; geometries: number; ombresMo: number };
   /** Plante des arbres / plantes (e2e : planche des essences). */
   plantVeg?: (items: { x: number; z: number; assetId: string }[]) => number;
+  /** Végétation dont l'emprise recouvre une chaussée (e2e : doit rester vide). */
+  vegOnRoads?: () => { x: number; z: number; r: number; assetId: string }[];
   /** Blocs de rivière maillés (e2e : cadrer une berge). */
   riverBlocks?: () => { x: number; z: number; tris: number }[];
   /** Copie de la dernière trame véhicules reçue (e2e : véhicules arrêtés aux feux). */
@@ -249,6 +251,7 @@ async function boot(): Promise<void> {
   debug.heightAt = (x, z) => render.terrain.heightAt(x, z);
   debug.riverBlocks = () => render.water.inlandCenters();
   debug.plantVeg = (items) => render.veg.plant(items);
+  debug.vegOnRoads = () => render.vegOnRoads();
   debug.streetLook = (x, z, lx, lz) => {
     input.camera.setStreetPosition(x, z, Math.atan2(-(lx - x), -(lz - z)));
     if (input.camera.mode !== 'street') input.camera.setMode('street');
