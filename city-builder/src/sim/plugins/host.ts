@@ -11,7 +11,7 @@ import { terrainBounds } from '../../shared/terrain-gen';
 import { Rng } from '../rng';
 import type { Simulation } from '../world';
 import type {
-  PluginBuildings, PluginClock, PluginCommandResult, PluginContext, PluginDemography, PluginErrorRecord, PluginRoads,
+  PluginBuildings, PluginClock, PluginCommandResult, PluginContext, PluginDemography, PluginEconomy, PluginErrorRecord, PluginRoads,
   PluginSaveSection, PluginTerrain, SimPlugin,
 } from './types';
 
@@ -125,6 +125,14 @@ export class PluginHost {
       get households() { return sim.demography?.households.count ?? 0; },
       report: () => sim.demography!.report(sim.clock.totalMinutes, sim.economy.taxRates.residential),
     };
+    const economy: PluginEconomy = {
+      get money() { return sim.economy.money; },
+      get taxRates() { return { ...sim.economy.taxRates }; },
+      lastMonth: () => {
+        const h = sim.economy.history[sim.economy.history.length - 1];
+        return h ? { ...h, income: { ...h.income }, expenses: { ...h.expenses } } : undefined;
+      },
+    };
     const rngs = this.rngs, services = this.services;
     return {
       pluginId,
@@ -137,6 +145,7 @@ export class PluginHost {
       roads,
       buildings,
       get demography() { return sim.demography ? demography : null; },
+      economy,
       get speed() { return sim.speed; },
       get rng() { return rngs.get(pluginId)!; },
       notify: (level, message) => sim.notify(level, message),

@@ -25,8 +25,10 @@ import { buildTown, runDays, townCatalog } from '../sim/fixtures';
  */
 const IMPLEMENTED = new Set(['circulation', 'pietons']);
 const isAtmosphere = (id: string): boolean => (ATMOSPHERE_MODULES as readonly string[]).includes(id);
+/** Modules de simulation sans rendu ni panneau (phase 2B, docs/requests/municipal.md §2). */
+const SIM_ONLY: readonly string[] = ['municipal'];
 /** Modules d'atmosphère (phase 2C) exclus aussi : leur absence d'effet sur la base est testée dans tests/weather. */
-const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id));
+const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id));
 
 function town(plugins?: readonly SimPlugin[]): Simulation {
   const s = plugins ? new Simulation(plugins) : new Simulation();
@@ -81,17 +83,17 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
   const ids = [...PHASE2_MODULES];
   // Modules d'atmosphère (phase 2C, tests/weather) : enregistrés en simulation et rendu, testés à part.
   const all = [...PHASE2_MODULES, ...ATMOSPHERE_MODULES];
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), all);
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY]);
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), all);
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), ids);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY]);
   for (const p of EMPTY_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
   for (const sec of SAVE_SECTIONS) {
     assert.deepEqual(sec.migrate(sec.empty(), sec.version), sec.empty());
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), all);
+  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY]);
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 

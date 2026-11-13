@@ -33,6 +33,7 @@ import type { AssetCatalog, CatalogAsset } from '../../shared/catalog';
 import type { BuildingRecord, NewGameParams } from '../../shared/contracts';
 import type { Season } from '../clock';
 import type { DemographyReport } from '../demography';
+import type { MonthRecord, TaxSector } from '../economy';
 import type { BuildingStore } from '../ecs';
 import type { RoadNetwork } from '../roads';
 import type { Rng } from '../rng';
@@ -107,6 +108,14 @@ export interface PluginTerrain {
   bounds(): { minX: number; minZ: number; maxX: number; maxZ: number } | null;
 }
 
+/** Économie en LECTURE SEULE (copies : aucun montant ne peut être modifié par un module). */
+export interface PluginEconomy {
+  readonly money: number;
+  readonly taxRates: Readonly<Record<TaxSector, number>>;
+  /** Dernier bilan mensuel clos (copie ; undefined avant le premier mois). */
+  lastMonth(): MonthRecord | undefined;
+}
+
 /**
  * Façade de la simulation passée à chaque crochet. Lecture seule, minimale et typée : les modules
  * ne reçoivent aucun objet interne mutable de la simulation (économie, planificateur, PRNG de base…).
@@ -127,6 +136,8 @@ export interface PluginContext {
   readonly roads: PluginRoads;
   readonly buildings: PluginBuildings;
   readonly demography: PluginDemography | null;
+  /** Économie en lecture seule (bilan mensuel : `onMonthStart` est appelé après `Economy.onMonth`). */
+  readonly economy: PluginEconomy;
   /** Vitesse de simulation courante (0 = pause). */
   readonly speed: number;
   /**
