@@ -30,7 +30,7 @@ export interface RoadRendererDeps {
 /** Assets du catalogue utilisés pour le décor routier. */
 export const DECOR_ASSETS: Record<DecorKind, string[]> = {
   lamp: ['lampadaire_fonte'],
-  tree: ['arbre_feuillu_jeune', 'arbre_feuillu_rond'],
+  tree: ['arbre_feuillu_jeune', 'arbre_feuillu_rond', 'arbre_platane'],
   bench: ['banc_bois'],
   planter: ['jardiniere_plante_a', 'jardiniere_plante_b'],
   bin: ['poubelle_metal'],

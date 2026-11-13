@@ -85,7 +85,10 @@ export function speciesFromCatalog(assets: readonly CatalogAsset[]): VegSpecies[
     let maxH = h;
     let weight = 1;
     switch (role) {
-      case 'feuillu': minH = Math.max(h * 0.9, 8); maxH = Math.max(h * 1.1, 15); weight = a.id.includes('jacaranda') ? 0.25 : 1; break;
+      case 'feuillu':
+        // Un jeune arbre garde sa taille réelle (sinon il serait agrandi à 8-15 m et paraîtrait clairsemé).
+        if (a.id.includes('jeune')) { minH = h * 0.85; maxH = h * 1.2; weight = 0.6; break; }
+        minH = Math.max(h * 0.9, 8); maxH = Math.max(h * 1.1, 15); weight = a.id.includes('jacaranda') ? 0.25 : 1; break;
       case 'conifere': minH = Math.max(h * 0.85, 10); maxH = Math.max(h * 1.15, 20); weight = 1; break;
       case 'ornement': minH = Math.max(h, 5); maxH = Math.max(h * 1.3, 8); weight = 0.3; break;
       case 'arbuste': minH = h * 0.8; maxH = h * 1.3; weight = 1; break;

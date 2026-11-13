@@ -362,7 +362,7 @@ function spruce(lod: number, seed: number): TreeGeo {
   return { trunk, foliage: fol, height: H };
 }
 
-function poplar(lod: number, seed: number): TreeGeo {
+export function poplar(lod: number, seed: number): TreeGeo {
   const rnd = rng(seed);
   const H = 21;
   const trunk = new MeshBuilder();
@@ -449,7 +449,7 @@ interface ProcTreeSpec {
 
 const PROC_TREES: ProcTreeSpec[] = [
   { id: 'arbre_epicea', nameFr: 'Épicéa (conifère)', fn: spruce, bark: 'epicea', foliage: needleTexture, tags: ['arbre', 'conifere', 'foret', 'montagne', 'parc'], cost: 450, heights: [0.75, 1.0, 1.2] },
-  { id: 'arbre_peuplier', nameFr: 'Peuplier d’Italie (alignement)', fn: poplar, bark: 'peuplier', foliage: leafTexture, tags: ['arbre', 'feuillu', 'rue', 'avenue', 'alignement', 'riviere'], cost: 400, heights: [0.85, 1.0, 1.15] },
+  // arbre_peuplier : remplacé par le peuplier dense de tools/generators/generate_trees.py (Blender) ; `poplar` reste disponible.
 ];
 
 const LOD_DIST: [number, number] = [90, 260];

@@ -112,8 +112,7 @@ const PROP_LODS: [number, number] = [35, 100];
 export const MODELS: ModelSpec[] = [
   // Arbres
   { id: 'arbre_jacaranda', ph: 'jacaranda_tree', nameFr: 'Jacaranda (grand arbre d’avenue)', category: 'tree', lod0Triangles: 24000, textureSize: 1024, lodDistances: TREE_LODS, cost: 900, tags: ['arbre', 'feuillu', 'parc', 'avenue'], heightVariants: [0.8, 1.0, 1.15] },
-  { id: 'arbre_feuillu_rond', ph: 'island_tree_01', nameFr: 'Arbre feuillu à couronne ronde', category: 'tree', lod0Triangles: 20000, textureSize: 1024, lodDistances: TREE_LODS, cost: 500, tags: ['arbre', 'feuillu', 'rue'], heightVariants: [0.9, 1.1, 1.3] },
-  { id: 'arbre_feuillu_jeune', ph: 'island_tree_02', nameFr: 'Jeune arbre feuillu', category: 'tree', lod0Triangles: 16000, textureSize: 1024, lodDistances: TREE_LODS, cost: 350, tags: ['arbre', 'feuillu', 'rue', 'jardin'], heightVariants: [0.9, 1.2, 1.4] },
+  // arbre_feuillu_rond / arbre_feuillu_jeune : remplacés par les arbres denses de tools/generators/generate_trees.py (Blender).
   { id: 'arbre_petit_ornement', ph: 'tree_small_02', nameFr: 'Petit arbre d’ornement', category: 'tree', lod0Triangles: 16000, textureSize: 1024, lodDistances: TREE_LODS, cost: 300, tags: ['arbre', 'jardin', 'ornement'], heightVariants: [0.9, 1.1, 1.3] },
   // Végétation basse
   { id: 'arbuste_searsia_a', ph: 'searsia_lucida', nodes: /_a_LOD0$/, nameFr: 'Arbuste persistant (grand)', category: 'vegetation', lod0Triangles: 9000, textureSize: 512, lodDistances: FURN_LODS, cost: 120, tags: ['arbuste', 'jardin', 'haie'], heightVariants: [0.8, 1.0, 1.2] },

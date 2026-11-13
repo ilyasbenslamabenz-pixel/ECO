@@ -75,25 +75,25 @@
       "category": "tree",
       "lods": [
         {
-          "file": "models/polyhaven/tree/arbre_feuillu_rond_lod0.glb",
-          "maxDistance": 90,
-          "triangles": 19939
+          "file": "models/nature/tree/arbre_feuillu_rond_lod0.glb",
+          "maxDistance": 50,
+          "triangles": 13490
         },
         {
-          "file": "models/polyhaven/tree/arbre_feuillu_rond_lod1.glb",
-          "maxDistance": 260,
-          "triangles": 6929
+          "file": "models/nature/tree/arbre_feuillu_rond_lod1.glb",
+          "maxDistance": 120,
+          "triangles": 2404
         },
         {
-          "file": "models/polyhaven/tree/arbre_feuillu_rond_lod2.glb",
+          "file": "models/nature/tree/arbre_feuillu_rond_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 1956
+          "triangles": 10
         }
       ],
       "dimensions": {
-        "width": 4.718,
-        "depth": 4.783,
-        "height": 4.977
+        "width": 9.397,
+        "depth": 8.9,
+        "height": 11.133
       },
       "footprint": {
         "tilesX": 0,
@@ -130,11 +130,11 @@
       "textureSets": [],
       "license": {
         "spdx": "CC0-1.0",
-        "source": "https://polyhaven.com/a/island_tree_01",
-        "author": "Rob Tuytel, Rico Cilliers"
+        "source": "tools/generators/generate_trees.py#arbre_feuillu_rond",
+        "author": "Œuvre originale générée par le projet (generate_trees.py, Blender/Cycles + numpy)"
       },
       "tags": [
-        "polyhaven",
+        "procedural",
         "arbre",
         "feuillu",
         "rue"
@@ -146,25 +146,25 @@
       "category": "tree",
       "lods": [
         {
-          "file": "models/polyhaven/tree/arbre_feuillu_jeune_lod0.glb",
-          "maxDistance": 90,
-          "triangles": 15990
+          "file": "models/nature/tree/arbre_feuillu_jeune_lod0.glb",
+          "maxDistance": 50,
+          "triangles": 6394
         },
         {
-          "file": "models/polyhaven/tree/arbre_feuillu_jeune_lod1.glb",
-          "maxDistance": 260,
-          "triangles": 5595
+          "file": "models/nature/tree/arbre_feuillu_jeune_lod1.glb",
+          "maxDistance": 120,
+          "triangles": 1533
         },
         {
-          "file": "models/polyhaven/tree/arbre_feuillu_jeune_lod2.glb",
+          "file": "models/nature/tree/arbre_feuillu_jeune_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 1604
+          "triangles": 10
         }
       ],
       "dimensions": {
-        "width": 3.89,
-        "depth": 4.053,
-        "height": 3.384
+        "width": 4.324,
+        "depth": 4.235,
+        "height": 6.182
       },
       "footprint": {
         "tilesX": 0,
@@ -201,11 +201,11 @@
       "textureSets": [],
       "license": {
         "spdx": "CC0-1.0",
-        "source": "https://polyhaven.com/a/island_tree_02",
-        "author": "Rob Tuytel, Rico Cilliers"
+        "source": "tools/generators/generate_trees.py#arbre_feuillu_jeune",
+        "author": "Œuvre originale générée par le projet (generate_trees.py, Blender/Cycles + numpy)"
       },
       "tags": [
-        "polyhaven",
+        "procedural",
         "arbre",
         "feuillu",
         "rue",
@@ -7603,24 +7603,24 @@
       "lods": [
         {
           "file": "models/nature/tree/arbre_peuplier_lod0.glb",
-          "maxDistance": 90,
-          "triangles": 704
+          "maxDistance": 50,
+          "triangles": 11175
         },
         {
           "file": "models/nature/tree/arbre_peuplier_lod1.glb",
-          "maxDistance": 260,
-          "triangles": 342
+          "maxDistance": 120,
+          "triangles": 2088
         },
         {
           "file": "models/nature/tree/arbre_peuplier_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 132
+          "triangles": 10
         }
       ],
       "dimensions": {
-        "width": 6.898,
-        "depth": 6.995,
-        "height": 20.839
+        "width": 4.64,
+        "depth": 4.383,
+        "height": 15.361
       },
       "footprint": {
         "tilesX": 0,
@@ -7652,8 +7652,8 @@
       "textureSets": [],
       "license": {
         "spdx": "CC0-1.0",
-        "source": "tools/generators/environment.ts#arbre_peuplier",
-        "author": "Aube Urbaine — générateur procédural (agent environnement)"
+        "source": "tools/generators/generate_trees.py#arbre_peuplier",
+        "author": "Œuvre originale générée par le projet (generate_trees.py, Blender/Cycles + numpy)"
       },
       "tags": [
         "procedural",
@@ -8045,6 +8045,75 @@
         "nature",
         "polyhaven"
       ]
+    },
+    {
+      "id": "arbre_platane",
+      "nameFr": "Platane (grand arbre d’avenue)",
+      "category": "tree",
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 700,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        },
+        {
+          "id": "h85",
+          "nameFr": "Taille ×0,85",
+          "heightScale": 0.85
+        },
+        {
+          "id": "h115",
+          "nameFr": "Taille ×1,15",
+          "heightScale": 1.15
+        }
+      ],
+      "textureSets": [],
+      "tags": [
+        "arbre",
+        "feuillu",
+        "avenue",
+        "parc",
+        "rue",
+        "platane",
+        "procedural"
+      ],
+      "lods": [
+        {
+          "file": "models/nature/tree/arbre_platane_lod0.glb",
+          "maxDistance": 50,
+          "triangles": 14182
+        },
+        {
+          "file": "models/nature/tree/arbre_platane_lod1.glb",
+          "maxDistance": 120,
+          "triangles": 2803
+        },
+        {
+          "file": "models/nature/tree/arbre_platane_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 10
+        }
+      ],
+      "dimensions": {
+        "width": 12.621,
+        "depth": 12.465,
+        "height": 14.973
+      },
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/generators/generate_trees.py#arbre_platane",
+        "author": "Œuvre originale générée par le projet (generate_trees.py, Blender/Cycles + numpy)"
+      }
     }
   ],
   "textureSets": [

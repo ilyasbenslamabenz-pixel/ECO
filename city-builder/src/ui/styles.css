@@ -251,6 +251,25 @@ output { color: var(--text); font-variant-numeric: tabular-nums; }
   #hud > .hud-group:last-child { gap: 4px; }
   #toolbar .tl { font-size: 9.5px; letter-spacing: -0.1px; }
 }
+/* Téléphone en paysage (écran bas) : barre supérieure sur une seule rangée, icônes seules, barre d'outils compacte. */
+@media (max-height: 500px) and (orientation: landscape) {
+  #hud { flex-wrap: nowrap; gap: 6px; padding-top: max(4px, var(--safe-t)); padding-bottom: 4px; font-size: 12px; }
+  #hud > .hud-group { flex-wrap: nowrap; min-width: 0; }
+  #hud > .hud-group:first-child { flex: 0 1 auto; }
+  #hud .tl, #hud .pill .lbl, .pill-balance, #btn-cinematic { display: none !important; }
+  #hud .ico { display: inline; font-size: 16px; }
+  #hud button, #hud .pill, #hud .pill-btn { min-height: 40px; }
+  #btn-camera, #btn-save, #btn-menu, #btn-finance { min-width: 40px; padding: 4px 6px; }
+  #hud .seg button { min-width: 40px; padding: 4px 6px; }
+  #toolbar { padding: 3px; gap: 2px; bottom: max(6px, var(--safe-b)); }
+  #toolbar button { min-height: 44px; padding: 3px 8px; font-size: 10.5px; gap: 1px; }
+  #toolbar .ico { font-size: 15px; }
+  #toolbar .phase { font-size: 8.5px; padding: 0 4px; }
+  #build-drawer, #tool-options { bottom: calc(max(6px, var(--safe-b)) + 58px); }
+  #build-drawer { max-height: 52dvh; }
+  .panel { top: calc(max(4px, var(--safe-t)) + 52px); bottom: calc(max(6px, var(--safe-b)) + 58px); max-height: none; }
+  #touch-confirm { bottom: calc(max(6px, var(--safe-b)) + 60px); }
+}
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
 /* --- Finances : impôts, emprunts ; panneau Population --- */
