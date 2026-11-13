@@ -13,6 +13,9 @@ import { hubTypeOfAsset, HUB_SPECS, type HubType } from '../../shared/hubs/types
 import type { PluginCommandResult, SimPlugin } from './types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** Codes du module ramenés aux codes standard (le message garde la raison précise, lisible tel quel). */
+const STANDARD = new Set(['NO_GAME', 'INVALID_ARGS', 'UNKNOWN_ASSET', 'OUT_OF_BOUNDS', 'INSUFFICIENT_FUNDS', 'COLLISION', 'TOO_STEEP', 'UNDER_WATER', 'NOT_FOUND']);
+const std = (r: { code: string; message: string }): PluginCommandResult => ({ ok: false, code: STANDARD.has(r.code) ? r.code : 'INVALID_ARGS', message: r.message });
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 
 /** Fabrique une instance du module (le registre utilise `hubsPlugin` ; les tests créent la leur). */
@@ -39,7 +42,7 @@ export function createHubsPlugin(): SimPlugin & { readonly system: HubsSystem } 
           const key = typeof p.assetId === 'string' ? p.assetId : typeof p.type === 'string' ? p.type : '';
           if (x === undefined || z === undefined) return { ok: false, code: 'INVALID_ARGS', message: 'x et z (nombres) attendus' };
           const r = sys.place(ctx, key, x, z, rot, p.dryRun === true);
-          return r.ok ? { ok: true, data: { id: r.id, cost: r.cost, y: r.y, type: r.type } } : r;
+          return r.ok ? { ok: true, data: { id: r.id, cost: r.cost, y: r.y, type: r.type } } : std(r);
         }
         case 'remove': {
           const id = num(p.id);
@@ -53,7 +56,7 @@ export function createHubsPlugin(): SimPlugin & { readonly system: HubsSystem } 
           // Un pôle n'est pas soumis aux servitudes (il est validé par `place`).
           if (hubTypeOfAsset(p.assetId)) return { ok: true, data: { limit: Infinity } };
           const msg = sys.checkBuilding(ctx, p.assetId, x, z, rot, num(p.variant) ?? -1);
-          return msg ? { ok: false, code: 'EASEMENT', message: msg } : { ok: true, data: { limit: Number.POSITIVE_INFINITY } };
+          return msg ? { ok: false, code: 'INVALID_ARGS', message: msg } : { ok: true, data: { limit: Number.POSITIVE_INFINITY } };
         }
         case 'summary': {
           const port = sys.freightApi('port').capacity();

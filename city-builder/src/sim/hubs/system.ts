@@ -107,7 +107,7 @@ export class HubsSystem {
   init(ctx: PluginContext): void {
     this.ctx = ctx;
     this.shared = ctx.use<Municipal>(MUNICIPAL_SERVICE) ?? null;
-    if (!this.shared) this.own = new Municipal();
+    this.own = this.shared ? null : new Municipal();
     const s = this.muni.scheduler;
     s.add({ id: 'hubs:nuisances', every: 'hour', order: AFTER_PROPAGATION, run: (info) => this.hourly(info.minutes) });
     s.add({ id: 'hubs:activite', every: 'day', order: AFTER_PROPAGATION, run: () => this.daily() });

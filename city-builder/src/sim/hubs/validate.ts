@@ -19,7 +19,7 @@ export type PlaceCheck =
   | { ok: false; code: string; message: string };
 
 /** Dénivelé maximal du terre-plein portuaire et de l'emprise de l'aéroport (m). */
-export const PORT_MAX_RELIEF = 5;
+export const PORT_MAX_RELIEF = 8;
 export const AIRPORT_MAX_RELIEF = 6;
 /** Parts minimales d'échantillons en eau : bassin devant le quai, chenal d'approche. */
 export const BASIN_WET_MIN = 0.9;
@@ -124,7 +124,8 @@ function checkPort(ctx: PluginContext, type: 'port_commerce' | 'port_passagers',
   const atSea = seaSamples.length >= depths.length * 0.6;
   if (atSea && percentile(depths, 0.5) < SEA_MIN_DEPTH) return fail('NOT_NAVIGABLE', `Eaux trop peu profondes pour les navires (${fmt1(percentile(depths, 0.5))} m < ${SEA_MIN_DEPTH} m)`);
   const waterY = atSea ? WATER_LEVEL : lMin - 1.2;
-  const y = Math.max(percentile(land, 0.75), waterY + 1.5);
+  // Sol fini = point haut du terre-plein (rien n'est enterré) ; la dalle et le mur de quai descendent sous l'eau (rendu).
+  const y = Math.max(lMax, waterY + 2);
   return { ok: true, y, waterY };
 }
 
@@ -140,7 +141,7 @@ function checkAirport(ctx: PluginContext, o: Obb, hubs: readonly HubRecord[], pr
   const mn = Math.min(...hs), mx = Math.max(...hs);
   if (!(mx - mn <= AIRPORT_MAX_RELIEF)) return fail('TOO_STEEP', `L'aéroport exige un grand terrain plat (dénivelé ${fmt1(mx - mn)} m > ${AIRPORT_MAX_RELIEF} m)`);
   // Servitudes : aucun bâtiment existant ne doit dépasser la hauteur autorisée.
-  const v = easementViolations(ctx, [...hubs, { ...probe, id: -1, y: 0, waterY: NaN, builtAt: 0 }], -1);
+  const v = easementViolations(ctx, [...hubs, { ...probe, id: -1, y: 0, waterY: NaN, builtAt: 0 }], -2);
   if (v.length) {
     const w = v[0]!;
     return fail('EASEMENT', `Servitude aéronautique : ${v.length} bâtiment(s) trop haut(s) dans l'axe des pistes (${w.name} : ${fmt1(w.height)} m > ${fmt1(w.limit)} m autorisés)`);

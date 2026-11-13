@@ -28,7 +28,11 @@ export const DRAWER_TABS: Record<Exclude<DrawerId, 'road'>, Tab[]> = {
     { id: 'commercial', label: 'Commerces & bureaux', cats: ['commercial'], placeable: true },
     { id: 'industrial', label: 'Industrie', cats: ['industrial'], placeable: true },
   ],
-  services: [{ id: 'public', label: 'Services publics', cats: ['public'], placeable: true }],
+  services: [
+    { id: 'public', label: 'Services publics', cats: ['public'], placeable: true },
+    // Pôles de transport (module hubs) : seules les entrées `hub` du catalogue (Port, Aéroport), pas leurs pièces.
+    { id: 'transport', label: 'Transports', cats: ['transport'], placeable: true },
+  ],
   environment: [
     { id: 'tree', label: 'Arbres', cats: ['tree'], placeable: false },
     { id: 'vegetation', label: 'Végétation', cats: ['vegetation'], placeable: false },
@@ -48,7 +52,7 @@ export const CATEGORY_FR: Record<AssetCategory, string> = {
 };
 
 export function assetsForTab(cat: AssetCatalog, tab: Tab): CatalogAsset[] {
-  return cat.assets.filter((a) => tab.cats.includes(a.category)).sort((a, b) => a.cost - b.cost);
+  return cat.assets.filter((a) => tab.cats.includes(a.category) && (a.category !== 'transport' || a.tags.includes('hub'))).sort((a, b) => a.cost - b.cost);
 }
 
 /** Coupe en travers d'un type de route (SVG), dessinée d'après le profil de la simulation. */
@@ -285,7 +289,7 @@ export class BuildBar {
       const bt = b.dataset['tool']; const bc = b.dataset['cat'];
       let active = false;
       if (this.open) active = (this.open === 'road' && bt === 'road') || (this.open === 'building' && bt === 'building') || this.open === bc;
-      else active = bt === t && (t === 'select' || t === 'bulldoze' || t === 'road') || (t === 'building' && ((bt === 'building' && m.asset?.category !== 'public') || (bc === 'services' && m.asset?.category === 'public')));
+      else active = bt === t && (t === 'select' || t === 'bulldoze' || t === 'road') || (t === 'building' && ((bt === 'building' && m.asset?.category !== 'public' && m.asset?.category !== 'transport') || (bc === 'services' && (m.asset?.category === 'public' || m.asset?.category === 'transport'))));
       b.classList.toggle('active', active);
     }
     this.markActive();

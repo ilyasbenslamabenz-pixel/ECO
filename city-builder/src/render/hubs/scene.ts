@@ -7,7 +7,7 @@
  */
 import * as THREE from 'three';
 import { rotAngle } from '../../shared/footprint';
-import { QUAY_DEPTH, hubLayout, hubToWorld, type HubPiece } from '../../shared/hubs/layout';
+import { hubLayout, hubToWorld, type HubPiece } from '../../shared/hubs/layout';
 import { movementPose, type MovementPose } from '../../shared/hubs/paths';
 import type { HubMovement, HubRecord } from '../../shared/hubs/types';
 import type { RenderPluginContext } from '../plugins/types';
@@ -123,7 +123,7 @@ export class HubsRenderer {
       this.pieces++;
       if (p.anim) this.addRig(view, p, holder); else this.addLod(p.asset, holder);
     }
-    if (h.type !== 'aeroport') this.addSlab(group, l.hx, l.hz);
+    if (h.type !== 'aeroport') this.addSlab(group, l.hx, l.hz, h.y - ((Number.isFinite(h.waterY) ? h.waterY : h.y - 3) - 4));
     group.updateMatrixWorld(true);
     return view;
   }
@@ -158,9 +158,9 @@ export class HubsRenderer {
     }).catch((e: unknown) => this.errors.push(`${p.asset} : ${String(e)}`)).finally(() => { this.loading--; });
   }
 
-  /** Terre-plein portuaire (béton) : dalle au niveau des quais avec jupe jusqu'au terrain. */
-  private addSlab(group: THREE.Group, hx: number, hz: number): void {
-    const w = hx * 2, d = hz * 2 - QUAY_DEPTH + 0.6;
+  /** Terre-plein portuaire (béton) : dalle au niveau des quais, mur jusque sous l'eau (`skirt` m), en retrait du front de quai. */
+  private addSlab(group: THREE.Group, hx: number, hz: number, skirtM: number): void {
+    const w = hx * 2, d = hz * 2 - 0.4;
     if (!this.slabMaterial) {
       this.slabMaterial = this.ctx.lib.load('port_quai_droit', 0).then((g) => {
         let best: THREE.MeshStandardMaterial | null = null;
@@ -178,7 +178,7 @@ export class HubsRenderer {
       });
     }
     void this.slabMaterial.then((mat) => {
-      const skirt = 10;
+      const skirt = Math.max(6, skirtM);
       const geo = new THREE.BoxGeometry(w, skirt, d);
       geo.translate(0, -skirt / 2 - 0.02, -hz + d / 2);
       const mesh = new THREE.Mesh(geo, mat);

@@ -209,11 +209,11 @@ export function airportNoiseLocal(lx: number, lz: number): number {
   const b = Math.abs(lz - RUNWAY_Z);
   const ax = Math.abs(lx);
   let L: number;
-  if (ax <= half) L = 78 - 20 * Math.log10(1 + Math.max(0, b - 30) / 60);
+  if (ax <= half) L = 78 - 25 * Math.log10(1 + Math.max(0, b - 30) / 60);
   else {
     const d = ax - half;
     const axis = 78 - 12 * Math.log10(1 + d / 150);
-    L = axis - 20 * Math.log10(1 + b / (60 + 0.12 * d));
+    L = axis - 25 * Math.log10(1 + b / (60 + 0.12 * d));
   }
   return Math.max(0, Math.min(100, (L - 45) * 2.2));
 }
