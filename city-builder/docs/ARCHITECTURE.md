@@ -64,6 +64,7 @@ réponse `{ kind:'result', reqId, ok:true, data }` ou `{ ok:false, error:{ code,
 | `terraform` | x, z, radius, delta | — | **NOT_IMPLEMENTED (phase 2)** |
 | `save` | slot | SaveFile JSON | partie en cours |
 | `load` | SaveFile | buildings (+ instantané) | format, version, assets connus |
+| `pluginCommand` | plugin, name, payload? | data? | forme (§9), module enregistré, puis le module |
 
 Worker -> main : `ready`, `result`, `snapshot`, `delta` (≈10/s), `log`.
 Feux tricolores (ajout rétrocompatible, QA n° 2) : `DeltaMessage.signals?: SignalFrame` = `{ version, states: Uint8Array
@@ -148,3 +149,53 @@ le terrain et le PRNG sont déterministes) ; (3) implémenter les interfaces de 
   bâtiments applique sa plage `uvq`).
 - **Tests en rendu logiciel** : `?norender` empêche la boucle d'affichage de démarrer ; les tests rendent les images à la
   demande (`__aube.renderNow`), car une image de la démo coûte 1 à 4 minutes sous SwiftShader.
+
+## 9. Points d'extension (phase 2)
+
+Préparation §0 de `docs/ROADMAP_PHASE2.md` : chaque module de phase 2 (`batiments`, `circulation`, `pietons`,
+`chantiers`) possède SES fichiers ; les registres communs (une ligne par module) existent déjà. Modules vides =
+aucun effet : la simulation est identique tick à tick avec ou sans registre (`tests/plugins/plugins.test.ts`).
+
+| Couche | Fichier du module (propriété `p2a-<module>`) | Registre / hôte commun |
+|---|---|---|
+| Simulation | `src/sim/plugins/<module>.ts` (`SimPlugin`) | `src/sim/plugins/index.ts` (`SIM_PLUGINS`), `types.ts`, `host.ts` (`PluginHost`) |
+| Protocole | `src/shared/protocol-ext/<module>.ts` (`<M>Delta`, `<M>Snapshot`, `<M>Commands`) | `src/shared/protocol-ext/index.ts` (`PHASE2_MODULES`, `deltaExt`, `snapshotExt`) |
+| Sauvegarde | `src/sim/save-sections/<module>.ts` (`<M>_SAVE_VERSION`, `migrate<M>`) | `src/sim/save-sections/index.ts` (`SAVE_SECTIONS`), `types.ts` (`runMigrations`) |
+| Rendu | `src/render/plugins/<module>.ts` (`RenderPlugin`) | `src/render/plugins/index.ts` (`RENDER_PLUGINS`, `RenderPluginHost`) |
+| Interface | `src/ui/panels/<module>.ts` (`UiPanel`) | `src/ui/panels/index.ts` (`UI_PANELS` ; importer `ui/panels/index`, `src/ui/panels.ts` existe) |
+| Tests | `tests/<module>/*.test.ts` | script `npm test` (inclut aussi `tests/plugins`) |
+
+**Simulation** (`SimPlugin`, tous crochets facultatifs) : `init(ctx)` au premier catalogue ; `onNewGame(ctx)` à chaque
+nouvelle partie et au début d'un chargement ; `load(ctx, data, version)` ensuite si la sauvegarde contient la section ;
+par tick : `onDayStart` / `onMonthStart` (après le traitement de base de l'événement) puis `onTick(ctx, minutes)` (après
+démographie et trafic) ; `takeDelta(ctx)` → `delta.ext[id]` ; `snapshot(ctx)` → `snapshot.ext[id]` ; `save(ctx)` →
+`save.plugins[id] = { v: saveVersion ?? 1, data, rng }` ; `command(ctx, name, payload)`. Toute exception est attrapée
+(journal console une fois par module et crochet, une notification joueur par module), jamais propagée à la boucle.
+
+**Façade `PluginContext`** (lecture seule) : `clock` (minutes, heure, jour, mois, saison, jour de semaine), `params`,
+`inGame`, `catalog` / `getAsset`, `terrain` (`heightAt`, `isWet`, `bounds`), `roads` (méthodes de consultation de
+`RoadNetwork`, dont `version`), `buildings` (colonnes SoA sans allocation, `indexOf`, `record`, `assetOf`, `query` par
+index spatial), `demography` (`population`, `households`, `report()`), `speed`, `rng` (PRNG **propre au module**, semé
+par la graine de la partie et l'id, sauvegardé avec la section : il ne perturbe jamais le PRNG de base), `notify`,
+`provide` / `use` (services inter-modules, ex. API des feux publiée par la circulation pour les piétons). Aucun objet
+interne mutable (économie, planificateur, PRNG de base) n'est exposé ; besoin supplémentaire → `docs/requests/<module>.md`.
+
+**Protocole** (ajouts rétrocompatibles) : `DeltaMessage.ext?` (clé absente si aucun module n'envoie rien),
+`SnapshotMessage.ext?`, commande `pluginCommand { plugin, name, payload? } -> { data? }` (forme validée par
+`validateCommandMessage` ; module non enregistré → `INVALID_ARGS « Module inconnu »` ; module sans commandes →
+`NOT_IMPLEMENTED` ; code d'erreur hors `CommandErrorCode` → `INVALID_ARGS` avec le code en préfixe). Les tableaux typés
+d'une charge utile sont copiés, sauf ceux listés sous `$transfer` (`PLUGIN_TRANSFER_KEY`), transférés.
+
+**Sauvegarde** : champ facultatif `plugins` (format v2 inchangé : les anciennes sauvegardes se chargent ; aucun champ
+écrit par des modules vides). Section d'un module inconnu ou de version plus récente : conservée telle quelle et
+réécrite. Section illisible ou `load` en erreur : notification, module remis à neuf, section d'origine conservée, le
+reste de la partie est chargé.
+
+**Rendu** (`RenderPlugin`) : `init({ scene, camera, renderer, sun, catalog, lib, heightAt, nightFactor })` après les
+systèmes de base ; `applySnapshotExt(snapshot.ext?.[id])` à chaque instantané (aussi avec `undefined`) ;
+`applyDeltaExt(payload)` quand `delta.ext[id]` est présent ; `frame(dt)` à chaque image ; `dispose()`. Exceptions
+attrapées (console.error une fois par module et crochet).
+
+**Banc de captures** : `npm run captures` (`tests/e2e/captures.mjs`) — 15 vues de la démo (aérien, horizon, rue,
+carrefour à feux, 4 quartiers, nuit, iPhone portrait) dans `tests/e2e/out/captures/` ; échec sur image quasi uniforme
+(écart-type < 10), erreur de page / console / requête ou modèle manquant.

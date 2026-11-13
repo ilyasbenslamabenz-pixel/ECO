@@ -60,5 +60,6 @@ export function handleCommand(sim: Simulation, raw: unknown): HandlerOutput {
       const e = sim.fromSave(msg.args.data);
       return e ? failure(e) : success({ buildings: sim.buildings.count }, true);
     }
+    case 'pluginCommand': { const r = sim.pluginCommand(msg.args); return r.ok ? success(r.data) : failure(r.error); }
   }
 }
