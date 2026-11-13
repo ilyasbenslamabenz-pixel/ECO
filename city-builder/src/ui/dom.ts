@@ -18,9 +18,30 @@ export function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: { cls?:
 
 const nf = new Intl.NumberFormat('fr-FR');
 export const fmt = (n: number): string => nf.format(Math.round(n));
-export const money = (n: number): string => `${fmt(n)} ¢`;
-export const signedMoney = (n: number): string => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))} ¢`;
+/** Monnaie affichée : franc suisse (CHF). Les montants internes et les sauvegardes sont inchangés. */
+export const CURRENCY = 'CHF';
+/** Montant complet : « 500 000 CHF ». */
+export const money = (n: number): string => `${n < 0 ? '−' : ''}${fmt(Math.abs(n))} ${CURRENCY}`;
+/** Montant signé complet : « +423 000 CHF ». */
+export const signedMoney = (n: number): string => `${n >= 0 ? '+' : '−'}${fmt(Math.abs(n))} ${CURRENCY}`;
+/** Nombre compact (« 12,5 M », « 423 k », « 9 800 ») : précision suffisante, chiffres jamais tronqués. */
+export function compact(n: number): string {
+  const a = Math.abs(n);
+  const s = n < 0 ? '−' : '';
+  const d = (v: number, max: number): string => v.toLocaleString('fr-FR', { maximumFractionDigits: max });
+  if (a >= 1e9) return `${s}${d(a / 1e9, a >= 1e10 ? 1 : 2)} Md`;
+  if (a >= 1e6) return `${s}${d(a / 1e6, a >= 1e8 ? 0 : a >= 1e7 ? 1 : 2)} M`;
+  if (a >= 1e5) return `${s}${d(a / 1e3, 0)} k`;
+  return `${s}${fmt(a)}`;
+}
+/** Montant compact : « 12,5 M CHF », « 500 000 CHF » (en dessous d'un million : montant complet). */
+export const moneyShort = (n: number): string => (Math.abs(n) >= 1e6 ? `${compact(n)} ${CURRENCY}` : money(n));
+/** Montant compact signé : « +423 k CHF ». */
+export const signedShort = (n: number): string => `${n >= 0 ? '+' : '−'}${compact(Math.abs(n))} ${CURRENCY}`;
+/** Textes venant d'autres couches (outils, simulation) : le symbole historique « ¢ » est affiché « CHF ». */
+export const chfText = (t: string): string => t.replace(/¢/g, CURRENCY);
+export const pct = (v: number, d = 0): string => `${(v * 100).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d })} %`;
 
 export const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
-export function phaseBadge(n: number): HTMLSpanElement { return el('span', { cls: 'phase', text: `Phase ${n}` }); }
+export function phaseBadge(n: number | string): HTMLSpanElement { return el('span', { cls: 'phase', text: `Phase ${n}` }); }

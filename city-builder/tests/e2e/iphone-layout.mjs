@@ -63,6 +63,18 @@ try {
             }
           }
         }
+        // Boutons tactiles visibles : au moins 40 px dans les deux dimensions.
+        for (const b of document.querySelectorAll('#hud button, #toolbar button, #minimap button, #bottom button')) {
+          const cs = getComputedStyle(b);
+          if (!b.offsetParent || cs.visibility === 'hidden') continue;
+          const r = b.getBoundingClientRect();
+          if (Math.min(r.width, r.height) < 39.5) res.push(`bouton trop petit ${b.id || b.dataset.tool || b.dataset.cat || b.dataset.speed || b.className} ${r.width.toFixed(0)}×${r.height.toFixed(0)}`);
+        }
+        // Chiffres entiers : aucune valeur de la barre supérieure tronquée.
+        for (const e of document.querySelectorAll('#hud b, #hud .delta, #hud-day, #hud-clock')) {
+          if (!e.offsetParent || !e.textContent) continue;
+          if (e.scrollWidth > e.clientWidth + 1 || e.textContent.includes('…')) res.push(`valeur tronquée ${e.id || e.className} « ${e.textContent} » (${e.scrollWidth} > ${e.clientWidth})`);
+        }
         return res.slice(0, 15);
       });
       await page.evaluate(() => window.__aube.pauseRender?.(true));

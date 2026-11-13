@@ -5,7 +5,7 @@
  */
 
 /** Nom original du jeu (fixé par l'architecte). */
-export const GAME_NAME = 'Aube Urbaine';
+export const GAME_NAME = 'Meknes City';
 export const GAME_VERSION = '0.1.0';
 
 /** Taille d'une case de la grille de simulation (mètres). */

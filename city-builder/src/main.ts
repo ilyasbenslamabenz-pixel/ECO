@@ -169,6 +169,7 @@ async function boot(): Promise<void> {
     roads: { segments: render.roads.net.segCount, nodes: render.roads.net.nodeCount }, camera: input.camera.mode,
   });
   const input = initInput(render.ctx.camera, canvas, (x, z) => render.terrain.heightAt(x, z));
+  ui.attachWorld({ heightAt: (x, z) => render.terrain.heightAt(x, z) });
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
   debug.signals = () => render.signals.debug();
@@ -272,6 +273,7 @@ async function boot(): Promise<void> {
     input.camera.bounds = terrainBounds(s.terrain);
     state.stats = s.stats;
     ui.updateStats(s.stats);
+    ui.moduleSnapshot(s.ext);
     ui.showHud(s.params.cityName);
     focusX = Infinity;
     firstSnapshot?.();
@@ -282,6 +284,7 @@ async function boot(): Promise<void> {
     // Copie pour les tests (les tampons sont ensuite confiés au rendu) : quelques centaines de nombres par trame.
     if (debug.trackVehicles && d.vehicles) debug.lastVehicles = { tick: d.tick, ids: Array.from(d.vehicles.ids ?? []), positions: Array.from(d.vehicles.positions.subarray(0, d.vehicles.count * 4)) };
     render.applyDelta(d);
+    if (d.ext) ui.moduleDelta(d.ext);
     state.stats = d.stats;
     debug.lastStats = d.stats;
     ui.updateStats(d.stats);
@@ -300,6 +303,7 @@ async function boot(): Promise<void> {
   await b.ready;
   debug.workerReady = true;
   ui.setExtPort(b);
+  ui.setModuleBridge({ pluginCommand: async (plugin, name, payload) => (await b.send('pluginCommand', { plugin, name, ...(payload !== undefined ? { payload } : {}) })).data });
   await b.send('init', { protocolVersion: PROTOCOL_VERSION, catalog });
 
   // Sauvegardes : IndexedDB (gzip) -> localStorage -> mémoire ; emplacements listés par l'interface.

@@ -1,8 +1,10 @@
 /**
- * Interface (DOM par-dessus le canvas) : écran de chargement, menu principal (nouvelle partie
- * paramétrée, chargement, options, démo, quitter), barre supérieure, barre de construction,
- * panneaux (information, finances), emplacements de sauvegarde, infobulles, notifications,
- * barre de confirmation tactile.
+ * Interface « Meknes City » (DOM par-dessus le canvas) : écran de chargement, menu principal (nouvelle
+ * partie paramétrée, chargement, options, démo, quitter), barre supérieure (vitesses, date, météo,
+ * population, satisfaction, trésorerie, statistiques, notifications, réglages), barre latérale de
+ * TABLEAUX DE BORD, barre inférieure d'OUTILS DE CONSTRUCTION avec sous-barre, panneaux à onglets à
+ * droite (feuille glissante sur téléphone), objectifs, mini-carte, emplacements de sauvegarde,
+ * infobulles, notifications, barre de confirmation tactile.
  *
  * Compatibilité : `initUI(handlers)` garde la signature de la fondation. Les fonctions
  * supplémentaires n'apparaissent QUE si le gestionnaire correspondant est fourni (sinon le bouton
@@ -12,6 +14,9 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import { CityPanels, type ExtPort } from './city-panels';
+import { Dashboards, ModuleHost, type ModuleBridge } from './dashboards';
+import { hydrateIcons, iconEl } from './icons';
+import { Minimap } from './minimap';
 import type { SimReport } from '../sim/sim-protocol';
 import type { CameraMode, SimStats } from '../shared/contracts';
 import type { SimSpeed } from '../shared/constants';
@@ -21,8 +26,9 @@ import type { ConstructionTools } from '../client/tools/machine';
 import type { CameraController } from '../input/camera';
 import type { ToolController, ToolUiHooks } from '../input/tools';
 import { BuildBar } from './buildbar';
-import { $, el, fmt, money, MONTHS, signedMoney } from './dom';
-import { FinanceChart, FinanceHistory } from './finance';
+import { $, chfText, el, fmt, money, moneyShort, signedShort } from './dom';
+import { FinanceHistory } from './finance';
+import { MONTHS_SHORT } from './charts';
 import { toast as showToast } from './notify';
 import { loadOptions, sanitizeOptions, saveOptions, type GraphicsOptions } from './options';
 import { InfoPanel } from './panels';
@@ -85,11 +91,19 @@ export interface UIHandle {
   setExtPort(p: ExtPort | null): void;
   /** Réinitialise l'historique financier (nouvelle partie / chargement). */
   resetFinance(): void;
+  /** Hauteur du terrain rendu (mini-carte). */
+  attachWorld(o: { heightAt: (x: number, z: number) => number }): void;
+  /** Commandes des modules de phase 2 (panneaux UiPanel). */
+  setModuleBridge(b: ModuleBridge | null): void;
+  /** États / deltas des modules de phase 2 (`snapshot.ext`, `delta.ext`). */
+  moduleSnapshot(ext: Record<string, unknown> | undefined): void;
+  moduleDelta(ext: Record<string, unknown> | undefined): void;
   readonly buildBar: BuildBar | null;
   readonly info: InfoPanel | null;
 }
 
 export function initUI(h: UIHandlers): UIHandle {
+  hydrateIcons();
   initTooltips();
   const menu = $('main-menu');
   const hud = $('hud');
@@ -181,7 +195,7 @@ export function initUI(h: UIHandlers): UIHandle {
   });
   optForm.addEventListener('submit', (e) => e.preventDefault());
 
-  /* ---------- Barre supérieure ---------- */
+  /* ---------- Barre supérieure : sauvegarde, menu, vitesses ---------- */
   $('btn-camera').addEventListener('click', () => h.onToggleCamera());
   const savePanel = $('save-panel');
   const renderSaveList = async (): Promise<void> => {
@@ -211,47 +225,80 @@ export function initUI(h: UIHandlers): UIHandle {
   const speedButtons = Array.from(hud.querySelectorAll<HTMLButtonElement>('[data-speed]'));
   for (const b of speedButtons) b.addEventListener('click', () => h.onSpeed(Number(b.dataset['speed']) as SimSpeed));
 
-  /* ---------- Finances ---------- */
+  /* ---------- Panneaux de droite : un seul ouvert à la fois ---------- */
   const history = new FinanceHistory();
-  const finPanel = $('finance-panel');
-  const chart = new FinanceChart($<HTMLCanvasElement>('fin-chart'), $('fin-tip'), history);
   let api: ConstructionUiApi | null = null;
   let lastStats: SimStats | null = null;
-  const btnFinance = $('btn-finance');
-  btnFinance.classList.remove('hidden');
-  const cityPanels = new CityPanels(showToast);
-  const toggleFinance = (): void => {
-    finPanel.classList.toggle('hidden');
-    if (!finPanel.classList.contains('hidden')) { $('pop-panel').classList.add('hidden'); renderFinance(); }
+  let cityName = '';
+  const modules = new ModuleHost(showToast);
+  let dash: Dashboards | null = null;
+  /** Ferme les panneaux de droite autres que `id` (finance, population, dash, info). */
+  const opened = (id: string): void => {
+    if (id !== 'finance') cityPanels.finPanel.classList.add('hidden');
+    if (id !== 'population') cityPanels.popPanel.classList.add('hidden');
+    if (id !== 'dash') dash?.hide();
+    if (id !== 'info' && info?.current) api?.tools.select(null);
+    if (id !== 'info') $('info-panel').classList.add('hidden');
+    queueMicrotask(() => dash?.syncSidebar());
   };
-  btnFinance.addEventListener('click', toggleFinance);
-  $('hud-money-btn').addEventListener('click', toggleFinance);
-  $('finance-close').addEventListener('click', () => finPanel.classList.add('hidden'));
-  $('finance-fold').addEventListener('click', () => finPanel.classList.toggle('folded'));
-  const renderFinance = (): void => {
-    const s = lastStats;
-    if (!s || finPanel.classList.contains('hidden')) return;
-    $('fin-money').textContent = money(s.money);
-    $('fin-pop').textContent = fmt(s.population);
-    const bal = $('fin-balance');
-    bal.textContent = signedMoney(s.monthlyBalance);
-    bal.className = s.monthlyBalance < 0 ? 'neg' : 'pos';
-    if (api) {
-      let ub = 0; let ur = 0;
-      const m = api.mirror;
-      for (const b of m.buildings.values()) ub += m.asset(b.assetId)?.upkeepPerMonth ?? 0;
-      for (const e of m.edges.values()) ur += e.length * (roadDef(e.kind ?? e.type)?.upkeepPerMeterMonth ?? 0);
-      $('fin-upkeep-b').textContent = `−${money(ub)} / mois`;
-      $('fin-upkeep-r').textContent = `−${money(ur)} / mois`;
-      $('fin-counts').textContent = `${fmt(m.buildings.size)} · ${fmt(s.roadLengthM)} m`;
-    } else {
-      $('fin-upkeep-b').textContent = '—'; $('fin-upkeep-r').textContent = '—';
-      $('fin-counts').textContent = `${fmt(s.buildings)} · ${fmt(s.roadLengthM)} m`;
-    }
-    $('fin-range').textContent = history.points.length ? `· ${history.points.length} jour${history.points.length > 1 ? 's' : ''} relevé${history.points.length > 1 ? 's' : ''}` : '';
-    chart.draw();
-    cityPanels.render();
+  const cityPanels = new CityPanels({
+    toast: showToast,
+    stats: () => lastStats,
+    counts: () => {
+      if (!api) return null;
+      let road = 0;
+      for (const e of api.mirror.edges.values()) road += e.length;
+      return { buildings: api.mirror.buildings.size, roadM: road };
+    },
+    history,
+    opened,
+  });
+  dash = new Dashboards({
+    report: () => cityPanels.report,
+    stats: () => lastStats,
+    mirror: () => api?.mirror ?? null,
+    camera: () => api?.camera ?? null,
+    cityName: () => cityName,
+    toggleCamera: () => h.onToggleCamera(),
+    openFinance: () => { if (cityPanels.financeOpen) cityPanels.finPanel.classList.add('hidden'); else cityPanels.openFinance(); },
+    openPop: () => { if (cityPanels.popOpen) cityPanels.popPanel.classList.add('hidden'); else cityPanels.openPop(); },
+    opened,
+    modules,
+  });
+  const dashboards = dash;
+  for (const id of ['finance-close', 'pop-close']) $(id).addEventListener('click', () => dashboards.syncSidebar());
+  $('hud-money-btn').addEventListener('click', () => { cityPanels.toggleFinance(); dashboards.syncSidebar(); });
+  $('hud-pop-btn').addEventListener('click', () => { cityPanels.togglePop(); dashboards.syncSidebar(); });
+  $('hud-happy-btn').addEventListener('click', () => { if (cityPanels.popOpen) cityPanels.popPanel.classList.add('hidden'); else cityPanels.openPop('overview'); dashboards.syncSidebar(); });
+
+  /* ---------- Barre latérale (tiroir sur téléphone) ---------- */
+  const sideBtn = $('btn-sidebar');
+  const setSidebar = (open: boolean): void => {
+    document.body.classList.toggle('sidebar-open', open);
+    sideBtn.setAttribute('aria-expanded', String(open));
+    sideBtn.classList.toggle('active', open);
   };
+  sideBtn.addEventListener('click', () => setSidebar(!document.body.classList.contains('sidebar-open')));
+  $('sidebar-scrim').addEventListener('click', () => setSidebar(false));
+
+  /* ---------- Objectifs (phase 2C : aucun objectif simulé, panneau discret repliable) ---------- */
+  const objToggle = $('obj-toggle');
+  objToggle.addEventListener('click', () => {
+    const open = $('obj-body').classList.toggle('hidden') === false;
+    objToggle.setAttribute('aria-expanded', String(open));
+    $('objectives').classList.toggle('open', open);
+  });
+
+  /* ---------- Mesures de mise en page (feuilles sur téléphone : entre la barre du haut et les outils) ---------- */
+  const rootStyle = document.documentElement.style;
+  const measure = (): void => {
+    const hr = hud.getBoundingClientRect();
+    const tr = toolbar.getBoundingClientRect();
+    if (hr.height) rootStyle.setProperty('--hud-h', `${Math.round(hr.bottom)}px`);
+    if (tr.height) rootStyle.setProperty('--tb-h', `${Math.max(0, Math.round(window.innerHeight - tr.top))}px`);
+  };
+  if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(measure); ro.observe(hud); ro.observe(toolbar); }
+  window.addEventListener('resize', measure);
 
   /* ---------- Clavier global ---------- */
   window.addEventListener('keydown', (e) => {
@@ -264,8 +311,10 @@ export function initUI(h: UIHandlers): UIHandle {
         if (sub) showScreen('home'); else if (inGameFlag) h.onContinue();
         return;
       }
-      if (!finPanel.classList.contains('hidden')) { finPanel.classList.add('hidden'); return; }
-      if (!$('pop-panel').classList.contains('hidden')) { $('pop-panel').classList.add('hidden'); return; }
+      if (document.body.classList.contains('sidebar-open')) { setSidebar(false); return; }
+      if (cityPanels.financeOpen) { cityPanels.finPanel.classList.add('hidden'); dashboards.syncSidebar(); return; }
+      if (cityPanels.popOpen) { cityPanels.popPanel.classList.add('hidden'); dashboards.syncSidebar(); return; }
+      if (dashboards.current) { dashboards.close(); return; }
       if (!hud.classList.contains('hidden')) h.onMenu();
       return;
     }
@@ -281,14 +330,44 @@ export function initUI(h: UIHandlers): UIHandle {
   });
 
   let currentSpeed: SimSpeed = 1;
-  const elDate = $('hud-date');
+  let lastFinRender = 0;
+  const elDay = $('hud-day');
+  const elClock = $('hud-clock');
   const elMoney = $('hud-money');
   const elBalance = $('hud-balance');
   const elPop = $('hud-pop');
+  const elPopDelta = $('hud-pop-delta');
+  const elHappy = $('hud-happy');
   let buildBar: BuildBar | null = null;
   let info: InfoPanel | null = null;
+  let minimap: Minimap | null = null;
+  let heightAt: ((x: number, z: number) => number) | null = null;
   const cursorTag = $('cursor-tag');
   const touchBar = $('touch-confirm');
+  const ensureMinimap = (): void => {
+    if (minimap || !api || !heightAt) return;
+    minimap = new Minimap({ camera: api.camera, mirror: api.mirror, heightAt });
+    (window as unknown as { __aubeMinimap?: Minimap }).__aubeMinimap = minimap;
+  };
+  /** Satisfaction et variation de population : rapport de la simulation (jamais inventées). */
+  const renderReportStats = (): void => {
+    const r = cityPanels.report;
+    if (!r) return;
+    const d = r.demography;
+    const net = d.month.immigrants + d.month.births - d.month.emigrants - d.month.deaths;
+    elPopDelta.textContent = `${net >= 0 ? '+' : '−'}${fmt(Math.abs(net))}`;
+    elPopDelta.className = `delta ${net > 0 ? 'pos' : net < 0 ? 'neg' : ''}`;
+    $('hud-pop-btn').dataset['tip'] = `Habitants — variation ce mois : ${elPopDelta.textContent} (arrivées + naissances − départs − décès). Ouvrir Population.`;
+    const happyBtn = $('hud-happy-btn');
+    if (d.population > 0) {
+      const v = Math.round(d.happiness);
+      elHappy.textContent = `${fmt(v)} %`;
+      const mood = v >= 60 ? 'smile' : v >= 40 ? 'meh' : 'frown';
+      const ico = happyBtn.querySelector('svg');
+      if (ico && ico.dataset['mood'] !== mood) { const n = iconEl(mood, 'ic-happy'); n.dataset['mood'] = mood; ico.replaceWith(n); }
+      happyBtn.dataset['level'] = v >= 60 ? 'good' : v >= 40 ? 'mid' : 'bad';
+    } else { elHappy.textContent = '—'; happyBtn.dataset['level'] = ''; }
+  };
 
   const handle: UIHandle = {
     setLoading(p, text) {
@@ -306,28 +385,40 @@ export function initUI(h: UIHandlers): UIHandle {
       menu.classList.remove('hidden');
     },
     hideMenu() { menu.classList.add('hidden'); },
-    showHud(cityName) {
-      $('hud-city').textContent = cityName;
-      hud.classList.remove('hidden');
-      toolbar.classList.remove('hidden');
+    showHud(name) {
+      cityName = name;
+      $('hud-city').textContent = name;
+      for (const id of ['hud', 'toolbar', 'sidebar', 'bottom', 'objectives']) $(id).classList.remove('hidden');
+      document.body.classList.add('in-game');
+      measure();
+      minimap?.invalidate();
     },
     updateStats(s) {
       lastStats = s;
       const d = s.date;
-      elDate.textContent = `${d.day} ${MONTHS[d.month - 1]} an ${d.year} · ${String(d.hour).padStart(2, '0')}:${String(d.minute).padStart(2, '0')}`;
-      elMoney.textContent = money(s.money);
+      elDay.textContent = `${d.day} ${MONTHS_SHORT[d.month - 1] ?? ''} an ${d.year}`;
+      elClock.textContent = `${String(d.hour).padStart(2, '0')}:${String(d.minute).padStart(2, '0')}`;
+      elMoney.textContent = moneyShort(s.money);
       elMoney.classList.toggle('neg', s.money < 0);
-      elBalance.textContent = signedMoney(s.monthlyBalance);
+      elBalance.replaceChildren(signedShort(s.monthlyBalance), el('span', { cls: 'per', text: ' / mois' }));
       elBalance.classList.toggle('neg', s.monthlyBalance < 0);
       elBalance.classList.toggle('pos', s.monthlyBalance > 0);
       elPop.textContent = fmt(s.population);
       currentSpeed = s.speed;
-      for (const b of speedButtons) b.classList.toggle('active', Number(b.dataset['speed']) === s.speed);
-      if (history.push(s)) renderFinance(); else if (!finPanel.classList.contains('hidden')) renderFinance();
+      for (const b of speedButtons) { const on = Number(b.dataset['speed']) === s.speed; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); }
+      const newDay = history.push(s);
+      // Panneau Finances : trésorerie à jour, sans redessiner les graphiques à chaque delta (≤ 2 fois/s).
+      const now = performance.now();
+      if (cityPanels.financeOpen && (newDay || now - lastFinRender > 500)) { lastFinRender = now; cityPanels.renderFinance(); }
     },
     setCameraMode(m) {
       const b = $('btn-camera');
-      (b.querySelector('.tl') ?? b).textContent = m === 'aerial' ? 'Vue rue' : 'Vue aérienne';
+      const label = m === 'aerial' ? 'Vue rue' : 'Vue aérienne';
+      (b.querySelector('.tl') ?? b).textContent = label;
+      b.classList.toggle('active', m === 'street');
+      const ico = b.querySelector('svg');
+      if (ico) ico.replaceWith(iconEl(m === 'aerial' ? 'walk' : 'eye'));
+      if (dashboards.current === 'city') dashboards.render(true);
     },
     toast(text, kind = 'info') { showToast(text, kind); },
     setMenuFoot(text) { $('menu-foot').textContent = text; },
@@ -335,7 +426,7 @@ export function initUI(h: UIHandlers): UIHandle {
       return {
         cursorTag(text, kind, sx, sy) {
           if (!text) { cursorTag.classList.add('hidden'); return; }
-          cursorTag.textContent = text;
+          cursorTag.textContent = chfText(text);
           cursorTag.className = kind;
           cursorTag.style.left = `${sx}px`;
           cursorTag.style.top = `${sy}px`;
@@ -347,7 +438,10 @@ export function initUI(h: UIHandlers): UIHandle {
           $('tc-rotate').classList.toggle('hidden', !o.canRotate);
           touchBar.classList.remove('hidden');
         },
-        selection(p: PickResult | null) { info?.show(p); },
+        selection(p: PickResult | null) {
+          if (p) opened('info');
+          info?.show(p);
+        },
       };
     },
     enableConstruction(a) {
@@ -357,16 +451,21 @@ export function initUI(h: UIHandlers): UIHandle {
       $('tc-ok').addEventListener('click', () => a.tools.confirmTouch());
       $('tc-rotate').addEventListener('click', () => a.tools.rotate());
       $('tc-cancel').addEventListener('click', () => a.tools.cancelTouch());
-      const cine = $('btn-cinematic');
-      cine.classList.remove('hidden');
-      cine.addEventListener('click', () => a.camera.toggleCinematic());
-      a.camera.setCinematicListener((on) => { cine.setAttribute('aria-pressed', String(on)); cine.classList.toggle('active', on); });
-      a.mirror.onChange(() => { if (!finPanel.classList.contains('hidden')) renderFinance(); });
+      a.mirror.onChange(() => { if (cityPanels.financeOpen) cityPanels.renderFinance(); });
+      ensureMinimap();
     },
     currentOptions: () => loadOptions(),
-    resetFinance() { history.reset(); cityPanels.reset(); renderFinance(); },
-    updateReport(r) { cityPanels.update(r); },
+    resetFinance() { history.reset(); cityPanels.reset(); cityPanels.renderFinance(); },
+    updateReport(r) {
+      cityPanels.update(r);
+      renderReportStats();
+      dashboards.render();
+    },
     setExtPort(p) { cityPanels.setPort(p); },
+    attachWorld(o) { heightAt = o.heightAt; ensureMinimap(); },
+    setModuleBridge(b) { modules.bridge = b; },
+    moduleSnapshot(ext) { modules.setSnapshot(ext); },
+    moduleDelta(ext) { modules.pushDelta(ext); },
     get buildBar() { return buildBar; },
     get info() { return info; },
   };
