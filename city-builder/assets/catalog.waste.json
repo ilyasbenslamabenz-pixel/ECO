@@ -68,6 +68,18 @@
               "color": "#2f62b0"
             }
           }
+        },
+        {
+          "id": "sable",
+          "nameFr": "Bardage sable, bandeau brique",
+          "materialOverrides": {
+            "facade": {
+              "color": "#e3d6bd"
+            },
+            "facade_b": {
+              "color": "#a5523a"
+            }
+          }
         }
       ],
       "textureSets": [
@@ -166,6 +178,15 @@
           "materialOverrides": {
             "facade_b": {
               "color": "#4f7fb5"
+            }
+          }
+        },
+        {
+          "id": "anthracite",
+          "nameFr": "Bardage anthracite et vert",
+          "materialOverrides": {
+            "facade": {
+              "color": "#6d7377"
             }
           }
         }
@@ -267,6 +288,18 @@
               "color": "#b07a52"
             }
           }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Béton blanc, caissons bleu nuit",
+          "materialOverrides": {
+            "facade": {
+              "color": "#f0eee8"
+            },
+            "facade_b": {
+              "color": "#3b4a66"
+            }
+          }
         }
       ],
       "textureSets": [
@@ -358,6 +391,25 @@
         {
           "id": "origine",
           "nameFr": "Casier sur géomembrane, digues en terre"
+        },
+        {
+          "id": "herbe",
+          "nameFr": "Digues enherbées",
+          "materialOverrides": {
+            "terre": {
+              "textureSet": "terrain_herbe",
+              "color": "#93a865"
+            }
+          }
+        },
+        {
+          "id": "loge_bleue",
+          "nameFr": "Loge bleue",
+          "materialOverrides": {
+            "facade": {
+              "color": "#9fb6cf"
+            }
+          }
         }
       ],
       "textureSets": [
@@ -369,6 +421,7 @@
         "route_asphalte",
         "sol_beton_brut",
         "terrain_gravier",
+        "terrain_herbe",
         "terrain_terre",
         "toit_tole_ondulee"
       ],

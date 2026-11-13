@@ -93,3 +93,11 @@ l'onglet « Services publics » existant (catégorie `public`).
 ## 7. FEATURES.md (proposition de lignes, section « Partiel »)
 
 | Déchets : production par bâtiment, bacs, tournées de camions-bennes sur le graphe routier, tri / recyclage / incinération / décharge, pollution et nuisances, panneau, calque | Camions simulés et dessinés par le module (pas dans le trafic : §2) ; recettes et dépenses non appliquées à la trésorerie (§6) ; panneau monté provisoirement (touche J, §5) | 2B.6 |
+
+## 8. Défaut préexistant constaté (hors module) : onglet figé puis planté en ×16 sans boucle d'affichage
+
+Sonde (`?autostart&seed=11&norender`, `setSpeed 16`, partie vide, Chromium SwiftShader) : l'horloge avance
+normalement jusqu'à ≈ minute 5 350 de jeu, puis une évaluation dans la page prend 37 s et l'onglet se ferme
+(« Target page, context or browser has been closed »). **Reproduit à l'identique sur la base 1cebbc6
+(p2b-municipal, sans le module déchets)**. En ×4, aucun blocage sur 60 s. Le parcours `tests/dechets/e2e.mjs`
+reste sous ce seuil (×8, ≈ 1,4 jour de jeu). À examiner par le cœur / la circulation.

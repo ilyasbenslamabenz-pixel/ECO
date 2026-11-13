@@ -67,6 +67,7 @@ export const depot: BuildingDef = {
   variants: [
     { id: 'origine', nameFr: 'Bardage clair, bandeau vert propreté' },
     { id: 'gris', nameFr: 'Bardage gris, bandeau bleu', materialOverrides: { facade: { color: '#b9bec2' }, facade_b: { color: '#2f62b0' } } },
+    { id: 'sable', nameFr: 'Bardage sable, bandeau brique', materialOverrides: { facade: { color: '#e3d6bd' }, facade_b: { color: '#a5523a' } } },
   ],
   build(ctx: Ctx): void {
     // Sol de la parcelle (emprise complète : origine centrée).
@@ -150,6 +151,7 @@ export const centreTri: BuildingDef = {
   variants: [
     { id: 'origine', nameFr: 'Bardage clair et vert' },
     { id: 'bleu', nameFr: 'Bardage clair et bleu', materialOverrides: { facade_b: { color: '#4f7fb5' } } },
+    { id: 'anthracite', nameFr: 'Bardage anthracite et vert', materialOverrides: { facade: { color: '#6d7377' } } },
   ],
   build(ctx: Ctx): void {
     slab(ctx, 'beton', -19.6, -15.6, 19.6, 15.6, 0, 0.08);
@@ -223,6 +225,7 @@ export const incinerateur: BuildingDef = {
   variants: [
     { id: 'origine', nameFr: 'Béton clair, caissons gris' },
     { id: 'cuivre', nameFr: 'Béton clair, caissons cuivrés', materialOverrides: { facade_b: { color: '#b07a52' } } },
+    { id: 'blanc', nameFr: 'Béton blanc, caissons bleu nuit', materialOverrides: { facade: { color: '#f0eee8' }, facade_b: { color: '#3b4a66' } } },
   ],
   build(ctx: Ctx): void {
     slab(ctx, 'beton', -19.6, -15.6, 19.6, 15.6, 0, 0.08);
@@ -299,7 +302,11 @@ export const decharge: BuildingDef = {
     eau: M('enduit_peint', '#4d6b5c', { roughness: 0.15 }),
     lettres: M('enduit_peint', '#2f5c3a'),
   }),
-  variants: [{ id: 'origine', nameFr: 'Casier sur géomembrane, digues en terre' }],
+  variants: [
+    { id: 'origine', nameFr: 'Casier sur géomembrane, digues en terre' },
+    { id: 'herbe', nameFr: 'Digues enherbées', materialOverrides: { terre: { textureSet: 'terrain_herbe', color: '#93a865' } } },
+    { id: 'loge_bleue', nameFr: 'Loge bleue', materialOverrides: { facade: { color: '#9fb6cf' } } },
+  ],
   build(ctx: Ctx): void {
     // Plate-forme en grave (emprise complète).
     slab(ctx, 'gravier', -31.6, -31.6, 31.6, 31.6, 0, 0.06);

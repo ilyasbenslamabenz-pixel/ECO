@@ -80,4 +80,8 @@ réglages (fréquence, part de tri, financement), case du calque. Montage provis
 
 ## 5. Preuves
 
-Voir le compte rendu de la branche (commandes et résultats). Tests d'effet : `tests/dechets/effets.test.ts`.
+2026-11-13 : `npm run typecheck` ✓ ; `npm test` 210/210 (dont 10 `tests/dechets`, 3 tests d'effet) ; `npm run build` ✓
+(dist 45,21 Mo / 60 ; **+0,97 Mo** par rapport à la base p2b-municipal : GLB déchets compressés 0,93 Mo, code et
+catalogue le reste) ; `npm run e2e` SUCCÈS ; `node tests/dechets/e2e.mjs` SUCCÈS (28 contrôles, 5 captures regardées dans
+`tests/dechets/out/`) ; `npm run validate:visual` SUCCÈS (6 modèles déchets chargés, planche-contact regardée) ;
+`tools/assets/validate.ts` : OK pour les 6 modèles une fois la source `tools/waste/` autorisée (docs/requests/dechets.md §3).
