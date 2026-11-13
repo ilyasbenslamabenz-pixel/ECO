@@ -56,6 +56,11 @@ Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration)
 | Build : `dist/index.html` + `dist/artifact.html` (fragment) + `game.js` + `sim.worker.js` + `assets/` relatifs ; budget ≤ 60 Mo (≈ 42 Mo) | `npm run build` |
 | Test de charge (500 bâtiments, 1 000 véhicules) et mesures | `npm run stress` → `tests/e2e/out/stress-rapport.json` (chiffres dans `PROJECT_STATUS.md`) |
 
+### Zonage et croissance automatique (phase 2B)
+| Fonctionnalité | Preuve |
+|---|---|
+| Outil Zones (souris / doigt) : résidentiel faible, moyen, dense, commerces, bureaux, industrie, Retirer, profondeur 1–4 cases, superposition instanciée visible avec l'outil ; croissance façade vers la route avec chantiers, jauge R/C/B/I, densification ; sauvegarde versionnée | `tests/zonage/*.test.ts` (19 tests), `tests/zonage/e2e.mjs`, captures `docs/captures-zonage/`, `docs/ZONAGE.md` |
+
 ## Partiel (fonctionne, avec limites connues)
 | Fonctionnalité | Limite | Phase |
 |---|---|---|
