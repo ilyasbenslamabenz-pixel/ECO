@@ -11,6 +11,8 @@
  * appelé par `initConstruction()` (src/input/construction.ts).
  * Propriétaire : agent construction/caméra/UI.
  */
+import { CityPanels, type ExtPort } from './city-panels';
+import type { SimReport } from '../sim/sim-protocol';
 import type { CameraMode, SimStats } from '../shared/contracts';
 import type { SimSpeed } from '../shared/constants';
 import type { PickResult, WorldMirror } from '../client/tools/mirror';
@@ -77,6 +79,10 @@ export interface UIHandle {
   enableConstruction(api: ConstructionUiApi): void;
   /** Options graphiques mémorisées. */
   currentOptions(): GraphicsOptions;
+  /** Rapport périodique de la simulation (finances détaillées, population). */
+  updateReport(r: SimReport): void;
+  /** Port des commandes étendues (impôts, emprunts, rapport). */
+  setExtPort(p: ExtPort | null): void;
   /** Réinitialise l'historique financier (nouvelle partie / chargement). */
   resetFinance(): void;
   readonly buildBar: BuildBar | null;
@@ -213,7 +219,11 @@ export function initUI(h: UIHandlers): UIHandle {
   let lastStats: SimStats | null = null;
   const btnFinance = $('btn-finance');
   btnFinance.classList.remove('hidden');
-  const toggleFinance = (): void => { finPanel.classList.toggle('hidden'); if (!finPanel.classList.contains('hidden')) renderFinance(); };
+  const cityPanels = new CityPanels(showToast);
+  const toggleFinance = (): void => {
+    finPanel.classList.toggle('hidden');
+    if (!finPanel.classList.contains('hidden')) { $('pop-panel').classList.add('hidden'); renderFinance(); }
+  };
   btnFinance.addEventListener('click', toggleFinance);
   $('hud-money-btn').addEventListener('click', toggleFinance);
   $('finance-close').addEventListener('click', () => finPanel.classList.add('hidden'));
@@ -222,7 +232,7 @@ export function initUI(h: UIHandlers): UIHandle {
     const s = lastStats;
     if (!s || finPanel.classList.contains('hidden')) return;
     $('fin-money').textContent = money(s.money);
-    $('fin-pop').textContent = `${fmt(s.population)} (démographie : phase 2)`;
+    $('fin-pop').textContent = fmt(s.population);
     const bal = $('fin-balance');
     bal.textContent = signedMoney(s.monthlyBalance);
     bal.className = s.monthlyBalance < 0 ? 'neg' : 'pos';
@@ -230,7 +240,7 @@ export function initUI(h: UIHandlers): UIHandle {
       let ub = 0; let ur = 0;
       const m = api.mirror;
       for (const b of m.buildings.values()) ub += m.asset(b.assetId)?.upkeepPerMonth ?? 0;
-      for (const e of m.edges.values()) ur += e.length * (roadDef(e.type)?.upkeepPerMeterMonth ?? 0);
+      for (const e of m.edges.values()) ur += e.length * (roadDef(e.kind ?? e.type)?.upkeepPerMeterMonth ?? 0);
       $('fin-upkeep-b').textContent = `−${money(ub)} / mois`;
       $('fin-upkeep-r').textContent = `−${money(ur)} / mois`;
       $('fin-counts').textContent = `${fmt(m.buildings.size)} · ${fmt(s.roadLengthM)} m`;
@@ -240,6 +250,7 @@ export function initUI(h: UIHandlers): UIHandle {
     }
     $('fin-range').textContent = history.points.length ? `· ${history.points.length} jour${history.points.length > 1 ? 's' : ''} relevé${history.points.length > 1 ? 's' : ''}` : '';
     chart.draw();
+    cityPanels.render();
   };
 
   /* ---------- Clavier global ---------- */
@@ -254,6 +265,7 @@ export function initUI(h: UIHandlers): UIHandle {
         return;
       }
       if (!finPanel.classList.contains('hidden')) { finPanel.classList.add('hidden'); return; }
+      if (!$('pop-panel').classList.contains('hidden')) { $('pop-panel').classList.add('hidden'); return; }
       if (!hud.classList.contains('hidden')) h.onMenu();
       return;
     }
@@ -350,7 +362,9 @@ export function initUI(h: UIHandlers): UIHandle {
       a.mirror.onChange(() => { if (!finPanel.classList.contains('hidden')) renderFinance(); });
     },
     currentOptions: () => loadOptions(),
-    resetFinance() { history.reset(); renderFinance(); },
+    resetFinance() { history.reset(); cityPanels.reset(); renderFinance(); },
+    updateReport(r) { cityPanels.update(r); },
+    setExtPort(p) { cityPanels.setPort(p); },
     get buildBar() { return buildBar; },
     get info() { return info; },
   };

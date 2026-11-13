@@ -250,7 +250,9 @@ const FRAG_MAIN = /* glsl */ `
     albs[0] *= mix(uGrassDry, uGrassLush, smoothstep(0.25, 0.8, moist + (mac.g - 0.5) * 0.35)) * mix(1.0, 0.94, far);
     float lr = dot(albs[2], vec3(0.299, 0.587, 0.114));
     albs[2] = mix(albs[2], vec3(lr) * vec3(1.02, 0.99, 0.94), 0.78);
-    albs[1] *= mix(1.0, 0.72, forestD);
+    // Sous-bois : mousse et végétation basse (vert sombre) plutôt que terre brune, pour que les massifs
+    // forestiers se lisent comme une canopée continue vus de haut.
+    albs[1] = mix(albs[1], albs[1] * vec3(0.52, 0.70, 0.40) + vec3(0.02, 0.05, 0.015), smoothstep(0.15, 0.7, forestD));
     // Mélange par hauteur : transitions franches et naturelles.
     float wsum = 0.0;
     for (int k = 0; k < 5; k++) { hb[k] = max(hb[k] - hmax * 0.55, 0.0); wsum += hb[k]; }

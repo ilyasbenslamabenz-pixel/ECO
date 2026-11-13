@@ -32,6 +32,7 @@ import {
 } from '../shared/contracts';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage } from '../shared/protocol';
 import { dist2 } from '../shared/math';
+import { distSegmentObb, footprintObb, makeObb, normRot, obbAabb, obbOverlap, obbToWorld, pointInObb, type Obb } from '../shared/footprint';
 import { terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
 import { GameClock, MINUTES_PER_DAY, MINUTES_PER_MONTH, MINUTES_PER_YEAR, formatDateFr } from './clock';
 import { DEMOLISH_REFUND_RATE, Economy } from './economy';
@@ -125,8 +126,8 @@ export class Simulation {
   private readonly q: number[] = [];
   private readonly q2: number[] = [];
 
-  /** Occupation des cases : 0 = libre, sinon id du bâtiment. */
-  private occupancy = new Int32Array(0);
+  /** Empreintes orientées des bâtiments (collisions exactes, angle libre). */
+  private readonly obbs = new Map<number, Obb>();
   private tilesPerSide = 0;
   private nextBuildingId = 1;
   private roadLength = 0;
@@ -180,7 +181,7 @@ export class Simulation {
     this.segInfo.clear();
     this.pendingPatch = null;
     this.tilesPerSide = this.terrain.samplesX - 1;
-    this.occupancy = new Int32Array(this.tilesPerSide * this.tilesPerSide);
+    this.obbs.clear();
     const size = this.tilesPerSide * TILE_SIZE;
     this.buildingIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
     this.edgeIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
@@ -258,9 +259,8 @@ export class Simulation {
   canHostDecor(x: number, z: number): boolean {
     const t = this.terrain;
     if (!t || !Number.isFinite(this.groundHeight(x, z)) || this.wetAt(x, z)) return false;
-    const i = Math.floor((x - t.originX) / TILE_SIZE), j = Math.floor((z - t.originZ) / TILE_SIZE);
-    if (i < 0 || j < 0 || i >= this.tilesPerSide || j >= this.tilesPerSide || this.occupancy[j * this.tilesPerSide + i] !== 0) return false;
-    return this.roadClearance(x - 0.5, z - 0.5, x + 0.5, z + 0.5, MAX_ROAD_HALF_WIDTH) > 0.3;
+    if (this.buildingAtPoint(x, z, 0.5) !== 0) return false;
+    return this.roadClearance(makeObb(x, z, 0.5, 0.5, 0), MAX_ROAD_HALF_WIDTH) > 0.3;
   }
 
   /** Vrai si de l'eau recouvre le terrain en (x, z) (mer, lac, rivière ; échantillons voisins). */
@@ -306,28 +306,44 @@ export class Simulation {
 
   /* ---------------------------- Bâtiments ---------------------------- */
 
-  /** Calcule l'empreinte alignée sur la grille pour un placement demandé. */
-  footprintFor(asset: CatalogAsset, x: number, z: number, rot: number): { cx: number; cz: number; tx: number; tz: number; i0: number; j0: number } {
-    const r = ((Math.round(rot) % 4) + 4) % 4;
-    const tx = r % 2 === 0 ? asset.footprint.tilesX : asset.footprint.tilesZ;
-    const tz = r % 2 === 0 ? asset.footprint.tilesZ : asset.footprint.tilesX;
-    const t = this.terrain!;
-    const i0 = Math.round((x - t.originX) / TILE_SIZE - tx / 2);
-    const j0 = Math.round((z - t.originZ) / TILE_SIZE - tz / 2);
-    return { cx: t.originX + (i0 + tx / 2) * TILE_SIZE, cz: t.originZ + (j0 + tz / 2) * TILE_SIZE, tx, tz, i0, j0 };
+  /** Empreinte orientée d'un modèle posé en (x, z) avec la rotation `rot` (quarts de tour, décimal possible). */
+  obbFor(asset: CatalogAsset, x: number, z: number, rot: number): Obb {
+    return footprintObb(asset.footprint.tilesX, asset.footprint.tilesZ, x, z, rot);
   }
 
-  /** Plus petite marge (distance - demi-largeur) entre un rectangle et les routes voisines (tronçons courbes). */
-  private roadClearance(minX: number, minZ: number, maxX: number, maxZ: number, reach: number): number {
+  /** Bâtiment dont l'empreinte contient le point (marge en m), 0 sinon. */
+  private buildingAtPoint(x: number, z: number, margin: number): number {
+    this.buildingIndex.query(x - margin, z - margin, x + margin, z + margin, this.q);
+    for (const id of this.q) {
+      const o = this.obbs.get(id);
+      if (o && pointInObb(o, x, z, margin)) return id;
+    }
+    return 0;
+  }
+
+  /** Premier bâtiment dont l'empreinte recouvre `o` (0 si aucun). */
+  private overlappingBuilding(o: Obb): number {
+    const bb = obbAabb(o);
+    this.buildingIndex.query(bb.minX, bb.minZ, bb.maxX, bb.maxZ, this.q);
+    for (const id of this.q) {
+      const other = this.obbs.get(id);
+      if (other && obbOverlap(o, other, 0.05)) return id;
+    }
+    return 0;
+  }
+
+  /** Plus petite marge (distance - demi-largeur) entre une empreinte orientée et les routes voisines (tronçons courbes). */
+  private roadClearance(o: Obb, reach: number): number {
     let best = Infinity;
-    this.edgeIndex.query(minX - reach, minZ - reach, maxX + reach, maxZ + reach, this.q2);
+    const bb = obbAabb(o);
+    this.edgeIndex.query(bb.minX - reach, bb.minZ - reach, bb.maxX + reach, bb.maxZ + reach, this.q2);
     for (const id of this.q2) {
       const poly = this.segPolys.get(id);
       const info = this.segInfo.get(id);
       if (!poly || !info) continue;
       const half = halfWidth(info.kind);
       for (let k = 0; k + 3 < poly.length; k += 2) {
-        const d = distSegmentRect(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, minX, minZ, maxX, maxZ) - half;
+        const d = distSegmentObb(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, o) - half;
         if (d < best) best = d;
       }
     }
@@ -339,44 +355,38 @@ export class Simulation {
     const asset = this.getAsset(a.assetId);
     if (!asset) return fail('UNKNOWN_ASSET', `Modèle inconnu : ${a.assetId}`);
     if (!isBuildingCategory(asset.category)) return fail('INVALID_ARGS', `${asset.nameFr} n'est pas un bâtiment`);
-    const rot = ((Math.round(a.rot) % 4) + 4) % 4;
+    // Angle libre (quarts de tour décimaux) et position libre au centimètre : un bâtiment peut
+    // border une route en biais ou courbe ; seules les collisions exactes décident.
+    const rot = normRot(a.rot);
     const variant = a.variant ?? -1;
     if (variant >= asset.variants.length || variant < -1 || !Number.isInteger(variant)) return fail('INVALID_ARGS', 'Variante inexistante');
-    const f = this.footprintFor(asset, a.x, a.z, rot);
-    if (f.i0 < 0 || f.j0 < 0 || f.i0 + f.tx > this.tilesPerSide || f.j0 + f.tz > this.tilesPerSide) {
-      return fail('OUT_OF_BOUNDS', 'Emplacement hors de la carte');
-    }
-    for (let j = f.j0; j < f.j0 + f.tz; j++) {
-      for (let i = f.i0; i < f.i0 + f.tx; i++) {
-        if (this.occupancy[j * this.tilesPerSide + i] !== 0) return fail('COLLISION', 'Emplacement déjà occupé par un bâtiment');
-      }
-    }
+    const x = Math.round(a.x * 100) / 100, z = Math.round(a.z * 100) / 100;
+    const o = this.obbFor(asset, x, z, rot);
     const t = this.terrain;
-    const minX = t.originX + f.i0 * TILE_SIZE;
-    const minZ = t.originZ + f.j0 * TILE_SIZE;
-    const maxX = minX + f.tx * TILE_SIZE;
-    const maxZ = minZ + f.tz * TILE_SIZE;
-    if (this.roadClearance(minX, minZ, maxX, maxZ, MAX_ROAD_HALF_WIDTH) < 0) return fail('COLLISION', 'Le bâtiment empiète sur une route');
+    const tb = terrainBounds(t);
+    const bb = obbAabb(o);
+    if (bb.minX < tb.minX || bb.minZ < tb.minZ || bb.maxX > tb.maxX || bb.maxZ > tb.maxZ) return fail('OUT_OF_BOUNDS', 'Emplacement hors de la carte');
+    if (this.overlappingBuilding(o) !== 0) return fail('COLLISION', 'Emplacement déjà occupé par un bâtiment');
+    if (this.roadClearance(o, MAX_ROAD_HALF_WIDTH) < 0) return fail('COLLISION', 'Le bâtiment empiète sur une route');
+    // Relief : échantillons sur une grille LOCALE de l'empreinte (pas d'environ une case).
     let hMin = Infinity;
     let hMax = -Infinity;
     let hSum = 0;
     let n = 0;
-    for (let j = 0; j <= f.tz; j++) {
-      for (let i = 0; i <= f.tx; i++) {
-        const h = terrainHeightAt(t, minX + i * TILE_SIZE, minZ + j * TILE_SIZE);
+    const nx = Math.max(1, asset.footprint.tilesX), nz = Math.max(1, asset.footprint.tilesZ);
+    for (let j = 0; j <= nz; j++) {
+      for (let i = 0; i <= nx; i++) {
+        const [wx, wz] = obbToWorld(o, -o.hx + (2 * o.hx * i) / nx, -o.hz + (2 * o.hz * j) / nz);
+        const h = terrainHeightAt(t, wx, wz);
         if (h < hMin) hMin = h;
         if (h > hMax) hMax = h;
         hSum += h;
         n++;
+        if (this.wetAt(wx, wz)) return fail('UNDER_WATER', 'Impossible de construire sur une rivière ou un lac');
       }
     }
     if (hMin < t.waterLevel + 0.3) return fail('UNDER_WATER', 'Impossible de construire dans l\'eau');
-    for (let j = 0; j <= f.tz; j++) {
-      for (let i = 0; i <= f.tx; i++) {
-        if (this.wetAt(minX + i * TILE_SIZE, minZ + j * TILE_SIZE)) return fail('UNDER_WATER', 'Impossible de construire sur une rivière ou un lac');
-      }
-    }
-    const span = Math.max(f.tx, f.tz) * TILE_SIZE;
+    const span = Math.max(asset.footprint.tilesX, asset.footprint.tilesZ) * TILE_SIZE;
     if ((hMax - hMin) / span > MAX_BUILDING_SLOPE) return fail('TOO_STEEP', 'Terrain trop pentu pour ce bâtiment');
     if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
     if (!this.economy.canAfford(asset.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${asset.cost} crédits requis)`);
@@ -384,7 +394,7 @@ export class Simulation {
 
     const id = this.nextBuildingId++;
     const y = hSum / n;
-    this.insertBuilding({ id, assetId: asset.id, variant, x: f.cx, z: f.cz, y, rot });
+    this.insertBuilding({ id, assetId: asset.id, variant, x, z, y, rot });
     this.economy.spend(asset.cost);
     return { ok: true, data: { buildingId: id, cost: asset.cost } };
   }
@@ -392,13 +402,11 @@ export class Simulation {
   /** Insertion sans contrôle ni coût (utilisée par placeBuilding et le chargement). */
   private insertBuilding(r: BuildingRecord, silent = false): void {
     const asset = this.getAsset(r.assetId)!;
-    const f = this.footprintFor(asset, r.x, r.z, r.rot);
-    for (let j = f.j0; j < f.j0 + f.tz; j++) {
-      for (let i = f.i0; i < f.i0 + f.tx; i++) this.occupancy[j * this.tilesPerSide + i] = r.id;
-    }
-    const bi = this.buildings.add(r.id, this.assetIndex.get(asset.id)!, r.variant, r.x, r.y, r.z, r.rot, f.tx, f.tz);
-    const hx = (f.tx * TILE_SIZE) / 2, hz = (f.tz * TILE_SIZE) / 2;
-    this.buildingIndex.insert(r.id, r.x - hx, r.z - hz, r.x + hx, r.z + hz);
+    const o = this.obbFor(asset, r.x, r.z, r.rot);
+    this.obbs.set(r.id, o);
+    const bi = this.buildings.add(r.id, this.assetIndex.get(asset.id)!, r.variant, r.x, r.y, r.z, normRot(r.rot), asset.footprint.tilesX, asset.footprint.tilesZ);
+    const bb = obbAabb(o);
+    this.buildingIndex.insert(r.id, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
     this.buildings.roadAccess[bi] = this.computeRoadAccess(bi) ? 1 : 0;
     this.economy.addUpkeep(asset.upkeepPerMonth, 'buildings');
     this.demography?.onBuildingAdded(r.id, this.clock.totalMinutes);
@@ -409,10 +417,9 @@ export class Simulation {
 
   /** Accès route : une route passe à moins de ROAD_ACCESS_MARGIN_M de l'empreinte. */
   private computeRoadAccess(bi: number): boolean {
-    const b = this.buildings;
-    const hx = (b.tilesX[bi]! * TILE_SIZE) / 2, hz = (b.tilesZ[bi]! * TILE_SIZE) / 2;
-    const x = b.x[bi]!, z = b.z[bi]!;
-    return this.roadClearance(x - hx, z - hz, x + hx, z + hz, MAX_ROAD_HALF_WIDTH + ROAD_ACCESS_MARGIN_M) <= ROAD_ACCESS_MARGIN_M;
+    const o = this.obbs.get(this.buildings.id[bi]!);
+    if (!o) return false;
+    return this.roadClearance(o, MAX_ROAD_HALF_WIDTH + ROAD_ACCESS_MARGIN_M) <= ROAD_ACCESS_MARGIN_M;
   }
 
   /** Recalcule l'accès route des bâtiments proches d'une zone (après ajout/suppression de route). */
@@ -434,10 +441,7 @@ export class Simulation {
     const i = this.buildings.indexOf(a.buildingId);
     if (i < 0) return fail('NOT_FOUND', 'Bâtiment introuvable');
     const asset = this.catalog!.assets[this.buildings.assetIndex[i]!]!;
-    const f = this.footprintFor(asset, this.buildings.x[i]!, this.buildings.z[i]!, this.buildings.rot[i]!);
-    for (let j = f.j0; j < f.j0 + f.tz; j++) {
-      for (let k = f.i0; k < f.i0 + f.tx; k++) this.occupancy[j * this.tilesPerSide + k] = 0;
-    }
+    this.obbs.delete(a.buildingId);
     const displaced = this.buildings.residents[i]!;
     this.demography?.onBuildingRemoved(a.buildingId, this.clock.totalMinutes);
     this.buildings.remove(a.buildingId);
@@ -462,13 +466,10 @@ export class Simulation {
     const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 6));
     const poly = polyline(curve, n);
     for (const id of this.q) {
-      const i = this.buildings.indexOf(id);
-      if (i < 0) continue;
-      const hx = (this.buildings.tilesX[i]! * TILE_SIZE) / 2;
-      const hz = (this.buildings.tilesZ[i]! * TILE_SIZE) / 2;
-      const cx = this.buildings.x[i]!, cz = this.buildings.z[i]!;
+      const o = this.obbs.get(id);
+      if (!o) continue;
       for (let k = 0; k + 3 < poly.length; k += 2) {
-        if (distSegmentRect(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, cx - hx, cz - hz, cx + hx, cz + hz) < half) {
+        if (distSegmentObb(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, o) < half) {
           return 'Le tracé traverse un bâtiment';
         }
       }
@@ -960,15 +961,13 @@ export class Simulation {
     this.applyNetworkChanges(false);
     for (const b of s.buildings) {
       const a = this.getAsset(b.assetId)!;
-      const f = this.footprintFor(a, b.x, b.z, b.rot);
-      if (f.i0 < 0 || f.j0 < 0 || f.i0 + f.tx > this.tilesPerSide || f.j0 + f.tz > this.tilesPerSide) {
+      const o = this.obbFor(a, b.x, b.z, b.rot);
+      const bb = obbAabb(o), tb = terrainBounds(this.terrain!);
+      if (bb.minX < tb.minX - 0.01 || bb.minZ < tb.minZ - 0.01 || bb.maxX > tb.maxX + 0.01 || bb.maxZ > tb.maxZ + 0.01) {
         return { code: 'BAD_SAVE', message: `Bâtiment ${b.id} hors de la carte` };
       }
-      for (let j = f.j0; j < f.j0 + f.tz; j++) {
-        for (let i = f.i0; i < f.i0 + f.tx; i++) {
-          if (this.occupancy[j * this.tilesPerSide + i] !== 0) return { code: 'BAD_SAVE', message: `Bâtiments ${b.id} et ${this.occupancy[j * this.tilesPerSide + i]} superposés` };
-        }
-      }
+      const other = this.overlappingBuilding(o);
+      if (other !== 0) return { code: 'BAD_SAVE', message: `Bâtiments ${b.id} et ${other} superposés` };
       this.insertBuilding(b, true);
     }
     this.economy.fromJSON(s.economy);

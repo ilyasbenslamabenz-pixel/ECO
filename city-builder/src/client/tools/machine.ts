@@ -12,9 +12,11 @@
  * rouge selon SA réponse, avec son message d'erreur. Rien n'est appliqué localement.
  * Propriétaire : agent construction/caméra/UI.
  */
+import { normRot } from '../../shared/footprint';
 import type { CatalogAsset } from '../../shared/catalog';
 import { isBuildingCategory } from '../../shared/catalog';
-import type { CommandError, RoadTypeId, ToolId } from '../../shared/contracts';
+import type { CommandError, RoadKindId, ToolId } from '../../shared/contracts';
+import { legacyRoadType } from '../../sim/roads/index';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage } from '../../shared/protocol';
 import type { Ray } from './geometry';
 import { roadDef, type PickResult, type WorldMirror } from './mirror';
@@ -47,7 +49,7 @@ export type ToolPreview =
   | { kind: 'none' }
   | { kind: 'select'; hover: PickResult | null }
   | { kind: 'building'; asset: CatalogAsset; proposal: PlacementProposal; variant: number; validity: Validity; cost: number; message: string }
-  | { kind: 'road'; type: RoadTypeId; mode: RoadMode; points: number[] | null; start: SnapPoint | null; control: SnapPoint | null; hover: SnapPoint | null; validity: Validity; cost: number; length: number; message: string }
+  | { kind: 'road'; type: RoadKindId; mode: RoadMode; points: number[] | null; start: SnapPoint | null; control: SnapPoint | null; hover: SnapPoint | null; validity: Validity; cost: number; length: number; message: string }
   | { kind: 'bulldoze'; target: PickResult | null; refund: number };
 
 export type Notify = (text: string, kind: 'info' | 'error' | 'ok') => void;
@@ -79,7 +81,7 @@ const fmt = (n: number): string => new Intl.NumberFormat('fr-FR').format(Math.ro
 
 export class ConstructionTools {
   tool: ToolId = 'select';
-  roadType: RoadTypeId = 'street';
+  roadType: RoadKindId = 'street';
   autoAlign = true;
   rot = 0;
   variant = 0;
@@ -111,7 +113,7 @@ export class ConstructionTools {
 
   isAvailable(t: ToolId): boolean { return TOOL_PHASE[t] === null; }
 
-  setTool(t: ToolId, opts?: { roadType?: RoadTypeId; assetId?: string }): boolean {
+  setTool(t: ToolId, opts?: { roadType?: RoadKindId; assetId?: string }): boolean {
     const phase = TOOL_PHASE[t];
     if (phase !== null) { this.notify(`Outil disponible en phase ${phase}`, 'info'); return false; }
     if (t === 'building') {
@@ -128,13 +130,13 @@ export class ConstructionTools {
     return true;
   }
 
-  setRoadType(t: RoadTypeId): void { this.roadType = t; this.draft.type = t; this.refresh(); }
+  setRoadType(t: RoadKindId): void { this.roadType = t; this.draft.type = t; this.refresh(); }
   setRoadMode(m: RoadMode): void { this.draft.mode = m; if (this.draft.phase === 'control') this.draft.back(); this.refresh(); }
 
   rotate(dir = 1): void {
     if (this.tool !== 'building') return;
     const cur = this.preview.kind === 'building' ? this.preview.proposal.rot : this.rot;
-    this.rot = (cur + dir + 4) & 3;
+    this.rot = normRot(Math.round(cur) + dir);
     this.autoAlign = false;
     this.refresh();
   }
@@ -238,7 +240,9 @@ export class ConstructionTools {
       if (seq !== this.previewSeq) return;
       let validity: Validity; let message = ''; let cost = 0;
       try {
-        const r = await this.sim.send('buildRoad', { type, points, dryRun: true });
+        const cmd = this.draft.command();
+        if (!cmd) throw new Error('Tracé trop court');
+        const r = await this.sim.send('buildRoad', { type: legacyRoadType(type), kind: type, ...cmd, dryRun: true });
         validity = 'ok'; cost = r.cost;
       } catch (e) { validity = 'error'; message = errorOf(e).message; }
       const cur = this.preview;
@@ -251,7 +255,7 @@ export class ConstructionTools {
 
   private refundOf(t: PickResult): number {
     if (t.kind === 'building') return Math.round((t.asset?.cost ?? 0) * DEMOLISH_REFUND_RATE);
-    if (t.kind === 'road') return Math.round(t.edge.length * (roadDef(t.edge.type)?.costPerMeter ?? 0) * DEMOLISH_REFUND_RATE);
+    if (t.kind === 'road') return Math.round(t.edge.length * (roadDef(t.edge.kindId)?.costPerMeter ?? 0) * DEMOLISH_REFUND_RATE);
     return 0;
   }
 
@@ -298,7 +302,8 @@ export class ConstructionTools {
     if (!points) { this.refresh(); return; }
     const end = d.hover;
     try {
-      const r = await this.sim.send('buildRoad', { type: this.roadType, points });
+      const cmd = d.command() ?? { points };
+      const r = await this.sim.send('buildRoad', { type: legacyRoadType(this.roadType), kind: this.roadType, ...cmd });
       this.applied++;
       this.undo.push({ label: `Route : ${roadDef(this.roadType)?.nameFr ?? this.roadType}`, steps: r.edgeIds.map((edgeId) => ({ kind: 'removeRoad', edgeId }) as UndoStep) });
       this.notify(`${roadDef(this.roadType)?.nameFr ?? 'Route'} construite : ${fmt(d.length())} m (−${fmt(r.cost)} ¢)`, 'ok');
@@ -333,7 +338,7 @@ export class ConstructionTools {
         const r = await this.sim.send('removeRoad', { edgeId: t.id });
         this.applied++;
         this.undo.forgetEdge(t.id);
-        this.undo.push({ label: 'Suppression de route', steps: [{ kind: 'buildRoad', type: e.type, points: [e.ax, e.az, e.bx, e.bz] }] });
+        this.undo.push({ label: 'Suppression de route', steps: [{ kind: 'buildRoad', kindId: e.kindId, points: [e.ax, e.az, e.bx, e.bz], ...(e.c1 && e.c2 ? { c1: e.c1, c2: e.c2 } : {}) }] });
         this.notify(`Tronçon supprimé (+${fmt(r.refund)} ¢)`, 'ok');
         return true;
       }
@@ -361,7 +366,7 @@ export class ConstructionTools {
         if (s.kind === 'demolish') await this.sim.send('demolish', { buildingId: s.buildingId });
         else if (s.kind === 'removeRoad') await this.sim.send('removeRoad', { edgeId: s.edgeId });
         else if (s.kind === 'placeBuilding') await this.sim.send('placeBuilding', { assetId: s.assetId, x: s.x, z: s.z, rot: s.rot, variant: s.variant });
-        else await this.sim.send('buildRoad', { type: s.type, points: s.points });
+        else await this.sim.send('buildRoad', { type: legacyRoadType(s.kindId), kind: s.kindId, points: s.points });
         ok++;
       } catch (err) { lastErr = errorOf(err).message; }
     }

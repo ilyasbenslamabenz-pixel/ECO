@@ -14,7 +14,7 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import type * as THREE from 'three';
-import type { IToolController, RoadTypeId, ToolId } from '../shared/contracts';
+import type { IToolController, RoadKindId, ToolId } from '../shared/contracts';
 import { footprintGroundY } from '../client/tools/geometry';
 import { TOOL_PHASE, type ConstructionTools, type ToolPreview } from '../client/tools/machine';
 import { roadWidth, type PickResult } from '../client/tools/mirror';
@@ -83,7 +83,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.disposers.push(() => window.removeEventListener('keydown', key, true), () => window.removeEventListener('keyup', keyup, true));
   }
 
-  setTool(tool: ToolId, options?: { roadType?: RoadTypeId; assetId?: string }): void {
+  setTool(tool: ToolId, options?: { roadType?: RoadKindId; assetId?: string }): void {
     if (!this.deps) return;
     this.hooks?.touchConfirm(null);
     this.pendingTouchConfirm = false;
@@ -256,7 +256,7 @@ export class ToolController implements IToolController, PointerToolSink {
       const r = mirror.buildingRect(p.record);
       if (r) mk.showRect(r.minX, r.minZ, r.maxX, r.maxZ, mirror.buildingHeight(p.record)); else mk.hide();
     } else if (p.kind === 'road') {
-      mk.showPath([p.edge.ax, p.edge.az, p.edge.bx, p.edge.bz], roadWidth(p.edge.type));
+      mk.showPath(Array.from(p.edge.poly), roadWidth(p.edge.kindId));
     } else mk.showPoint(p.x, p.z, 3.5);
   }
 
@@ -271,7 +271,7 @@ export class ToolController implements IToolController, PointerToolSink {
     if (p.kind !== 'select' && p.kind !== 'bulldoze') this.hoverMarker.hide();
     switch (p.kind) {
       case 'building': {
-        const y = footprintGroundY(d.heightAt, { minX: p.proposal.rect.minX, minZ: p.proposal.rect.minZ, tx: p.proposal.rect.tx, tz: p.proposal.rect.tz });
+        const y = footprintGroundY(d.heightAt, p.proposal.obb, p.asset.footprint.tilesX, p.asset.footprint.tilesZ);
         this.ghost.show(p.asset, p.proposal.x, y, p.proposal.z, p.proposal.rot, p.variant, p.validity);
         const v = p.variant >= 0 ? p.asset.variants[p.variant] : undefined;
         const head = `${p.asset.nameFr}${v ? ` · ${v.nameFr}` : ''}`;

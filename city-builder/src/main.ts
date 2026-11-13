@@ -9,10 +9,10 @@
 import * as THREE from 'three';
 import { DEFAULT_START_MONEY, GAME_NAME, PROTOCOL_VERSION, type SimSpeed } from './shared/constants';
 import { validateCatalog } from './shared/catalog';
-import type { CommandError, NewGameParams, SaveFile } from './shared/contracts';
+import type { CommandError, NewGameParams, SaveFile, SimStats } from './shared/contracts';
 import { terrainBounds } from './shared/terrain-gen';
 import type { CityBuildResult } from './sim/city-builder';
-import type { SimNotice } from './sim/sim-protocol';
+import type { SimNotice, SimReport } from './sim/sim-protocol';
 import { SimBridge, SimCommandError } from './client/sim-bridge';
 import { createClientState } from './client/state';
 import { AssetLibrary, fetchCatalog } from './render/assets';
@@ -26,6 +26,8 @@ import { Autosaver, SaveStore } from './save';
 
 const QUICK_SLOT = 'rapide';
 const DEMO_SEED = 7;
+/** Budget de la démo : la ville construite coûte ≈ 138 M ¢ ; il reste une trésorerie crédible (≈ 12 M ¢). */
+const DEMO_START_MONEY = 150_000_000;
 
 /** Diagnostic exposé pour les tests e2e et la porte visuelle (lecture seule, plus quelques commandes de test). */
 interface DebugInfo {
@@ -59,6 +61,12 @@ interface DebugInfo {
   /** Rend `n` images immédiatement (boucle suspendue : captures rapides en rendu logiciel). */
   renderNow?: (n?: number, dt?: number) => number;
   lookAt?: (x: number, z: number, distance: number) => void;
+  /** Aperçu courant de l'outil de construction (e2e : rotation proposée, aimantation, validité). */
+  toolPreview?: () => unknown;
+  /** Statistiques portées par le dernier instantané complet (état exact au chargement). */
+  snapshotStats?: SimStats;
+  /** Projection écran (px CSS) d'un point au sol (e2e : clics souris à des positions monde précises). */
+  worldToScreen?: (x: number, z: number) => { x: number; y: number };
 }
 declare global { interface Window { __aube: DebugInfo } }
 
@@ -200,11 +208,23 @@ async function boot(): Promise<void> {
   const cons = initConstruction({ sim: b, ui, input, scene: render.ctx.scene, models: lib, catalog, heightAt: (x, z) => render.terrain.heightAt(x, z) });
   render.ctx.onFrame.push((dt) => cons.update(dt));
   debug.constructionApplied = () => cons.machine.applied;
+  debug.worldToScreen = (x, z) => {
+    const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);
+    const r = canvas.getBoundingClientRect();
+    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
+  };
+  debug.toolPreview = () => {
+    const p = cons.machine.preview;
+    if (p.kind === 'building') return { kind: p.kind, assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot, snapped: p.proposal.snapped, validity: p.validity, message: p.message };
+    if (p.kind === 'road') return { kind: p.kind, type: p.type, mode: p.mode, validity: p.validity, message: p.message, length: p.length };
+    return { kind: p.kind };
+  };
 
   let firstSnapshot: (() => void) | null = null;
   const seenNotices = new Set<string>();
   b.onSnapshot((s) => {
     debug.snapshotReceived = true;
+    debug.snapshotStats = s.stats;
     state.inGame = true;
     state.cityName = s.params.cityName;
     render.applySnapshot(s);
@@ -225,6 +245,7 @@ async function boot(): Promise<void> {
     ui.updateStats(d.stats);
     if (d.report) {
       debug.lastReport = d.report;
+      ui.updateReport(d.report as SimReport);
       // Notifications de la simulation (faillite, nouvelle année, démolition…) : affichées une fois.
       for (const n of d.report.notices as SimNotice[]) {
         const key = `${n.minute}|${n.message}`;
@@ -236,6 +257,7 @@ async function boot(): Promise<void> {
   });
   await b.ready;
   debug.workerReady = true;
+  ui.setExtPort(b);
   await b.send('init', { protocolVersion: PROTOCOL_VERSION, catalog });
 
   // Sauvegardes : IndexedDB (gzip) -> localStorage -> mémoire ; emplacements listés par l'interface.
@@ -307,7 +329,7 @@ async function boot(): Promise<void> {
       ui.hideMenu();
       ui.setLoading(0.55, 'Scène de démonstration : génération du terrain…');
       let snap = waitSnapshot();
-      await b.send('newGame', { seed: DEMO_SEED, mapChunks: 8, startMoney: 2_000_000_000, cityName: 'Aube-sur-Mer (démonstration)', startHour: params.has('h') ? Number(params.get('h')) : 10.5 });
+      await b.send('newGame', { seed: DEMO_SEED, mapChunks: 8, startMoney: DEMO_START_MONEY, cityName: 'Aube-sur-Mer (démonstration)', startHour: params.has('h') ? Number(params.get('h')) : 10.5 });
       await snap;
       ui.setLoading(0.65, 'Construction de la ville (routes, ponts, bâtiments, habitants)…');
       snap = waitSnapshot();

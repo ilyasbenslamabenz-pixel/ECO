@@ -138,6 +138,30 @@ test('RoadNetworkRenderer (IRoadRenderer) : ajout par enregistrements, chunks, s
   rr.dispose();
 });
 
+test('RoadNetworkRenderer : un tronçon coupé par un carrefour (delta retrait + ajout) reste affiché', () => {
+  // Reproduit le delta de la simulation : l'avenue existante est retirée puis remplacée par ses morceaux,
+  // qui réutilisent ses nœuds d'extrémité (absents de roadNodesAdded) — régression QA « route disparue ».
+  const src = new RoadNetwork(flat);
+  build(src, R('avenue', -300, 0, 300, 0));
+  const rr = new RoadNetworkRenderer(new THREE.Scene(), () => 10, { waterLevel: 2 });
+  const first = networkRecords(src);
+  rr.addRoads(first.nodes, first.edges);
+  src.takeChanges();
+  const r = planRoad(src, { kind: 'street', start: { x: -60, z: -150 }, end: { x: 60, z: 150 }, control: { x: 120, z: 0 } });
+  assert.ok(r.ok);
+  commitRoadPlan(src, r.plan);
+  const ch = src.takeChanges();
+  const removed = ch.segmentsRemoved.filter((id) => !ch.segmentsAdded.includes(id));
+  const added = ch.segmentsAdded.filter((id) => src.hasSegment(id));
+  assert.ok(removed.length >= 1, 'l\'avenue a été coupée');
+  const rec = networkRecords(src, ch.nodesAdded, added);
+  rr.removeRoadEdges(removed);
+  rr.addRoads(rec.nodes, rec.edges);
+  assert.equal(rr.stats().segments, src.segCount, 'tous les tronçons (morceaux de l\'avenue compris) sont affichés');
+  assert.equal(rr.stats().nodes, src.nodeCount);
+  rr.dispose();
+});
+
 test('Enregistrements étendus : le rendu reprend le profil validé par la simulation (pont compris)', () => {
   const src = new RoadNetwork(river);
   build(src, R('street', 0, 0, 0, 400));

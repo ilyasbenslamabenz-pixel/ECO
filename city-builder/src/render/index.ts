@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import type { AssetCatalog } from '../shared/catalog';
 import { TILE_SIZE } from '../shared/constants';
 import type { BuildingRecord, CameraPose, RoadEdgeRecord } from '../shared/contracts';
+import { rotAngle } from '../shared/footprint';
 import type { DeltaMessage, SnapshotMessage } from '../shared/protocol';
 import { cubic, polyline } from '../sim/roads/bezier';
 import { halfWidth, isRoadKind } from '../sim/roads/types';
@@ -88,7 +89,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
     for (const b of list) {
       const a = assets.get(b.assetId);
       if (!a) continue;
-      veg.removeInFootprint(b.x, b.z, (a.footprint.tilesX * TILE_SIZE) / 2, (a.footprint.tilesZ * TILE_SIZE) / 2, (b.rot & 3) * (Math.PI / 2), 1.5);
+      veg.removeInFootprint(b.x, b.z, (a.footprint.tilesX * TILE_SIZE) / 2, (a.footprint.tilesZ * TILE_SIZE) / 2, rotAngle(b.rot), 1.5);
     }
   };
   const clearVegForRoads = (nodes: SnapshotMessage['roads']['nodes'], edges: readonly RoadEdgeRecord[]): void => {

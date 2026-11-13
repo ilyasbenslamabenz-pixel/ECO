@@ -778,7 +778,9 @@ export class DemographySystem {
     let free = 0;
     for (let i = 0; i < b.count; i++) free += this.freeHousingAt(i);
     if (free <= 0) return 0;
-    const expected = (free / 2.6) * this.attractiveness * 0.12;
+    // Proportionnel aux logements libres, avec un flux de base pour qu'une petite ville naissante (quelques
+    // maisons desservies) se peuple en un ou deux jours de jeu au lieu d'une semaine (recette QA phase 1).
+    const expected = (free / 2.6) * this.attractiveness * 0.3 + Math.min(1, free / 4) * this.attractiveness * 0.6;
     let arrivals = Math.floor(expected) + (rng.next() < expected - Math.floor(expected) ? 1 : 0);
     arrivals = Math.min(arrivals, MAX_ARRIVALS_PER_WAVE);
     let placed = 0;

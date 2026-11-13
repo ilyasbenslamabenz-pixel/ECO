@@ -9,17 +9,62 @@ import { TILE_SIZE, VEHICLE_STRIDE } from '../../shared/constants';
 import type { AssetCatalog, CatalogAsset } from '../../shared/catalog';
 import { ROAD_TYPES, type RoadTypeDef, type BuildingRecord, type RoadEdgeRecord, type RoadNodeRecord, type SimStats, type TerrainData } from '../../shared/contracts';
 import type { DeltaMessage, SnapshotMessage } from '../../shared/protocol';
-import { distPointSegment, projectOnSegment, rayBox, rotatedTiles, type Ray } from './geometry';
+import { footprintObb, obbAabb, pointInObb, type Obb } from '../../shared/footprint';
+import { cubic, polyline } from '../../sim/roads/bezier';
+import { ROAD_KINDS, halfWidth, isRoadKind, type RoadKindId } from '../../sim/roads/types';
+import { rayBox, type Ray } from './geometry';
 
-export interface RoadEdgeView extends RoadEdgeRecord { ax: number; az: number; bx: number; bz: number; ay: number; by: number }
+export interface RoadEdgeView extends RoadEdgeRecord {
+  ax: number; az: number; bx: number; bz: number; ay: number; by: number;
+  /** Type exact (6 types de la simulation). */
+  kindId: RoadKindId;
+  /** Polyligne de l'axe (courbe échantillonnée, x/z alternés). */
+  poly: Float64Array;
+}
 
-/** Largeur d'un type de route ; tolère des types futurs (module routes) inconnus du contrat actuel. */
+/**
+ * Largeur TOTALE (chaussée + trottoirs) d'un type de route, identique à la simulation
+ * (6 types de src/sim/roads/types.ts) ; repli sur le contrat hérité pour un type inconnu.
+ */
 export function roadWidth(type: string): number {
+  if (isRoadKind(type)) return halfWidth(type) * 2;
   return (ROAD_TYPES as Record<string, RoadTypeDef | undefined>)[type]?.width ?? 10;
 }
 
-export function roadDef(type: string): RoadTypeDef | undefined {
-  return (ROAD_TYPES as Record<string, RoadTypeDef | undefined>)[type];
+/** Type exact d'un enregistrement de tronçon. */
+export function edgeKind(e: RoadEdgeRecord): RoadKindId {
+  return e.kind && isRoadKind(e.kind) ? e.kind : isRoadKind(e.type) ? e.type : 'street';
+}
+
+export { ROAD_KINDS };
+
+export interface NearestEdge {
+  edge: RoadEdgeView;
+  /** Distance à l'axe (m). */
+  dist: number;
+  /** Paramètre approché (0..1) le long du tronçon. */
+  t: number;
+  /** Point de l'axe le plus proche et tangente unitaire en ce point. */
+  px: number; pz: number; tx: number; tz: number;
+}
+
+/** Fiche d'un type de route pour l'interface (données de la simulation : src/sim/roads/types.ts). */
+export interface RoadKindInfo {
+  id: RoadKindId;
+  nameFr: string;
+  /** Largeur totale chaussée + trottoirs (m). */
+  width: number;
+  lanesForward: number;
+  lanesBackward: number;
+  speedKmh: number;
+  costPerMeter: number;
+  upkeepPerMeterMonth: number;
+}
+
+export function roadDef(type: string): RoadKindInfo | undefined {
+  if (!isRoadKind(type)) return undefined;
+  const k = ROAD_KINDS[type];
+  return { id: type, nameFr: k.nameFr, width: halfWidth(type) * 2, lanesForward: k.lanesForward, lanesBackward: k.lanesBackward, speedKmh: k.speedKmh, costPerMeter: k.costPerMeter, upkeepPerMeterMonth: k.upkeepPerMeterMonth };
 }
 
 export type PickResult =
@@ -41,6 +86,8 @@ export class WorldMirror {
   /** Incrémenté à chaque changement de bâtiments/routes (invalidation des caches). */
   version = 0;
   private byId = new Map<string, CatalogAsset>();
+  private views = new Map<number, RoadEdgeView>();
+  private obbs = new Map<number, Obb>();
   private listeners: (() => void)[] = [];
 
   constructor(public catalog: AssetCatalog) { this.setCatalog(catalog); }
@@ -57,7 +104,7 @@ export class WorldMirror {
     return () => { this.listeners = this.listeners.filter((l) => l !== fn); };
   }
 
-  private changed(): void { this.version++; for (const l of this.listeners) l(); }
+  private changed(): void { this.version++; this.views.clear(); this.obbs.clear(); for (const l of this.listeners) l(); }
 
   applySnapshot(s: SnapshotMessage): void {
     this.buildings.clear(); this.nodes.clear(); this.edges.clear();
@@ -88,20 +135,37 @@ export class WorldMirror {
   }
 
   edgeView(e: RoadEdgeRecord): RoadEdgeView | null {
+    const cached = this.views.get(e.id);
+    if (cached && cached.a === e.a && cached.b === e.b) return cached;
     const a = this.nodes.get(e.a);
     const b = this.nodes.get(e.b);
     if (!a || !b) return null;
-    return { ...e, ax: a.x, az: a.z, ay: a.y, bx: b.x, bz: b.z, by: b.y };
+    const c1 = e.c1 ?? [a.x + (b.x - a.x) / 3, a.z + (b.z - a.z) / 3];
+    const c2 = e.c2 ?? [a.x + ((b.x - a.x) * 2) / 3, a.z + ((b.z - a.z) * 2) / 3];
+    const curved = !!(e.c1 && e.c2);
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    // Même pas d'échantillonnage que la simulation (≈ 8 m) pour des distances route/emprise cohérentes.
+    const poly = curved ? polyline(cubic(a.x, a.z, c1[0], c1[1], c2[0], c2[1], b.x, b.z), Math.max(2, Math.ceil((e.length || len) / 8))) : new Float64Array([a.x, a.z, b.x, b.z]);
+    const v: RoadEdgeView = { ...e, ax: a.x, az: a.z, ay: a.y, bx: b.x, bz: b.z, by: b.y, kindId: edgeKind(e), poly };
+    this.views.set(e.id, v);
+    return v;
   }
 
-  /** Rectangle au sol occupé par un bâtiment (empreinte en cases, tournée). */
-  buildingRect(b: BuildingRecord): { minX: number; minZ: number; maxX: number; maxZ: number } | null {
+  /** Empreinte orientée d'un bâtiment (angle libre). */
+  buildingObb(b: BuildingRecord): Obb | null {
+    const cached = this.obbs.get(b.id);
+    if (cached && cached.cx === b.x && cached.cz === b.z) return cached;
     const a = this.byId.get(b.assetId);
     if (!a) return null;
-    const { tx, tz } = rotatedTiles(a.footprint.tilesX, a.footprint.tilesZ, b.rot);
-    const hx = (tx * TILE_SIZE) / 2;
-    const hz = (tz * TILE_SIZE) / 2;
-    return { minX: b.x - hx, minZ: b.z - hz, maxX: b.x + hx, maxZ: b.z + hz };
+    const o = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, b.x, b.z, b.rot);
+    this.obbs.set(b.id, o);
+    return o;
+  }
+
+  /** Boîte englobante alignée de l'empreinte (sélection, marqueurs). */
+  buildingRect(b: BuildingRecord): { minX: number; minZ: number; maxX: number; maxZ: number } | null {
+    const o = this.buildingObb(b);
+    return o ? obbAabb(o) : null;
   }
 
   /** Hauteur visuelle d'un bâtiment (catalogue × variante). */
@@ -112,14 +176,38 @@ export class WorldMirror {
     return a.dimensions.height * (v?.heightScale ?? 1);
   }
 
-  /** Route la plus proche d'un point au sol (distance à l'axe), dans un rayon maximal. */
-  nearestEdge(x: number, z: number, maxDist: number): { edge: RoadEdgeView; dist: number; t: number } | null {
-    let best: { edge: RoadEdgeView; dist: number; t: number } | null = null;
+  /** Route la plus proche d'un point au sol (distance à l'axe COURBE), dans un rayon maximal. */
+  nearestEdge(x: number, z: number, maxDist: number): NearestEdge | null {
+    let best: NearestEdge | null = null;
     for (const e of this.edges.values()) {
       const v = this.edgeView(e);
       if (!v) continue;
-      const d = distPointSegment(x, z, v.ax, v.az, v.bx, v.bz);
-      if (d <= maxDist && (!best || d < best.dist)) best = { edge: v, dist: d, t: projectOnSegment(x, z, v.ax, v.az, v.bx, v.bz) };
+      const p = v.poly;
+      const nSeg = p.length / 2 - 1;
+      for (let k = 0; k + 3 < p.length; k += 2) {
+        const ax = p[k]!, az = p[k + 1]!, ex = p[k + 2]! - ax, ez = p[k + 3]! - az;
+        const l2 = ex * ex + ez * ez;
+        const u = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / l2)) : 0;
+        const px = ax + ex * u, pz = az + ez * u;
+        const d = Math.hypot(x - px, z - pz);
+        if (d <= maxDist && (!best || d < best.dist)) {
+          const l = Math.sqrt(l2) || 1;
+          best = { edge: v, dist: d, t: (k / 2 + u) / nSeg, px, pz, tx: ex / l, tz: ez / l };
+        }
+      }
+    }
+    return best;
+  }
+
+  /** Distance d'un point à l'axe (courbe) d'un tronçon. */
+  distToEdge(v: RoadEdgeView, x: number, z: number): number {
+    const p = v.poly;
+    let best = Infinity;
+    for (let k = 0; k + 3 < p.length; k += 2) {
+      const ax = p[k]!, az = p[k + 1]!, ex = p[k + 2]! - ax, ez = p[k + 3]! - az;
+      const l2 = ex * ex + ez * ez;
+      const u = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / l2)) : 0;
+      best = Math.min(best, Math.hypot(x - ax - ex * u, z - az - ez * u));
     }
     return best;
   }
@@ -137,8 +225,8 @@ export class WorldMirror {
   /** Bâtiment dont l'empreinte contient le point au sol. */
   buildingAt(x: number, z: number): BuildingRecord | null {
     for (const b of this.buildings.values()) {
-      const r = this.buildingRect(b);
-      if (r && x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ) return b;
+      const o = this.buildingObb(b);
+      if (o && pointInObb(o, x, z)) return b;
     }
     return null;
   }
@@ -165,9 +253,12 @@ export class WorldMirror {
       if (best) return best;
     }
     for (const b of this.buildings.values()) {
-      const r = this.buildingRect(b);
-      if (!r) continue;
-      const t = rayBox(ray, r.minX, b.y - 1, r.minZ, r.maxX, b.y + this.buildingHeight(b), r.maxZ);
+      const o = this.buildingObb(b);
+      if (!o) continue;
+      // Rayon exprimé dans le repère local du bâtiment : boîte orientée exacte (angle libre).
+      const [lox, loz] = [(ray.ox - o.cx) * o.c - (ray.oz - o.cz) * o.s, (ray.ox - o.cx) * o.s + (ray.oz - o.cz) * o.c];
+      const local = { ox: lox, oy: ray.oy, oz: loz, dx: ray.dx * o.c - ray.dz * o.s, dy: ray.dy, dz: ray.dx * o.s + ray.dz * o.c };
+      const t = rayBox(local, -o.hx, b.y - 1, -o.hz, o.hx, b.y + this.buildingHeight(b), o.hz);
       if (t >= 0 && (!best || t < best.distance)) best = { kind: 'building', id: b.id, record: b, asset: this.byId.get(b.assetId), distance: t };
     }
     if (best) return best;
@@ -177,8 +268,8 @@ export class WorldMirror {
       for (const e of this.edges.values()) {
         const v = this.edgeView(e);
         if (!v) continue;
-        const d = distPointSegment(ground.x, ground.z, v.ax, v.az, v.bx, v.bz);
-        if (d <= roadWidth(v.type) / 2 + 0.5 && d < bestD) { bestD = d; bestE = v; }
+        const near = this.distToEdge(v, ground.x, ground.z);
+        if (near <= roadWidth(v.kindId) / 2 + 0.5 && near < bestD) { bestD = near; bestE = v; }
       }
       if (bestE) return { kind: 'road', id: bestE.id, edge: bestE, distance: bestD };
     }

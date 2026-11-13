@@ -13,6 +13,7 @@ import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMes
 import { distSegmentRect, facadeNormal, gridFootprint, rayBox, rayTerrain, sampleBezier2, segmentIntersectsRect, footprintGroundY } from '../../src/client/tools/geometry';
 import { WorldMirror } from '../../src/client/tools/mirror';
 import { proposePlacement, rotationFacing } from '../../src/client/tools/snapping';
+import { footprintObb, obbAabb } from '../../src/shared/footprint';
 import { RoadDraft, snapRoadPoint } from '../../src/client/tools/road-draft';
 import { ConstructionTools, LatestOnly, type SimPort } from '../../src/client/tools/machine';
 import { MockSim } from '../../src/input/mocks';
@@ -53,17 +54,26 @@ test('géométrie : Bézier échantillonnée, extrémités exactes, segments ≥
   for (let k = 0; k + 3 < pts.length; k += 2) assert.ok(Math.hypot(pts[k + 2]! - pts[k]!, pts[k + 3]! - pts[k + 1]!) >= 4);
 });
 
-test('géométrie : empreinte grille identique à Simulation.footprintFor', () => {
+test('placement : position et angle libres (pas de grille), collisions orientées exactes', () => {
   const sim = new Simulation();
   sim.setCatalog(testCatalog());
   sim.newGame({ seed: 3, mapChunks: 2, startMoney: 1e6, cityName: 't', terrain: { hydrology: 'aucune', rivers: 0 } });
-  const t = sim.terrain!;
   const a = sim.getAsset('grand_test')!;
-  for (const [x, z, rot] of [[13.2, -7.9, 0], [3, 3, 1], [-41.7, 22.2, 2], [0.1, 0.1, 3]] as const) {
-    const ref = sim.footprintFor(a, x, z, rot);
-    const mine = gridFootprint(t.originX, t.originZ, a.footprint.tilesX, a.footprint.tilesZ, x, z, rot);
-    assert.equal(mine.cx, ref.cx); assert.equal(mine.cz, ref.cz); assert.equal(mine.tx, ref.tx); assert.equal(mine.tz, ref.tz);
+  // Cherche un emplacement plat et sec, puis pose en biais (30° = 1/3 de quart de tour).
+  let id = 0, at: [number, number] = [0, 0];
+  for (let r = 0; r < 400 && !id; r += 24) for (let k = 0; k < 8 && !id; k++) {
+    const x = Math.cos(k) * r + 0.37, z = Math.sin(k) * r - 0.21;
+    const res = sim.placeBuilding({ assetId: a.id, x, z, rot: 1 / 3, variant: -1 });
+    if (res.ok) { id = res.data.buildingId; at = [x, z]; }
   }
+  assert.ok(id > 0, 'bâtiment posé en biais');
+  const rec = sim.snapshot().buildings.find((b) => b.id === id)!;
+  assert.ok(Math.abs(rec.x - at[0]) < 0.006, 'x conservé (pas d\'aimantation à la grille)');
+  assert.ok(Math.abs(rec.z - at[1]) < 0.006);
+  assert.ok(Math.abs(rec.rot - 0.3333) < 1e-9, `rotation décimale conservée (${rec.rot})`);
+  // Recouvrement avec l'empreinte tournée : refus.
+  const same = sim.placeBuilding({ assetId: a.id, x: at[0] + 1, z: at[1], rot: 0, dryRun: true });
+  assert.equal(same.ok, false);
 });
 
 test('géométrie : normale de façade cohérente avec rotateQuarter', () => {
@@ -122,8 +132,9 @@ test('snapping : façade tournée vers la route, sans chevauchement, glisse le l
     const [nx, nz] = rotateQuarter(0, 1, p.rot);
     assert.equal(nx + 0, 0); assert.equal(nz, -side, `façade vers la route (côté ${side})`);
     assert.equal(p.localConflict, false);
-    // Bord côté route à ≤ 1,5 case de la chaussée (demi-largeur 8 m).
-    const gap = side > 0 ? p.rect.minZ - 8 : -8 - p.rect.maxZ;
+    // Bord côté route juste derrière le trottoir (avenue : demi-largeur totale 11,5 m).
+    const bb = obbAabb(p.obb);
+    const gap = side > 0 ? bb.minZ - 11.5 : -11.5 - bb.maxZ;
     assert.ok(gap >= 0 && gap <= 12, `écart ${gap}`);
   }
   const p1 = proposePlacement(m, a, -30, 18, { rot: 0, autoAlign: true });
@@ -316,8 +327,8 @@ test('machine (VRAIE simulation) : snapping façade-route accepté, routes, refu
   assert.deepEqual([nx + 0, nz], [0, -1], 'façade tournée vers la route');
   // Altitude prévue côté client = altitude retenue par la simulation.
   const asset = cat.assets[0]!;
-  const rect = gridFootprint(t.originX, t.originZ, asset.footprint.tilesX, asset.footprint.tilesZ, b.x, b.z, b.rot);
-  assert.ok(Math.abs(footprintGroundY((x, z) => h(x, z), rect) - b.y) < 1e-4);
+  const o = footprintObb(asset.footprint.tilesX, asset.footprint.tilesZ, b.x, b.z, b.rot);
+  assert.ok(Math.abs(footprintGroundY((x, z) => h(x, z), o, asset.footprint.tilesX, asset.footprint.tilesZ) - b.y) < 1e-4);
   // Route à travers le bâtiment : refus expliqué par la simulation.
   tools.setTool('road');
   tools.hover({ x: b.x, z: b.z - 40 }, null); await tools.primary();
@@ -332,3 +343,54 @@ test('machine (VRAIE simulation) : snapping façade-route accepté, routes, refu
   assert.equal(m.edges.size, 0);
 });
 
+
+test('machine (VRAIE simulation) : rue courbe = une vraie Bézier ; aimantation exacte sur route en biais ; 6 types', async () => {
+  const port = new RealSimPort();
+  const cat = testCatalog();
+  const { m, tools, notes } = setup(port, cat);
+  await port.send('init', { protocolVersion: PROTOCOL_VERSION, catalog: cat });
+  await port.send('newGame', { seed: 11, mapChunks: 4, startMoney: 5_000_000, cityName: 'Biais', terrain: { hydrology: 'aucune', rivers: 0 } });
+  const h = (x: number, z: number): number => terrainHeightAt(port.sim.terrain!, x, z);
+  let cx = 0; let cz = 0; let found = false;
+  for (let r = 0; r < 400 && !found; r += 16) for (let a = 0; a < 16 && !found; a++) {
+    const x = Math.cos(a) * r; const z = Math.sin(a) * r;
+    let lo = Infinity; let hi = -Infinity;
+    for (let dx = -100; dx <= 100; dx += 8) for (let dz = -100; dz <= 100; dz += 8) { const v = h(x + dx, z + dz); lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    if (lo > m.terrain!.waterLevel + 1 && hi - lo < 8) { cx = x; cz = z; found = true; }
+  }
+  assert.ok(found);
+  // Courbe : départ, point de courbure, arrivée.
+  tools.setTool('road', { roadType: 'oneway' });
+  tools.setRoadMode('curve');
+  tools.hover({ x: cx - 60, z: cz - 60 }, null); await tools.primary();
+  tools.hover({ x: cx + 40, z: cz }, null); await tools.primary();
+  tools.hover({ x: cx - 60, z: cz + 60 }, null); await settle(); await tools.primary();
+  assert.equal(m.edges.size, 1, notes.join(' | '));
+  const e = [...m.edges.values()][0]!;
+  assert.equal(e.kind, 'oneway', 'type exact transmis (sens unique)');
+  assert.ok(e.c1 && e.c2 && Math.hypot(e.c1[0] - (cx - 60), e.c1[1] - (cz - 60)) > 5, 'tronçon courbe (points de contrôle hors de l\'axe)');
+  // Route en biais (direction (3, 2)) puis aperçu de bâtiment à côté.
+  tools.setTool('road', { roadType: 'street' });
+  tools.setRoadMode('straight');
+  tools.hover({ x: cx + 10, z: cz - 70 }, null); await tools.primary();
+  tools.hover({ x: cx + 100, z: cz - 10 }, null); await settle(); await tools.primary();
+  assert.equal(m.edges.size, 2, notes.join(' | '));
+  tools.setTool('building', { assetId: 'maison_test' });
+  const L = Math.hypot(3, 2);
+  tools.hover({ x: cx + 55 + (2 / L) * 18, z: cz - 40 - (3 / L) * 18 }, null);
+  await settle();
+  const p = tools.preview;
+  assert.equal(p.kind, 'building');
+  if (p.kind !== 'building') return;
+  assert.equal(p.proposal.snapped, true);
+  const th = p.proposal.rot * Math.PI / 2;
+  const [fx, fz] = [Math.sin(th), Math.cos(th)]; // façade locale +Z
+  assert.ok(Math.abs(fx * 3 + fz * 2) / L < 1e-3, `façade perpendiculaire à la route (rot ${p.proposal.rot})`);
+  // Côté du bâtiment par rapport à l'axe (normale n = (2, −3)/L) : la façade doit regarder vers l'axe.
+  const side = Math.sign(((p.proposal.x - (cx + 10)) * 2 - (p.proposal.z - (cz - 70)) * 3) / L);
+  assert.ok(side !== 0 && side * (fx * 2 - fz * 3) / L < -0.99, 'façade tournée vers la route');
+  assert.equal(p.validity, 'ok', p.message);
+  await tools.primary();
+  assert.equal(m.buildings.size, 1, notes.join(' | '));
+  assert.ok(Math.abs([...m.buildings.values()][0]!.rot - p.proposal.rot) < 1e-6);
+});

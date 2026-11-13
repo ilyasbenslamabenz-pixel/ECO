@@ -7,6 +7,7 @@
  */
 import { buildAssetIndex, type AssetCatalog } from '../../shared/catalog';
 import { ROAD_TYPES } from '../../shared/contracts';
+import { rotAngle } from '../../shared/footprint';
 import type { BuildingStore, RoadGraph } from '../ecs';
 import { ROAD_TYPE_ORDER } from '../pathfinding';
 import { evalCubic, profileHeightAt, ROAD_KINDS, ROAD_KIND_ORDER, type RoadNetwork } from '../roads/index';
@@ -75,7 +76,7 @@ export function buildingsFromStore(b: BuildingStore, cat: AssetCatalog): Traffic
     if (!a) continue;
     const f = a.frontage[0];
     // rotation par quarts de tour autour de Y (même convention que le rendu des bâtiments)
-    const th = (b.rot[i]! & 3) * (Math.PI / 2);
+    const th = rotAngle(b.rot[i]!);
     const c = Math.cos(th), s = Math.sin(th);
     const lx = f ? f.x : 0, lz = f ? f.z + 1 : a.dimensions.depth / 2 + 1;
     out.push({

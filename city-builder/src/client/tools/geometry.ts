@@ -7,6 +7,7 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import { TILE_SIZE } from '../../shared/constants';
+import { obbToWorld, type Obb } from '../../shared/footprint';
 
 export interface Vec3 { x: number; y: number; z: number }
 export interface Ray { ox: number; oy: number; oz: number; dx: number; dy: number; dz: number }
@@ -194,10 +195,19 @@ export function snapAngle(a: number, stepRad: number): number {
   return Math.round(a / stepRad) * stepRad;
 }
 
-/** Altitude retenue par la simulation pour un bâtiment : moyenne des coins de cases de l'empreinte. */
-export function footprintGroundY(heightAt: (x: number, z: number) => number, r: { minX: number; minZ: number; tx: number; tz: number }): number {
+/**
+ * Altitude retenue par la simulation pour un bâtiment : moyenne d'une grille (tilesX+1)×(tilesZ+1)
+ * de points de l'empreinte orientée (même échantillonnage que Simulation.placeBuilding).
+ */
+export function footprintGroundY(heightAt: (x: number, z: number) => number, o: Obb, tilesX: number, tilesZ: number): number {
   let sum = 0;
   let n = 0;
-  for (let j = 0; j <= r.tz; j++) for (let i = 0; i <= r.tx; i++) { sum += heightAt(r.minX + i * TILE_SIZE, r.minZ + j * TILE_SIZE); n++; }
+  const nx = Math.max(1, tilesX), nz = Math.max(1, tilesZ);
+  for (let j = 0; j <= nz; j++) {
+    for (let i = 0; i <= nx; i++) {
+      const [x, z] = obbToWorld(o, -o.hx + (2 * o.hx * i) / nx, -o.hz + (2 * o.hz * j) / nz);
+      sum += heightAt(x, z); n++;
+    }
+  }
   return n ? sum / n : 0;
 }

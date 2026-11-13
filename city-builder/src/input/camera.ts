@@ -384,6 +384,9 @@ export class CameraController implements ICameraController {
     if (!p) return;
     const [sx, sy] = this.local(e);
     const tap = !cancelled && Math.hypot(sx - p.sx, sy - p.sy) <= TAP_SLOP_PX;
+    // Pincement en attente (pas encore d'image depuis les derniers mouvements : appareil lent, onglet en
+    // arrière-plan, rendu suspendu) : appliqué avant de lever le doigt, sinon le geste serait perdu.
+    if (this.gesture === 'pinch' && this.pinchDirty && this.pointers.size === 2) { this.pinchDirty = false; this.pinchMove(); }
     this.pointers.delete(e.pointerId);
     if (this.pointers.size === 0) {
       if (this.gesture === 'tool') { if (cancelled) this.toolSink?.cancel(); else this.toolSink?.up(sx, sy, e.pointerType, tap); }

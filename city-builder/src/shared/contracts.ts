@@ -211,7 +211,7 @@ export type ToolId = 'select' | 'road' | 'building' | 'bulldoze' | 'terraform';
 
 export interface IToolController {
   readonly activeTool: ToolId;
-  setTool(tool: ToolId, options?: { roadType?: RoadTypeId; assetId?: string }): void;
+  setTool(tool: ToolId, options?: { roadType?: RoadKindId; assetId?: string }): void;
   dispose(): void;
 }
 

@@ -10,13 +10,13 @@
  * le protocole n'a pas de commande `undo` dédiée (demande dans docs/requests/construction-ui.md).
  * Propriétaire : agent construction/caméra/UI.
  */
-import type { RoadTypeId } from '../../shared/contracts';
+import type { RoadKindId } from '../../shared/contracts';
 
 export type UndoStep =
   | { kind: 'demolish'; buildingId: number }
   | { kind: 'removeRoad'; edgeId: number }
   | { kind: 'placeBuilding'; assetId: string; x: number; z: number; rot: number; variant: number }
-  | { kind: 'buildRoad'; type: RoadTypeId; points: number[] };
+  | { kind: 'buildRoad'; kindId: RoadKindId; points: number[]; c1?: [number, number]; c2?: [number, number] };
 
 export interface UndoEntry {
   label: string;

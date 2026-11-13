@@ -1,8 +1,9 @@
 /**
  * Placement intelligent des bâtiments (pur TypeScript) :
- * - près d'une route : la façade (premier point `frontage` du catalogue) est tournée vers la
- *   route et le bâtiment est reculé juste au-delà de la chaussée, en glissant le long de la voie ;
- * - sinon : placement libre aligné sur la grille, rotation choisie par le joueur.
+ * - près d'une route (droite, en biais ou courbe) : la façade (premier point `frontage` du catalogue)
+ *   est tournée EXACTEMENT vers la route (angle libre, perpendiculaire à la tangente locale) et le
+ *   bâtiment est reculé juste au-delà du trottoir, en glissant le long de la voie ;
+ * - sinon : placement libre aligné sur la grille, rotation choisie par le joueur (quarts de tour).
  * Le résultat n'est qu'une PROPOSITION : la validité réelle (collision, pente, eau, fonds)
  * est demandée au worker par un placeBuilding { dryRun: true }.
  * Propriétaire : agent construction/caméra/UI.
@@ -10,17 +11,19 @@
 import { TILE_SIZE } from '../../shared/constants';
 import type { CatalogAsset } from '../../shared/catalog';
 import { rotateQuarter } from '../../shared/math';
-import { distPointRect, distSegmentRect, gridFootprint, type GridFootprint } from './geometry';
+import { angleToRot, distSegmentObb, footprintObb, normRot, obbAabb, obbOverlap, type Obb } from '../../shared/footprint';
 import { roadWidth, type WorldMirror } from './mirror';
 
 export interface PlacementProposal {
   x: number;
   z: number;
+  /** Rotation en quarts de tour (décimale si alignée sur une route en biais). */
   rot: number;
   /** Vrai si aligné automatiquement sur une route. */
   snapped: boolean;
   edgeId: number | null;
-  rect: GridFootprint;
+  /** Empreinte orientée (identique à celle que la simulation occupera). */
+  obb: Obb;
   /** Avertissement local (indicatif) : chevauchement prévisible avec une route ou un bâtiment. */
   localConflict: boolean;
 }
@@ -35,7 +38,7 @@ export function localFacade(asset: CatalogAsset): [number, number] {
   return az >= ax ? [0, Math.sign(f.nz) || 1] : [Math.sign(f.nx), 0];
 }
 
-/** Rotation (0..3) qui oriente la façade le plus possible vers la direction (dx, dz). */
+/** Rotation entière (0..3) qui oriente la façade le plus possible vers la direction (dx, dz). */
 export function rotationFacing(asset: CatalogAsset, dx: number, dz: number): number {
   const [lx, lz] = localFacade(asset);
   let best = 0;
@@ -48,15 +51,24 @@ export function rotationFacing(asset: CatalogAsset, dx: number, dz: number): num
   return best;
 }
 
-/** Vrai si le rectangle chevauche une route (demi-largeur) ou un bâtiment existant. */
-export function rectConflicts(m: WorldMirror, r: { minX: number; minZ: number; maxX: number; maxZ: number }): boolean {
+/** Vrai si l'empreinte orientée chevauche une route (demi-largeur, axe courbe) ou un bâtiment existant. */
+export function obbConflicts(m: WorldMirror, o: Obb): boolean {
+  const bb = obbAabb(o);
   for (const e of m.edges.values()) {
     const v = m.edgeView(e);
-    if (v && distSegmentRect(v.ax, v.az, v.bx, v.bz, r.minX, r.minZ, r.maxX, r.maxZ) < roadWidth(v.type) / 2) return true;
+    if (!v) continue;
+    const half = roadWidth(v.kindId) / 2;
+    const p = v.poly;
+    for (let k = 0; k + 3 < p.length; k += 2) {
+      const x0 = Math.min(p[k]!, p[k + 2]!) - half, x1 = Math.max(p[k]!, p[k + 2]!) + half;
+      const z0 = Math.min(p[k + 1]!, p[k + 3]!) - half, z1 = Math.max(p[k + 1]!, p[k + 3]!) + half;
+      if (x1 < bb.minX || x0 > bb.maxX || z1 < bb.minZ || z0 > bb.maxZ) continue;
+      if (distSegmentObb(p[k]!, p[k + 1]!, p[k + 2]!, p[k + 3]!, o) < half) return true;
+    }
   }
   for (const b of m.buildings.values()) {
-    const o = m.buildingRect(b);
-    if (o && r.minX < o.maxX - 0.01 && r.maxX > o.minX + 0.01 && r.minZ < o.maxZ - 0.01 && r.maxZ > o.minZ + 0.01) return true;
+    const other = m.buildingObb(b);
+    if (other && obbOverlap(o, other, 0.05)) return true;
   }
   return false;
 }
@@ -69,52 +81,53 @@ export interface SnapOptions {
   reach?: number;
 }
 
+/** Recul (m) entre le bord du trottoir et la façade. */
+const FRONT_GAP = 0.6;
+
 export function proposePlacement(m: WorldMirror, asset: CatalogAsset, x: number, z: number, opt: SnapOptions): PlacementProposal {
   const t = m.terrain;
   const ox = t?.originX ?? 0;
   const oz = t?.originZ ?? 0;
+  const tX = asset.footprint.tilesX, tZ = asset.footprint.tilesZ;
   const free = (): PlacementProposal => {
-    const rect = gridFootprint(ox, oz, asset.footprint.tilesX, asset.footprint.tilesZ, x, z, opt.rot);
-    return { x: rect.cx, z: rect.cz, rot: opt.rot & 3, snapped: false, edgeId: null, rect, localConflict: rectConflicts(m, rect) };
+    // Placement libre : centre aligné sur la grille des cases (rangées régulières), rotation du joueur.
+    const rot = normRot(opt.rot);
+    const o0 = footprintObb(tX, tZ, x, z, rot);
+    const bb = obbAabb(o0);
+    const w = bb.maxX - bb.minX, d = bb.maxZ - bb.minZ;
+    const cx = ox + Math.round((x - ox - w / 2) / TILE_SIZE) * TILE_SIZE + w / 2;
+    const cz = oz + Math.round((z - oz - d / 2) / TILE_SIZE) * TILE_SIZE + d / 2;
+    const o = footprintObb(tX, tZ, cx, cz, rot);
+    return { x: cx, z: cz, rot, snapped: false, edgeId: null, obb: o, localConflict: obbConflicts(m, o) };
   };
-  const fw = Math.max(asset.footprint.tilesX, asset.footprint.tilesZ) * TILE_SIZE;
+  const fw = Math.max(tX, tZ) * TILE_SIZE;
   const reach = opt.reach ?? 10;
-  const near = m.nearestEdge(x, z, fw / 2 + 12 + reach);
+  const near = m.nearestEdge(x, z, fw / 2 + 14 + reach);
   if (!near) return free();
   const e = near.edge;
-  const half = roadWidth(e.type) / 2;
-  // Point de la route le plus proche et direction curseur -> route.
-  const px = e.ax + (e.bx - e.ax) * near.t;
-  const pz = e.az + (e.bz - e.az) * near.t;
-  let dx = px - x;
-  let dz = pz - z;
-  let dl = Math.hypot(dx, dz);
-  if (dl < 1e-6) {
-    // Curseur sur l'axe : côté gauche par défaut (perpendiculaire à la voie).
-    const ex = e.bx - e.ax; const ez = e.bz - e.az; const el = Math.hypot(ex, ez) || 1;
-    dx = ez / el; dz = -ex / el; dl = 1;
-  }
-  dx /= dl; dz /= dl;
-  const rot = opt.autoAlign ? rotationFacing(asset, dx, dz) : opt.rot & 3;
+  const half = roadWidth(e.kindId) / 2;
+  // Normale à la route (perpendiculaire à la tangente locale), du côté du curseur.
+  let nx = -near.tz, nz = near.tx;
+  if ((x - near.px) * nx + (z - near.pz) * nz < 0) { nx = -nx; nz = -nz; }
+  // La façade regarde la route : direction -n.
+  const fx = -nx, fz = -nz;
   const [lx, lz] = localFacade(asset);
-  const [fx, fz] = rotateQuarter(lx, lz, rot);
-  const depth = (lz !== 0 ? asset.footprint.tilesZ : asset.footprint.tilesX) * TILE_SIZE;
-  // Candidats : on recule du point de route le long de -façade, case par case, jusqu'à 3 cases.
+  const rot = opt.autoAlign ? angleToRot(Math.atan2(fx, fz) - Math.atan2(lx, lz)) : normRot(opt.rot);
+  // Profondeur de l'empreinte mesurée selon la normale à la route.
+  const probe = footprintObb(tX, tZ, 0, 0, rot);
+  const halfDepth = Math.abs(probe.hx * (probe.c * fx - probe.s * fz)) + Math.abs(probe.hz * (probe.s * fx + probe.c * fz));
   let first: PlacementProposal | null = null;
-  for (let k = 0; k <= 6; k++) {
-    const s = half + depth / 2 + k * (TILE_SIZE / 2);
-    const cx = px - fx * s;
-    const cz = pz - fz * s;
-    const rect = gridFootprint(ox, oz, asset.footprint.tilesX, asset.footprint.tilesZ, cx, cz, rot);
-    // La façade doit rester à portée de la route (pas plus de 1,5 case de recul).
-    const gap = distPointRect(px, pz, rect.minX, rect.minZ, rect.maxX, rect.maxZ) - half;
-    if (gap > TILE_SIZE * 1.5) break;
-    const conflict = rectConflicts(m, rect);
-    const p: PlacementProposal = { x: rect.cx, z: rect.cz, rot, snapped: true, edgeId: e.id, rect, localConflict: conflict };
+  for (let k = 0; k <= 8; k++) {
+    const s = half + halfDepth + FRONT_GAP + k * 1.5;
+    const cx = Math.round((near.px + nx * s) * 100) / 100;
+    const cz = Math.round((near.pz + nz * s) * 100) / 100;
+    const o = footprintObb(tX, tZ, cx, cz, rot);
+    const conflict = obbConflicts(m, o);
+    const p: PlacementProposal = { x: cx, z: cz, rot, snapped: true, edgeId: e.id, obb: o, localConflict: conflict };
     if (!first) first = p;
     if (!conflict) return p;
   }
   // Si le curseur s'est éloigné au-delà de la portée, placement libre.
-  if (near.dist > half + depth + reach) return free();
+  if (near.dist > half + halfDepth * 2 + reach) return free();
   return first ?? free();
 }

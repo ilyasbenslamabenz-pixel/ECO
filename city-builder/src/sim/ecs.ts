@@ -9,6 +9,7 @@
 function growF32(a: Float32Array, n: number): Float32Array { const b = new Float32Array(n); b.set(a); return b; }
 function growI32(a: Int32Array, n: number): Int32Array { const b = new Int32Array(n); b.set(a); return b; }
 function growU16(a: Uint16Array, n: number): Uint16Array { const b = new Uint16Array(n); b.set(a); return b; }
+function growF64(a: Float64Array, n: number): Float64Array { const b = new Float64Array(n); b.set(a); return b; }
 function growU8(a: Uint8Array, n: number): Uint8Array { const b = new Uint8Array(n); b.set(a); return b; }
 
 /** Bâtiments : une ligne par bâtiment posé. */
@@ -21,8 +22,9 @@ export class BuildingStore {
   x: Float32Array;
   y: Float32Array;
   z: Float32Array;
-  rot: Uint8Array;
-  /** Empreinte en cases, après rotation. */
+  /** Rotation en quarts de tour, décimale autorisée (0..4[ ; voir shared/footprint.ts). */
+  rot: Float64Array;
+  /** Empreinte en cases du modèle (AVANT rotation : la rotation est appliquée par l'empreinte orientée). */
   tilesX: Uint16Array;
   tilesZ: Uint16Array;
   /** Habitants / emplois effectivement occupés (démographie, phase 2). */
@@ -40,7 +42,7 @@ export class BuildingStore {
     this.x = new Float32Array(capacity);
     this.y = new Float32Array(capacity);
     this.z = new Float32Array(capacity);
-    this.rot = new Uint8Array(capacity);
+    this.rot = new Float64Array(capacity);
     this.tilesX = new Uint16Array(capacity);
     this.tilesZ = new Uint16Array(capacity);
     this.residents = new Int32Array(capacity);
@@ -56,7 +58,7 @@ export class BuildingStore {
     this.x = growF32(this.x, n);
     this.y = growF32(this.y, n);
     this.z = growF32(this.z, n);
-    this.rot = growU8(this.rot, n);
+    this.rot = growF64(this.rot, n);
     this.tilesX = growU16(this.tilesX, n);
     this.tilesZ = growU16(this.tilesZ, n);
     this.residents = growI32(this.residents, n);

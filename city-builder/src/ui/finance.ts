@@ -1,7 +1,7 @@
 /**
  * Panneau Finances : trésorerie, bilan mensuel, entretien estimé (catalogue + réseau), et
  * graphique de l'historique de la trésorerie RELEVÉE pendant la partie (un point par jour de jeu,
- * à partir des statistiques envoyées par la simulation). Pas d'emprunts ni d'impôts : phase 2.
+ * à partir des statistiques envoyées par la simulation). Impôts, emprunts et recettes détaillées : city-panels.ts.
  * Graphique : une seule série (pas de légende, le titre la nomme), ligne de 2 px, aire légère,
  * grille discrète, réticule + infobulle au survol / au doigt.
  * Propriétaire : agent construction/caméra/UI.

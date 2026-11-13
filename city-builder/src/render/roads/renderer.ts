@@ -91,6 +91,12 @@ export class RoadNetworkRenderer implements IRoadRenderer {
   private readonly tmpS = new THREE.Vector3();
   private readonly up = new THREE.Vector3(0, 1, 0);
   private cam = new THREE.Vector3(0, 300, 400);
+  /**
+   * Nœuds devenus orphelins lors de la dernière suppression : un même delta de la simulation retire
+   * un tronçon coupé par un carrefour PUIS ajoute ses morceaux, qui réutilisent ces nœuds existants
+   * (absents de `roadNodesAdded`). On garde leur position pour les recréer à l'ajout.
+   */
+  private readonly orphanPos = new Map<number, { x: number; y: number; z: number }>();
   /** Diagnostic : nombre de reconstructions de chunks, durée cumulée (ms). */
   rebuilds = 0;
   rebuildMs = 0;
@@ -185,6 +191,10 @@ export class RoadNetworkRenderer implements IRoadRenderer {
     const touched: number[] = [];
     for (const e0 of edges) {
       const e = e0 as RoadEdgeRecordEx;
+      for (const nid of [e.a, e.b]) {
+        const o = this.orphanPos.get(nid);
+        if (o && !this.net.hasNode(nid)) this.net.addNode(o.x, o.z, o.y, nid);
+      }
       if (this.net.hasSegment(e.id) || !this.net.hasNode(e.a) || !this.net.hasNode(e.b) || e.a === e.b) continue;
       const kind: RoadKindId = e.kind && isRoadKind(e.kind) ? e.kind : isRoadKind(e.type) ? e.type : 'street';
       let curve;
@@ -197,6 +207,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       if (e.profile && e.profile.length >= 2) this.net.setProfile(e.id, e.profile, e.bridgeRuns ?? []);
       touched.push(e.id);
     }
+    this.orphanPos.clear();
     this.net.takeChanges();
     this.markSegments(touched);
     this.flush();
@@ -204,14 +215,19 @@ export class RoadNetworkRenderer implements IRoadRenderer {
 
   removeRoadEdges(edgeIds: readonly number[]): void {
     const ends: number[] = [];
+    this.orphanPos.clear();
     for (const id of edgeIds) {
       if (!this.net.hasSegment(id)) continue;
       const [a, b] = this.net.endpoints(id);
+      const pa = this.net.nodePos(a), pb = this.net.nodePos(b);
       this.markChunkOfSeg(id);
       this.unassignSeg(id);
       ends.push(a, b);
       const orphans = this.net.removeSegment(id);
-      for (const o of orphans) this.unassignNode(o);
+      for (const o of orphans) {
+        this.unassignNode(o);
+        this.orphanPos.set(o, o === a ? { ...pa } : { ...pb });
+      }
     }
     for (const n of ends) if (this.net.hasNode(n)) this.markNode(n);
     this.net.takeChanges();

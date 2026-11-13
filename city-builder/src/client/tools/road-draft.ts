@@ -6,7 +6,7 @@
  * points [x0,z0,x1,z1,…]) ; la simulation valide pente, eau, collisions et fonds.
  * Propriétaire : agent construction/caméra/UI.
  */
-import type { RoadTypeId } from '../../shared/contracts';
+import type { RoadKindId } from '../../shared/contracts';
 import { polylineLength, sampleBezier2, snapAngle } from './geometry';
 import type { WorldMirror } from './mirror';
 
@@ -32,10 +32,7 @@ export function snapRoadPoint(m: WorldMirror, x: number, z: number, s: SnapSetti
   const n = m.nearestNode(x, z, s.radius);
   if (n) return { x: n.x, z: n.z, snap: 'node', nodeId: n.id };
   const e = m.nearestEdge(x, z, s.radius * 0.7);
-  if (e) {
-    const v = e.edge;
-    return { x: v.ax + (v.bx - v.ax) * e.t, z: v.az + (v.bz - v.az) * e.t, snap: 'edge', edgeId: v.id };
-  }
+  if (e) return { x: e.px, z: e.pz, snap: 'edge', edgeId: e.edge.id };
   if (s.angleSnap && from) {
     const dx = x - from.x;
     const dz = z - from.z;
@@ -53,7 +50,7 @@ export type DraftPhase = 'idle' | 'start' | 'control';
 
 /** Machine à états du tracé : idle → (clic) start → [courbe : (clic) control] → (clic) construit. */
 export class RoadDraft {
-  type: RoadTypeId = 'street';
+  type: RoadKindId = 'street';
   mode: RoadMode = 'straight';
   phase: DraftPhase = 'idle';
   start: SnapPoint | null = null;
@@ -99,4 +96,16 @@ export class RoadDraft {
   }
 
   length(): number { const p = this.points(); return p ? polylineLength(p) : 0; }
+
+  /**
+   * Arguments de la commande buildRoad : en mode courbe, UNE vraie courbe (2 extrémités + point de
+   * contrôle quadratique, convertie en Bézier cubique par la simulation) ; sinon un tronçon droit.
+   */
+  command(): { points: number[]; control?: [number, number] } | null {
+    const a = this.start;
+    const b = this.hover;
+    if (!a || !b || this.phase === 'idle' || Math.hypot(b.x - a.x, b.z - a.z) < 4) return null;
+    if (this.mode === 'curve' && this.control) return { points: [a.x, a.z, b.x, b.z], control: [this.control.x, this.control.z] };
+    return { points: [a.x, a.z, b.x, b.z] };
+  }
 }

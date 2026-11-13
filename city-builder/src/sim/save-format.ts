@@ -116,7 +116,7 @@ function validateV2(s: Record<string, unknown>): SaveFileV2 {
   need(Array.isArray(bs) && bs.length <= MAX_BUILDINGS_IN_SAVE, 'Liste des bâtiments invalide');
   const bIds = new Set<number>();
   for (const b of bs) {
-    need(isObj(b) && int(b.id) && b.id > 0 && typeof b.assetId === 'string' && int(b.variant) && fin(b.x) && fin(b.y) && fin(b.z) && int(b.rot) && b.rot >= 0 && b.rot <= 3, 'Bâtiment mal formé');
+    need(isObj(b) && int(b.id) && b.id > 0 && typeof b.assetId === 'string' && int(b.variant) && fin(b.x) && fin(b.y) && fin(b.z) && fin(b.rot) && b.rot >= 0 && b.rot < 4, 'Bâtiment mal formé');
     need(!bIds.has(b.id), `Bâtiment en double (${b.id})`);
     bIds.add(b.id);
   }

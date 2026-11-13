@@ -15,6 +15,7 @@ import { TILE_SIZE } from '../shared/constants';
 import { rotateQuarter } from '../shared/math';
 import type { Validity } from '../client/tools/machine';
 import { localFacade } from '../client/tools/snapping';
+import { footprintObb, obbCorners, obbToWorld, rotAngle } from '../shared/footprint';
 
 export interface ModelSource { load(assetId: string, lod?: number): Promise<THREE.Group> }
 export type HeightFn = (x: number, z: number) => number;
@@ -128,16 +129,16 @@ export class GhostPreview {
     this.group.visible = true;
     this.lastY = y;
     const tint = colorOf(validity);
-    // Dalle d'empreinte (même rectangle que celui que la simulation occupera).
-    const tx = ((rot & 3) % 2 === 0 ? asset.footprint.tilesX : asset.footprint.tilesZ) * TILE_SIZE;
-    const tz = ((rot & 3) % 2 === 0 ? asset.footprint.tilesZ : asset.footprint.tilesX) * TILE_SIZE;
-    const hx = tx / 2; const hz = tz / 2;
-    buildGroundRibbon(this.plate.geometry, [x, z - hz, x, z + hz], tx, this.heightAt, 0.12, 2);
-    buildGroundRibbon(this.border.geometry, [x - hx, z - hz, x + hx, z - hz, x + hx, z + hz, x - hx, z + hz], 0.5, this.heightAt, 0.16, 2, true);
+    // Dalle d'empreinte : rectangle ORIENTÉ, identique à celui que la simulation occupera.
+    const o = footprintObb(asset.footprint.tilesX, asset.footprint.tilesZ, x, z, rot);
+    const [p0x, p0z] = obbToWorld(o, 0, -o.hz);
+    const [p1x, p1z] = obbToWorld(o, 0, o.hz);
+    buildGroundRibbon(this.plate.geometry, [p0x, p0z, p1x, p1z], o.hx * 2, this.heightAt, 0.12, 2);
+    buildGroundRibbon(this.border.geometry, obbCorners(o), 0.5, this.heightAt, 0.16, 2, true);
     // Flèche de façade (côté rue).
     const [lx, lz] = localFacade(asset);
-    const [fx, fz] = rotateQuarter(lx, lz, rot);
-    const depth = Math.abs(fx) > 0 ? hx : hz;
+    const fx = lx * o.c + lz * o.s, fz = -lx * o.s + lz * o.c;
+    const depth = Math.abs(lx) > 0 ? o.hx : o.hz;
     const ax = x + fx * (depth + 1.5); const az = z + fz * (depth + 1.5);
     buildGroundRibbon(this.arrow.geometry, [ax - fx * 1.2, az - fz * 1.2, ax + fx * 1.6, az + fz * 1.6], 2.4, this.heightAt, 0.2, 1);
     for (const m of [this.plate, this.border, this.arrow]) (m.material as THREE.MeshBasicMaterial).color.copy(tint);
@@ -166,7 +167,7 @@ export class GhostPreview {
     const v = variant >= 0 ? asset.variants[variant] : undefined;
     // Altitude : même règle que la simulation (moyenne des coins de l'empreinte).
     g.root.position.set(x, this.lastY, z);
-    g.root.rotation.set(0, (rot & 3) * (Math.PI / 2), 0);
+    g.root.rotation.set(0, rotAngle(rot), 0);
     g.root.scale.set(1, v?.heightScale ?? 1, 1);
     const tint = colorOf(validity);
     for (let i = 0; i < g.materials.length; i++) {

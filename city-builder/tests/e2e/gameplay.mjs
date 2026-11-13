@@ -45,16 +45,20 @@ try {
   const cross = await send('buildRoad', { type: 'street', points: [at[0], at[1] - 60, at[0], at[1] + 90] });
   check(cross.ok, `rue transversale : carrefour automatique (${cross.ok ? cross.r.edgeIds.length + ' tronçons' : cross.e})`);
   // Bâtiments le long de la rue transversale (façade vers la rue).
+  // Modèles abordables avec le budget de départ (500 000 ¢) : l'ancien test essayait un immeuble à 620 000 ¢
+  // en boucle (refus « fonds insuffisants ») et ne posait jamais rien.
   let placed = 0;
-  // Ouest de la rue : façade vers +X (rot 1) ; est : façade vers -X (rot 3).
-  for (const dx of [-16, 16, -20, 20, -24, 24]) {
+  const refusals = new Map();
+  const models = ['immeuble_petit_enduit', 'maison_pavillon_enduit', 'commerce_boulangerie', 'maison_brique_pignon'];
+  // Ouest de la rue : façade vers +X (rot 1) ; est : façade vers -X (rot 3). Rue : demi-largeur 6,2 m.
+  for (const dx of [-16, 16, -20, 20]) {
     const rot = dx < 0 ? 1 : 3;
-    for (let dz = -50; dz <= 80 && placed < 3; dz += 8) {
-      const res = await send('placeBuilding', { assetId: placed === 0 ? 'immeuble_haussmannien' : 'maison_pavillon_enduit', x: at[0] + dx, z: at[1] + dz, rot, variant: 1 });
-      if (res.ok) { placed++; dz += 24; }
+    for (let dz = -50; dz <= 80 && placed < 4; dz += 8) {
+      const res = await send('placeBuilding', { assetId: models[placed], x: at[0] + dx, z: at[1] + dz, rot, variant: 1 });
+      if (res.ok) { placed++; dz += 16; } else refusals.set(res.e, (refusals.get(res.e) ?? 0) + 1);
     }
   }
-  check(placed >= 2, `${placed} bâtiments GLB posés le long des routes`);
+  check(placed >= 3, `${placed} bâtiments GLB posés le long des routes (refus : ${JSON.stringify([...refusals])})`);
   await send('setSpeed', { speed: 4 });
   await page.waitForTimeout(8000);
   const st = await page.evaluate(() => window.__aube.lastStats);
@@ -87,13 +91,15 @@ try {
   const row = page.locator('#load-list .slot', { hasText: 'partie-e2e' });
   await row.locator('button.primary').click();
   await page.waitForFunction(() => window.__aube.snapshotReceived, null, { timeout: 120000 });
+  // Date exacte au chargement = celle de l'instantané (la partie chargée reprend à vitesse 1 jusqu'à la pause).
+  const loadedMinutes = await page.evaluate(() => window.__aube.snapshotStats.date.totalMinutes);
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
   const after = await page.evaluate(() => window.__aube.send('save', { slot: 'cmp' }));
   const got = strip(after.data);
   check(JSON.stringify(got.buildings) === JSON.stringify(ref.buildings), `bâtiments identiques après rechargement (${got.buildings.length})`);
   check(JSON.stringify(got.roads) === JSON.stringify(ref.roads), `routes identiques (${got.roads.edges.length} tronçons, courbes comprises)`);
   check(got.money === ref.money, `trésorerie identique (${got.money})`);
-  check(Math.abs(got.minutes - ref.minutes) <= 4, `date identique (${ref.minutes} -> ${got.minutes} min)`);
+  check(loadedMinutes === ref.minutes, `date identique au chargement (${ref.minutes} -> ${loadedMinutes} min)`);
   check(got.pop === ref.pop, `population identique (${got.pop})`);
   await page.evaluate(() => window.__aube.renderNow(2));
   await page.screenshot({ path: join(out, 'jeu-recharge.png'), timeout: 600000 });

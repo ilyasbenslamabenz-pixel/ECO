@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import type { AssetCatalog, CatalogAsset } from '../../shared/catalog';
 import type { BuildingRecord, IBuildingRenderer } from '../../shared/contracts';
+import { rotAngle } from '../../shared/footprint';
 import { BuildingMaterials, nightFactorForHour, VARYING_ROLES } from './materials';
 
 /** Source de modèles : la bibliothèque d'assets du jeu (src/render/assets.ts) convient. */
@@ -182,7 +183,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       const i = b.ids.length;
       if (i >= b.capacity) this.grow(b, b.capacity * 2);
       b.ids.push(r.id);
-      _q.setFromAxisAngle(_up, (r.rot & 3) * (Math.PI / 2));
+      _q.setFromAxisAngle(_up, rotAngle(r.rot));
       _p.set(r.x, r.y, r.z);
       _s.set(1, b.heightScale, 1);
       _m.compose(_p, _q, _s).toArray(b.mats, i * 16);

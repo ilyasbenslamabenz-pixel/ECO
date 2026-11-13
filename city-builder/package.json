@@ -33,7 +33,8 @@
     "assets:validate": "tsx tools/assets/validate.ts",
     "assets:showcase": "tsx tools/assets/showcase/run.ts --lods",
     "stress": "node tests/e2e/stress.mjs",
-    "e2e:game": "node tests/e2e/gameplay.mjs"
+    "e2e:game": "node tests/e2e/gameplay.mjs",
+    "e2e:play": "node tests/e2e/play.mjs"
   },
   "dependencies": {
     "three": "0.187.0"

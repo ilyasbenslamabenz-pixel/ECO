@@ -84,13 +84,13 @@ export class InfoPanel {
       this.action('Vue rue', () => this.streetViewAt(rec.x, rec.z, a ? Math.max(a.footprint.tilesX, a.footprint.tilesZ) * TILE_SIZE : 16), '', 'Se placer dans la rue devant le bâtiment');
     } else if (p.kind === 'road') {
       const e = p.edge;
-      const def = roadDef(e.type);
+      const def = roadDef(e.kindId);
       this.kicker.textContent = 'Route';
-      this.title.textContent = def?.nameFr ?? e.type;
+      this.title.textContent = def?.nameFr ?? e.kindId;
       this.row('Longueur', `${fmt(e.length)} m`);
       if (def) {
         this.row('Largeur', `${def.width} m`);
-        this.row('Voies', `${def.lanesPerDirection} par sens`);
+        this.row('Voies', def.lanesBackward === 0 ? `${def.lanesForward} (sens unique)` : `${def.lanesForward} + ${def.lanesBackward}`);
         this.row('Vitesse limite', `${def.speedKmh} km/h`);
         this.row('Entretien', `${money(e.length * def.upkeepPerMeterMonth)} / mois`);
       }
@@ -130,9 +130,8 @@ export class InfoPanel {
     const near = m.nearestEdge(x, z, size + 40);
     let sx = x; let sz = z + size / 2 + 6;
     if (near) {
-      const v = near.edge;
-      sx = v.ax + (v.bx - v.ax) * near.t;
-      sz = v.az + (v.bz - v.az) * near.t;
+      sx = near.px;
+      sz = near.pz;
     }
     const yaw = Math.atan2(-(x - sx), -(z - sz));
     this.d.camera.setStreetPosition(sx, sz, yaw);

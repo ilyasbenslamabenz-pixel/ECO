@@ -12,6 +12,7 @@
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
 import { TILE_SIZE } from '../shared/constants';
+import { rotAngle } from '../shared/footprint';
 import { isBuildingCategory, type CatalogAsset } from '../shared/catalog';
 import type { RoadKindId } from '../shared/contracts';
 import { halfWidth } from './roads/types';
@@ -265,8 +266,8 @@ export function buildCity(sim: Simulation, opts: CityPlanOptions): CityBuildResu
   for (let i = 0; i < b.count; i++) {
     const a = cat.assets[b.assetIndex[i]!];
     if (a?.id !== 'public_parc_kiosque') continue;
-    const r = b.rot[i]! & 3;
-    const c = Math.cos(r * Math.PI / 2), s = Math.sin(r * Math.PI / 2);
+    const th = rotAngle(b.rot[i]!);
+    const c = Math.cos(th), s = Math.sin(th);
     const pts: [number, number, string][] = [[11, 6, 'arbre_jacaranda'], [-11, 6, 'arbre_feuillu_rond'], [11, -2, 'arbre_feuillu_jeune'], [-11, 2, 'arbre_feuillu_rond'],
       [6, 11, 'arbre_peuplier'], [-6, 11, 'arbre_feuillu_jeune'], [-12, -2, 'arbre_petit_ornement'], [3, -12, 'arbre_feuillu_rond']];
     for (const [lx, lz, id] of pts) res.decor.push({ assetId: id, x: b.x[i]! + lx * c + lz * s, z: b.z[i]! - lx * s + lz * c, rot: 0 });

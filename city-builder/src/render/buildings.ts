@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three';
 import type { BuildingRecord, IBuildingRenderer } from '../shared/contracts';
+import { rotAngle } from '../shared/footprint';
 import type { AssetLibrary } from './assets';
 
 interface SubMesh { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[]; local: THREE.Matrix4; inst: THREE.InstancedMesh | null }
@@ -46,7 +47,7 @@ export class BuildingRenderer implements IBuildingRenderer {
         this.batches.set(r.assetId, b);
         this.loadBatch(b);
       }
-      q.setFromAxisAngle(up, (r.rot & 3) * (Math.PI / 2));
+      q.setFromAxisAngle(up, rotAngle(r.rot));
       p.set(r.x, r.y, r.z);
       b.ids.push(r.id);
       b.matrices.push(new THREE.Matrix4().compose(p, q, one));

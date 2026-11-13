@@ -6,7 +6,9 @@
  */
 import type { AssetCatalog, AssetCategory, CatalogAsset } from '../shared/catalog';
 import { TILE_SIZE } from '../shared/constants';
-import { ROAD_TYPES, type RoadTypeId, type ToolId } from '../shared/contracts';
+import type { RoadKindId, ToolId } from '../shared/contracts';
+import { roadDef } from '../client/tools/mirror';
+import { ROAD_KINDS, ROAD_KIND_ORDER } from '../sim/roads/types';
 import type { ConstructionTools } from '../client/tools/machine';
 import type { ToolController } from '../input/tools';
 import { $, el, fmt, money, phaseBadge } from './dom';
@@ -48,40 +50,56 @@ export function assetsForTab(cat: AssetCatalog, tab: Tab): CatalogAsset[] {
   return cat.assets.filter((a) => tab.cats.includes(a.category)).sort((a, b) => a.cost - b.cost);
 }
 
-/** Coupe en travers d'un type de route (SVG) : trottoirs, voies, terre-plein. */
-function roadSvg(type: RoadTypeId): SVGSVGElement {
-  const def = ROAD_TYPES[type];
+/** Coupe en travers d'un type de route (SVG), dessinée d'après le profil de la simulation. */
+function roadSvg(type: RoadKindId): SVGSVGElement {
+  const k = ROAD_KINDS[type];
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', '0 0 100 40');
   svg.setAttribute('class', 'road-svg');
   svg.setAttribute('preserveAspectRatio', 'none');
-  const W = def.width;
-  const sx = 100 / 26;
+  const lanes = k.lanesForward + k.lanesBackward;
+  const W = lanes * k.laneWidth + 2 * k.shoulder + k.medianWidth + 2 * k.sidewalk;
+  const sx = 96 / 32;
   const x0 = 50 - (W * sx) / 2;
   const rect = (x: number, w: number, fill: string): void => {
     const r = document.createElementNS(ns, 'rect');
     r.setAttribute('x', String(x)); r.setAttribute('y', '0'); r.setAttribute('width', String(w)); r.setAttribute('height', '40'); r.setAttribute('fill', fill);
     svg.appendChild(r);
   };
-  rect(0, 100, '#2c3b2a');
-  const walk = 2.2 * sx;
-  rect(x0, W * sx, '#8d8a83');
-  rect(x0 + walk, W * sx - 2 * walk, '#3a3d42');
-  const lanes = def.lanesPerDirection * 2;
-  const roadW = W * sx - 2 * walk;
-  const median = type === 'boulevard' ? 3 * sx : 0;
-  if (median) rect(50 - median / 2, median, '#4f7a3c');
-  const laneW = (roadW - median) / lanes;
-  for (let i = 1; i < lanes; i++) {
-    const half = lanes / 2;
-    let x = x0 + walk + i * laneW + (i >= half ? median : 0);
-    if (i === half) { if (median) continue; x = 50; }
+  const line = (x: number, color: string, dashed: boolean, w = 0.8): void => {
     const l = document.createElementNS(ns, 'line');
     l.setAttribute('x1', String(x)); l.setAttribute('x2', String(x)); l.setAttribute('y1', '0'); l.setAttribute('y2', '40');
-    l.setAttribute('stroke', i === half ? '#e8d27a' : '#d9d9d9'); l.setAttribute('stroke-width', '0.8');
-    if (i !== half) l.setAttribute('stroke-dasharray', '4 4');
+    l.setAttribute('stroke', color); l.setAttribute('stroke-width', String(w));
+    if (dashed) l.setAttribute('stroke-dasharray', '4 4');
     svg.appendChild(l);
+  };
+  rect(0, 100, '#2c3b2a');
+  const walk = k.sidewalk * sx;
+  rect(x0, W * sx, k.surface === 'pavers' ? '#9a8a76' : '#8d8a83');
+  if (k.surface === 'pavers') {
+    for (let y = 4; y < 40; y += 6) { const r = document.createElementNS(ns, 'line'); r.setAttribute('x1', String(x0)); r.setAttribute('x2', String(x0 + W * sx)); r.setAttribute('y1', String(y)); r.setAttribute('y2', String(y)); r.setAttribute('stroke', '#7d6f60'); r.setAttribute('stroke-width', '0.6'); svg.appendChild(r); }
+    return svg;
+  }
+  const roadX = x0 + walk, roadW = W * sx - 2 * walk;
+  rect(roadX, roadW, k.surface === 'asphalt_worn' ? '#45474b' : '#3a3d42');
+  const med = k.medianWidth * sx;
+  const laneW = k.laneWidth * sx, sh = k.shoulder * sx;
+  if (med) rect(50 - med / 2, med, k.median === 'planted' ? '#4f7a3c' : '#a9a9a3');
+  // Voies sens inverse (à gauche) puis sens direct (à droite du terre-plein).
+  let x = roadX + sh;
+  for (let i = 1; i < k.lanesBackward; i++) line(x + i * laneW, '#d9d9d9', true);
+  x += k.lanesBackward * laneW;
+  if (!med && k.lanesBackward > 0) line(x, '#e8d27a', false);
+  x += med;
+  for (let i = 1; i < k.lanesForward; i++) line(x + i * laneW, '#d9d9d9', true);
+  if (sh > 1) { line(roadX + sh, '#e6e6e6', false, 0.6); line(roadX + roadW - sh, '#e6e6e6', false, 0.6); }
+  if (k.lanesBackward === 0) {
+    // Flèches de sens unique.
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', 'M50 30 L50 12 M44 18 L50 10 L56 18');
+    p.setAttribute('stroke', '#f2f2f2'); p.setAttribute('stroke-width', '1.6'); p.setAttribute('fill', 'none');
+    svg.appendChild(p);
   }
   return svg;
 }
@@ -116,7 +134,7 @@ export class BuildBar {
       b.disabled = false;
       b.querySelector('.phase')?.remove();
       const tips: Record<string, string> = {
-        road: 'Routes : tracer des rues, avenues, boulevards (droites ou courbes)', building: 'Bâtiments : maisons, immeubles, tours, commerces, industrie',
+        road: 'Routes : 6 types (rue, avenue, boulevard, sens unique, piétonne, autoroute), droites ou courbes', building: 'Bâtiments : maisons, immeubles, tours, commerces, industrie',
         services: 'Services publics : mairie, école, hôpital, pompiers…', environment: 'Environnement : arbres, végétation, mobilier urbain',
         bulldoze: 'Bulldozer : démolir bâtiments et routes (touche B)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
       };
@@ -213,12 +231,16 @@ export class BuildBar {
 
   private renderRoads(): void {
     const m = this.d.machine;
-    for (const def of Object.values(ROAD_TYPES)) {
+    for (const id of ROAD_KIND_ORDER) {
+      const def = roadDef(id)!;
+      const k = ROAD_KINDS[id];
+      const lanes = !k.vehicles ? 'piétons' : k.lanesBackward === 0 ? `${k.lanesForward} voies, sens unique` : `${k.lanesForward}×2 voies`;
+      const extra = id === 'highway' ? ' · sans carrefour à niveau' : '';
       const b = el('button', { cls: `card road-card${m.roadType === def.id ? ' active' : ''}`, attrs: { 'data-road': def.id } },
         el('div', { cls: 'thumb' }, roadSvg(def.id)),
         el('div', { cls: 'cap' }, el('span', { cls: 'nm', text: def.nameFr }), el('span', { cls: 'ct', text: `${fmt(def.costPerMeter)} ¢ / m` }),
-          el('span', { cls: 'sz', text: `${def.width} m · ${def.lanesPerDirection}×2 voies · ${def.speedKmh} km/h` })));
-      b.dataset['tip'] = `${def.nameFr} : ${fmt(def.costPerMeter)} ¢/m, entretien ${def.upkeepPerMeterMonth.toLocaleString('fr-FR')} ¢/m/mois`;
+          el('span', { cls: 'sz', text: `${def.width.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} m · ${lanes} · ${def.speedKmh} km/h${extra}` })));
+      b.dataset['tip'] = `${def.nameFr} : ${fmt(def.costPerMeter)} ¢/m, entretien ${def.upkeepPerMeterMonth.toLocaleString('fr-FR')} ¢/m/mois${id === 'highway' ? ' — ne croise pas les autres routes à niveau (échangeurs : phase 4)' : ''}`;
       b.addEventListener('click', () => { this.d.tools.setTool('road', { roadType: def.id }); this.closeDrawer(); });
       this.body.append(b);
     }
@@ -249,7 +271,7 @@ export class BuildBar {
       const v = m.variant >= 0 ? m.asset.variants[m.variant] : undefined;
       return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m`;
     }
-    if (m.tool === 'road') return `${ROAD_TYPES[m.roadType].nameFr} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'clic départ, clic arrivée'} — clic droit : étape précédente`;
+    if (m.tool === 'road') return `${ROAD_KINDS[m.roadType].nameFr} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'clic départ, clic arrivée'} — clic droit : étape précédente`;
     if (m.tool === 'bulldoze') return 'Bulldozer : cliquez un bâtiment ou un tronçon de route (remboursement 25 %)';
     return '';
   }
