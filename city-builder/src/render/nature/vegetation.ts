@@ -53,7 +53,7 @@ interface SpeciesRender {
   sp: VegSpecies;
   /** Par LOD : maillages instanciés partageant le même tampon de matrices. */
   lods: { meshes: THREE.InstancedMesh[]; matrices: THREE.InstancedBufferAttribute; colors: THREE.InstancedBufferAttribute; cap: number; count: number }[];
-  imp: { mesh: THREE.InstancedMesh; atlas: ImpostorAtlas; cap: number; count: number } | null;
+  imp: { mesh: THREE.InstancedMesh; atlas: ImpostorAtlas; cap: number; count: number; root: THREE.Object3D } | null;
   baseHeight: number;
 }
 
@@ -223,7 +223,8 @@ export class VegetationSystem {
         rec.lods.push({ meshes, matrices, colors, cap, count: 0 });
       });
       if (sp.impostor && r) {
-        const atlas = bakeImpostor(r, roots[Math.min(1, roots.length - 1)]!);
+        const impRoot = roots[Math.min(1, roots.length - 1)]!;
+        const atlas = bakeImpostor(r, impRoot);
         const geo = new THREE.PlaneGeometry(2, 2);
         const tintAttr = new THREE.InstancedBufferAttribute(new Float32Array(3 * 20000), 3);
         tintAttr.setUsage(THREE.DynamicDrawUsage);
@@ -234,7 +235,7 @@ export class VegetationSystem {
         im.frustumCulled = false;
         im.name = `veg_${sp.asset.id}_imposteur`;
         this.group.add(im);
-        rec.imp = { mesh: im, atlas, cap: 20000, count: 0 };
+        rec.imp = { mesh: im, atlas, cap: 20000, count: 0, root: impRoot };
       }
       this.renders.push(rec);
     }
@@ -242,6 +243,24 @@ export class VegetationSystem {
   }
 
   get speciesList(): readonly VegSpecies[] { return this.species; }
+
+  /**
+   * Après une perte du contexte WebGL (iPhone : mémoire), le contenu des atlas d'imposteurs (cibles de rendu)
+   * est perdu : on les recuit depuis les modèles gardés en mémoire et on les rebranche sur les matériaux.
+   */
+  rebakeImpostors(renderer?: THREE.WebGLRenderer): void {
+    const r = renderer ?? this.o.renderer;
+    if (!r) return;
+    for (const rec of this.renders) {
+      if (!rec.imp) continue;
+      const atlas = bakeImpostor(r, rec.imp.root);
+      const u = (rec.imp.mesh.material as THREE.ShaderMaterial).uniforms;
+      u['tAlb']!.value = atlas.albedo;
+      u['tNor']!.value = atlas.normal;
+      rec.imp.atlas.dispose();
+      rec.imp.atlas = atlas;
+    }
+  }
 
   /**
    * Matériau d'imposteur d'une essence (partagé, éclairage déjà synchronisé par syncLights), ou null. Sert au

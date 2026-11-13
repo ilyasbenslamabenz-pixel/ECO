@@ -83,6 +83,12 @@ interface DebugInfo {
   roadDecor?: () => { kind: string; x: number; z: number }[];
   /** Dernier préchargement des bâtiments au chargement d'une partie (e2e : attente, préchauffage, plafond atteint). */
   lastPreload?: { totalMs: number; capped: boolean; pending: number };
+  /** Compteurs de la scène et du rendu (e2e : non-régression mémoire). */
+  memStats?: () => { geometries: number; textures: number; programs: number; objects: number; instanced: number; meshes: number; dom: number };
+  /** Nombre de pertes du contexte WebGL depuis le chargement (e2e). */
+  contextLost?: number;
+  /** Estimation de la mémoire GPU (Mo) : textures, géométries, cibles de rendu (e2e : mode mobile). */
+  gpuMemory?: () => { texturesMo: number; textures: number; geometriesMo: number; geometries: number; ombresMo: number };
   /** Plante des arbres / plantes (e2e : planche des essences). */
   plantVeg?: (items: { x: number; z: number; assetId: string }[]) => number;
   /** Blocs de rivière maillés (e2e : cadrer une berge). */
@@ -187,9 +193,16 @@ async function boot(): Promise<void> {
 
   ui.setLoading(0.2, 'Préparation du rendu 3D (ciel, terrain, végétation)…');
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
-  const render = await initRender(canvas, lib, catalog, assetsBase);
+  const render = await initRender(canvas, lib, catalog, assetsBase, undefined, ui.currentOptions().quality);
   debug.frames = () => render.ctx.frames;
   debug.renderStats = () => render.stats();
+  debug.gpuMemory = () => estimateGpuMemory(render.ctx.scene, render.ctx.renderer);
+  debug.memStats = () => {
+    const r = render.ctx.renderer;
+    let objects = 0, instanced = 0, meshes = 0;
+    render.ctx.scene.traverse((o) => { objects++; if ((o as THREE.InstancedMesh).isInstancedMesh) instanced++; else if ((o as THREE.Mesh).isMesh) meshes++; });
+    return { geometries: r.info.memory.geometries, textures: r.info.memory.textures, programs: r.info.programs?.length ?? 0, objects, instanced, meshes, dom: document.getElementsByTagName('*').length };
+  };
   const props = new PropLayer(render.ctx.scene, lib);
   debug.sceneCheck = () => ({
     buildings: render.buildings.count, buildingErrors: render.buildings.errors.slice(0, 20), buildingsLoading: render.buildings.loading,
@@ -367,6 +380,31 @@ async function boot(): Promise<void> {
     flushCloud: () => (st instanceof CloudSlotProvider ? st.flush() : Promise.resolve()),
   });
   autoTriggers.install();
+
+  // Perte du contexte WebGL (iPhone : mémoire graphique) : rendu suspendu, partie sauvegardée tout de suite,
+  // message ; à la restauration, three ré-envoie textures et géométries, on reconstruit ce qui n'existait que
+  // sur le GPU (imposteurs, environnement) et l'affichage reprend.
+  let contextLost = false;
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault(); // autorise la restauration
+    contextLost = true;
+    debug.contextLost = (debug.contextLost ?? 0) + 1;
+    render.ctx.stop();
+    ui.setLoading(0.5, 'Reprise de l\'affichage…');
+    void autoTriggers?.saveAndFlush();
+  }, false);
+  canvas.addEventListener('webglcontextrestored', () => {
+    if (!contextLost) return;
+    contextLost = false;
+    try {
+      render.rebuildGpu();
+      applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera });
+    } catch (err) { console.warn('Reconstruction après perte du contexte WebGL :', err); }
+    startLoop();
+    if (params.has('norender')) render.ctx.renderNow(1 / 60);
+    ui.hideLoading();
+    ui.toast('Affichage rétabli', 'ok');
+  }, false);
 
   // Copies de secours en fichier .meknes (export/import), rappel ~30 min sans sauvegarde en ligne,
   // stockage persistant (Safari) : src/save/file-transfer.ts, docs/SAUVEGARDES.md.
@@ -591,3 +629,43 @@ boot().catch((e: unknown) => {
   if (t) t.textContent = `Erreur au démarrage : ${errText(e)}`;
   window.__aube?.errors.push(errText(e));
 });
+
+/**
+ * Estimation grossière de la mémoire GPU occupée par la scène (diagnostic). Taille des images CÔTÉ CPU : la
+ * réduction faite par three à l'envoi (mode allégé) n'y apparaît pas ; mesure réelle : docs/PERFORMANCE_MOBILE.md.
+ */
+function estimateGpuMemory(scene: THREE.Scene, renderer: THREE.WebGLRenderer): { texturesMo: number; textures: number; geometriesMo: number; geometries: number; ombresMo: number } {
+  const tex = new Set<THREE.Texture>();
+  const geo = new Set<THREE.BufferGeometry>();
+  const addTex = (v: unknown): void => { if (v && (v as THREE.Texture).isTexture) tex.add(v as THREE.Texture); };
+  scene.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.geometry) geo.add(m.geometry);
+    const mats = m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : [];
+    for (const mat of mats) {
+      for (const v of Object.values(mat)) addTex(v);
+      const u = (mat as THREE.ShaderMaterial).uniforms;
+      if (u) for (const x of Object.values(u)) addTex(x?.value);
+    }
+  });
+  addTex(scene.environment); addTex(scene.background);
+  let tb = 0;
+  for (const t of tex) {
+    const img = t.image as { width?: number; height?: number; data?: ArrayBufferView } | undefined;
+    const w = img?.width ?? 0, h = img?.height ?? 0;
+    const bpp = (img?.data as { BYTES_PER_ELEMENT?: number } | undefined)?.BYTES_PER_ELEMENT === 4 ? 16 : (img?.data as { BYTES_PER_ELEMENT?: number } | undefined)?.BYTES_PER_ELEMENT === 2 ? 8 : 4;
+    tb += w * h * bpp * (t.generateMipmaps || t.mipmaps?.length ? 1.33 : 1);
+  }
+
+  let gb = 0;
+  for (const g of geo) {
+    for (const a of Object.values(g.attributes)) gb += (a as THREE.BufferAttribute).array?.byteLength ?? 0;
+    gb += g.index?.array.byteLength ?? 0;
+  }
+  let sb = 0;
+  scene.traverse((o) => { const l = o as THREE.DirectionalLight; if (l.isDirectionalLight && l.castShadow) sb += l.shadow.mapSize.x * l.shadow.mapSize.y * 4; });
+  void renderer;
+  const mo = (b: number): number => Math.round(b / 1048576);
+  return { texturesMo: mo(tb), textures: tex.size, geometriesMo: mo(gb), geometries: geo.size, ombresMo: mo(sb) };
+}
+

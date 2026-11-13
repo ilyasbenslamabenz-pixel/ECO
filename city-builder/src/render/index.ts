@@ -35,6 +35,7 @@ import { TrafficSignalRenderer } from './traffic/signals';
 import { InstancedVehicleRenderer } from './vehicles/renderer';
 import { RENDER_PLUGINS, RenderPluginHost, type RenderPlugin } from './plugins';
 import { WaterSystem } from './water/water-system';
+import { deviceProfile, type DeviceProfile, type QualitySetting } from './device-profile';
 
 export interface RenderStats {
   /** Appels de rendu et triangles de la dernière image (ombres comprises). */
@@ -51,6 +52,10 @@ export interface RenderStats {
 
 export interface RenderHandle {
   ctx: RenderContext;
+  /** Reconstruit ce qui vit seulement sur le GPU après une restauration du contexte WebGL. */
+  rebuildGpu(): void;
+  /** Profil de rendu retenu (mode allégé sur téléphone). */
+  profile: DeviceProfile;
   sky: SkySystem;
   terrain: TerrainSystem;
   water: WaterSystem;
@@ -76,19 +81,24 @@ export interface RenderHandle {
 
 export async function initRender(
   canvas: HTMLCanvasElement, lib: AssetLibrary, catalog: AssetCatalog, assetsBase: URL, renderPlugins: readonly RenderPlugin[] = RENDER_PLUGINS,
+  quality: QualitySetting = 'auto',
 ): Promise<RenderHandle> {
   const ctx = initScene(canvas);
+  const profile = deviceProfile(quality);
+  // Mode allégé : toute texture d'image plus grande est réduite par three avant l'envoi au GPU (resizeImage).
+  // Fixé AVANT tout envoi ; la carte d'ombre a déjà lu la vraie limite à la création du rendu.
+  if (Number.isFinite(profile.textureCap)) ctx.renderer.capabilities.maxTextureSize = Math.min(ctx.renderer.capabilities.maxTextureSize, profile.textureCap);
   const sky = await SkySystem.create({
     renderer: ctx.renderer, scene: ctx.scene, sun: ctx.sun, hemi: ctx.hemi, catalog, assetsBase,
-    shadowMapSize: Math.min(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1) > 1100 ? 4096 : 2048,
+    shadowMapSize: profile.lite ? profile.shadowSize : Math.min(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1) > 1100 ? 4096 : 2048,
   });
   const terrain = new TerrainSystem(ctx.scene, { catalog, assetsBase });
   const water = new WaterSystem(ctx.scene);
   const heightAt = (x: number, z: number): number => terrain.heightAt(x, z);
-  const veg = new VegetationSystem(ctx.scene, lib, { heightAt, renderer: ctx.renderer });
+  const veg = new VegetationSystem(ctx.scene, lib, { heightAt, renderer: ctx.renderer, distances: profile.vegDistances });
   await veg.load();
   const roads = new RoadNetworkRenderer(ctx.scene, heightAt, { lib, treeImpostor: (id) => veg.impostorMaterial(id) });
-  const buildings = new InstancedBuildingRenderer(ctx.scene, lib);
+  const buildings = new InstancedBuildingRenderer(ctx.scene, lib, { lodBias: profile.buildingLodBias });
   buildings.attachCamera(ctx.camera);
   buildings.attachRenderer(ctx.renderer);
   const vehicles = new InstancedVehicleRenderer(ctx.scene, lib);
@@ -135,8 +145,9 @@ export async function initRender(
   };
 
   const handle: RenderHandle = {
-    ctx, sky, terrain, water, roads, buildings, vehicles, signals, veg, plugins,
+    ctx, profile, sky, terrain, water, roads, buildings, vehicles, signals, veg, plugins,
     disposePlugins() { plugins.dispose(); },
+    rebuildGpu() { sky.rebuildEnvironment(); veg.rebakeImpostors(ctx.renderer); buildings.invalidate(); },
     setTimeOfDay(hour) {
       if (Math.abs(hour - lastHour) < 1 / 120) return;
       lastHour = hour;
@@ -197,7 +208,8 @@ export async function initRender(
       handle.setTimeOfDay(d.stats.date.hour + d.stats.date.minute / 60);
     },
     async whenReady(preloadAll = false) {
-      if (preloadAll) { buildings.preloadAll(); vehicles.preloadAll(); }
+      // Mode allégé : pas de préchargement de TOUS les modèles (mémoire) ; chargement à la demande.
+      if (preloadAll && profile.preloadAll) { buildings.preloadAll(); vehicles.preloadAll(); }
       await Promise.all([terrain.ready, roads.whenReady(), buildings.whenReady(), vehicles.whenReady()]);
     },
     stats() {

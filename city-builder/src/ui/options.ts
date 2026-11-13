@@ -5,15 +5,17 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import * as THREE from 'three';
+import { deviceProfile } from '../render/device-profile';
 
 export interface GraphicsOptions {
-  quality: 'basse' | 'moyenne' | 'haute';
+  /** « auto » : mode allégé sur téléphone / faible mémoire (src/render/device-profile.ts), sinon moyenne. */
+  quality: 'auto' | 'basse' | 'moyenne' | 'haute';
   shadows: 'off' | 'low' | 'high' | 'ultra';
   /** Distance d'affichage (m) : plan lointain de la caméra et brouillard. */
   viewDistance: number;
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'moyenne', shadows: 'high', viewDistance: 4500 };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500 };
 const KEY = 'aube-urbaine:options:v1';
 
 export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined): GraphicsOptions {
@@ -21,7 +23,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
   const s = o?.shadows;
   const d = Number(o?.viewDistance);
   return {
-    quality: q === 'basse' || q === 'moyenne' || q === 'haute' ? q : DEFAULT_OPTIONS.quality,
+    quality: q === 'auto' || q === 'basse' || q === 'moyenne' || q === 'haute' ? q : DEFAULT_OPTIONS.quality,
     shadows: s === 'off' || s === 'low' || s === 'high' || s === 'ultra' ? s : DEFAULT_OPTIONS.shadows,
     viewDistance: Number.isFinite(d) ? Math.min(8000, Math.max(1500, d)) : DEFAULT_OPTIONS.viewDistance,
   };
@@ -47,12 +49,14 @@ export interface GraphicsTargets {
 
 export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): void {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-  const ratio = o.quality === 'basse' ? Math.min(dpr, 1) * 0.75 : o.quality === 'moyenne' ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+  const prof = deviceProfile(o.quality);
+  const ratio = o.quality === 'basse' ? Math.min(dpr, 1) * 0.75 : o.quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, prof.lite ? prof.maxPixelRatio : 1.5);
   t.renderer.setPixelRatio(ratio);
   const size = new THREE.Vector2();
   t.renderer.getSize(size);
   t.renderer.setSize(size.x, size.y, false);
-  const sz = SHADOW_SIZE[o.shadows];
+  // Mode allégé : carte d'ombre plafonnée (mémoire graphique des téléphones).
+  const sz = prof.lite ? Math.min(SHADOW_SIZE[o.shadows], prof.shadowSize) : SHADOW_SIZE[o.shadows];
   t.renderer.shadowMap.enabled = sz > 0;
   if (t.sun) {
     t.sun.castShadow = sz > 0;

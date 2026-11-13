@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import type { AssetCatalog } from '../../shared/catalog';
 import { astronomicalDay, seasonVisuals } from '../../shared/weather/season';
+import { isLiteDevice } from '../device-profile';
 import type { WeatherPayload } from '../../shared/weather/types';
 import { roleOf } from '../nature/vegetation';
 import { getActiveSky, type SkySystem } from '../sky/sky-system';
@@ -28,7 +29,8 @@ export function readQualitySetting(): AtmosphereQuality {
     const s = globalThis.localStorage?.getItem(QUALITY_KEY);
     if (s === 'off' || s === 'bas' || s === 'haut') return s;
   } catch { /* stockage indisponible */ }
-  return 'haut';
+  // Téléphone / faible mémoire : particules réduites par défaut.
+  return isLiteDevice() ? 'bas' : 'haut';
 }
 
 const PARTICLES: Record<AtmosphereQuality, { rain: number; snow: number }> = {

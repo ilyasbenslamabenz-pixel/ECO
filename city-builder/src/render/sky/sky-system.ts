@@ -309,6 +309,9 @@ export class SkySystem {
   private readonly sUp = new THREE.Vector3();
   private readonly sSnap = new THREE.Vector3();
 
+  /** Après une perte du contexte WebGL : carte d'environnement (PMREM) recalculée. */
+  rebuildEnvironment(): void { this.refreshEnvironment(); }
+
   private refreshEnvironment(): void {
     this.envHour = this.hour;
     const old = this.envRT;
