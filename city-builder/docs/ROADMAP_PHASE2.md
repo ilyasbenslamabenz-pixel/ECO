@@ -56,6 +56,13 @@ demande dans `docs/requests/<module>.md`. Chaque branche doit passer `npm run ch
 bâtiments → circulation → piétons → chantiers, `npm run check` + captures après chaque fusion,
 puis tests croisés (piétons × feux, quartiers × chantiers), QA indépendante, publication.
 
+## 1bis. Refonte de l'interface (entre 2A et 2B)
+
+Référence validée : `docs/ui/INTERFACE_REFERENCE.md` (+ `docs/ui/reference-interface.png`).
+Barre supérieure complète, barre latérale de tableaux de bord, barre d'outils à sous-barres
+colorées, panneaux à onglets, objectifs, mini-carte, variante iPhone. Aucune fonction existante
+supprimée ; chaque bouton testé en e2e.
+
 ## 2. Phase 2B — intégration progressive, une sous-étape à la fois
 
 Systèmes interdépendants : pas de parallélisme risqué. Chaque sous-étape = 1 agent + vérification
