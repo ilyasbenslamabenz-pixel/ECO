@@ -36,6 +36,8 @@ export const LOAN_BASE_CAPACITY = 1_000_000;
 /** Mois de recettes fiscales moyennes ajoutés à la capacité d'emprunt. */
 export const LOAN_CAPACITY_MONTHS_OF_INCOME = 36;
 /** Nombre de bilans mensuels négatifs consécutifs (trésorerie < 0) avant la faillite. */
+/** Heures de jeu dans un mois (30 jours). */
+export const HOURS_PER_MONTH = 30 * 24;
 export const BANKRUPTCY_MONTHS = 3;
 /** Taille maximale de l'historique conservé (mois). */
 export const HISTORY_MAX_MONTHS = 240;
@@ -118,7 +120,7 @@ export interface EconomyJSON {
   history: MonthRecord[];
   monthsInDeficit: number;
   bankrupt: boolean;
-  month: { construction: number; refunds: number; loansTaken: number };
+  month: { construction: number; refunds: number; loansTaken: number; operating?: number; hours?: number; acc?: { income: Record<TaxSector, number>; buildings: number; roads: number; salaries: number } };
 }
 
 const zeroSectors = (): Record<TaxSector, number> => ({ residential: 0, commercial: 0, industrial: 0, office: 0 });
@@ -149,6 +151,12 @@ export class Economy {
   private monthConstruction = 0;
   private monthRefunds = 0;
   private monthLoans = 0;
+  /** Solde d'exploitation déjà versé heure par heure ce mois-ci (recettes − entretien − salaires). */
+  private monthOperating = 0;
+  /** Heures déjà versées ce mois-ci (0 : clôture mensuelle « à l'ancienne », tout le mois d'un coup). */
+  private monthHours = 0;
+  /** Montants réellement versés heure par heure ce mois-ci (bilan mensuel exact). */
+  private acc = { income: { residential: 0, commercial: 0, industrial: 0, office: 0 } as Record<TaxSector, number>, buildings: 0, roads: 0, salaries: 0 };
 
   reset(money: number): void {
     this.money = money;
@@ -316,14 +324,37 @@ export class Economy {
   /* --------------------------- Clôture du mois --------------------------- */
 
   /**
+   * Versement horaire (demande du propriétaire : gagner ou perdre de l'argent à chaque heure de jeu) :
+   * recettes fiscales − entretien − salaires, au prorata d'une heure sur un mois de 30 jours.
+   * Les échéances d'emprunt restent prélevées à la clôture mensuelle.
+   */
+  onHour(hours = 1): number {
+    const f = hours / HOURS_PER_MONTH;
+    const sal = this.salaries();
+    for (const k of TAX_SECTORS) this.acc.income[k] += this.taxIncome(k) * f;
+    this.acc.buildings += this.buildingUpkeep * f; this.acc.roads += this.roadUpkeep * f; this.acc.salaries += sal * f;
+    const op = this.monthlyIncome - (this.buildingUpkeep + this.roadUpkeep + sal);
+    const delta = op * f;
+    this.money += delta;
+    this.monthOperating += delta;
+    this.monthHours += hours;
+    return delta;
+  }
+
+  /** Solde d'exploitation horaire courant (affichage « / h »). */
+  get hourlyBalance(): number { return (this.monthlyIncome - (this.buildingUpkeep + this.roadUpkeep + this.salaries())) / HOURS_PER_MONTH; }
+
+  /**
    * Appelé au changement de mois : encaisse les impôts, paie l'entretien, les salaires et
    * les échéances d'emprunt, enregistre le bilan et met à jour l'état de faillite.
    */
   onMonth(ctx?: MonthContext): MonthRecord {
+    const hourly = this.monthHours > 0;
     const income = zeroSectors();
     let totalIncome = 0;
-    for (const s of TAX_SECTORS) { income[s] = r2(this.taxIncome(s)); totalIncome += this.taxIncome(s); }
-    const salaries = this.salaries();
+    for (const s of TAX_SECTORS) { const v = hourly ? this.acc.income[s] : this.taxIncome(s); income[s] = r2(v); totalIncome += v; }
+    const salaries = hourly ? this.acc.salaries : this.salaries();
+    const upB = hourly ? this.acc.buildings : this.buildingUpkeep, upR = hourly ? this.acc.roads : this.roadUpkeep;
     let interest = 0, principal = 0;
     for (const l of this.loans) {
       const i = l.remaining * (l.annualRate / 12);
@@ -334,8 +365,16 @@ export class Economy {
       l.monthsLeft--;
     }
     this.loans = this.loans.filter((l) => l.remaining > 0.005 && l.monthsLeft > 0);
-    const expenses = this.buildingUpkeep + this.roadUpkeep + salaries + interest + principal;
-    this.money += totalIncome - expenses;
+    const expenses = upB + upR + salaries + interest + principal;
+    // Exploitation déjà versée heure par heure (onHour) : seules les échéances d'emprunt sont prélevées ici.
+    // Sans aucun versement horaire (appel direct), le mois entier est versé d'un coup comme avant.
+    if (!hourly) { this.monthOperating = totalIncome - (upB + upR + salaries); this.money += this.monthOperating; }
+    this.money -= interest + principal;
+    this.money = Math.round(this.money * 1e6) / 1e6; // somme de 720 versements horaires : pas de résidu flottant
+    const balance = this.monthOperating - interest - principal;
+    this.monthOperating = 0;
+    this.monthHours = 0;
+    this.acc = { income: zeroSectors(), buildings: 0, roads: 0, salaries: 0 };
 
     if (this.money < 0) {
       this.monthsInDeficit++;
@@ -348,9 +387,9 @@ export class Economy {
     const rec: MonthRecord = {
       monthIndex: mi, year: 1 + Math.floor(mi / 12), month: 1 + (mi % 12),
       income,
-      expenses: { buildings: r2(this.buildingUpkeep), roads: r2(this.roadUpkeep), salaries: r2(salaries), loanInterest: r2(interest), loanPrincipal: r2(principal) },
+      expenses: { buildings: r2(upB), roads: r2(upR), salaries: r2(salaries), loanInterest: r2(interest), loanPrincipal: r2(principal) },
       construction: r2(this.monthConstruction), refunds: r2(this.monthRefunds), loansTaken: r2(this.monthLoans),
-      balance: r2(totalIncome - expenses), moneyEnd: Math.round(this.money),
+      balance: r2(balance), moneyEnd: Math.round(this.money),
       population: ctx?.population ?? 0, jobs: ctx?.jobs ?? 0,
       unemploymentRate: ctx?.unemploymentRate ?? 0, happiness: ctx?.happiness ?? 0,
     };
@@ -367,7 +406,7 @@ export class Economy {
       money: this.money, taxRates: { ...this.taxRates }, loans: this.loans.map((l) => ({ ...l })), nextLoanId: this.nextLoanId,
       history: this.history.map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } })),
       monthsInDeficit: this.monthsInDeficit, bankrupt: this.bankrupt,
-      month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans },
+      month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans, operating: this.monthOperating, hours: this.monthHours, acc: { ...this.acc, income: { ...this.acc.income } } },
     };
   }
 
@@ -383,6 +422,9 @@ export class Economy {
     this.monthConstruction = j.month.construction;
     this.monthRefunds = j.month.refunds;
     this.monthLoans = j.month.loansTaken;
+    this.monthOperating = j.month.operating ?? 0;
+    this.monthHours = j.month.hours ?? 0;
+    if (j.month.acc) this.acc = { ...j.month.acc, income: { ...zeroSectors(), ...j.month.acc.income } };
   }
 }
 

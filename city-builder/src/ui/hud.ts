@@ -412,7 +412,9 @@ export function initUI(h: UIHandlers): UIHandle {
       elClock.textContent = `${String(d.hour).padStart(2, '0')}:${String(d.minute).padStart(2, '0')}`;
       elMoney.textContent = moneyShort(s.money);
       elMoney.classList.toggle('neg', s.money < 0);
-      elBalance.replaceChildren(signedShort(s.monthlyBalance), el('span', { cls: 'per', text: ' / mois' }));
+      // Argent gagné ou perdu à chaque heure de jeu (versé heure par heure par la simulation : 720 h par mois).
+      const perHour = Math.round(s.monthlyBalance / 720);
+      elBalance.replaceChildren(signedShort(perHour), el('span', { cls: 'per', text: ' / h' }));
       elBalance.classList.toggle('neg', s.monthlyBalance < 0);
       elBalance.classList.toggle('pos', s.monthlyBalance > 0);
       elPop.textContent = fmt(s.population);

@@ -729,8 +729,11 @@ export class Simulation {
    */
   tick(minutes: number = GAME_MINUTES_PER_TICK): void {
     if (!this.terrain) return;
+    const h0 = Math.floor(this.clock.totalMinutes / 60);
     this.clock.advance(minutes);
     const now = this.clock.totalMinutes;
+    const hours = Math.floor(now / 60) - h0;
+    if (hours > 0) this.economy.onHour(hours);
     this.scheduler.runDue(now, this.onEvent);
     const demo = this.demography;
     if (demo) {
