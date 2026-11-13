@@ -84,4 +84,16 @@ qui n'ont donc pas changé. Build complet sans cache : ~25 s ; avec cache : quel
 Démo (`?demo`), ordinateur 1280×800 et iPhone 13 émulé en mode allégé (`?lite=1`), vues aérienne et rue,
 même scène à 10 h 30. Écart mesuré par `node tests/e2e/compression-captures.mjs --compare <avant> <après>` :
 
-(mesures en cours, ajoutées au commit suivant)
+| Vue | Écart moyen (0-255) | PSNR |
+|---|---:|---:|
+| ordinateur, aérien | 0,95 | 34,7 dB |
+| ordinateur, rue | 2,31 | 28,1 dB |
+| iPhone 13 allégé, aérien | 0,18 | 41,3 dB |
+| iPhone 13 allégé, rue | 1,29 | 30,4 dB |
+
+Les deux séries : démo prête (12,0 / 12,9 s ordinateur, 8,5 / 8,8 s iPhone sous SwiftShader), 112/112 bâtiments
+dessinés, aucun modèle en erreur, aucune erreur de page, console ou requête, mode allégé bien actif sur iPhone.
+À l'œil, aucune différence de modèle ni de texture. Les écarts mesurés viennent de ce qui bouge entre deux sessions
+(heure simulée 11:32 contre 11:36, position des véhicules, pales de l'éolienne) : les vues rue, où les véhicules
+sont au premier plan, ont donc les écarts les plus grands. Planches avant (gauche) / après (droite) :
+`docs/captures-compression/cmp-*.webp`.
