@@ -18,7 +18,7 @@
     "e2e": "node tests/e2e/smoke.mjs",
     "check": "npm run typecheck && npm test && npm run build && npm run e2e && npm run e2e:gate",
     "e2e:gate": "node tests/e2e/gate-selftest.mjs",
-    "test:assets": "tsx --test tests/buildings/*.test.ts tests/buildings-other/*.test.ts",
+    "test:assets": "tsx --test tests/buildings/*.test.ts tests/buildings-other/*.test.ts tests/transport-assets/*.test.ts",
     "test:all": "npm test && npm run test:assets",
     "buildings:residential": "tsx tools/buildings/residential/build.ts",
     "buildings:showcase": "tsx tools/buildings/showcase/run.ts",
@@ -37,7 +37,9 @@
     "e2e:play": "node tests/e2e/play.mjs",
     "e2e:signals": "node tests/e2e/signals.mjs",
     "captures": "node tests/e2e/captures.mjs",
-    "circulation:bench": "tsx tests/circulation/bench.ts"
+    "circulation:bench": "tsx tests/circulation/bench.ts",
+    "transport:build": "tsx tools/transport/build.ts",
+    "transport:showcase": "tsx tools/transport/showcase/run.ts"
   },
   "dependencies": {
     "three": "0.187.0"
