@@ -466,7 +466,8 @@ function markings(out: BuildOutput, ctx: BuildContext, k: RoadKindDef, sm: SegSa
   // Abords de carrefour : passages piétons, lignes d'arrêt, flèches.
   const ends: { j: JunctionInfo; atStart: boolean }[] = [{ j: startJ, atStart: true }, { j: endJ, atStart: false }];
   for (const { j, atStart } of ends) {
-    if (j.type !== 'junction') continue;
+    // Simple coude (deux branches) : pas de passage piéton ni de ligne d'arrêt.
+    if (j.type !== 'junction' || j.arms.length < 3) continue;
     const sBase = atStart ? s0 : s1;
     const dir = atStart ? 1 : -1;
     if (s1 - s0 < 14) continue;
@@ -743,10 +744,30 @@ export function buildJunction(out: BuildOutput, ctx: BuildContext, nodeId: numbe
     // côté « -p » (vers la branche précédente) puis côté « +p » (vers la suivante)
     contour.push([e.x - e.nx * hcE, e.y + surfLift, e.z - e.nz * hcE]);
     contour.push([e.x + e.nx * hcE, e.y + surfLift, e.z + e.nz * hcE]);
+    // Angle du coin, de la branche e à la suivante f (sens croissant) : > 180° = coin rentrant (côté extérieur
+    // d'un virage, d'une épingle ou d'un angle droit à deux branches).
+    let alpha = f.arm.angle - e.arm.angle;
+    while (alpha <= 0) alpha += 2 * Math.PI;
+    const reflex = alpha > (185 * Math.PI) / 180;
     // Coin entre e (+p) et f (-p).
     const quadCorner = (offE: number, offF: number, dy: number): [number, number, number][] => {
       const ax = e.x + e.nx * offE, az = e.z + e.nz * offE;
       const bx = f.x - f.nx * offF, bz = f.z - f.nz * offF;
+      if (reflex) {
+        // Coin rentrant : les bords filent parallèlement aux branches jusqu'au droit du nœud, puis un arc centré
+        // sur le nœud les raccorde (rayon = demi-largeur). Plus de corde droite qui coupait une pointe d'asphalte
+        // dans l'herbe, ni de trottoirs qui se croisent. Même découpage pour toutes les courbes du coin (les bandes
+        // de bordure et de trottoir relient les points de même rang).
+        const pts: [number, number, number][] = [[ax, e.y + dy, az]];
+        const a0 = Math.atan2(e.nz, e.nx), sweep = alpha - Math.PI;
+        const yN = node.y;
+        for (let q = 0; q <= Q - 2; q++) {
+          const u = q / (Q - 2), th = a0 + sweep * u, r = offE + (offF - offE) * u;
+          pts.push([node.x + Math.cos(th) * r, yN + dy, node.z + Math.sin(th) * r]);
+        }
+        pts.push([bx, f.y + dy, bz]);
+        return pts;
+      }
       // Point de contrôle : intersection des bords (droites parallèles aux branches).
       let t = lineIntersectT(ax, az, -e.dx, -e.dz, bx, bz, -f.dx, -f.dz);
       let cx: number, cz: number;
