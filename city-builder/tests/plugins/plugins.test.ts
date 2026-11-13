@@ -72,7 +72,18 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), ids);
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
   assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), ids);
-  for (const p of SIM_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
+  // Un module de phase 2A rempli expose des crochets : on vérifie la FORME du contrat, pas la vacuité
+  // (l'absence d'effet d'un module inactif est garantie par le test suivant, tick à tick).
+  // Modification d'un fichier commun par la branche p2a-batiments : voir docs/requests/batiments.md §2.
+  const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load'];
+  for (const p of SIM_PLUGINS) {
+    assert.equal(typeof p.id, 'string', 'identifiant de module');
+    for (const [k, v] of Object.entries(p)) {
+      if (k === 'id' || k === 'saveVersion') continue;
+      assert.ok(HOOKS.includes(k), `${p.id} : clé inconnue ${k}`);
+      assert.equal(typeof v, 'function', `${p.id} : ${k} doit être une fonction`);
+    }
+  }
   for (const sec of SAVE_SECTIONS) {
     assert.deepEqual(sec.migrate(sec.empty(), sec.version), sec.empty());
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
