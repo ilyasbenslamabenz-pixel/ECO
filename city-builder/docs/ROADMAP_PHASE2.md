@@ -108,3 +108,14 @@ estimation GPU), temps de simulation par tick (moyenne, p95), draw calls, triang
 configuration matérielle exacte (CPU, cœurs, RAM, OS, Chromium, renderer WebGL). Les FPS
 mesurés sous SwiftShader (rendu logiciel, sans GPU) sont marqués **non représentatifs**.
 Banc `?bench` pour mesurer sur l'appareil réel du joueur.
+
+## 6. Décisions du propriétaire (2026-11-13)
+
+- Style architectural : **européen** (pas de style médina).
+- Monnaie affichée : **franc suisse (CHF)** — à appliquer lors de la refonte de l'interface
+  (formatage « 12,5 M CHF »), sans changer les montants internes ni casser les sauvegardes.
+- Nom du jeu : **Meknes City** (voir `docs/ui/INTERFACE_REFERENCE.md`).
+- Le jeu doit être **accessible par une URL** à chaque étape : publication en artifact claude.ai.
+  Les artifacts ne servent ni `.glb` ni `.hdr` : l'étape de publication convertit les GLB en glTF
+  JSON (buffer embarqué) et embarque les HDRI dans `catalog.json` (script à intégrer :
+  `scripts/pack-artifact.mjs`, après la phase 1).
