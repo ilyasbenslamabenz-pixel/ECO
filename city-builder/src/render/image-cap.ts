@@ -46,9 +46,21 @@ function workCanvas(w: number, h: number): typeof work {
   return work;
 }
 
+/**
+ * Réductions déjà faites, par image d'origine. THREE.Cache partage une même ImageBitmap entre tous les GLB qui
+ * citent la même texture (même URL) : la première réduction la ferme (`close()`, largeur 0). Sans cette table,
+ * les modèles suivants recevaient l'image fermée et l'envoyaient vide au GPU : façades noires (vignettes des
+ * bâtiments, accessoires) en mode allégé.
+ */
+const reduced = new WeakMap<object, ImageData>();
+
 /** Image réduite à `cap` px de côté au plus (même orientation), ou l'image d'origine si elle tient déjà. */
 export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | ImageData {
   if (!Number.isFinite(cap)) return img;
+  if (img && typeof img === 'object') {
+    const done = reduced.get(img);
+    if (done) return done;
+  }
   const d = dims(img);
   if (!d || (d.w <= cap && d.h <= cap)) return img;
   const s = cap / Math.max(d.w, d.h);
@@ -60,9 +72,61 @@ export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | Ima
   ctx.clearRect(0, 0, w, h);
   ctx.drawImage(img as unknown as Img as CanvasImageSource, 0, 0, w, h);
   const out = ctx.getImageData(0, 0, w, h);
+  refillTransparent(out);
+  reduced.set(img as object, out);
   // Libère l'original au plus tôt (ImageBitmap : mémoire décodée rendue tout de suite).
   (img as { close?: () => void }).close?.();
   return out;
+}
+
+/**
+ * Le canevas 2D stocke ses pixels prémultipliés : la couleur des texels TOTALEMENT transparents est perdue (noir).
+ * Les feuillages des arbres ont un fond coloré (vert dilaté autour des feuilles) justement pour que le filtrage
+ * et les mipmaps ne mêlent pas de noir aux bords : réduits en mode allégé, ils sortaient cerclés de noir (arbres
+ * sombres et granuleux, imposteurs compris). On rétablit ce fond : dilatation de la couleur des texels voisins sur
+ * quelques pixels, puis couleur moyenne des texels opaques pour le reste.
+ */
+export function refillTransparent(img: ImageData, passes = 4): void {
+  const { data, width: w, height: h } = img;
+  let holes = 0, sr = 0, sg = 0, sb = 0, n = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) holes++;
+    else if (data[i + 3]! > 127) { sr += data[i]!; sg += data[i + 1]!; sb += data[i + 2]!; n++; }
+  }
+  if (!holes || !n) return;
+  // 1 = couleur connue (texel non transparent ou déjà rempli).
+  const known = new Uint8Array(w * h);
+  for (let p = 0; p < w * h; p++) known[p] = data[p * 4 + 3]! > 0 ? 1 : 0;
+  const next = new Uint8Array(w * h);
+  for (let pass = 0; pass < passes; pass++) {
+    next.set(known);
+    let filled = 0;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const p = y * w + x;
+        if (known[p]) continue;
+        let r = 0, g = 0, b = 0, c = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= w || (!dx && !dy)) continue;
+            const q = yy * w + xx;
+            if (!known[q]) continue;
+            r += data[q * 4]!; g += data[q * 4 + 1]!; b += data[q * 4 + 2]!; c++;
+          }
+        }
+        if (!c) continue;
+        data[p * 4] = r / c; data[p * 4 + 1] = g / c; data[p * 4 + 2] = b / c;
+        next[p] = 1; filled++;
+      }
+    }
+    known.set(next);
+    if (!filled) break;
+  }
+  const mr = sr / n, mg = sg / n, mb = sb / n;
+  for (let p = 0; p < w * h; p++) if (!known[p]) { data[p * 4] = mr; data[p * 4 + 1] = mg; data[p * 4 + 2] = mb; }
 }
 
 /** Réduit en place les images des textures d'un modèle chargé (une fois par texture). */

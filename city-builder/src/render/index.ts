@@ -19,7 +19,7 @@ import { TILE_SIZE } from '../shared/constants';
 import type { BuildingRecord, CameraPose, RoadEdgeRecord } from '../shared/contracts';
 import { rotAngle } from '../shared/footprint';
 import { SIGNAL_HEAD_STRIDE, type DeltaMessage, type SignalLayoutMsg, type SnapshotMessage } from '../shared/protocol';
-import { cubic, polyline } from '../sim/roads/bezier';
+import { cubic, cubicLength, polyline } from '../sim/roads/bezier';
 import { halfWidth, isRoadKind } from '../sim/roads/types';
 import { isWorldTerrain } from '../sim/terrain';
 import type { TerrainPatch } from '../sim/terrain/types';
@@ -77,6 +77,8 @@ export interface RenderHandle {
   /** Charge tous les modèles (démo, porte de validation) et attend la fin des chargements en cours. */
   whenReady(preloadAll?: boolean): Promise<void>;
   stats(): RenderStats;
+  /** Végétation qui recouvre une chaussée (diagnostic e2e : doit rester vide). */
+  vegOnRoads(): { x: number; z: number; r: number; assetId: string }[];
 }
 
 export async function initRender(
@@ -134,8 +136,28 @@ export async function initRender(
       const c2 = e.c2 ?? [a.x + ((b.x - a.x) * 2) / 3, a.z + ((b.z - a.z) * 2) / 3];
       const poly = polyline(cubic(a.x, a.z, c1[0], c1[1], c2[0], c2[1], b.x, b.z), Math.max(1, Math.ceil(e.length / 12)));
       const hw = halfWidth(e.kind && isRoadKind(e.kind) ? e.kind : e.type) + 1.5;
-      for (let k = 0; k + 3 < poly.length; k += 2) veg.removeAlongSegment(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, hw);
+      // Arbres plantés compris : une route tracée sur un alignement ou un parc les remplace.
+      for (let k = 0; k + 3 < poly.length; k += 2) veg.removeAlongSegment(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, hw, true);
     }
+  };
+  /** Végétation dont l'emprise recouvre la chaussée d'une route du rendu (diagnostic e2e : doit rester vide). */
+  const vegOnRoads = (): { x: number; z: number; r: number; assetId: string }[] => {
+    const segs: number[] = [];
+    for (const id of roads.net.segmentIds()) {
+      const c = roads.net.curve(id);
+      const poly = polyline(c, Math.max(1, Math.ceil(cubicLength(c) / 12)));
+      const hw = halfWidth(roads.net.kindOf(id));
+      for (let k = 0; k + 3 < poly.length; k += 2) segs.push(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, hw);
+    }
+    return veg.overlapping((x, z, r) => {
+      for (let k = 0; k < segs.length; k += 5) {
+        const ax = segs[k]!, az = segs[k + 1]!, dx = segs[k + 2]! - ax, dz = segs[k + 3]! - az;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1e-9)));
+        const w = segs[k + 4]! + r;
+        if ((x - ax - dx * t) ** 2 + (z - az - dz * t) ** 2 < w * w) return true;
+      }
+      return false;
+    });
   };
 
   /** Le décor routier (lampadaires, arbres) s'écarte des pieds de mâts de feux (disposition lue, jamais modifiée). */
@@ -217,6 +239,7 @@ export async function initRender(
       if (preloadAll && profile.preloadAll) { buildings.preloadAll(); vehicles.preloadAll(); }
       await Promise.all([terrain.ready, roads.whenReady(), buildings.whenReady(), vehicles.whenReady()]);
     },
+    vegOnRoads,
     stats() {
       const info = ctx.renderer.info;
       const vs = vehicles.stats();

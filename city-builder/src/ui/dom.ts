@@ -45,3 +45,21 @@ export const pct = (v: number, d = 0): string => `${(v * 100).toLocaleString('fr
 export const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 export function phaseBadge(n: number | string): HTMLSpanElement { return el('span', { cls: 'phase', text: `Phase ${n}` }); }
+
+/**
+ * Rend le défilement horizontal ÉVIDENT : `data-more` vaut « r », « l » ou « lr » selon qu'il reste du contenu
+ * à droite / à gauche ; la feuille de style fond alors le bord concerné (un libellé coupé net au bord de
+ * l'écran passait pour un défaut d'affichage). Écoute le défilement et les changements de taille.
+ */
+export function scrollHints(elm: HTMLElement): void {
+  const upd = (): void => {
+    const max = elm.scrollWidth - elm.clientWidth;
+    const v = max > 2 ? `${elm.scrollLeft > 2 ? 'l' : ''}${elm.scrollLeft < max - 2 ? 'r' : ''}` : '';
+    if (v) elm.dataset['more'] = v; else delete elm.dataset['more'];
+  };
+  elm.addEventListener('scroll', upd, { passive: true });
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(upd).observe(elm);
+  if (typeof MutationObserver !== 'undefined') new MutationObserver(() => requestAnimationFrame(upd)).observe(elm, { childList: true });
+  window.addEventListener('resize', upd);
+  requestAnimationFrame(upd);
+}

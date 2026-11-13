@@ -42,7 +42,11 @@ const CSS = `
 #elec-launcher.on{background:#e8b65a;color:#1b1408}
 #elec-panel{position:fixed;right:calc(60px + env(safe-area-inset-right,0px));top:72px;bottom:96px;width:min(420px,calc(100vw - 76px));z-index:41;overflow:auto;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(17,21,27,.94);color:#e8edf2;font:13px/1.35 system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.4)}
 #elec-panel.hidden{display:none}
-@media (max-width:560px){#elec-panel{left:8px;right:8px;width:auto;top:auto;bottom:calc(150px + env(safe-area-inset-bottom,0px));max-height:55vh}#elec-launcher{top:auto;bottom:calc(210px + env(safe-area-inset-bottom,0px))}}
+@media (max-width:760px){#elec-panel{left:max(4px,env(safe-area-inset-left,0px));right:max(4px,env(safe-area-inset-right,0px));width:auto;top:calc(var(--hud-h,200px) + 6px);bottom:calc(var(--tb-h,150px) + 6px);max-height:none}
+#elec-launcher{top:auto;bottom:calc(var(--tb-h,150px) + 6px);min-width:48px;height:48px;padding:0;font-size:20px}#elec-launcher .t{display:none}
+body.drawer-open #elec-launcher,body.tool-opts #elec-launcher,body.confirming #elec-launcher,body.sidebar-open #elec-launcher,body:has(.panel:not(.hidden)) #elec-launcher{display:none}}
+@media (max-height:500px) and (orientation:landscape){#elec-panel{top:calc(var(--hud-h,60px) + 4px);bottom:calc(var(--tb-h,60px) + 4px);max-height:none}
+#elec-launcher{top:calc(var(--hud-h,60px) + 8px);bottom:auto}#elec-launcher .t{display:none}}
 .elec h3{margin:0 0 8px;font-size:15px;display:flex;justify-content:space-between;align-items:center}
 .elec h4{margin:12px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#8f9baa}
 .elec .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
@@ -259,7 +263,9 @@ export function mountElectriciteLauncher(): void {
   btn.id = 'elec-launcher';
   btn.type = 'button';
   btn.title = 'Énergie : production, consommation, réseau électrique';
-  btn.textContent = '⚡ Énergie';
+  btn.setAttribute('aria-label', 'Énergie');
+  // Libellé masqué sur téléphone (icône seule) : le bouton ne recouvre plus la mini-carte ni les tiroirs.
+  btn.innerHTML = '<span aria-hidden="true">⚡</span><span class="t"> Énergie</span>';
   const panel = document.createElement('div');
   panel.id = 'elec-panel';
   panel.className = 'hidden';
