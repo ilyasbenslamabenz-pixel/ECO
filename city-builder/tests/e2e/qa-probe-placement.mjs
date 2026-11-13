@@ -11,8 +11,9 @@ await send('setSpeed', { speed: 0 });
 const before = await send('placeBuilding', { assetId: 'maison_pavillon_enduit', x: -320, z: 60, rot: 0, variant: 0, dryRun: true });
 console.log('sans route, (-320,60):', JSON.stringify(before));
 const road = await send('buildRoad', { type: 'street', kind: 'avenue', points: [-450, 128, -190, 128] });
+  const ter = await page.evaluate(() => JSON.stringify(window.__aube.sceneCheck?.()?.roads ?? null).slice(0,300)); console.log('rendu routes', ter);
 console.log('avenue', JSON.stringify(road).slice(0, 200));
-for (const dz of [-12, -16, -20, -30, -50, -80, -120, -200, 200]) {
+for (const dz of [-14,-18,-22,-24,-26,-28,14,18,22,24,26,28,32,36,40]) {
   const r = await send('placeBuilding', { assetId: 'maison_pavillon_enduit', x: -320, z: 128 + dz, rot: 0, variant: 0, dryRun: true });
   console.log(`dz=${dz}`, JSON.stringify(r));
 }
