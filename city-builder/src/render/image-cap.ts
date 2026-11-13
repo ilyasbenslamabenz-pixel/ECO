@@ -24,24 +24,45 @@ function dims(img: unknown): { w: number; h: number } | null {
   return w > 0 && h > 0 ? { w, h } : null;
 }
 
+/**
+ * Un seul canevas de travail pour toutes les réductions : sur iPhone, Safari plafonne la mémoire TOTALE des
+ * canevas et ferme la page au-delà ; garder un canevas par texture (des centaines) la faisait planter juste
+ * après le chargement. Le résultat est un ImageData (simple tableau d'octets, accepté par three comme image).
+ */
+let work: { canvas: HTMLCanvasElement | OffscreenCanvas; ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D } | null = null;
+
+function workCanvas(w: number, h: number): typeof work {
+  if (!work) {
+    let canvas: HTMLCanvasElement | OffscreenCanvas;
+    if (typeof OffscreenCanvas !== 'undefined') canvas = new OffscreenCanvas(w, h);
+    else if (typeof document !== 'undefined') canvas = document.createElement('canvas');
+    else return null;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+    if (!ctx) return null;
+    work = { canvas, ctx };
+  }
+  if (work.canvas.width < w) work.canvas.width = w;
+  if (work.canvas.height < h) work.canvas.height = h;
+  return work;
+}
+
 /** Image réduite à `cap` px de côté au plus (même orientation), ou l'image d'origine si elle tient déjà. */
-export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | HTMLCanvasElement | OffscreenCanvas {
+export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | ImageData {
   if (!Number.isFinite(cap)) return img;
   const d = dims(img);
   if (!d || (d.w <= cap && d.h <= cap)) return img;
   const s = cap / Math.max(d.w, d.h);
   const w = Math.max(1, Math.round(d.w * s)), h = Math.max(1, Math.round(d.h * s));
-  let canvas: HTMLCanvasElement | OffscreenCanvas;
-  if (typeof OffscreenCanvas !== 'undefined') canvas = new OffscreenCanvas(w, h);
-  else if (typeof document !== 'undefined') { canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h; }
-  else return img;
-  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-  if (!ctx) return img;
+  const wk = workCanvas(w, h);
+  if (!wk) return img;
+  const { ctx } = wk;
   ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, w, h);
   ctx.drawImage(img as unknown as Img as CanvasImageSource, 0, 0, w, h);
+  const out = ctx.getImageData(0, 0, w, h);
   // Libère l'original au plus tôt (ImageBitmap : mémoire décodée rendue tout de suite).
   (img as { close?: () => void }).close?.();
-  return canvas;
+  return out;
 }
 
 /** Réduit en place les images des textures d'un modèle chargé (une fois par texture). */

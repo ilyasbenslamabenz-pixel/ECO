@@ -41,7 +41,9 @@ async function decode(url: string, size: number): Promise<Uint8ClampedArray> {
   if (!g) throw new Error('Contexte 2D indisponible');
   g.drawImage(bmp, 0, 0, size, size);
   bmp.close();
-  return g.getImageData(0, 0, size, size).data;
+  const data = g.getImageData(0, 0, size, size).data;
+  canvas.width = 0; canvas.height = 0; // rend la mémoire du canevas tout de suite (Safari iOS la plafonne)
+  return data;
 }
 
 function arrayTexture(layers: Uint8ClampedArray[], size: number, srgb: boolean, anisotropy: number): THREE.DataArrayTexture {

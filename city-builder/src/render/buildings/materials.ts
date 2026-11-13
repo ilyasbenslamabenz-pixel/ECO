@@ -27,7 +27,7 @@ export const VARYING_ROLES = new Set(['facade', 'facade_b', 'toiture', 'soubasse
 
 export class BuildingMaterials {
   private readonly loader = new THREE.TextureLoader();
-  private readonly images = new Map<string, Promise<HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas | null>>();
+  private readonly images = new Map<string, Promise<HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas | ImageData | null>>();
   private readonly textures = new Map<string, THREE.Texture>();
   private readonly materials = new Map<string, THREE.Material>();
   private readonly sets: Map<string, TextureSet>;
@@ -44,7 +44,7 @@ export class BuildingMaterials {
    * qui figeait la première image d'une ville chargée. Sans ImageBitmap : élément <img> comme avant.
    * Pas de retournement (flipY = false, comme pour l'élément <img>) ni de conversion de couleur (cartes de normales).
    */
-  private async loadImage(url: string): Promise<HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas> {
+  private async loadImage(url: string): Promise<HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas | ImageData> {
     // Mode allégé : image réduite dès son décodage, original libéré (src/render/image-cap.ts).
     return downscaleImage(await this.decodeImage(url));
   }
