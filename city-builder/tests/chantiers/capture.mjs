@@ -127,27 +127,36 @@ try {
 
   // Avancement piloté par le TEMPS DE JEU : pour chaque phase, on fait tourner la simulation jusqu'à ce que
   // le chantier suivi l'atteigne, puis jusqu'à une heure de jour (9 h - 17 h), et on capture à l'arrêt.
-  const siteOf = (nom) => page.evaluate((id) => (window.__aube.chantiers?.()?.sites ?? []).find((s) => s.buildingId === id) ?? null, ids[nom]);
-  async function runUntil(pred, arg, speed, timeout = 600000) {
+  // État lu côté SIMULATION (commande `etat`) : le rendu, en mode ?norender, n'avance qu'aux images forcées.
+  const etat = () => page.evaluate(() => window.__aube.send('pluginCommand', { plugin: 'chantiers', name: 'etat' })
+    .then((r) => ({ ...(r?.data ?? r), date: window.__aube.lastStats?.date })));
+  const siteOf = async (nom) => ((await etat()).chantiers ?? []).find((s) => s.buildingId === ids[nom]) ?? null;
+  /** Fait tourner la simulation jusqu'à ce que `cond(etat)` soit vrai (sondage côté Node, 200 ms). */
+  async function runUntil(cond, speed, timeout = 600000) {
     await send(page, 'setSpeed', { speed });
-    const ok = await page.waitForFunction(pred, arg, { timeout, polling: 250 }).then(() => true, () => false);
+    const t0 = Date.now();
+    let ok = false;
+    while (Date.now() - t0 < timeout) {
+      if (cond(await etat())) { ok = true; break; }
+      await new Promise((r) => setTimeout(r, 200));
+    }
     await send(page, 'setSpeed', { speed: 0 });
     return ok;
   }
-  const dayPred = () => { const h = window.__aube.lastStats?.date?.hour; return h !== undefined && h >= 9 && h < 17; };
+  const dayPred = (e) => { const h = e.date?.hour; return h !== undefined && h >= 9 && h < 17; };
   const ORDER = ['terrassement', 'fondations', 'structure', 'facades', 'finitions'];
   async function capturePhase(nom, phase, vue, label) {
-    const reached = await runUntil(([id, ph, order]) => {
-      const s = (window.__aube.chantiers?.()?.sites ?? []).find((x) => x.buildingId === id);
-      return !s || order.indexOf(s.phase) >= order.indexOf(ph);
-    }, [ids[nom], phase, ORDER], 4);
+    const reached = await runUntil((e) => {
+      const s = (e.chantiers ?? []).find((x) => x.buildingId === ids[nom]);
+      return !s || ORDER.indexOf(s.phase) >= ORDER.indexOf(phase);
+    }, 2);
     let s = await siteOf(nom);
     if (s && s.phase === phase) {
-      await runUntil(dayPred, null, 2, 300000);
+      await runUntil(dayPred, 2, 300000);
       s = await siteOf(nom);
     }
     const vu = s?.phase ?? 'achevé';
-    console.log(`  ${nom}/${phase} : ${JSON.stringify(s)} ; ${JSON.stringify(await page.evaluate(() => window.__aube.lastStats?.date))}`);
+    console.log(`  ${nom}/${phase} : ${s ? `${s.phase} ${Math.round(s.avancement * 100)} %` : 'achevé'}`);
     R.notes[`${nom}-${phase}`] = s;
     check(reached && vu === phase, `${nom} capturé en phase ${phase} (vu : ${vu})`);
     await page.evaluate(vue);
@@ -164,27 +173,26 @@ try {
   noteSites(await shot(page, 'chantiers-ensemble', 'vue d\'ensemble'));
 
   // Nuit : hors horaires, tout est à l'arrêt.
-  await send(page, 'setSpeed', { speed: 4 });
-  await page.waitForFunction(() => { const h = window.__aube.lastStats?.date?.hour; return h !== undefined && (h >= 21 || h < 4); }, null, { timeout: 180000, polling: 500 });
-  await send(page, 'setSpeed', { speed: 0 });
+  await runUntil((e) => { const h = e.date?.hour; return h !== undefined && (h >= 21 || h < 4); }, 4, 300000);
+  const eNuit = await etat();
   await page.evaluate(() => window.__aube.lookAt(60, -40, 220, 0.5));
   const nuit = await shot(page, 'chantiers-nuit', 'chantiers la nuit (travaux suspendus)');
-  check(nuit && nuit.enTravail === false, 'la nuit, les chantiers sont déclarés hors horaires');
+  check(eNuit.enTravail === false && nuit?.enTravail === false, 'la nuit, les chantiers sont déclarés hors horaires');
 
   // Démolition : le pavillon (chantier court) doit être achevé ; on le démolit en journée.
-  const fini = await runUntil((id) => !(window.__aube.chantiers?.()?.sites ?? []).some((s) => s.buildingId === id), ids.pavillon, 8);
+  const fini = await runUntil((e) => !(e.chantiers ?? []).some((s) => s.buildingId === ids.pavillon), 8);
   check(fini, 'pavillon achevé avant démolition');
-  await runUntil(dayPred, null, 4, 300000);
+  await runUntil(dayPred, 4, 300000);
   const dem = await send(page, 'demolish', { buildingId: ids.pavillon });
   check(dem.ok, `démolition du pavillon${dem.ok ? '' : ' : ' + dem.e}`);
   const demShots = {};
   let demInfo = null;
   for (const ph of ['preparation', 'abattage', 'deblaiement']) {
-    await runUntil(([ph]) => {
-      const order = ['preparation', 'abattage', 'deblaiement'];
-      const s = (window.__aube.chantiers?.()?.sites ?? []).find((x) => x.kind === 'demolition');
+    const order = ['preparation', 'abattage', 'deblaiement'];
+    await runUntil((e) => {
+      const s = (e.chantiers ?? []).find((x) => x.kind === 'demolition');
       return !s || order.indexOf(s.phase) >= order.indexOf(ph);
-    }, [ph], 1, 300000);
+    }, 1, 300000);
     await page.evaluate(() => window.__aube.lookAt(-120, -26, 70, 0.42));
     const info = await shot(page, `demolition-${ph}`, `démolition : ${ph}`);
     const s = (info?.sites ?? []).find((x) => x.kind === 'demolition');

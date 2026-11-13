@@ -12,7 +12,7 @@
  */
 import * as THREE from 'three';
 import {
-  CHANTIER_PHASE_ENDS, DEMOLITION_PHASE_ENDS, phaseIndexAt, phaseLocalProgress, type ChantierRecord,
+  CHANTIER_PHASE_ENDS, CHANTIER_PHASES, DEMOLITION_PHASE_ENDS, DEMOLITION_PHASES, phaseIndexAt, phaseLocalProgress, type ChantierRecord,
 } from '../../shared/protocol-ext/chantiers';
 import type { ConstructionAssets } from './assets';
 import { buildFormwork, buildPlatform, buildRebar, buildRemains, buildSlab, buildStructure, type StructureGeometry } from './geometry';
@@ -437,7 +437,7 @@ export class ChantierSite {
   debug(): Record<string, unknown> {
     return {
       id: this.id, buildingId: this.buildingId, kind: this.record.kind, progress: Math.round(this.progress * 1000) / 1000,
-      phase: this.phase, x: this.record.x, z: this.record.z, hauteurBatie: Math.round(this.builtHeight * 10) / 10,
+      phase: (this.record.kind === 'demolition' ? DEMOLITION_PHASES : CHANTIER_PHASES)[this.phase] ?? this.phase, x: this.record.x, z: this.record.z, hauteurBatie: Math.round(this.builtHeight * 10) / 10,
       palissade: this.fence.length, travees: this.bays.length, niveaux: this.scaffoldLevels(),
       grue: this.craneVisible() ? (this.craneBase?.sections ?? 0) : 0, grueAnimee: this.crane !== null,
       batimentVisible: this.buildingVisible,
