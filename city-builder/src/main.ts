@@ -7,6 +7,7 @@
  * ?seed=N (graine de la partie), ?h=H (heure de départ).
  */
 import * as THREE from 'three';
+import { previousTrace, traceStart, traceStep, tracePlaying } from './boot-trace';
 import { bootDone, bootStarted, deviceProfile, isSafeMode, setSafeMode } from './render/device-profile';
 import { imageLimits } from './render/image-cap';
 import { DEFAULT_START_MONEY, GAME_NAME, PROTOCOL_VERSION, type SimSpeed } from './shared/constants';
@@ -127,6 +128,12 @@ async function boot(): Promise<void> {
   // Repli sûr : si le chargement précédent ne s'est pas terminé (Safari a fermé l'onglet), on redémarre en
   // mode allégé forcé et qualité basse.
   const crashedBefore = bootStarted();
+  // Journal du lancement précédent : affiché si la page a été fermée par un plantage (chargement ou partie).
+  const prevTrace = previousTrace();
+  const crashReport = prevTrace && (crashedBefore || prevTrace.playing) && prevTrace.steps.length
+    ? `Arrêt précédent (${prevTrace.playing ? 'en jeu' : 'au chargement'}) après : ${prevTrace.steps.slice(-3).join(' › ')}` : null;
+  traceStart();
+  tracePlaying(false);
   const enteredSafeMode = crashedBefore && !isSafeMode();
   if (enteredSafeMode) setSafeMode(true);
   debug.safeMode = isSafeMode();
@@ -182,6 +189,9 @@ async function boot(): Promise<void> {
       void refreshMenu();
     },
   });
+  // Chaque étape du chargement est notée dans le journal de plantage.
+  const setLoadingRaw = ui.setLoading.bind(ui);
+  ui.setLoading = (p: number, text: string): void => { traceStep(text.replace(/…$/, '')); setLoadingRaw(p, text); };
   const refreshMenu = async (): Promise<void> => {
     continueSlot = store ? latestSlot(await store.list()) : null;
     ui.showMenu({ canContinue: state.inGame || continueSlot !== null, inGame: state.inGame });
@@ -300,7 +310,7 @@ async function boot(): Promise<void> {
   const cons = initConstruction({ sim: b, ui, input, scene: render.ctx.scene, models: lib, catalog, heightAt: (x, z) => render.terrain.heightAt(x, z), renderer: render.ctx.renderer, lite: render.profile.lite });
   render.ctx.onFrame.push((dt) => cons.update(dt));
   // Grille de construction au sol (cases de 8 m) pendant le tracé des routes, la pose et le terrassement.
-  cons.machine.onToolChange((t) => render.terrain.setGrid(t === 'road' || t === 'building' || t === 'terraform'));
+  cons.machine.onToolChange((t) => { traceStep(`outil ${t}`); render.terrain.setGrid(t === 'road' || t === 'building' || t === 'terraform'); });
   debug.constructionApplied = () => cons.machine.applied;
   debug.worldToScreen = (x, z) => {
     const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);
@@ -340,6 +350,8 @@ async function boot(): Promise<void> {
     debug.snapshotStats = s.stats;
     cityCenter = computeCityCenter(s);
     state.inGame = true;
+    tracePlaying(true);
+    traceStep('partie lancée');
     state.cityName = s.params.cityName;
     render.applySnapshot(s);
     if (!demoRunning) props.clear();
@@ -642,7 +654,9 @@ async function boot(): Promise<void> {
   else if (params.has('autostart')) await startNewGame();
   else await refreshMenu();
   debug.ready = true;
+  traceStep('prêt');
   bootDone();
+  if (crashReport) { console.warn(crashReport); ui.toast(crashReport, 'error'); }
   if (enteredSafeMode) ui.toast('Le chargement précédent a échoué : mode sûr activé (qualité basse, affichage allégé). Réglages pour revenir à la qualité normale.', 'info');
 }
 

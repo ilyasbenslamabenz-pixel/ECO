@@ -35,7 +35,7 @@ import { TrafficSignalRenderer } from './traffic/signals';
 import { InstancedVehicleRenderer } from './vehicles/renderer';
 import { RENDER_PLUGINS, RenderPluginHost, type RenderPlugin } from './plugins';
 import { WaterSystem } from './water/water-system';
-import { deviceProfile, type DeviceProfile, type QualitySetting } from './device-profile';
+import { deviceProfile, isSafeMode, type DeviceProfile, type QualitySetting } from './device-profile';
 
 export interface RenderStats {
   /** Appels de rendu et triangles de la dernière image (ombres comprises). */
@@ -93,7 +93,8 @@ export async function initRender(
     renderer: ctx.renderer, scene: ctx.scene, sun: ctx.sun, hemi: ctx.hemi, catalog, assetsBase,
     shadowMapSize: profile.lite ? profile.shadowSize : Math.min(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1) > 1100 ? 4096 : 2048,
   });
-  const terrain = new TerrainSystem(ctx.scene, { catalog, assetsBase });
+  // Textures du sol (3 tableaux de 5 couches) : 1024 px sur ordinateur, 512 en mode allégé, 256 en mode sûr.
+  const terrain = new TerrainSystem(ctx.scene, { catalog, assetsBase, textureSize: profile.lite ? (isSafeMode() ? 256 : 512) : 1024 });
   const water = new WaterSystem(ctx.scene);
   const heightAt = (x: number, z: number): number => terrain.heightAt(x, z);
   const veg = new VegetationSystem(ctx.scene, lib, { heightAt, renderer: ctx.renderer, distances: profile.vegDistances });
