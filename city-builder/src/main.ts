@@ -135,6 +135,7 @@ async function boot(): Promise<void> {
   const state = createClientState();
   const assetsBase = new URL('./assets/', import.meta.url);
   const workerUrl = new URL('./sim.worker.js', import.meta.url);
+  workerUrl.search = new URL(import.meta.url).search; // même version que game.js (cache de GitHub Pages)
 
   let speedBeforeMenu: SimSpeed = 1;
   let bridge: SimBridge | null = null;

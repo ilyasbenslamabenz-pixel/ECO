@@ -47,8 +47,12 @@ function html({ fragment }) {
   ].join('\n');
   const body = `${markup}\n<script type="module" src="./game.js"></script>`;
   if (fragment) return `${head}\n${body}\n`;
+  // Page complète (GitHub Pages, cache navigateur de 10 min) : numéro de version sur le script pour que
+  // chaque publication soit chargée tout de suite ; game.js le transmet au Worker (src/main.ts).
+  const ver = (process.env.GITHUB_SHA ?? Date.now().toString(36)).slice(0, 10);
+  const bodyFull = body.replace('src="./game.js"', `src="./game.js?v=${ver}"`);
   // Page complète : icône locale (évite le 404 /favicon.ico qu'un Chromium complet demande, compté comme erreur par l'e2e).
-  return `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<link rel="icon" href="./favicon.svg" type="image/svg+xml">\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
+  return `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<link rel="icon" href="./favicon.svg" type="image/svg+xml">\n${head}\n</head>\n<body>\n${bodyFull}\n</body>\n</html>\n`;
 }
 
 const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#10161c"/><path d="M16 50V32a16 16 0 0132 0v18M24 50V36a8 8 0 0116 0v14M11 50h42M32 9v7" fill="none" stroke="#3ddc84" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>\n';
