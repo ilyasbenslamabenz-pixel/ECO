@@ -112,7 +112,15 @@ Triangles LOD0/1/2 : centrale 3 984/2 018/402, éolienne 520/304/116, ferme sola
 2 678/1 440/424, poste 2 724/1 436/282, rotor 696/182/57, pylône 1 676/496/136. Poids ajouté au build (GLB après
 meshopt) : 0,84 Mo (budget de l'étape : 2 Mo).
 
-## 8. Preuves
+## 8. Preuves (2026-11-13)
 
-Voir le compte rendu de la branche (commandes : `npm run typecheck`, `npm test`, `npm run build`, `npm run e2e`,
-`node tests/electricite/e2e.mjs`, `npm run validate:visual`). Captures regardées : `tests/electricite/out/elec-*.png`.
+- `npm run typecheck` ✓ ; `npm test` 214/214 (dont 14 dans `tests/electricite` : pénurie -> coupures des moins
+  prioritaires, entretien réduit -> pannes plus fréquentes, éolien sans vent -> production nulle, satisfaction et
+  pollution, ligne HT / poste, sauvegarde aller-retour, partie sans installation) ; `npm run test:assets` 102/102.
+- `npm run build` ✓ (dist 45,1 Mo / 60) ; ajout de l'étape : GLB 0,84 Mo + JS ≈ 89 Ko + catalogue 11,5 Ko ≈ 0,94 Mo.
+- `npm run e2e` SUCCÈS ; `node tests/electricite/e2e.mjs` SUCCÈS (installations posées, ligne, 10 pylônes, rotors,
+  panneau = simulation, financement relu, calque) ; `npm run validate:visual` SUCCÈS (94 assets dont les 5 `elec_*`).
+- Captures regardées : `tests/electricite/out/elec-centrale.png`, `elec-eoliennes.png`, `elec-solaire.png`,
+  `elec-ligne-rue.png`, `elec-calque.png`, `elec-calque-panneau.png`, `elec-barrage.png`, `elec-poste.png` ;
+  planche-contact `tests/e2e/out/planche-contact.png`.
+- `npm run assets:validate` : seule la règle de source `tools/power/` échoue (demande §4 de `docs/requests/electricite.md`).
