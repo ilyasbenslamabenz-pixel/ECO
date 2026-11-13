@@ -164,6 +164,7 @@ async function boot(): Promise<void> {
     onLoadSlot: (slot) => { void loadSlot(slot); },
     onSaveSlot: (slot) => saveSlot(slot),
     onDemo: () => { void startDemo(); },
+    onDemoGame: () => { void startDemo(true); },
     onQuit: () => {
       void autoTriggers?.saveAndFlush();
       autosaver?.stop();
@@ -558,14 +559,15 @@ async function boot(): Promise<void> {
   }
 
   /** Scène de démonstration : vraie partie, ville construite par la simulation avec les opérations du joueur. */
-  async function startDemo(): Promise<void> {
+  async function startDemo(asGame = false): Promise<void> {
     try {
-      demoRunning = true;
+      // asGame : la ville de démonstration sert de point de départ d'une vraie partie (nom, sauvegarde auto).
+      demoRunning = !asGame;
       debug.demoReady = false;
       ui.hideMenu();
       ui.setLoading(0.55, 'Scène de démonstration : génération du terrain…');
       let snap = waitSnapshot();
-      await b.send('newGame', { seed: DEMO_SEED, mapChunks: 8, startMoney: DEMO_START_MONEY, cityName: 'Aube-sur-Mer (démonstration)', startHour: params.has('h') ? Number(params.get('h')) : 10.5, startMonth: START_MONTH });
+      await b.send('newGame', { seed: DEMO_SEED, mapChunks: 8, startMoney: DEMO_START_MONEY, cityName: asGame ? 'Meknes City' : 'Aube-sur-Mer (démonstration)', startHour: params.has('h') ? Number(params.get('h')) : 10.5, startMonth: START_MONTH });
       await snap;
       ui.setLoading(0.65, 'Construction de la ville (routes, ponts, bâtiments, habitants)…');
       snap = waitSnapshot();
@@ -589,8 +591,9 @@ async function boot(): Promise<void> {
       render.terrain.refineAround(ax, az, 560);
       debug.demo = { ...city, decor: city.decor.length };
       ui.hideLoading();
-      ui.toast(`Démonstration : ${city.buildings} bâtiments (${city.distinctBuildings} modèles différents), ${city.vehicles} véhicules. Touche V : vue rue.`, 'info');
+      ui.toast(asGame ? `Nouvelle partie : ville de départ de ${city.buildings} bâtiments, sauvegarde automatique activée.` : `Démonstration : ${city.buildings} bâtiments (${city.distinctBuildings} modèles différents), ${city.vehicles} véhicules. Touche V : vue rue.`, 'info');
       await b.send('setSpeed', { speed: 1 });
+      if (asGame) { autosaver?.start(); void autoTriggers?.saveAndFlush(); }
       debug.demoReady = true;
     } catch (e) {
       startLoop();

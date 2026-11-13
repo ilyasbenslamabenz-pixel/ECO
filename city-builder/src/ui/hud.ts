@@ -54,6 +54,8 @@ export interface UIHandlers {
   onSaveSlot?(slot: string): Promise<unknown> | void;
   /** Lancer la scène de démonstration (active le bouton du menu). */
   onDemo?(): void;
+  /** Nouvelle partie qui part de la ville de démonstration (sauvegardée comme une partie normale). */
+  onDemoGame?(): void;
   /** Quitter la partie en cours (retour à l'accueil). */
   onQuit?(): void;
   /** Appliquer des options graphiques (affiche « Options »). */
@@ -130,6 +132,12 @@ export function initUI(h: UIHandlers): UIHandle {
     btnDemo.removeAttribute('title');
     btnDemo.dataset['tip'] = 'Ville déjà construite montrant toute la bibliothèque (vue aérienne et vue rue)';
     btnDemo.addEventListener('click', () => h.onDemo?.());
+  }
+  const btnNewDemo = $<HTMLButtonElement>('btn-new-demo');
+  if (h.onDemoGame) {
+    btnNewDemo.classList.remove('hidden');
+    btnNewDemo.dataset['tip'] = 'Nouvelle partie sur la ville de démonstration déjà construite, sauvegardée automatiquement';
+    btnNewDemo.addEventListener('click', () => h.onDemoGame?.());
   }
   const btnLoad = $<HTMLButtonElement>('btn-load');
   if (h.onLoadSlot) { btnLoad.classList.remove('hidden'); btnLoad.addEventListener('click', () => { void renderLoadList(); showScreen('load'); }); }
