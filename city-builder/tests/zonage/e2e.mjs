@@ -243,7 +243,11 @@ try {
   await p2.waitForTimeout(500);
   // Glisser au doigt : vrais événements tactiles (protocole DevTools), convertis en pointeurs « touch » par Chromium.
   const pts = [];
-  for (let x = at2.x - 170; x <= at2.x - 20; x += 6) pts.push(await h2.screen(x, at2.z - 4));
+  for (let x = at2.x - 170; x <= at2.x + 170; x += 6) {
+    const q = await h2.screen(x, at2.z - 4);
+    if (q.x > 12 && q.x < 378 && q.y > 200 && q.y < 560) pts.push(q);
+  }
+  check(pts.length >= 10, `iPhone : ${pts.length} points du trait à l'écran`);
   const cdp = await ip.newCDPSession(p2);
   const touch = (type, p) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ x: p.x, y: p.y, id: 1 }] : [] });
   await touch('touchStart', pts[0]);
