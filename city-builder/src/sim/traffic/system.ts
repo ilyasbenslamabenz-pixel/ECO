@@ -996,7 +996,18 @@ export class TrafficSystem {
       if (gap < FREE_GAP && ds > gap - 0.2) { ds = Math.max(0, gap - 0.2); nv = Math.min(nv, ds / dt); }
       this.v[v] = nv;
       this.acc[v] = a;
-      this.flags[v] = (this.flags[v]! & ~1) | (a < -1 ? 1 : 0);
+      // bits d'état : 1 = freine ; 2 / 4 = clignotant gauche / droit pendant un changement de voie (décalage
+      // latéral résiduel : négatif = vient de la gauche, donc se rabat à droite) ou à moins de 35 m d'un virage
+      let blink = 0;
+      const lo = this.latOff[v]!;
+      if (lo < -0.35) blink = 4; else if (lo > 0.35) blink = 2;
+      else if (g.linkKind[l] === 0 && g.linkLen[l]! - s < 35) {
+        const nx = this.nextLink[v]!;
+        if (nx >= nl) { const tr = g.connTurn[nx - nl]!; blink = tr === Turn.Right ? 4 : tr === Turn.Left || tr === Turn.UTurn ? 2 : 0; }
+      } else if (g.linkKind[l] === 1) {
+        const tr = g.connTurn[l - nl]!; blink = tr === Turn.Right ? 4 : tr === Turn.Left || tr === Turn.UTurn ? 2 : 0;
+      }
+      this.flags[v] = (this.flags[v]! & ~7) | (a < -1 ? 1 : 0) | blink;
       // temps d'attente : cumulé tant que le véhicule ne roule pas franchement (le « grignotage » à la ligne ne compte pas)
       this.waitT[v] = nv < 1.5 ? this.waitT[v]! + dt : nv > 3 ? 0 : this.waitT[v]!;
       // décalage latéral (changement de voie, sortie de bas-côté) amorti

@@ -44,12 +44,15 @@ test('MOBIL : dépassement d\'un véhicule lent sur une avenue, puis retour à d
   assert.ok(lent >= 0 && vif >= 0);
   t.vDes[lent] = 6; t.vDes[vif] = 22;
   const rangInitial = gg.linkRank[t.link[vif]!]!;
-  let rangMax = rangInitial, depasse = false, revenu = false;
+  let rangMax = rangInitial, depasse = false, revenu = false, clignoG = false, clignoD = false;
   for (let k = 0; k < 900; k++) {
     t.step(0.1, 9);
     t.vDes[lent] = 6;
     if (!t.alive[vif]) break;
     const r = gg.linkRank[t.link[vif]!]!;
+    // clignotant pendant la manœuvre : gauche (bit 2) en déboîtant, droit (bit 4) en se rabattant
+    if (r < rangInitial && (t.flags[vif]! & 2)) clignoG = true;
+    if (depasse && r === rangInitial && (t.flags[vif]! & 4)) clignoD = true;
     rangMax = Math.min(rangMax, r);
     if (r < rangInitial) depasse = true;
     if (depasse && r === rangInitial && t.s[vif]! > t.s[lent]!) revenu = true;
@@ -57,6 +60,7 @@ test('MOBIL : dépassement d\'un véhicule lent sur une avenue, puis retour à d
   assert.ok(depasse, 'le véhicule rapide est passé sur la voie de gauche');
   assert.ok(revenu, 'puis revenu sur la voie de droite devant le lent (biais à droite)');
   assert.ok(t.stats.laneChanges >= 2);
+  assert.ok(clignoG && clignoD, `clignotants émis (gauche ${clignoG}, droit ${clignoD})`);
 });
 
 test('MOBIL : aucun changement de voie quand l\'écart est insuffisant', () => {
