@@ -26,7 +26,8 @@ const browser = await launch();
 const R = { checks: [], shots: [], phases: {}, notes: {} };
 let failed = false;
 const check = (ok, msg) => { R.checks.push({ ok: !!ok, msg }); console.log(`${ok ? 'OK  ' : 'ÉCHEC'} ${msg}`); if (!ok) failed = true; };
-const render = (page, n = 2) => page.evaluate((k) => window.__aube.renderNow(k), n);
+// dt de 0,5 s : l'horloge lissée du rendu rattrape entièrement celle de la simulation.
+const render = (page, n = 2) => page.evaluate((k) => window.__aube.renderNow(k, 0.5), n);
 const send = (page, n, a) => page.evaluate(([n, a]) => window.__aube.send(n, a).then((r) => ({ ok: true, r }), (e) => ({ ok: false, e: e.message })), [n, a]);
 const chantiers = (page) => page.evaluate(() => (window.__aube.chantiers ? window.__aube.chantiers() : null));
 
