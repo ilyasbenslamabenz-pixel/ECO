@@ -12,3 +12,13 @@ Le jeu se lance et fonctionne sur iPhone ; le propriétaire « aime bien ». À 
    bouton menu coupé), barre d'outils coupée. Tout doit tenir dans la largeur avec les zones sûres
    (`env(safe-area-inset-*)`), ou défiler explicitement (barre d'outils), sans débordement de page.
    Vérifier par capture iPhone 13/15 en portrait.
+
+## Retours de jeu iPhone (2026-11-13, 17h)
+- Jonction de routes à angle aigu : herbe en triangles à travers l'asphalte, bords qui se chevauchent.
+- Coins de route mal raccordés.
+- Peuplier : plaques plates horizontales visibles à travers la couronne.
+- Grand arbre isolé : feuilles éparses flottant autour d'une boule dense (LOD mélangés).
+- Maisons qui se touchent / se chevauchent.
+- Barre supérieure coupée / barre d'outils qui déborde (une capture).
+- Demande : pouvoir placer les routes et bâtiments droits plus facilement (aimantation d'angles, alignements, guides).
+→ Confiés à la branche claude/bugs-joueur (Mac, GPU).
