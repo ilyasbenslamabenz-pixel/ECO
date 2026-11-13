@@ -26,8 +26,9 @@
   (152 assets, 103 bâtiments ; démo : 122 bâtiments posés, 103 modèles distincts — tous les modèles sont posés).
 
 ## Reste à faire
-- Planche à revoir sous d'autres angles (`--views=back,aerial`) et aux LOD1/2 (`--lods`) : seule la vue de face LOD0
-  a été regardée. Liserés rouges des arêtiers de croupe un peu voyants (rôle `rive`).
+- Planche aux LOD1/2 (`--lods`) à regarder. Vues de face, de dos et aérienne LOD0 regardées pour les 63 modèles
+  (`--views=back,aerial` → `planche_procedural_dos_aerien.png`) : volumes fermés, aucune face retournée ; façades
+  arrière volontairement sobres. Liserés rouges des arêtiers de croupe un peu voyants (rôle `rive`).
 - Entrepôts, dépôts, gymnase : corrects mais pauvres en détail.
 - Script de capture des 6 types de quartier en jeu ; mise à jour FEATURES/PROJECT_STATUS ; tests `generateur-*`.
 
