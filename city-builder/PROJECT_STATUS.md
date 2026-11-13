@@ -1,6 +1,26 @@
 # État du projet — Aube Urbaine
 
-## Phase actuelle : 1 (première ville jouable) — corrections après la recette QA n° 1 (2026-11-13)
+## Phase actuelle : 1 (première ville jouable) — corrections après la recette QA n° 2 (2026-11-13)
+
+La recette QA n° 2 (7,3/10) a relevé un défaut majeur — feux tricolores simulés mais invisibles (le seul rendu était
+dans une scène de test du module véhicules, importée par rien) — et quatre défauts mineurs. **Décider si la phase 1
+est close revient à la prochaine recette.**
+
+### Corrections QA n° 2 (cause → correction → preuve)
+| Problème QA | Cause trouvée | Correction | Preuve |
+|---|---|---|---|
+| Feux tricolores invisibles (jeu et `?demo`) | l'état des feux ne quittait pas le worker ; aucun rendu dans le jeu | protocole : `DeltaMessage.signals` (rétrocompatible : disposition à chaque changement de réseau ou instantané, états seulement quand ils changent, tampons transférés) ; `TrafficSystem.signalLayout()/signalStateArray()` ; rendu `src/render/traffic/signals.ts` : mât à potence (arrivées à 2+ voies) ou poteau simple, têtes détaillées, lentilles hors tone mapping + halo la nuit, 7 `InstancedMesh` (≤ 11 appels de rendu avec les ombres) | `tests/vehicles/signals.test.ts` (4 tests) ; `npm run e2e:signals` : 35 bras / 9 carrefours / 62 têtes dessinés dans la démo, états qui changent, véhicule n° 16 immobile en tête de file à 5,1 m du poteau d'un feu ROUGE, toujours rouge après pause ; 138 px de lentille rouge dans `feux-rue.png`, 1 147 dans `feux-rue-nuit.png` |
+| (a) herbe sur la moitié d'une route fraîchement posée | le chunk nivelé était re-maillé à son LOD courant, souvent encore le maillage grossier initial (pas de 64 m) | re-maillage au LOD voulu par la caméra (0 si inconnu) | `qa2-fixes.mjs`, `qa2fix-route.png` (route sur terre ferme, chaussée nette dès la 1re image) |
+| (b) rivières fragmentées et anguleuses à l'ouverture | même maillage grossier initial : il recouvrait l'eau par blocs tant que le worker n'avait pas affiné ; berges : poids de sable/gravier tout-ou-rien par sommet | `TerrainSystem.refineAround()` synchrone à l'ouverture, au chargement et dans la démo ; poids de berge progressif selon la distance à l'eau | `qa2fix-ouverture.png` (graine de la recette, 63 chunks au LOD 0 dès la 1re image, rivières continues) ; il reste des coudes au pas de la grille de 8 m |
+| (c) journée de 72 s à ×1 | 2 min de jeu par tick | 0,2 min par tick : journée = 12 min réelles à ×1 ; immigration et synchronisation du trafic en ticks (rythme réel inchangé) ; horloge arrondie (pas de dérive) ; anciennes sauvegardes : périodes remises à jour au chargement | `tests/sim/day-length.test.ts` ; `qa2-fixes.mjs` (20 min de jeu en 10 s) ; tests de l'économie et de la démographie inchangés sur le fond (avance rapide `tick(2)` dans les tests) |
+| (d) caméra non recentrée après chargement | le chargement ne touchait pas la caméra | barycentre bâtiments + nœuds de routes, distance selon l'étendue, affinage du terrain | `qa2-fixes.mjs` (cible à 0,0 m du centre de la ville) ; `qa2fix-charge.png` |
+
+Conséquence assumée de (c) : l'économie reste mensuelle (mêmes montants par mois de jeu) mais un mois dure 6 h réelles
+à ×1 et 1 h 30 à ×4 ; des vitesses ×8/×16 sont demandées à l'interface (`docs/requests/feux-qa2.md`, `src/ui` non
+modifié). Les feux de la vue de nuit (`feux-rue-nuit.png`) viennent d'une seconde partie de démonstration : leurs états
+ne sont pas ceux de la vue de jour.
+
+## Historique : corrections après la recette QA n° 1 (2026-11-13)
 
 La recette QA n° 1 (score 5,5/10) a relevé un test de parcours en échec, une route qui disparaissait à l'affichage,
 l'absence d'alignement des bâtiments sur les routes en biais, des impôts et emprunts inaccessibles, 3 types de route
@@ -24,7 +44,24 @@ dans `FEATURES.md`. **Décider si la phase 1 est close revient à la prochaine r
 | `npm run stress` sans rapport | la capture pendant la boucle de rendu logiciel dépassait 30 s | capture et mesure d'image boucle suspendue | `tests/e2e/out/stress-rapport.json` (ci-dessous) |
 | Forêts sombres vues de haut | — | sous-bois teinté vert mousse (amélioration partielle) | `demo-aerien.png` — les imposteurs restent des silhouettes sombres |
 
-### Résultat des commandes (dernière exécution, 2026-11-13)
+### Résultat des commandes après les corrections QA n° 2 (2026-11-13)
+| Commande | Résultat |
+|---|---|
+| `npm run typecheck` | OK |
+| `npm test` | OK, 148/148 (dont 4 nouveaux tests des feux et 4 de la durée de journée) |
+| `npm run build` | OK, 389 fichiers, 41,80 Mo |
+| `npm run e2e` | SUCCÈS |
+| `npm run e2e:gate` | SUCCÈS |
+| `npm run validate:visual` | SUCCÈS : 88 assets, 40 bâtiments ; démo 119 bâtiments, 141 véhicules, 42 tronçons ; aérien 2 987 appels (avant : 2 966), rue 2 155 |
+| `npm run e2e:signals` (nouveau) | SUCCÈS (12 contrôles, jour et nuit) |
+| `node tests/e2e/qa2-fixes.mjs` (nouveau) | SUCCÈS (6 contrôles) |
+| non relancés cette fois | `test:assets`, `e2e:game`, `e2e:play`, `stress`, `demo-night.mjs` (résultats ci-dessous : tour QA n° 1) |
+
+Captures regardées : `feux-rue.png` (mât à potence, tête suspendue et répétiteur au rouge derrière un véhicule
+arrêté), `feux-rue-nuit.png` (halos rouges), `feux-aerien.png` (carrefour d'avenues, mâts aux quatre coins ; petits à
+85 m), `qa2fix-ouverture.png`, `qa2fix-route.png`, `qa2fix-charge.png`, `demo-rue.png`.
+
+### Résultat des commandes (tour QA n° 1, 2026-11-13)
 | Commande | Résultat |
 |---|---|
 | `npm run typecheck` | OK |
@@ -66,7 +103,6 @@ gratte-ciel vitrés très claires la nuit.
 
 ### Reste à faire / fragile
 - Rien n'a été vérifié sur un vrai GPU ni sur un vrai iPhone (émulation Chromium + rendu logiciel uniquement).
-- Feux de circulation non vérifiés visuellement.
 - L'annulation d'une construction ne rembourse que 25 %.
 - Autoroute : pas de croisement à niveau, échangeurs en phase 4.
 - Phase 2 : zonage, terraformation, atlas de matériaux, décors placés par le joueur (voir `docs/ROADMAP_PHASE2.md`).

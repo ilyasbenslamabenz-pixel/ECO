@@ -3,12 +3,13 @@
 Règle : une ligne n'est marquée **Terminé** que si une preuve automatisée ou une vérification documentée existe
 (colonne « Preuve ») ET que cette preuve passe à la date indiquée. Ce qui fonctionne seulement en partie est dans
 « Partiel », avec la limite exacte. Tout le reste est « À faire » avec sa phase.
-Dernière mise à jour : corrections après la recette QA n° 1 de la phase 1, 2026-11-13. Résultats chiffrés et liste
+Dernière mise à jour : corrections après la recette QA n° 2 de la phase 1 (feux tricolores, horloge, terrain,
+chargement), 2026-11-13. Résultats chiffrés et liste
 des captures regardées : `PROJECT_STATUS.md`.
 
 Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration), `npm run test:assets`,
 `npm run build`, `npm run e2e`, `npm run e2e:gate`, `npm run e2e:game`, `npm run e2e:play`, `npm run validate:visual`,
-`npm run stress`, `node tests/e2e/demo-night.mjs`. Les captures citées sont dans `tests/e2e/out/` et ont été regardées.
+`npm run stress`, `node tests/e2e/demo-night.mjs`, `npm run e2e:signals` (feux), `node tests/e2e/qa2-fixes.mjs`. Les captures citées sont dans `tests/e2e/out/` et ont été regardées.
 
 ## Terminé (vérifié)
 
@@ -43,8 +44,11 @@ Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration)
 | **Économie dans l'interface** : recettes fiscales, salaires, échéances d'emprunt ; **impôts réglables par secteur** (0–25 %) ; **emprunts** (offre chiffrée, emprunt, remboursement anticipé) ; graphique de trésorerie | `npm run e2e:play` (impôt résidentiel 14 % relu dans la simulation ; emprunt 200 000 ¢ : trésorerie +200 000 et ligne affichée) ; `play-finances-impots.png`, `play-finances-emprunt.png` ; `tests/sim/economy.test.ts` |
 | **Panneau Population** (clic sur « Habitants ») : habitants, ménages, actifs, emploi, chômage, emplois pourvus/offerts, trajets en cours, véhicules, logements, bonheur, attractivité, revenus, arrivées/départs, demande par secteur, activités, tranches d'âge — tout vient du rapport de la simulation | `npm run e2e:play` (« 8 habitants » = simulation) ; `play-population.png` |
 | Démographie : emménagement si route, emploi, école, vieillissement, naissances, décès, émigration ; flux d'immigration de base pour qu'une petite ville se peuple en 1 à 2 jours de jeu | `tests/sim/demography.test.ts` ; e2e:game (25 habitants après rechargement) |
-| Trafic réel (voies, carrefours à priorité/feux, IDM, A*), véhicules instanciés | `tests/vehicles/traffic.test.ts` ; `tests/integration` |
-| Cycle jour/nuit | `demo-night.mjs` ; captures nuit des modules |
+| Trafic réel (voies, carrefours à priorité / cédez-le-passage / feux, IDM, A*), véhicules instanciés | `tests/vehicles/traffic.test.ts` ; `tests/integration` |
+| **Feux tricolores simulés ET dessinés** : la simulation gère les phases (vert / orange / rouge intégral) et arrête les véhicules au rouge ; elle envoie au rendu la disposition (une tête par voie d'arrivée régulée, au pied de la ligne d'arrêt sur le trottoir de droite) puis l'état de chaque bras, uniquement quand il change (`DeltaMessage.signals`, tampons transférés). Le rendu dessine un mât à potence au-dessus des voies (tête suspendue + répétiteur) pour les arrivées à plusieurs voies, un poteau simple sinon ; tête détaillée (caisson arrondi, plaque de contraste, visières, 3 lentilles) ; lentille allumée = état simulé, lisible de jour et de nuit (halo la nuit) ; 7 maillages instanciés au total. Démo : 9 carrefours à feux, 35 bras, 62 têtes | `tests/vehicles/signals.test.ts` (disposition, états = simulation, deltas compacts et transférables, « véhicule arrêté à la ligne ⇒ feu non vert ») ; `npm run e2e:signals` (35 bras dessinés, états changeants, véhicule immobile en tête de file devant un feu ROUGE, toujours rouge après pause) ; captures `feux-rue.png` (jour), `feux-rue-nuit.png`, `feux-aerien.png` |
+| Cycle jour/nuit : **une journée = 12 min réelles à ×1** (0,2 min de jeu par tick ; avant 72 s) ; immigration et synchronisation du trafic gardent leur rythme réel ; anciennes sauvegardes rechargées avec les nouvelles périodes | `tests/sim/day-length.test.ts` ; `qa2-fixes.mjs` (20 min de jeu en 10 s réelles) ; `demo-night.mjs` |
+| **Chargement d'une sauvegarde : caméra recentrée sur la ville** (barycentre des bâtiments et nœuds de routes, distance selon l'étendue) | `qa2-fixes.mjs` (cible à 0,0 m du centre de la ville après chargement par le chemin de l'interface) ; `qa2fix-charge.png` |
+| Terrain affiné tout de suite autour de la caméra à l'ouverture d'une partie, au chargement et dans la démo ; chunk nivelé par une route re-maillé au LOD fin (l'herbe ne recouvre plus la chaussée) | `qa2-fixes.mjs` (63 chunks au LOD 0 dès la 1re image) ; `qa2fix-ouverture.png`, `qa2fix-route.png` |
 | Sauvegarde v2 (gzip, IndexedDB → localStorage → mémoire), emplacements nommés, autosauvegarde 3 min, rechargement de la page puis chargement à l'identique (date exacte de l'instantané) ; anciennes sauvegardes (rotation entière) toujours valides | `npm run e2e:game` ; `tests/sim/save.test.ts` |
 | Simulation en Web Worker, sans three ni DOM ; protocole typé, Transferables | `tests/unit/architecture.test.ts` ; `tests/integration` « protocole » |
 | Souris/clavier et tactile : pincer = zoom, deux doigts = déplacement/inclinaison/rotation (un pincement en attente est appliqué au lever des doigts : plus de geste perdu quand aucune image n'a été rendue) | `npm run e2e:game` (iPhone 13 émulé, CDP : 420 → 140 m, inclinaison 0,69 → 0,21) — **pas testé sur un vrai iPhone** |
@@ -61,7 +65,8 @@ Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration)
 | Nivellement sous les routes | un bâtiment voisin construit sur un talus n'est pas réajusté après démolition de la route | 2 |
 | Performances | simulation : tick moyen 0,7 ms (p95 1,0 ms) pour 500 bâtiments et 1 000+ véhicules ; rendu : 2 700 à 3 000 appels par image en vue aérienne (bâtiments multi-matériaux), mesuré en rendu LOGICIEL seulement — **aucune mesure sur GPU réel** (détail : `PROJECT_STATUS.md`) | 2 |
 | Forêts vues de haut | sous-bois teinté en vert (lecture de canopée améliorée) ; les imposteurs lointains restent des silhouettes sombres découpées | 2 |
-| Rivières | contours encore anguleux par endroits (maillage de l'eau à la résolution de la grille de terrain) | 2 |
+| Rivières | plus fragmentées à l'ouverture (affinage immédiat du terrain) et berges adoucies (poids de berge progressif) ; le tracé suit encore la grille de 8 m : coudes visibles par endroits (`qa2fix-ouverture.png`) | 2 |
+| Économie au rythme de la nouvelle horloge | montants mensuels inchangés, mais un mois de jeu dure 6 h réelles à ×1 (1 h 30 à ×4) : vitesses ×8/×16 demandées à l'interface (`docs/requests/feux-qa2.md`) | 2 |
 
 ## À faire
 | Fonctionnalité | Phase |
