@@ -22,13 +22,13 @@
 - Quartiers : `src/sim/districts/**`, plugin sim/rendu/UI/sauvegarde v2 `batiments`, tests `tests/batiments/`,
   demande d'API d'écriture `docs/requests/batiments.md`.
 - Vérifié : `npm run typecheck` OK, `npm test` 188/188, `npm run test:assets` 102/102, `npm run validate:assets` OK,
-  `npm run build` OK (53,73 Mo). e2e / validate:visual : voir le compte rendu de session (résultats consignés ci-dessous).
+  `npm run build` OK (53,73 Mo), `npm run e2e` OK (17 contrôles, sortie 0), `npm run validate:visual` SUCCÈS
+  (152 assets, 103 bâtiments ; démo : 122 bâtiments posés, 103 modèles distincts — tous les modèles sont posés).
 
 ## Reste à faire
 - Planche à revoir sous d'autres angles (`--views=back,aerial`) et aux LOD1/2 (`--lods`) : seule la vue de face LOD0
   a été regardée. Liserés rouges des arêtiers de croupe un peu voyants (rôle `rive`).
 - Entrepôts, dépôts, gymnase : corrects mais pauvres en détail.
-- Vérifier que la ville de démo pose les 103 modèles (`demo.missing`, city-builder.ts hors propriété).
 - Script de capture des 6 types de quartier en jeu ; mise à jour FEATURES/PROJECT_STATUS ; tests `generateur-*`.
 
 ## Décisions
