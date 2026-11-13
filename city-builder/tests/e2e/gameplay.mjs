@@ -26,7 +26,7 @@ try {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = collectErrors(page);
-  await page.goto(`${base}/index.html?autostart&seed=7&norender`);
+  await page.goto(`${base}/index.html?autostart&seed=7&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived, null, { timeout: 300000 });
   const send = (name, args) => page.evaluate(([n, a]) => window.__aube.send(n, a).then((r) => ({ ok: true, r }), (e) => ({ ok: false, e: e.message })), [name, args]);
   await send('setSpeed', { speed: 0 });
@@ -46,7 +46,9 @@ try {
   check(cross.ok, `rue transversale : carrefour automatique (${cross.ok ? cross.r.edgeIds.length + ' tronçons' : cross.e})`);
   // Bâtiments le long de la rue transversale (façade vers la rue).
   let placed = 0;
-  for (const [dx, rot] of [[-14, 3], [14, 1], [-16, 3], [16, 1]]) {
+  // Ouest de la rue : façade vers +X (rot 1) ; est : façade vers -X (rot 3).
+  for (const dx of [-16, 16, -20, 20, -24, 24]) {
+    const rot = dx < 0 ? 1 : 3;
     for (let dz = -50; dz <= 80 && placed < 3; dz += 8) {
       const res = await send('placeBuilding', { assetId: placed === 0 ? 'immeuble_haussmannien' : 'maison_pavillon_enduit', x: at[0] + dx, z: at[1] + dz, rot, variant: 1 });
       if (res.ok) { placed++; dz += 24; }
@@ -78,7 +80,7 @@ try {
   check(await page.evaluate(() => window.__aube.saveStoreKind) === 'indexeddb', 'sauvegarde stockée dans IndexedDB');
 
   // Rechargement de la page, puis chargement depuis le menu.
-  await page.goto(`${base}/index.html?norender`);
+  await page.goto(`${base}/index.html?norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__aube?.ready === true, null, { timeout: 300000 });
   await page.click('#btn-load');
   await page.waitForSelector('#load-list .slot');
@@ -103,7 +105,7 @@ try {
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' });
   const p2 = await ip.newPage();
   const errs2 = collectErrors(p2);
-  await p2.goto(`${base}/index.html?autostart&seed=7&norender`);
+  await p2.goto(`${base}/index.html?autostart&seed=7&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
   await p2.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived, null, { timeout: 300000 });
   await p2.evaluate(() => window.__aube.renderNow(2));
   await p2.screenshot({ path: join(out, 'iphone-partie.png'), timeout: 600000 });

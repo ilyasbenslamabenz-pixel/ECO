@@ -125,6 +125,15 @@ async function boot(): Promise<void> {
   debug.catalogAssets = catalog.assets.length;
   const lib = new AssetLibrary(catalog, assetsBase);
 
+  if (params.has('validate')) {
+    // Mode porte de validation visuelle : pas de partie ni de scène, inspection des assets (renderer dédié).
+    const { validateAllAssets } = await import('./render/validation');
+    debug.validate = () => validateAllAssets(lib);
+    debug.ready = true;
+    ui.hideLoading();
+    return;
+  }
+
   ui.setLoading(0.2, 'Préparation du rendu 3D (ciel, terrain, végétation)…');
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const render = await initRender(canvas, lib, catalog, assetsBase);
@@ -180,15 +189,6 @@ async function boot(): Promise<void> {
       void bridge.sendExt('setFocus', { x: focusX, z: focusZ }).catch(() => undefined);
     }
   });
-
-  if (params.has('validate')) {
-    // Mode porte de validation visuelle : pas de partie, inspection des assets à la demande.
-    const { validateAllAssets } = await import('./render/validation');
-    debug.validate = () => validateAllAssets(lib);
-    debug.ready = true;
-    ui.hideLoading();
-    return;
-  }
 
   ui.setLoading(0.5, 'Démarrage de la simulation…');
   bridge = await SimBridge.create(workerUrl);
