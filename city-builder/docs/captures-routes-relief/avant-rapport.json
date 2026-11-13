@@ -11,11 +11,20 @@
       "yaw": -2.641592653589793
     },
     {
+      "name": "plage-quai",
+      "file": "avant-plage-quai.jpg",
+      "x": 256,
+      "z": 272,
+      "dist": 60,
+      "pitch": 0.32,
+      "yaw": -2.441592653589793
+    },
+    {
       "name": "riviere",
       "file": "avant-riviere.jpg",
-      "x": 276,
+      "x": 286,
       "z": -256,
-      "dist": 120,
+      "dist": 130,
       "pitch": 0.5,
       "yaw": 0.6
     },
@@ -27,6 +36,42 @@
       "dist": 100,
       "pitch": 0.38,
       "yaw": 1.8897290008848722
+    },
+    {
+      "name": "viaduc",
+      "file": "avant-viaduc.jpg",
+      "x": -128,
+      "z": 0,
+      "dist": 110,
+      "pitch": 0.42,
+      "yaw": 0.7
+    },
+    {
+      "name": "tunnel",
+      "file": "avant-tunnel.jpg",
+      "x": -752,
+      "z": -821,
+      "dist": 75,
+      "pitch": 0.35,
+      "yaw": 3.641592653589793
+    },
+    {
+      "name": "tunnel-sortie",
+      "file": "avant-tunnel-sortie.jpg",
+      "x": -752,
+      "z": -651,
+      "dist": 75,
+      "pitch": 0.35,
+      "yaw": 0.5
+    },
+    {
+      "name": "rondpoint",
+      "file": "avant-rondpoint.jpg",
+      "x": -80,
+      "z": 288,
+      "dist": 95,
+      "pitch": 0.75,
+      "yaw": 0.4
     }
   ],
   "builds": [
@@ -65,18 +110,6 @@
       }
     },
     {
-      "label": "rivière : rue qui traverse (pont)",
-      "points": [
-        296,
-        -190,
-        296,
-        -322
-      ],
-      "extra": {},
-      "ok": false,
-      "message": "Une route ne peut pas commencer ou finir dans l'eau"
-    },
-    {
       "label": "colline : rue à flanc de coteau",
       "points": [
         -668.6055687182125,
@@ -92,6 +125,102 @@
         ],
         "cost": 8400
       }
+    },
+    {
+      "label": "viaduc : rue au sol",
+      "points": [
+        -218,
+        0,
+        -38,
+        0
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          4
+        ],
+        "cost": 10800
+      }
+    },
+    {
+      "label": "viaduc : rue +8 m au-dessus",
+      "points": [
+        -128,
+        -110,
+        -128,
+        110
+      ],
+      "extra": {
+        "elevation": 8
+      },
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          7,
+          8
+        ],
+        "cost": 13200
+      }
+    },
+    {
+      "label": "tunnel : rue −16 m sous la colline",
+      "points": [
+        -752,
+        -846,
+        -752,
+        -626
+      ],
+      "extra": {
+        "elevation": -16
+      },
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          9
+        ],
+        "cost": 15600
+      }
+    },
+    {
+      "label": "rond-point : rue est-ouest",
+      "points": [
+        -170,
+        288,
+        10,
+        288
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          10
+        ],
+        "cost": 10800
+      }
+    },
+    {
+      "label": "rond-point : rue nord-sud",
+      "points": [
+        -80,
+        198,
+        -80,
+        378
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          13,
+          14
+        ],
+        "cost": 10800
+      }
+    },
+    {
+      "label": "rond-point",
+      "ok": false,
+      "message": "Commande inconnue : buildRoundabout"
     }
   ],
   "plage": {
@@ -101,12 +230,14 @@
     "dz": 1,
     "score": 0.024558258056640803
   },
+  "pont": null,
   "riviere": {
     "cx": 256,
     "cz": -256,
     "ux": 1,
     "uz": 0,
-    "off": 6
+    "off": 6,
+    "off2": 6
   },
   "colline": {
     "x": -656,
@@ -115,6 +246,25 @@
     "gz": -0.04499787092208862,
     "score": 0.00012226461505801534,
     "h": 25.10980796813965
+  },
+  "viaduc": {
+    "x": -128,
+    "z": 0,
+    "v": 0.27266359329223633
+  },
+  "tunnel": {
+    "x": -752,
+    "z": -736,
+    "dx": 0,
+    "dz": 1,
+    "prom": 32.146873474121094,
+    "score": 32.10981750488281
+  },
+  "tunnelEdges": [],
+  "rondpoint": {
+    "x": -80,
+    "z": 288,
+    "v": 1.9692373275756836
   },
   "errors": []
 }

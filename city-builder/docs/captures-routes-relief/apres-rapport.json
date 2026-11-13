@@ -2,50 +2,68 @@
   "seed": 7,
   "views": [
     {
-      "name": "riviere",
-      "file": "apres-riviere.jpg",
-      "x": 286,
-      "z": -256,
-      "dist": 130,
-      "pitch": 0.5,
-      "yaw": 0.6
+      "name": "pont",
+      "file": "apres-pont.jpg",
+      "x": 112,
+      "z": 112,
+      "dist": 80,
+      "pitch": 0.32,
+      "yaw": 3.741592653589793
     },
     {
-      "name": "riviere-pont",
-      "file": "apres-riviere-pont.jpg",
-      "x": 316,
-      "z": -256,
-      "dist": 70,
-      "pitch": 0.3,
-      "yaw": 2.0707963267948966
-    },
-    {
-      "name": "tunnel",
-      "file": "apres-tunnel.jpg",
-      "x": -752,
-      "z": -821,
-      "dist": 75,
-      "pitch": 0.35,
-      "yaw": 3.641592653589793
-    },
-    {
-      "name": "tunnel-sortie",
-      "file": "apres-tunnel-sortie.jpg",
-      "x": -752,
-      "z": -651,
-      "dist": 75,
-      "pitch": 0.35,
-      "yaw": 0.5
+      "name": "pont-culee",
+      "file": "apres-pont-culee.jpg",
+      "x": 82,
+      "z": 112,
+      "dist": 40,
+      "pitch": 0.22,
+      "yaw": 4.0415926535897935
     }
   ],
   "builds": [
     {
-      "label": "rivière : rue sur la berge",
+      "label": "pont : rue qui traverse la rivière (128 m)",
       "points": [
-        186,
-        -242,
-        326,
-        -242
+        48,
+        112,
+        176,
+        112
+      ],
+      "extra": {},
+      "ok": false,
+      "message": "Une route ne peut pas commencer ou finir dans l'eau"
+    },
+    {
+      "label": "pont : rue qui traverse la rivière (176 m)",
+      "points": [
+        24,
+        112,
+        200,
+        112
+      ],
+      "extra": {},
+      "ok": false,
+      "message": "Une route ne peut pas commencer ou finir dans l'eau"
+    },
+    {
+      "label": "pont : rue qui traverse la rivière (224 m)",
+      "points": [
+        0,
+        112,
+        224,
+        112
+      ],
+      "extra": {},
+      "ok": false,
+      "message": "Une route ne peut pas commencer ou finir dans l'eau"
+    },
+    {
+      "label": "pont : rue qui traverse la rivière (272 m)",
+      "points": [
+        -24,
+        112,
+        248,
+        112
       ],
       "extra": {},
       "ok": true,
@@ -53,72 +71,16 @@
         "edgeIds": [
           1
         ],
-        "cost": 8400
-      }
-    },
-    {
-      "label": "rivière : rue qui traverse (pont)",
-      "points": [
-        316,
-        -195,
-        316,
-        -307
-      ],
-      "extra": {},
-      "ok": true,
-      "data": {
-        "edgeIds": [
-          4,
-          5
-        ],
-        "cost": 6720
-      }
-    },
-    {
-      "label": "tunnel : rue −16 m sous la colline",
-      "points": [
-        -752,
-        -846,
-        -752,
-        -626
-      ],
-      "extra": {
-        "elevation": -16
-      },
-      "ok": true,
-      "data": {
-        "edgeIds": [
-          6
-        ],
-        "cost": 60000
+        "cost": 40920
       }
     }
   ],
-  "riviere": {
-    "cx": 256,
-    "cz": -256,
-    "ux": 1,
-    "uz": 0,
-    "off": 6,
-    "off2": 6
+  "pont": {
+    "x": 112,
+    "z": 112,
+    "dx": 1,
+    "dz": 0,
+    "wet": 2
   },
-  "tunnel": {
-    "x": -752,
-    "z": -736,
-    "dx": 0,
-    "dz": 1,
-    "prom": 32.146873474121094,
-    "score": 32.10981750488281
-  },
-  "tunnelEdges": [
-    {
-      "id": 6,
-      "runs": [
-        5,
-        44
-      ],
-      "n": 56
-    }
-  ],
   "errors": []
 }

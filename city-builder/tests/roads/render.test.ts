@@ -240,3 +240,16 @@ test('Relief : talus raccordé au terrain, mur au bord de l\'eau, portails de tu
   const whole = meshAll(rn);
   for (const l of LAYERS) assert.ok(whole.layers.get(l)!.pos.every(Number.isFinite), l);
 });
+
+test('Aperçu du tracé (▲ / ▼) : le ruban suit le profil 3D renvoyé par la simulation', async () => {
+  const { RoadPreview } = await import('../../src/input/previews');
+  const scene = new THREE.Scene();
+  const p = new RoadPreview(scene, () => 10);
+  const path: number[] = [];
+  for (let x = 0; x <= 100; x += 4) path.push(x, 10 + 8 * Math.sin((Math.PI * x) / 100), 0, 1);
+  p.show({ points: [0, 0, 100, 0], width: 12, validity: 'ok', start: { x: 0, z: 0 }, control: null, hover: { x: 100, z: 0, snap: 'free' }, path });
+  const pos = (p as unknown as { ribbon: THREE.Mesh }).ribbon.geometry.getAttribute('position');
+  let max = 0;
+  for (let i = 0; i < pos.count; i++) max = Math.max(max, pos.getY(i));
+  assert.ok(max > 17.5, `ruban à ${max} m (viaduc +8 m)`);
+});

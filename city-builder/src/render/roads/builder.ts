@@ -355,7 +355,7 @@ export function talusFoot(G: (x: number, z: number) => number, x: number, y: num
     if (over(d)) { hit = d; break; }
     prev = d;
   }
-  if (hit < 0) {
+  if (hit < 0 || hit > MAX_TALUS_WIDTH) {
     const d = MAX_TALUS_WIDTH + 2;
     return { x: x + nx * d, y: y + d * slope, z: z + nz * d, kind: 'air' };
   }
@@ -382,8 +382,12 @@ function roadSide(out: BuildOutput, ctx: BuildContext, st: Station[], from: numb
     const [ex, ey, ez] = edge(s);
     feet.push(talusFoot(G, ex, ey, ez, s.nx * side, s.nz * side));
   }
+  // Abouts de pont : les murs en aile de la culée remplacent le talus sur les derniers mètres.
+  const sFrom = st[from]!.s, sTo = st[to]!.s;
+  const bridgeBefore = (from > 0 && st[from - 1]!.bridge) || st[from]!.bridge, bridgeAfter = st[to]!.bridge || (to < st.length - 1 && st[to + 1]!.bridge);
   for (let i = from; i < to; i++) {
     const a = st[i]!, b = st[i + 1]!;
+    if ((bridgeBefore && b.s - sFrom < 6) || (bridgeAfter && sTo - a.s < 6)) continue;
     const fa = feet[i - from], fb = feet[i + 1 - from];
     if (!fa || !fb || fa.kind === 'air' || fb.kind === 'air') { wallPanel(out, ctx, a, b, side, ht, topY); continue; }
     const cut = fa.kind === 'cut' || fb.kind === 'cut';

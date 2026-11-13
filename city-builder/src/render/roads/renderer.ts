@@ -150,7 +150,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
     pick('concrete', 'sol_beton_brut', 'box', { tileSizeM: 3 });
     pick('skirt', 'terrain_terre', 'box', { tileSizeM: 2.5 });
     // Talus : mêmes textures que le terrain (herbe, sable au bord de l'eau) pour un raccord sans couture visible.
-    pick('talus', 'terrain_herbe', 'worldXZ');
+    pick('talus', 'terrain_herbe', 'worldXZ', { color: '#9aae6c' });
     pick('sand', 'terrain_sable', 'worldXZ');
     this.materials.set('tunnel', new THREE.MeshStandardMaterial({ name: 'tunnel_interieur', color: 0x1d1e20, roughness: 0.95, metalness: 0 }));
     // Peinture routière (rétroréfléchissante mate) et métal galvanisé : matériaux propres au module.

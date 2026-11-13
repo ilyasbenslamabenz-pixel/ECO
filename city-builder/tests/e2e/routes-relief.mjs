@@ -124,13 +124,25 @@ try {
       if (!off2) continue;
       const bx = cx + nx * (off + 8), bz = cz + nz * (off + 8);
       const r1 = await build('rivière : rue sur la berge', [bx - ux * 70, bz - uz * 70, bx + ux * 70, bz + uz * 70]);
-      const r2 = await build('rivière : rue qui traverse (pont)', [cx + nx * (off + 55) + ux * 60, cz + nz * (off + 55) + uz * 60, cx - nx * (off2 + 45) + ux * 60, cz - nz * (off2 + 45) + uz * 60]);
+      // Traversée : direction (8 essais) dont les deux extrémités sont au sec et la travée mouillée la plus courte.
+      let cross = null;
+      const bx0 = cx, bz0 = cz;
+      for (let k = 0; k < 8; k++) {
+        const a = (k * Math.PI) / 8, vx = Math.cos(a), vz = Math.sin(a);
+        if ((await H(bx0, bz0)) > 2) continue;
+        const e1 = await H(bx0 + vx * 75, bz0 + vz * 75), e2 = await H(bx0 - vx * 75, bz0 - vz * 75);
+        if (e1 < 3.6 || e2 < 3.6) continue;
+        let wet = 0;
+        for (let d = -75; d <= 75; d += 5) if ((await H(bx0 + vx * d, bz0 + vz * d)) < 2.4) wet++;
+        if (!cross || wet < cross.wet) cross = { vx, vz, wet };
+      }
+      const r2 = cross ? await build('rivière : rue qui traverse (pont)', [bx0 + cross.vx * 75, bz0 + cross.vz * 75, bx0 - cross.vx * 75, bz0 - cross.vz * 75]) : { ok: false };
+      report.pont = cross && { x: bx0, z: bz0, ...cross };
       report.riviere = { cx, cz, ux, uz, off, off2 };
       if (r1.ok || r2.ok) {
         await shoot('riviere', cx + ux * 30, cz + uz * 30, 130, 0.5, Math.atan2(nx, nz) + 0.6);
         if (r2.ok) {
-          const mx = cx + ux * 60 + nx * (off - off2) / 2, mz = cz + uz * 60 + nz * (off - off2) / 2;
-          await shoot('riviere-pont', mx, mz, 70, 0.3, Math.atan2(ux, uz) + 0.5, true);
+          await shoot('riviere-pont', bx0, bz0, 70, 0.3, Math.atan2(cross.vz, -cross.vx) + 0.5, true);
         }
         done = true; break;
       }
@@ -207,6 +219,33 @@ try {
     const buf = await page.screenshot({ timeout: 900000 });
     await sharp(buf).jpeg({ quality: 82 }).toFile(join(out, `${PREFIX}-apercu-hauteur.jpg`));
     await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  }
+  // Pont : rivière étroite (eau au centre, sec à ±56 m sur un axe), rue qui la traverse ; culées et raccords.
+  if (want('pont')) {
+    let best = null;
+    for (const [x, z, h] of grid) {
+      if (h > 1.6 || Math.abs(x) > 600 || Math.abs(z) > 700) continue;
+      for (const [dx, dz] of [[1, 0], [0, 1]]) {
+        const a = g(x - dx * 64, z - dz * 64), b = g(x + dx * 64, z + dz * 64);
+        if (a === undefined || b === undefined || a < 3.8 || b < 3.8 || Math.abs(a - b) > 3) continue;
+        let wet = 0;
+        for (let d = -64; d <= 64; d += 16) if ((g(x + dx * d, z + dz * d) ?? 0) < 2.2) wet++;
+        if (!best || wet < best.wet) best = { x, z, dx, dz, wet };
+      }
+    }
+    report.pont = best;
+    if (best) {
+      const { x, z, dx, dz } = best;
+      let r = { ok: false };
+      for (const L of [64, 88, 112, 136]) {
+        r = await build(`pont : rue qui traverse la rivière (${2 * L} m)`, [x - dx * L, z - dz * L, x + dx * L, z + dz * L]);
+        if (r.ok) break;
+      }
+      if (r.ok) {
+        await shoot('pont', x, z, 80, 0.32, Math.atan2(dz, -dx) + 0.6, true);
+        await shoot('pont-culee', x - dx * 30, z - dz * 30, 40, 0.22, Math.atan2(dz, -dx) + 0.9, true);
+      }
+    }
   }
   if (want('tunnel')) {
     // Colline marquée : point haut entouré de terrain plus bas à ±100 m.
