@@ -36,7 +36,9 @@
     "e2e:game": "node tests/e2e/gameplay.mjs",
     "e2e:play": "node tests/e2e/play.mjs",
     "e2e:signals": "node tests/e2e/signals.mjs",
-    "captures": "node tests/e2e/captures.mjs"
+    "captures": "node tests/e2e/captures.mjs",
+    "power:build": "tsx tools/power/build.ts",
+    "e2e:electricite": "node tests/electricite/e2e.mjs"
   },
   "dependencies": {
     "three": "0.187.0"

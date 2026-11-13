@@ -29,7 +29,7 @@ export interface FacilitySpec {
 
 export const FACILITY_SPECS: Record<FacilityKind, FacilitySpec> = {
   thermique: { kind: 'thermique', nameFr: 'Centrale thermique (gaz)', nominalKw: 60_000, radius: 450, meritCost: 40, failurePerHour: 0.0012, repairHours: 18, airPerHourAtFull: 9, airRadius: 260, noisePerHourAtFull: 2 },
-  eolien: { kind: 'eolien', nameFr: 'Éolienne', nominalKw: 3_000, radius: 250, meritCost: 2, failurePerHour: 0.0008, repairHours: 10, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 1.5 },
+  eolien: { kind: 'eolien', nameFr: 'Éolienne', nominalKw: 2_300, radius: 250, meritCost: 2, failurePerHour: 0.0008, repairHours: 10, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 1.5 },
   solaire: { kind: 'solaire', nameFr: 'Ferme solaire', nominalKw: 6_000, radius: 300, meritCost: 1, failurePerHour: 0.0004, repairHours: 6, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 0 },
   hydro: { kind: 'hydro', nameFr: 'Barrage hydroélectrique', nominalKw: 30_000, radius: 400, meritCost: 3, failurePerHour: 0.0006, repairHours: 24, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 0.5 },
   poste: { kind: 'poste', nameFr: 'Poste de transformation', nominalKw: 45_000, radius: 700, meritCost: 0, failurePerHour: 0.0005, repairHours: 8, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 0.5 },

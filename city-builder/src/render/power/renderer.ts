@@ -9,7 +9,10 @@
  * Le rendu ne modifie jamais l'état du jeu.
  */
 import * as THREE from 'three';
-import { GANTRY_HEIGHT, POWER_ASSETS, PYLON, TURBINE } from '../../shared/power/render-spec';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { GANTRY_HEIGHT, POWER_ELEMENT_FILES, PYLON, TURBINE } from '../../shared/power/render-spec';
+import { dequantizeGeometry } from '../assets';
 import { LINE_SPEC, windPowerShare } from '../../shared/power/model';
 import { COVER_CUT, COVER_OK, COVER_PARTIAL, COVER_UNLINKED, type ElectriciteDelta, type FacilityView, type LineView } from '../../shared/power/types';
 import { powerView } from '../../shared/power/view';
@@ -25,16 +28,18 @@ class InstancedModel {
   ready = false;
   constructor(private readonly group: THREE.Group, private readonly capacity: number, private readonly name: string) {}
 
-  async load(ctx: RenderPluginContext, assetId: string): Promise<void> {
-    const a = ctx.lib.get(assetId);
-    if (!a) throw new Error(`modèle ${assetId} absent du catalogue`);
-    for (let l = 0; l < a.lods.length; l++) {
-      const root = await ctx.lib.load(assetId, l);
+  /** Charge les LOD (fichiers GLB relatifs au dossier assets, hors catalogue) et crée les InstancedMesh. */
+  async load(ctx: RenderPluginContext, files: readonly string[]): Promise<void> {
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    for (let l = 0; l < files.length; l++) {
+      const gltf = await loader.loadAsync(ctx.lib.url(files[l]!));
+      const root = gltf.scene;
       root.updateMatrixWorld(true);
       const set: LodSet = { meshes: [] };
       root.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
+        dequantizeGeometry(m.geometry);
         const geo = m.geometry.clone();
         geo.applyMatrix4(m.matrixWorld);
         const im = new THREE.InstancedMesh(geo, m.material, this.capacity);
@@ -107,11 +112,10 @@ export class PowerRenderer {
     this.rotors = new InstancedModel(this.group, 256, 'elec_rotor');
     this.pylons = new InstancedModel(this.group, 4096, 'elec_pylone');
     this.unsub = powerView.on(() => this.applyOverlayVisibility());
-    // Les modèles n'existent que si le catalogue les contient (le module reste fonctionnel sans).
-    const jobs: Promise<void>[] = [];
-    if (ctx.lib.get(POWER_ASSETS.rotor)) jobs.push(this.rotors.load(ctx, POWER_ASSETS.rotor).then(() => this.rebuildTurbines(true)));
-    if (ctx.lib.get(POWER_ASSETS.pylone)) jobs.push(this.pylons.load(ctx, POWER_ASSETS.pylone).then(() => this.rebuildLines(true)));
-    await Promise.all(jobs);
+    // Éléments chargés en arrière-plan : une erreur (fichier absent) laisse le reste du rendu fonctionnel.
+    void this.rotors.load(ctx, POWER_ELEMENT_FILES.rotor).then(() => this.rebuildTurbines(true)).catch((e: unknown) => { console.error('[rendu electricite] rotor :', e); });
+    void this.pylons.load(ctx, POWER_ELEMENT_FILES.pylone).then(() => this.rebuildLines(true)).catch((e: unknown) => { console.error('[rendu electricite] pylône :', e); });
+    await Promise.resolve();
   }
 
   apply(state: ElectriciteDelta): void {

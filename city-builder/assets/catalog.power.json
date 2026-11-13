@@ -1,0 +1,531 @@
+{
+  "assets": [
+    {
+      "id": "elec_centrale_gaz",
+      "nameFr": "Centrale thermique (gaz)",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "models/power/elec_centrale_gaz_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 3984
+        },
+        {
+          "file": "models/power/elec_centrale_gaz_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 2018
+        },
+        {
+          "file": "models/power/elec_centrale_gaz_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 402
+        }
+      ],
+      "dimensions": {
+        "width": 47.6,
+        "depth": 39.6,
+        "height": 46.01
+      },
+      "footprint": {
+        "tilesX": 6,
+        "tilesZ": 5
+      },
+      "cost": 8500000,
+      "upkeepPerMonth": 9500,
+      "capacity": {
+        "residents": 0,
+        "jobs": 60
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 19.8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Bardage gris clair, aérocondenseur bleu"
+        },
+        {
+          "id": "sable",
+          "nameFr": "Bardage sable",
+          "materialOverrides": {
+            "facade": {
+              "color": "#e2d6bf"
+            },
+            "bardage_acc": {
+              "color": "#6d7b5a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/power/models.ts#centraleGaz",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "electricite",
+        "elec:centrale:thermique",
+        "industrie",
+        "energie",
+        "cheminee",
+        "service:electricite",
+        "style:centrale_cycle_combine",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "elec_eolienne",
+      "nameFr": "Éolienne",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "models/power/elec_eolienne_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 520
+        },
+        {
+          "file": "models/power/elec_eolienne_lod1.glb",
+          "maxDistance": 1500,
+          "triangles": 304
+        },
+        {
+          "file": "models/power/elec_eolienne_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 116
+        }
+      ],
+      "dimensions": {
+        "width": 15,
+        "depth": 15,
+        "height": 58.6
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 1200000,
+      "upkeepPerMonth": 1100,
+      "capacity": {
+        "residents": 0,
+        "jobs": 2
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.5,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Mât blanc"
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "sol_beton_brut"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/power/models.ts#eolienne",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "electricite",
+        "elec:centrale:eolien",
+        "energie",
+        "renouvelable",
+        "repere_visuel",
+        "service:electricite",
+        "style:eolienne_tubulaire",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "elec_ferme_solaire",
+      "nameFr": "Ferme solaire",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "models/power/elec_ferme_solaire_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 3752
+        },
+        {
+          "file": "models/power/elec_ferme_solaire_lod1.glb",
+          "maxDistance": 800,
+          "triangles": 1268
+        },
+        {
+          "file": "models/power/elec_ferme_solaire_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 128
+        }
+      ],
+      "dimensions": {
+        "width": 47.6,
+        "depth": 47.6,
+        "height": 15.03
+      },
+      "footprint": {
+        "tilesX": 6,
+        "tilesZ": 6
+      },
+      "cost": 2400000,
+      "upkeepPerMonth": 900,
+      "capacity": {
+        "residents": 0,
+        "jobs": 3
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 23.8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Tables fixes orientées au sud"
+        }
+      ],
+      "textureSets": [
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "terrain_herbe"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/power/models.ts#fermeSolaire",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "electricite",
+        "elec:centrale:solaire",
+        "energie",
+        "renouvelable",
+        "service:electricite",
+        "style:centrale_photovoltaique",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "elec_barrage",
+      "nameFr": "Barrage hydroélectrique",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "models/power/elec_barrage_lod0.glb",
+          "maxDistance": 250,
+          "triangles": 2678
+        },
+        {
+          "file": "models/power/elec_barrage_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 1440
+        },
+        {
+          "file": "models/power/elec_barrage_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 424
+        }
+      ],
+      "dimensions": {
+        "width": 47.6,
+        "depth": 31.9,
+        "height": 24.21
+      },
+      "footprint": {
+        "tilesX": 6,
+        "tilesZ": 4
+      },
+      "cost": 9000000,
+      "upkeepPerMonth": 5000,
+      "capacity": {
+        "residents": 0,
+        "jobs": 30
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.95,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Béton, vannes bleues"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/power/models.ts#barrage",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "electricite",
+        "elec:centrale:hydro",
+        "energie",
+        "renouvelable",
+        "eau",
+        "bord_de_l_eau",
+        "service:electricite",
+        "style:barrage_usine",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "elec_poste",
+      "nameFr": "Poste de transformation",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "models/power/elec_poste_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 2724
+        },
+        {
+          "file": "models/power/elec_poste_lod1.glb",
+          "maxDistance": 800,
+          "triangles": 1436
+        },
+        {
+          "file": "models/power/elec_poste_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 282
+        }
+      ],
+      "dimensions": {
+        "width": 31.6,
+        "depth": 31.6,
+        "height": 15.03
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 4
+      },
+      "cost": 650000,
+      "upkeepPerMonth": 700,
+      "capacity": {
+        "residents": 0,
+        "jobs": 4
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Poste extérieur 225/20 kV"
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/power/models.ts#posteTransformation",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "electricite",
+        "elec:poste",
+        "energie",
+        "reseau",
+        "service:electricite",
+        "style:poste_haute_tension",
+        "densite:faible",
+        "genere"
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "id": "elec_eolienne_rotor",
+      "nameFr": "Rotor d'éolienne (animé)",
+      "category": "prop",
+      "lods": [
+        {
+          "file": "models/power/elec_eolienne_rotor_lod0.glb",
+          "maxDistance": 350,
+          "triangles": 696
+        },
+        {
+          "file": "models/power/elec_eolienne_rotor_lod1.glb",
+          "maxDistance": 2100,
+          "triangles": 182
+        },
+        {
+          "file": "models/power/elec_eolienne_rotor_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 57
+        }
+      ],
+      "dimensions": {
+        "width": 68.69,
+        "depth": 3.8,
+        "height": 59.55
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Origine"
+        }
+      ],
+      "textureSets": [
+        "enduit_blanc",
+        "enduit_peint"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/power/models.ts#buildRotor",
+        "author": "Projet Aube Urbaine (générateur réseau électrique)"
+      },
+      "tags": [
+        "electricite",
+        "elec:element",
+        "anime",
+        "rotor",
+        "genere"
+      ]
+    },
+    {
+      "id": "elec_pylone",
+      "nameFr": "Pylône de ligne haute tension",
+      "category": "prop",
+      "lods": [
+        {
+          "file": "models/power/elec_pylone_lod0.glb",
+          "maxDistance": 350,
+          "triangles": 1676
+        },
+        {
+          "file": "models/power/elec_pylone_lod1.glb",
+          "maxDistance": 1400,
+          "triangles": 496
+        },
+        {
+          "file": "models/power/elec_pylone_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 136
+        }
+      ],
+      "dimensions": {
+        "width": 15.5,
+        "depth": 8.2,
+        "height": 36.05
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Origine"
+        }
+      ],
+      "textureSets": [
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_rideau",
+        "sol_beton_brut"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/power/models.ts#buildPylon",
+        "author": "Projet Aube Urbaine (générateur réseau électrique)"
+      },
+      "tags": [
+        "electricite",
+        "elec:element",
+        "pylone",
+        "ligne_ht",
+        "genere"
+      ]
+    }
+  ],
+  "textureSets": []
+}
