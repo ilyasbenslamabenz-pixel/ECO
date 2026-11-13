@@ -110,13 +110,22 @@ export class HubsRenderer {
     this.root.add(group);
     const view: HubView = { rec: h, group, rigs: [] };
     const l = hubLayout(h.type);
+    // Végétation du terrain dégagée sous l'emprise (comme pour un bâtiment).
+    this.ctx.vegetation?.removeInFootprint(h.x, h.z, l.hx, l.hz, rotAngle(h.rot), 4);
     for (const p of l.pieces) {
       const holder = new THREE.Group();
       holder.position.set(p.x, p.y ?? 0, p.z);
       if (p.ground) {
-        const [wx, wz] = hubToWorld(h, p.x, p.z);
-        const gy = this.ctx.heightAt(wx, wz);
-        if (Number.isFinite(gy)) holder.position.y = gy - h.y + (p.y ?? 0);
+        // Point haut du terrain sous la pièce (centre, coins, milieux) : rien n'est noyé dans le relief ;
+        // la jupe des modules (−0,4 m) masque les faibles écarts du côté bas.
+        const r = Math.max(4, (this.ctx.lib.get(p.asset)?.dimensions.width ?? 30) / 2);
+        let gy = -Infinity;
+        for (const [dx, dz] of [[0, 0], [-r, -r], [r, -r], [-r, r], [r, r], [0, -r], [0, r], [-r, 0], [r, 0]] as const) {
+          const [wx, wz] = hubToWorld(h, p.x + dx, p.z + dz);
+          const v = this.ctx.heightAt(wx, wz);
+          if (Number.isFinite(v) && v > gy) gy = v;
+        }
+        if (Number.isFinite(gy)) holder.position.y = gy + 0.03 - h.y + (p.y ?? 0);
       }
       holder.rotation.y = p.rotY;
       group.add(holder);

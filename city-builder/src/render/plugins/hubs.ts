@@ -20,6 +20,8 @@ export const hubsRenderPlugin: RenderPlugin = {
     if (!renderer) return;
     const s = payload as HubsSnapshot | undefined;
     if (!s) { renderer.clear(); return; }
+    // Instantané = état complet (nouvelle partie, chargement) : on repart de zéro.
+    renderer.clear();
     renderer.setState(s.hubs, s.movements, s.phys, s.speed);
   },
   applyDeltaExt(payload) {

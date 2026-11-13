@@ -100,7 +100,7 @@ export async function initRender(
   let night = 0;
   const plugins = new RenderPluginHost(renderPlugins);
   await plugins.init({
-    scene: ctx.scene, camera: ctx.camera, renderer: ctx.renderer, sun: ctx.sun, catalog, lib, heightAt, nightFactor: () => night,
+    scene: ctx.scene, camera: ctx.camera, renderer: ctx.renderer, sun: ctx.sun, catalog, lib, heightAt, nightFactor: () => night, vegetation: veg,
   });
 
   const clearVegForBuildings = (list: readonly BuildingRecord[]): void => {
