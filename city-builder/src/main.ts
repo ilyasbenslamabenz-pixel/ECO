@@ -164,7 +164,8 @@ async function boot(): Promise<void> {
     onLoadSlot: (slot) => { void loadSlot(slot); },
     onSaveSlot: (slot) => saveSlot(slot),
     onDemo: () => { void startDemo(); },
-    onDemoGame: () => { void startDemo(true); },
+    // « Nouvelle partie (ville de départ) » retirée pour l'instant : seul point commun de tous les plantages
+    // Safari iPhone du 13/11 (démo + sauvegarde automatique d'une grande ville). startDemo(true) reste disponible.
     onQuit: () => {
       void autoTriggers?.saveAndFlush();
       autosaver?.stop();
