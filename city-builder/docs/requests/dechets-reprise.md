@@ -7,3 +7,5 @@
 - montage UI des panneaux (provisoire : touche J) (§5) ; trésorerie et démographie (§6) ;
 - défaut préexistant ×16 sans affichage (§8).
 **Décisions** : municipal enregistré avant dechets ; tests plugins/municipal adaptés (registre filtré, aucune assertion changée).
+
+**Reprise (2026-11-13, soir)** : aucun changement de code nécessaire ; revérifié : typecheck ✓, npm test 210/210, build ✓ (dist 45,21 Mo ; apport du module +0,97 Mo ≤ 1,5 Mo, dont GLB déchets 0,93 Mo). Module terminé ; le « reste » ci-dessus relève d'autres propriétaires.
