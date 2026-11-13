@@ -171,6 +171,7 @@ export const centraleGaz: BuildingDef = {
   variants: [
     { id: 'origine', nameFr: 'Bardage gris clair, aérocondenseur bleu' },
     { id: 'sable', nameFr: 'Bardage sable', materialOverrides: { facade: { color: '#e2d6bf' }, bardage_acc: { color: '#6d7b5a' } } },
+    { id: 'anthracite', nameFr: 'Bardage anthracite, aérocondenseur gris', materialOverrides: { facade: { color: '#6a7075' }, bardage_ind: { color: '#8d9398' }, bardage_acc: { color: '#9aa1a5' } } },
   ],
   build(ctx: Ctx): void {
     const lod = ctx.lod;
@@ -277,7 +278,11 @@ export const eolienne: BuildingDef = {
   source: `${SRC}#eolienne`,
   lodDistances: [300, 1500],
   palette: powerPalette(),
-  variants: [{ id: 'origine', nameFr: 'Mât blanc' }],
+  variants: [
+    { id: 'origine', nameFr: 'Mât blanc, balisage rouge' },
+    { id: 'gris', nameFr: 'Mât gris clair', materialOverrides: { blanc_eol: { color: '#d9dee0' } } },
+    { id: 'vert', nameFr: 'Pied de mât vert (intégration paysagère)', materialOverrides: { rouge_balise: { color: '#5d7f4a' } } },
+  ],
   build(ctx: Ctx): void {
     const lod = ctx.lod;
     const seg = lod === 0 ? 24 : lod === 1 ? 14 : 8;
@@ -395,7 +400,11 @@ export const fermeSolaire: BuildingDef = {
   source: `${SRC}#fermeSolaire`,
   lodDistances: [200, 800],
   palette: powerPalette({ gazon: M('terrain_herbe', '#93ad6a') }),
-  variants: [{ id: 'origine', nameFr: 'Tables fixes orientées au sud' }],
+  variants: [
+    { id: 'origine', nameFr: 'Tables fixes orientées au sud' },
+    { id: 'cadre_noir', nameFr: 'Modules à cadre noir', materialOverrides: { cadre_pv: { color: '#2b2e31' } } },
+    { id: 'prairie_seche', nameFr: 'Prairie sèche', materialOverrides: { gazon: { color: '#b9b07a' } } },
+  ],
   build(ctx: Ctx): void {
     const lod = ctx.lod;
     ground(ctx, 'gazon', -23.8, -23.8, 23.8, 23.8, 0.06);
@@ -477,7 +486,11 @@ export const barrage: BuildingDef = {
   source: `${SRC}#barrage`,
   lodDistances: [250, 1000],
   palette: powerPalette(),
-  variants: [{ id: 'origine', nameFr: 'Béton, vannes bleues' }],
+  variants: [
+    { id: 'origine', nameFr: 'Béton, vannes bleues' },
+    { id: 'ocre', nameFr: 'Béton ocre, vannes vertes', materialOverrides: { beton: { color: '#d4c2a0' }, beton_clair: { color: '#e8dcc2' }, vanne: { color: '#4f7a52' } } },
+    { id: 'rouge', nameFr: 'Vannes rouges', materialOverrides: { vanne: { color: '#9a3a2e' } } },
+  ],
   build(ctx: Ctx): void {
     const lod = ctx.lod;
     // Corps du barrage : profil poids (amont vertical côté -Z, aval incliné vers +Z), 5 passes séparées par des piles.
@@ -577,7 +590,11 @@ export const posteTransformation: BuildingDef = {
   source: `${SRC}#posteTransformation`,
   lodDistances: [200, 800],
   palette: powerPalette(),
-  variants: [{ id: 'origine', nameFr: 'Poste extérieur 225/20 kV' }],
+  variants: [
+    { id: 'origine', nameFr: 'Poste extérieur 225/20 kV' },
+    { id: 'sombre', nameFr: 'Transformateurs gris foncé', materialOverrides: { transfo: { color: '#4f5659' } } },
+    { id: 'brique', nameFr: 'Bâtiment de commande en brique', materialOverrides: { beton_clair: { textureSet: 'brique_rouge', color: '#ffffff' } } },
+  ],
   build(ctx: Ctx): void {
     const lod = ctx.lod;
     ground(ctx, 'gravier_poste', -15.8, -15.8, 15.8, 15.8, 0.1);

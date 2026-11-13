@@ -8176,6 +8176,21 @@
               "color": "#6d7b5a"
             }
           }
+        },
+        {
+          "id": "anthracite",
+          "nameFr": "Bardage anthracite, aérocondenseur gris",
+          "materialOverrides": {
+            "facade": {
+              "color": "#6a7075"
+            },
+            "bardage_ind": {
+              "color": "#8d9398"
+            },
+            "bardage_acc": {
+              "color": "#9aa1a5"
+            }
+          }
         }
       ],
       "textureSets": [
@@ -8254,7 +8269,25 @@
       "variants": [
         {
           "id": "origine",
-          "nameFr": "Mât blanc"
+          "nameFr": "Mât blanc, balisage rouge"
+        },
+        {
+          "id": "gris",
+          "nameFr": "Mât gris clair",
+          "materialOverrides": {
+            "blanc_eol": {
+              "color": "#d9dee0"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Pied de mât vert (intégration paysagère)",
+          "materialOverrides": {
+            "rouge_balise": {
+              "color": "#5d7f4a"
+            }
+          }
         }
       ],
       "textureSets": [
@@ -8332,6 +8365,24 @@
         {
           "id": "origine",
           "nameFr": "Tables fixes orientées au sud"
+        },
+        {
+          "id": "cadre_noir",
+          "nameFr": "Modules à cadre noir",
+          "materialOverrides": {
+            "cadre_pv": {
+              "color": "#2b2e31"
+            }
+          }
+        },
+        {
+          "id": "prairie_seche",
+          "nameFr": "Prairie sèche",
+          "materialOverrides": {
+            "gazon": {
+              "color": "#b9b07a"
+            }
+          }
         }
       ],
       "textureSets": [
@@ -8408,6 +8459,30 @@
         {
           "id": "origine",
           "nameFr": "Béton, vannes bleues"
+        },
+        {
+          "id": "ocre",
+          "nameFr": "Béton ocre, vannes vertes",
+          "materialOverrides": {
+            "beton": {
+              "color": "#d4c2a0"
+            },
+            "beton_clair": {
+              "color": "#e8dcc2"
+            },
+            "vanne": {
+              "color": "#4f7a52"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Vannes rouges",
+          "materialOverrides": {
+            "vanne": {
+              "color": "#9a3a2e"
+            }
+          }
         }
       ],
       "textureSets": [
@@ -8487,11 +8562,31 @@
         {
           "id": "origine",
           "nameFr": "Poste extérieur 225/20 kV"
+        },
+        {
+          "id": "sombre",
+          "nameFr": "Transformateurs gris foncé",
+          "materialOverrides": {
+            "transfo": {
+              "color": "#4f5659"
+            }
+          }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Bâtiment de commande en brique",
+          "materialOverrides": {
+            "beton_clair": {
+              "textureSet": "brique_rouge",
+              "color": "#ffffff"
+            }
+          }
         }
       ],
       "textureSets": [
         "bardage_blanc",
         "beton_facade",
+        "brique_rouge",
         "enduit_peint",
         "metal_conteneur",
         "metal_larme",
