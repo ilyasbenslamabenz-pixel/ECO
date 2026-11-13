@@ -1,0 +1,64 @@
+name: Publier Meknes City sur GitHub Pages
+
+# Compile le jeu (city-builder) et publie le site dans la branche gh-pages :
+#   https://ilyasbenslamabenz-pixel.github.io/eco/            -> Meknes City
+#   https://ilyasbenslamabenz-pixel.github.io/eco/moon-dust/  -> Balayeur Lunaire (copié tel quel)
+# Réglage unique du dépôt : Settings > Pages > Source « Deploy from a branch », branche gh-pages, dossier / (root).
+
+on:
+  push:
+    branches: [claude/amazing-meitner-vtryts]
+    paths: ["city-builder/**", "moon-dust/**", ".github/workflows/pages-meknes-city.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-gh-pages
+  cancel-in-progress: true
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: city-builder/package-lock.json
+
+      - name: Installer les dépendances
+        working-directory: city-builder
+        run: npm ci --no-audit --no-fund
+
+      - name: Vérifier (types + tests unitaires)
+        working-directory: city-builder
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Compiler le jeu
+        working-directory: city-builder
+        run: npm run build
+
+      - name: Assembler le site
+        run: |
+          mkdir -p _site
+          cp -r city-builder/dist/. _site/
+          if [ -d moon-dust ]; then mkdir -p _site/moon-dust && cp -r moon-dust/. _site/moon-dust/; fi
+          touch _site/.nojekyll
+          du -sh _site
+
+      - name: Publier dans gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_message: "Publication Meknes City ${{ github.sha }}"
