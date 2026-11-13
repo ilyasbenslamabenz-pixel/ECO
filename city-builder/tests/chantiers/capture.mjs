@@ -118,6 +118,7 @@ try {
   check((info0?.sites?.length ?? 0) === plan.length, `${info0?.sites?.length ?? 0} chantiers ouverts (4 attendus)`);
   check((info0?.erreurs?.length ?? 0) === 0, `aucune erreur du rendu des chantiers (${JSON.stringify(info0?.erreurs ?? [])})`);
   // Tous les modèles de chantier chargés avant la première image (sinon la capture serait vide).
+  await send(page, 'setSpeed', { speed: 0 });
   await page.evaluate(async () => { const r = window.__aube.chantiersPreload; if (r) await r(); });
   await page.waitForFunction(() => { const d = window.__aube.chantiers?.(); return d && d.chargements === 0; }, null, { timeout: 180000, polling: 1000 });
 
@@ -146,6 +147,7 @@ try {
       s = await siteOf(nom);
     }
     const vu = s?.phase ?? 'achevé';
+    console.log(`  ${nom}/${phase} : ${JSON.stringify(s)} ; ${JSON.stringify(await page.evaluate(() => window.__aube.lastStats?.date))}`);
     R.notes[`${nom}-${phase}`] = s;
     check(reached && vu === phase, `${nom} capturé en phase ${phase} (vu : ${vu})`);
     await page.evaluate(vue);
