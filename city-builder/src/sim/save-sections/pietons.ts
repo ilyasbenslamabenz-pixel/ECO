@@ -3,35 +3,24 @@
  * Écrite sous `save.plugins.pietons = { v, data, rng }` par l'hôte des modules (src/sim/plugins/host.ts).
  *
  * Règles : toute modification du format incrémente `PIETONS_SAVE_VERSION` et ajoute une étape à
- * `migratePietons` (v -> v+1), avec un test dans tests/pietons/ (sauvegarde de l'ancienne version -> chargée).
+ * `PIETONS_MIGRATIONS` (v -> v+1), avec un test dans tests/pietons/ (sauvegarde de l'ancienne version -> chargée).
  * `migratePietons` LÈVE une erreur si les données sont inutilisables : l'hôte attrape, notifie le joueur,
  * conserve la section d'origine et charge le reste de la partie.
+ *
+ * Format, historique (v1 gabarit vide, v2 marcheurs + trajets) et migrations : src/sim/pedestrians/save.ts
+ * (réexporté ici ; voir l'en-tête de ce fichier pour la raison de cet emplacement).
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { PIETONS_MIGRATIONS, PIETONS_SAVE_VERSION, emptyPietonsSave, migratePietons, type PietonsSave } from '../pedestrians/save';
 import { runMigrations, type SaveSectionSpec } from './types';
 
-export const PIETONS_SAVE_VERSION = 1;
-
-/** Format courant (v1 : gabarit vide, à compléter par le module). */
-export interface PietonsSaveV1 {
-  // Exemple : chantiers: { buildingId: number; phase: number; progress: number }[];
-}
-export type PietonsSave = PietonsSaveV1;
-
-export function emptyPietonsSave(): PietonsSave {
-  return {};
-}
-
-/** Étapes de migration : STEPS[v] transforme des données v en v+1. */
-const STEPS: Record<number, (d: Record<string, unknown>) => Record<string, unknown>> = {
-  // 1: (d) => ({ ...d, nouveauChamp: [] }),
-};
-
-/** Migre des données écrites en version `fromVersion` vers le format courant (lève si impossible). */
-export function migratePietons(data: unknown, fromVersion: number): PietonsSave {
-  return runMigrations(data, fromVersion, PIETONS_SAVE_VERSION, STEPS, 'pietons') as PietonsSave;
-}
+export { PIETONS_MIGRATIONS, PIETONS_SAVE_VERSION, emptyPietonsSave, migratePietons };
+export type { PietonsMarcheursV2, PietonsSave, PietonsSaveV1, PietonsSaveV2 } from '../pedestrians/save';
 
 export const pietonsSaveSection: SaveSectionSpec<PietonsSave> = {
-  id: 'pietons', version: PIETONS_SAVE_VERSION, empty: emptyPietonsSave, migrate: migratePietons,
+  id: 'pietons',
+  version: PIETONS_SAVE_VERSION,
+  empty: emptyPietonsSave,
+  // Moteur de migration commun (vérifications de version), puis étapes et validation du module.
+  migrate: (data, fromVersion) => migratePietons(runMigrations(data, fromVersion, PIETONS_SAVE_VERSION, PIETONS_MIGRATIONS, 'pietons'), PIETONS_SAVE_VERSION),
 };
