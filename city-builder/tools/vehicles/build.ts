@@ -32,6 +32,7 @@ export function buildVehicleMesh(def: VehicleDef, lod: number): VMesh {
 export function textureSetsFor(tex: VehicleTextureFiles): TextureSet[] {
   const license = { spdx: 'CC0-1.0', source: 'tools/vehicles/textures.ts#writeVehicleTextures', author: LICENSE_AUTHOR };
   return [
+    { id: 'vehicules_plaques', nameFr: 'Véhicules — planche de plaques d\'immatriculation (une bande par numéro)', albedo: tex.plates.albedo, normal: tex.plates.normal, arm: tex.plates.arm, tileSizeM: 1, license },
     { id: 'vehicules_atlas', nameFr: 'Véhicules — atlas de détails (pneus, optiques, chromes, lettrages)', albedo: tex.atlas.albedo, normal: tex.atlas.normal, arm: tex.atlas.arm, tileSizeM: 1, license },
     { id: 'vehicules_peinture', nameFr: 'Véhicules — peinture carrosserie (teintée par variante)', albedo: tex.paint.albedo, normal: tex.paint.normal, arm: tex.paint.arm, tileSizeM: PAINT_TILE, license },
   ];
@@ -65,7 +66,7 @@ export async function buildVehicle(def: VehicleDef, assetsDir: string, tex: Vehi
     capacity: { residents: 0, jobs: 0 },
     frontage: [],
     variants: def.paints.map((p) => ({ id: p.id, nameFr: p.nameFr, materialOverrides: { peinture: { color: p.color } } })),
-    textureSets: ['vehicules_atlas', 'vehicules_peinture'],
+    textureSets: ['vehicules_atlas', 'vehicules_peinture', 'vehicules_plaques'],
     license: { spdx: 'CC0-1.0', source: `tools/vehicles/models.ts#${def.id}`, author: LICENSE_AUTHOR },
     tags: ['vehicule', `usage:${def.usage}`, `type:${def.kind}`, 'genere'],
     vehicle: { kind: def.kind, maxSpeedKmh: def.maxSpeedKmh, lengthM: +Math.max(dims.depth, def.lengthM * 0).toFixed(3) || def.lengthM },

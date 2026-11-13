@@ -6147,7 +6147,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -6261,7 +6262,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -6366,7 +6368,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -6480,7 +6483,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -6585,7 +6589,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -6690,7 +6695,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -6795,7 +6801,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -6882,7 +6889,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -6960,7 +6968,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -7065,7 +7074,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -7143,7 +7153,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -7248,7 +7259,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -7344,7 +7356,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -7422,7 +7435,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -7509,7 +7523,8 @@
       ],
       "textureSets": [
         "vehicules_atlas",
-        "vehicules_peinture"
+        "vehicules_peinture",
+        "vehicules_plaques"
       ],
       "license": {
         "spdx": "CC0-1.0",
@@ -8622,6 +8637,19 @@
         "spdx": "CC0-1.0",
         "source": "https://polyhaven.com/a/wood_floor_deck",
         "author": "Dimitrios Savva"
+      }
+    },
+    {
+      "id": "vehicules_plaques",
+      "nameFr": "Véhicules — planche de plaques d'immatriculation (une bande par numéro)",
+      "albedo": "vehicles/textures/vehicules_plaques_albedo.webp",
+      "normal": "vehicles/textures/vehicules_plaques_normal.webp",
+      "arm": "vehicles/textures/vehicules_plaques_arm.webp",
+      "tileSizeM": 1,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/vehicles/textures.ts#writeVehicleTextures",
+        "author": "Projet Aube Urbaine (générateur procédural, CC0)"
       }
     }
   ],

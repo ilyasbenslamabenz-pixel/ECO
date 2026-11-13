@@ -14,6 +14,27 @@ import { ADVANCE, glyph, textWidthUnits } from './font';
 
 export const ATLAS_SIZE = 1024;
 
+/** Plaques d'immatriculation : une par bande de 256 × 64 px dans une texture dédiée (variété par instance). */
+export const PLATE_W = 256, PLATE_H = 64, PLATE_ROWS = 24;
+
+/**
+ * Numéros des plaques (format européen à deux lettres, trois chiffres, deux lettres), tirés d'une suite
+ * déterministe : la texture est reproductible et le rendu choisit une bande par véhicule.
+ */
+export function plateNumbers(rows = PLATE_ROWS): string[] {
+  const L = 'ABCDEFGHJKLMNPRSTUVWXYZ';
+  let st = 20260413 >>> 0;
+  const r = (): number => { st = (Math.imul(st ^ (st >>> 15), st | 1) + 0x6d2b79f5) >>> 0; return st / 4294967296; };
+  const out: string[] = [];
+  const vus = new Set<string>();
+  while (out.length < rows) {
+    const p = `${L[Math.floor(r() * L.length)]}${L[Math.floor(r() * L.length)]}-${String(Math.floor(r() * 900) + 100)}-${L[Math.floor(r() * L.length)]}${L[Math.floor(r() * L.length)]}`;
+    if (vus.has(p)) continue;
+    vus.add(p); out.push(p);
+  }
+  return out;
+}
+
 /** Rectangle en pixels de l'atlas [x0, y0, x1, y1]. */
 export type PxRect = [number, number, number, number];
 
@@ -501,9 +522,28 @@ function paintPaint(c: PbrCanvas): void {
 export interface VehicleTextureFiles {
   atlas: { albedo: string; normal: string; arm: string; emissive: string };
   paint: { albedo: string; normal: string; arm: string };
+  /** Planche de plaques d'immatriculation : `rows` bandes empilées (une par numéro). */
+  plates: { albedo: string; normal: string; arm: string; rows: number };
 }
 
 /** Écrit les textures dans `<assetsDir>/vehicles/textures/` ; renvoie les chemins relatifs à assets/. */
+/** Peint la planche des plaques : fond réfléchissant, liseré, bande bleue d'identification, numéro embossé. */
+export function paintPlates(c: PbrCanvas, numbers: string[]): void {
+  numbers.forEach((num, i) => {
+    const y0 = i * PLATE_H;
+    const rect: PxRect = [0, y0, PLATE_W, y0 + PLATE_H];
+    c.each(rect, (u, v) => {
+      const border = u < 0.012 || u > 0.988 || v < 0.06 || v > 0.94;
+      const band = u < 0.085;
+      return { alb: border ? [0.1, 0.1, 0.1] : band ? [0.08, 0.2, 0.62] : [0.93, 0.93, 0.9], h: border ? 0.7 : 0.5, rough: 0.35, metal: 0, ao: 1 };
+    });
+    // étoiles européennes stylisées sur la bande bleue
+    c.text([2, y0 + 6, 20, y0 + 26], '*', 14, { alb: [0.95, 0.85, 0.12], h: 0.55 }, 0.22);
+    c.text([2, y0 + 40, 20, y0 + 58], 'CH', 12, { alb: [0.95, 0.95, 0.95], h: 0.55 }, 0.16);
+    c.text([28, y0, PLATE_W - 10, y0 + PLATE_H], num, 30, { alb: [0.06, 0.06, 0.07], h: 0.78 }, 0.15);
+  });
+}
+
 export async function writeVehicleTextures(assetsDir: string): Promise<VehicleTextureFiles> {
   const rel = 'vehicles/textures';
   const dir = join(assetsDir, rel);
@@ -512,9 +552,11 @@ export async function writeVehicleTextures(assetsDir: string): Promise<VehicleTe
   paintAtlas(atlas);
   const paint = new PbrCanvas(256, 256);
   paintPaint(paint);
+  const plates = new PbrCanvas(PLATE_W, PLATE_H * PLATE_ROWS);
+  paintPlates(plates, plateNumbers());
   const write = async (name: string, data: Uint8Array, w: number, h: number, size: number, q: number, lossless = false): Promise<string> => {
     let img = sharp(Buffer.from(data), { raw: { width: w, height: h, channels: 3 } });
-    if (size !== w) img = img.resize(size, size, { kernel: 'lanczos3' });
+    if (size !== w && w === h) img = img.resize(size, size, { kernel: 'lanczos3' });
     const buf = await img.webp(lossless ? { lossless: true } : { quality: q, effort: 6 }).toBuffer();
     writeFileSync(join(dir, name), buf);
     return `${rel}/${name}`;
@@ -530,6 +572,12 @@ export async function writeVehicleTextures(assetsDir: string): Promise<VehicleTe
       albedo: await write('vehicules_peinture_albedo.webp', paint.albedoRGB(), 256, 256, 256, 92),
       normal: await write('vehicules_peinture_normal.webp', paint.normalRGB(3), 256, 256, 256, 92),
       arm: await write('vehicules_peinture_arm.webp', paint.armRGB(), 256, 256, 256, 92),
+    },
+    plates: {
+      albedo: await write('vehicules_plaques_albedo.webp', plates.albedoRGB(), PLATE_W, PLATE_H * PLATE_ROWS, PLATE_W, 94),
+      normal: await write('vehicules_plaques_normal.webp', plates.normalRGB(3), PLATE_W, PLATE_H * PLATE_ROWS, PLATE_W, 90),
+      arm: await write('vehicules_plaques_arm.webp', plates.armRGB(), PLATE_W, PLATE_H * PLATE_ROWS, PLATE_W, 92),
+      rows: PLATE_ROWS,
     },
   };
 }

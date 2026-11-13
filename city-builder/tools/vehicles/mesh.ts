@@ -1,6 +1,6 @@
 /**
  * Constructeur de maillages des véhicules (Node pur, sans three) :
- * 3 matériaux — `peinture` (carrosserie teintée par variante/instance), `atlas` (détails texturés,
+ * 4 matériaux — `peinture` (carrosserie teintée par variante/instance), `atlas` (détails texturés,
  * optiques émissives), `verre` (vitrages). Surfaces en grille (lofts) avec lissage par angle
  * (arêtes vives conservées), tours (lathe), boîtes arrondies, décalques plaqués sur l'atlas.
  * Unités : mètres ; Y vers le haut ; avant du véhicule vers +Z ; origine au sol, au centre.
@@ -8,8 +8,8 @@
 import { regionUv, type RegionName } from './textures';
 
 export type V3 = [number, number, number];
-export type Mat = 'peinture' | 'atlas' | 'verre';
-export const MATS: readonly Mat[] = ['peinture', 'atlas', 'verre'];
+export type Mat = 'peinture' | 'atlas' | 'verre' | 'plaque';
+export const MATS: readonly Mat[] = ['peinture', 'atlas', 'verre', 'plaque'];
 
 export interface Group { pos: number[]; nrm: number[]; uv: number[]; idx: number[] }
 
@@ -53,7 +53,7 @@ export interface SurfaceOpts {
 }
 
 export class VMesh {
-  readonly groups: Record<Mat, Group> = { peinture: { pos: [], nrm: [], uv: [], idx: [] }, atlas: { pos: [], nrm: [], uv: [], idx: [] }, verre: { pos: [], nrm: [], uv: [], idx: [] } };
+  readonly groups: Record<Mat, Group> = { peinture: { pos: [], nrm: [], uv: [], idx: [] }, atlas: { pos: [], nrm: [], uv: [], idx: [] }, verre: { pos: [], nrm: [], uv: [], idx: [] }, plaque: { pos: [], nrm: [], uv: [], idx: [] } };
   private m: M = IDENT.slice();
   private stack: M[] = [];
   /** Niveau de détail courant (0, 1, 2). */
@@ -205,6 +205,10 @@ export class VMesh {
       const V = (t: number): number => r.v0 + (r.v1 - r.v0) * t;
       // l'image a l'origine en haut : a (bas-gauche) -> v = t1
       uvs = [[U(s0), V(t1)], [U(s1), V(t1)], [U(s1), V(t0)], [U(s0), V(t0)]];
+    } else if (mat === 'plaque' && uvRect) {
+      // planche de plaques : le rectangle est donné directement en UV (origine de l'image en haut)
+      const [s0, t0, s1, t1] = uvRect;
+      uvs = [[s0, t1], [s1, t1], [s1, t0], [s0, t0]];
     } else uvs = [a, b, c, d].map((p) => VMesh.paintUv(p, n));
     const ids = [a, b, c, d].map((p, k) => this.vert(mat, p, n, uvs[k]![0], uvs[k]![1]));
     this.tri(mat, ids[0]!, ids[1]!, ids[2]!);

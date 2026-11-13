@@ -6,7 +6,7 @@
  */
 import type { CarBody } from './body';
 import { VMesh, type Mat, type V3 } from './mesh';
-import type { RegionName } from './textures';
+import { PLATE_ROWS, type RegionName } from './textures';
 
 export type RimStyle = 'alliage' | 'alliage_sport' | 'acier' | 'pl';
 
@@ -91,11 +91,17 @@ export function lamp(mb: VMesh, region: RegionName, x: number, y: number, z: num
   mb.pop();
 }
 
-/** Plaque d'immatriculation (0,52 × 0,11 m) face à `sign` (+1 avant, −1 arrière). */
+/**
+ * Plaque d'immatriculation (0,52 × 0,11 m) face à `sign` (+1 avant, −1 arrière).
+ * Matériau DÉDIÉ (`plaque`) : les UV couvrent la PREMIÈRE bande de la planche de numéros ; le rendu
+ * décale v d'une bande par véhicule (src/render/vehicles/renderer.ts), d'où des plaques toutes différentes.
+ */
 export function plate(mb: VMesh, y: number, z: number, sign: 1 | -1, scale = 1): void {
   const w = 0.52 * scale / 2, h = 0.11 * scale / 2;
-  if (sign > 0) mb.quad('atlas', [-w, y - h, z], [w, y - h, z], [w, y + h, z], [-w, y + h, z], 'plaque');
-  else mb.quad('atlas', [w, y - h, z], [-w, y - h, z], [-w, y + h, z], [w, y + h, z], 'plaque');
+  const v1 = 1 / PLATE_ROWS;
+  const uv: [number, number, number, number] = [0, 0, 1, v1];
+  if (sign > 0) mb.quad('plaque', [-w, y - h, z], [w, y - h, z], [w, y + h, z], [-w, y + h, z], undefined, uv);
+  else mb.quad('plaque', [w, y - h, z], [-w, y - h, z], [-w, y + h, z], [w, y + h, z], undefined, uv);
 }
 
 /** Quad d'atlas plaqué sur un flanc latéral (x = ±sx), entre z0..z1 et y0..y1. */

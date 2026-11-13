@@ -26,6 +26,8 @@ export interface VehicleFrameExt extends VehicleFrame {
   variants?: Uint8Array;
   /** Bits d'état : 1 = freine, 2 = clignotant gauche, 4 = clignotant droit, 8 = urgence. */
   flags?: Uint8Array;
+  /** Numéro de plaque d'immatriculation (bande de la planche) propre à chaque véhicule. */
+  plates?: Uint8Array;
 }
 
 /** Source de modèles : la bibliothèque d'assets du jeu (src/render/assets.ts) convient. */
@@ -39,12 +41,20 @@ interface Lot {
   state: 0 | 1 | 2 | 3; // non demandé, en cours, prêt, échec
   meshes: THREE.InstancedMesh[];
   paint: THREE.InstancedMesh | null;
+  /** Sous-maillage des plaques d'immatriculation (bande de la planche choisie par instance). */
+  plate: THREE.InstancedMesh | null;
   matrices: Float32Array;
   colors: Float32Array;
+  /** Numéro de bande de plaque par instance. */
+  plates: Float32Array;
   capacity: number;
   count: number;
   matAttr: THREE.InstancedBufferAttribute | null;
   colAttr: THREE.InstancedBufferAttribute | null;
+  plateAttr: THREE.InstancedBufferAttribute | null;
+  /** Bits d'état par instance (feux stop, clignotants : voir VehicleFrame.flags). */
+  lights: Float32Array;
+  lightAttr: THREE.InstancedBufferAttribute | null;
 }
 interface Model {
   asset: CatalogAsset;
@@ -92,8 +102,13 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
   private paintMat!: THREE.MeshPhysicalMaterial;
   private detailMat!: THREE.MeshStandardMaterial;
   private glassMat!: THREE.MeshPhysicalMaterial;
+  private plateMat!: THREE.MeshStandardMaterial;
+  /** Nombre de bandes (numéros différents) de la planche de plaques. */
+  private plateRows = 1;
   private camera: THREE.Camera | null = null;
   private night = 0;
+  /** Phase des clignotants (0 / 1, ≈ 1,5 Hz), partagée par toutes les instances. */
+  private readonly blinkUniform = { value: 0 };
   private texturesReady: Promise<void>;
   private pending = new Set<Promise<unknown>>();
 
@@ -103,6 +118,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
   private curIds = new Uint32Array(0);
   private curVar = new Uint8Array(0);
   private curFlags = new Uint8Array(0);
+  private curPlates: Uint8Array | null = null;
   private curCount = 0;
   private curTime = 0;
   private interval = 100;
@@ -128,6 +144,8 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     this.now = opts.now ?? (() => performance.now());
     this.shadows = opts.shadows ?? true;
     this.group.name = 'vehicules';
+    // sonde e2e (lecture seule) : bits d'état et plaques effectivement envoyés au GPU
+    (globalThis as { __aubeVehicules?: unknown }).__aubeVehicules = { probe: () => this.probe() };
     scene.add(this.group);
     const cat = src.catalog;
     cat.assets.forEach((a, i) => {
@@ -147,7 +165,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
   private readonly shadows: boolean;
 
   private emptyLot(): Lot {
-    return { state: 0, meshes: [], paint: null, matrices: new Float32Array(0), colors: new Float32Array(0), capacity: 0, count: 0, matAttr: null, colAttr: null };
+    return { state: 0, meshes: [], paint: null, plate: null, matrices: new Float32Array(0), colors: new Float32Array(0), plates: new Float32Array(0), capacity: 0, count: 0, matAttr: null, colAttr: null, plateAttr: null, lights: new Float32Array(0), lightAttr: null };
   }
 
   /* ----------------------------- matériaux ----------------------------- */
@@ -168,9 +186,55 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     };
     this.paintMat = new THREE.MeshPhysicalMaterial({ name: 'vehicule_peinture', color: 0xffffff, roughness: 1, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.12 });
     this.detailMat = new THREE.MeshStandardMaterial({ name: 'vehicule_details', color: 0xffffff, roughness: 1, metalness: 1, emissive: 0xffffff, emissiveIntensity: 0.3 });
+    // feux stop et clignotants : bits d'état par instance (aFeux), appliqués aux optiques de la carte émissive.
+    // Repère du modèle : avant = +Z, gauche du conducteur = +X. Feu arrière = texel émissif rouge à l'arrière.
+    const blink = this.blinkUniform;
+    this.detailMat.onBeforeCompile = (sh) => {
+      sh.uniforms['uBlink'] = blink;
+      sh.vertexShader = `attribute float aFeux;\nvarying float vFeux;\nvarying vec3 vLoc;\n${sh.vertexShader}`.replace(
+        '#include <begin_vertex>', '#include <begin_vertex>\n\tvFeux = aFeux;\n\tvLoc = position;');
+      sh.fragmentShader = `uniform float uBlink;\nvarying float vFeux;\nvarying vec3 vLoc;\n${sh.fragmentShader}`.replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+#ifdef USE_EMISSIVEMAP
+\t{
+\t\tfloat fb = floor(vFeux + 0.5);
+\t\tfloat brake = mod(fb, 2.0);
+\t\tfloat bl = mod(floor(fb / 2.0), 2.0), br = mod(floor(fb / 4.0), 2.0);
+\t\tvec3 ec = emissiveColor.rgb;
+\t\tfloat lit = max(ec.r, max(ec.g, ec.b));
+\t\tfloat redLamp = step(0.08, ec.r) * step(ec.g * 1.6, ec.r) * step(vLoc.z, 0.0);
+\t\ttotalEmissiveRadiance += vec3(1.0, 0.05, 0.02) * 3.0 * brake * redLamp;
+\t\tfloat side = bl * step(0.25, vLoc.x) + br * step(vLoc.x, -0.25);
+\t\ttotalEmissiveRadiance += vec3(1.0, 0.42, 0.0) * 4.0 * uBlink * side * step(0.08, lit);
+\t}
+#endif`);
+    };
+    this.detailMat.customProgramCacheKey = () => 'vehicule_feux';
     this.glassMat = new THREE.MeshPhysicalMaterial({ name: 'vehicule_verre', color: 0x18222b, roughness: 0.04, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.6 });
     const atlas = sets.get('vehicules_atlas');
     const paint = sets.get('vehicules_peinture');
+    const plaques = sets.get('vehicules_plaques');
+    // planche de plaques : hauteur = nombre de bandes × 64 px (déduit du nom de fichier si besoin)
+    this.plateMat = new THREE.MeshStandardMaterial({ name: 'vehicule_plaque', color: 0xffffff, roughness: 1, metalness: 1 });
+    if (plaques) {
+      const [pla, pln, plarm] = await Promise.all([load(plaques.albedo, true), load(plaques.normal, false), load(plaques.arm, false)]);
+      if (pla?.image) {
+        const img = pla.image as { width?: number; height?: number };
+        this.plateRows = Math.max(1, Math.round((img.height ?? 64) / Math.max(1, img.width ?? 256) * 4));
+      }
+      Object.assign(this.plateMat, { map: pla, normalMap: pln, roughnessMap: plarm, metalnessMap: plarm, aoMap: plarm });
+      this.plateMat.normalScale.set(0.6, 0.6);
+      const rows = this.plateRows;
+      this.plateMat.onBeforeCompile = (sh) => {
+        sh.vertexShader = `attribute float aPlaque;\n${sh.vertexShader}`.replace(
+          '#include <uv_vertex>',
+          `#include <uv_vertex>\n#ifdef USE_MAP\n\tvMapUv.y += aPlaque * ${(1 / rows).toFixed(8)};\n#endif`,
+        );
+      };
+      this.plateMat.customProgramCacheKey = () => `plaque${rows}`;
+      this.plateMat.needsUpdate = true;
+    }
     if (!atlas || !paint) { this.loadErrors.push('jeux de textures véhicules absents du catalogue'); return; }
     const emissiveFile = atlas.albedo.replace('_albedo.', '_emissive.');
     const [pa, pn, parm, aa, an, aarm, ae] = await Promise.all([
@@ -254,15 +318,23 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     lot.capacity = 32;
     lot.matrices = new Float32Array(lot.capacity * 16);
     lot.colors = new Float32Array(lot.capacity * 3);
+    lot.plates = new Float32Array(lot.capacity);
     lot.matAttr = new THREE.InstancedBufferAttribute(lot.matrices, 16);
     lot.matAttr.setUsage(THREE.DynamicDrawUsage);
     lot.colAttr = new THREE.InstancedBufferAttribute(lot.colors, 3);
     lot.colAttr.setUsage(THREE.DynamicDrawUsage);
+    lot.plateAttr = new THREE.InstancedBufferAttribute(lot.plates, 1);
+    lot.plateAttr.setUsage(THREE.DynamicDrawUsage);
+    lot.lights = new Float32Array(lot.capacity);
+    lot.lightAttr = new THREE.InstancedBufferAttribute(lot.lights, 1);
+    lot.lightAttr.setUsage(THREE.DynamicDrawUsage);
     for (const { geo, role } of parts) {
-      const mat = role === 'peinture' ? this.paintMat : role === 'verre' ? this.glassMat : this.detailMat;
+      const mat = role === 'peinture' ? this.paintMat : role === 'verre' ? this.glassMat : role === 'plaque' ? this.plateMat : this.detailMat;
       const im = new THREE.InstancedMesh(geo, mat, lot.capacity);
       im.instanceMatrix = lot.matAttr;
       if (role === 'peinture') { im.instanceColor = lot.colAttr; lot.paint = im; }
+      if (role === 'plaque') { geo.setAttribute('aPlaque', lot.plateAttr); lot.plate = im; }
+      if (mat === this.detailMat) geo.setAttribute('aFeux', lot.lightAttr);
       im.count = 0;
       im.frustumCulled = false;
       im.castShadow = this.shadows && lot === model.lods[0];
@@ -278,16 +350,24 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     while (cap < need) cap *= 2;
     const m = new Float32Array(cap * 16); m.set(lot.matrices);
     const c = new Float32Array(cap * 3); c.set(lot.colors);
-    lot.matrices = m; lot.colors = c; lot.capacity = cap;
+    const pl = new Float32Array(cap); pl.set(lot.plates);
+    const li = new Float32Array(cap); li.set(lot.lights);
+    lot.matrices = m; lot.colors = c; lot.plates = pl; lot.lights = li; lot.capacity = cap;
+    lot.lightAttr = new THREE.InstancedBufferAttribute(li, 1);
+    lot.lightAttr.setUsage(THREE.DynamicDrawUsage);
     lot.matAttr = new THREE.InstancedBufferAttribute(m, 16);
     lot.matAttr.setUsage(THREE.DynamicDrawUsage);
     lot.colAttr = new THREE.InstancedBufferAttribute(c, 3);
     lot.colAttr.setUsage(THREE.DynamicDrawUsage);
+    lot.plateAttr = new THREE.InstancedBufferAttribute(pl, 1);
+    lot.plateAttr.setUsage(THREE.DynamicDrawUsage);
     for (const im of lot.meshes) {
       // libère les anciens tampons GPU (les nouveaux sont créés au prochain rendu), puis remplace les attributs
       if (im === lot.meshes[0]) im.dispose();
       im.instanceMatrix = lot.matAttr;
       if (im === lot.paint) im.instanceColor = lot.colAttr;
+      if (im === lot.plate) im.geometry.setAttribute('aPlaque', lot.plateAttr);
+      if (im.material === this.detailMat) im.geometry.setAttribute('aFeux', lot.lightAttr);
       im.count = 0;
     }
   }
@@ -334,6 +414,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     }
     this.curPos = f.positions;
     this.curAsset = f.assetIndices;
+    this.curPlates = f.plates ?? null;
     for (let i = 0; i < n; i++) {
       const id = f.ids ? f.ids[i]! : i;
       this.curIds[i] = id;
@@ -380,9 +461,28 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     this.dispH[i] = h0 + dh * alpha;
   }
 
+  /** Sonde e2e : instances par bit d'état (1 frein, 2 / 4 clignotants), bandes de plaques distinctes, shader. */
+  probe(): { instances: number; brake: number; left: number; right: number; inFrame: number; plateRows: number; plates: number; detailShader: string; emissiveMap: boolean; blinking: number[] | null } {
+    let instances = 0, brake = 0, left = 0, right = 0;
+    let blinking: number[] | null = null;
+    const plates = new Set<number>();
+    for (const m of this.models) if (m) for (const lot of m.lods) for (let i = 0; i < lot.count; i++) {
+      instances++;
+      const f = lot.lights[i]!;
+      if (f & 1) brake++; if (f & 2) left++; if (f & 4) right++;
+      if (!blinking && (f & 6)) blinking = [lot.matrices[i * 16 + 12]!, lot.matrices[i * 16 + 14]!, Math.atan2(lot.matrices[i * 16 + 8]!, lot.matrices[i * 16 + 10]!), f];
+      if (lot.plate) plates.add(lot.plates[i]!);
+    }
+    let inFrame = 0;
+    for (let i = 0; i < this.curCount; i++) if (this.curFlags[i]! & 6) inFrame++;
+    const key = this.detailMat ? String((this.detailMat as { customProgramCacheKey: () => string }).customProgramCacheKey()) : '';
+    return { instances, brake, left, right, inFrame, plateRows: this.plateRows, plates: plates.size, detailShader: key, emissiveMap: !!this.detailMat?.emissiveMap, blinking };
+  }
+
   /* ----------------------------- mise à jour ----------------------------- */
 
   update(_dt: number): void {
+    this.blinkUniform.value = (performance.now() / 1000 * 1.5) % 1 < 0.55 ? 1 : 0;
     const t = this.now();
     const alpha = this.alphaAt(t);
     const cam = this.camera;
@@ -437,6 +537,9 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
       const co = lot.count * 3;
       const bright = 0.92 + (hash32(this.curIds[i]! * 7 + 3) & 255) / 255 * 0.14;
       lot.colors[co] = pal[v]! * bright; lot.colors[co + 1] = pal[v + 1]! * bright; lot.colors[co + 2] = pal[v + 2]! * bright;
+      // plaque d'immatriculation : bande de la planche propre au véhicule (identifiant stable)
+      lot.plates[lot.count] = this.curPlates ? this.curPlates[i]! % this.plateRows : hash32(this.curIds[i]! * 2654435761 + 11) % this.plateRows;
+      lot.lights[lot.count] = this.curFlags[i]! & 7;
       lot.count++;
       this.drawn[use]!++;
       if (night && d < 260) {
@@ -459,6 +562,14 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
         lot.colAttr!.clearUpdateRanges();
         lot.colAttr!.addUpdateRange(0, lot.count * 3);
         lot.colAttr!.needsUpdate = true;
+        if (lot.plate) {
+          lot.plateAttr!.clearUpdateRanges();
+          lot.plateAttr!.addUpdateRange(0, lot.count);
+          lot.plateAttr!.needsUpdate = true;
+        }
+        lot.lightAttr!.clearUpdateRanges();
+        lot.lightAttr!.addUpdateRange(0, lot.count);
+        lot.lightAttr!.needsUpdate = true;
       }
     }
     this.beams.count = beams;

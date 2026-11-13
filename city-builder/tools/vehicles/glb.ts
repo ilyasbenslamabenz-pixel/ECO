@@ -1,6 +1,6 @@
 /**
  * Écriture GLB (glTF 2.0 binaire) des véhicules, sans dépendance :
- *  - 1 nœud, 1 maillage, 1 primitive par matériau (`peinture`, `atlas`, `verre`) ;
+ *  - 1 nœud, 1 maillage, 1 primitive par matériau (`peinture`, `atlas`, `verre`, `plaque`) ;
  *  - positions quantifiées int16 normalisées (KHR_mesh_quantization ; échelle + translation sur le nœud),
  *    normales int8 normalisées, UV float32 ; indices uint16/uint32 ;
  *  - textures EXTERNES partagées (URI relative vers assets/vehicles/textures/*.webp, EXT_texture_webp) :
@@ -78,6 +78,15 @@ export function writeVehicleGlb(mesh: VMesh, tex: VehicleTextureFiles, glbPath: 
         emissiveTexture: { index: tex2(tex.atlas.emissive, 1) },
         emissiveFactor: [0.6, 0.6, 0.6],
         extras: { aube: { role: 'details' } },
+      });
+    } else if (m === 'plaque') {
+      // plaques d'immatriculation : planche de numéros, la bande affichée est choisie PAR INSTANCE au rendu
+      json.materials.push({
+        name: 'plaque',
+        pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], baseColorTexture: { index: tex2(tex.plates.albedo, 1) }, metallicFactor: 1, roughnessFactor: 1, metallicRoughnessTexture: { index: tex2(tex.plates.arm, 1) } },
+        normalTexture: { index: tex2(tex.plates.normal, 1) },
+        occlusionTexture: { index: tex2(tex.plates.arm, 1) },
+        extras: { aube: { role: 'plaque', rows: tex.plates.rows } },
       });
     } else {
       json.materials.push({
