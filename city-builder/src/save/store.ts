@@ -20,7 +20,7 @@ const META = 'meta:';
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 export class SaveStore {
-  constructor(readonly backend: SaveBackend, private readonly compress = true) {}
+  constructor(readonly backend: SaveBackend, readonly compress = true) {}
 
   static async open(env?: { indexedDB?: IDBFactory | undefined; localStorage?: StorageLike | undefined; compress?: boolean }): Promise<SaveStore> {
     return new SaveStore(await openBestBackend(env), env?.compress ?? true);
@@ -48,6 +48,30 @@ export class SaveStore {
     if (!bytes) return { ok: false, message: `Aucune sauvegarde dans l'emplacement « ${slot} »` };
     const d = await decodeSave(bytes);
     return d.ok ? { ok: true, value: d.value.data } : d;
+  }
+
+  /** Octets encodés (gzip) et métadonnées d'un emplacement, sans décodage (synchronisation en ligne). */
+  async getRaw(slot: string): Promise<{ bytes: Uint8Array; info: SlotInfo } | null> {
+    if (!SLOT_RE.test(slot)) return null;
+    try {
+      const [bytes, meta] = await Promise.all([this.backend.get(DATA + slot), this.backend.get(META + slot)]);
+      if (!bytes || !meta) return null;
+      const info = JSON.parse(new TextDecoder().decode(meta)) as SlotInfo;
+      return typeof info.savedAt === 'string' ? { bytes, info: { ...info, slot } } : null;
+    } catch { return null; }
+  }
+
+  /** Écrit des octets déjà encodés (ex. sauvegarde rapatriée et vérifiée) avec leurs métadonnées. */
+  async putRaw(slot: string, bytes: Uint8Array, info: SlotInfo): Promise<Result<SlotInfo>> {
+    if (!SLOT_RE.test(slot)) return { ok: false, message: 'Nom d\'emplacement invalide' };
+    const meta: SlotInfo = { ...info, slot, bytes: bytes.length };
+    try {
+      await this.backend.put(DATA + slot, bytes);
+      await this.backend.put(META + slot, new TextEncoder().encode(JSON.stringify(meta)));
+      return { ok: true, value: meta };
+    } catch (e) {
+      return { ok: false, message: `Sauvegarde impossible : ${msg(e)}` };
+    }
   }
 
   async has(slot: string): Promise<boolean> {

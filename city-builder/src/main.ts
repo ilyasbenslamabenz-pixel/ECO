@@ -22,8 +22,8 @@ import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
 import { applyGraphicsOptions } from './ui/options';
-import { gameDateLabel, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
-import { Autosaver, SaveStore } from './save';
+import { gameDateLabel, installCloudSaveBadge, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
+import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
 
 const QUICK_SLOT = 'rapide';
 const DEMO_SEED = 7;
@@ -48,6 +48,8 @@ interface DebugInfo {
   setCamera?: (mode: 'aerial' | 'street' | 'demo-aerial' | 'demo-street') => void;
   send?: (name: string, args: unknown) => Promise<unknown>;
   saveStoreKind?: string;
+  /** Sauvegardes en ligne (artifact claude.ai) : état publié par src/save/cloud.ts. */
+  cloudSave?: CloudSaveStatus;
   constructionApplied?: () => number;
   validate?: () => Promise<unknown>;
   lastReport?: unknown;
@@ -305,6 +307,10 @@ async function boot(): Promise<void> {
   // Sauvegardes : IndexedDB (gzip) -> localStorage -> mémoire ; emplacements listés par l'interface.
   store = await SaveStore.open();
   debug.saveStoreKind = store.backend.kind;
+  // Sauvegardes en ligne (docs/SAUVEGARDES.md) : dans l'artifact claude.ai, SaveStore synchronisé
+  // (locale immédiate + envoi en arrière-plan) ; ailleurs (window.claude absent), store inchangé.
+  installCloudSaveBadge();
+  store = await attachCloudSaves(store);
   const st = store;
   setSlotProvider({
     list: async () => (await st.list()).map((s): UiSlotInfo => ({

@@ -26,7 +26,7 @@ src/
             bibliothèque d'assets (GLB + cache), validation visuelle
   input/    caméra (aérienne / rue), outils de construction
   ui/       balisage HTML, CSS (thème sombre), HUD
-  save/     stockage local des sauvegardes JSON
+  save/     sauvegardes : SaveStore local (IndexedDB + gzip), cloud.ts = en ligne dans l'artifact (docs/SAUVEGARDES.md)
   main.ts   amorçage et câblage
 tools/      pipeline d'assets Node (générateurs GLB, inspection gltf-transform, validation)
 assets/     sources : catalog.json, models/, textures/, hdri/, LICENSES.md

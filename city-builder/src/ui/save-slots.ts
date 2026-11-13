@@ -6,6 +6,7 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import type { SaveFile } from '../shared/contracts';
+import { CLOUD_SAVE_EVENT, type CloudSaveStatus } from '../save/cloud';
 
 /** Doit rester identique au PREFIX de src/save/storage.ts. */
 export const SAVE_PREFIX = 'aube-urbaine:save:';
@@ -80,4 +81,29 @@ export function deleteSlot(slot: string): boolean {
 export function slotId(name: string): string {
   const s = name.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
   return s || 'partie';
+}
+
+/**
+ * Indicateur discret des sauvegardes en ligne (« Sauvegardé en ligne » / « Hors ligne — sauvegarde
+ * locale ») : écoute l'évènement 'meknes:cloudsave' (src/save/cloud.ts). Rien n'est affiché hors
+ * artifact (état « disabled »). La refonte d'interface peut le remplacer en écoutant le même évènement.
+ */
+export function installCloudSaveBadge(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  let el: HTMLElement | null = null;
+  const show = (s: CloudSaveStatus | undefined): void => {
+    if (!s || s.state === 'disabled' || !s.label) { el?.remove(); el = null; return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'cloud-save-status';
+      el.setAttribute('role', 'status');
+      el.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:40;pointer-events:none;font:11px/1.5 system-ui,sans-serif;'
+        + 'padding:1px 8px;border-radius:9px;background:rgba(20,20,20,.5);color:#f4efe6;opacity:.8';
+      document.body.appendChild(el);
+    }
+    el.textContent = `${s.state === 'offline' ? '○' : '●'} ${s.label}`;
+    el.title = s.message ?? (s.lastSyncAt ? `Dernière synchronisation : ${new Date(s.lastSyncAt).toLocaleTimeString('fr-FR')}` : '');
+  };
+  window.addEventListener(CLOUD_SAVE_EVENT, (e) => show((e as CustomEvent<CloudSaveStatus>).detail));
+  show((window as unknown as { __aube?: { cloudSave?: CloudSaveStatus } }).__aube?.cloudSave);
 }
