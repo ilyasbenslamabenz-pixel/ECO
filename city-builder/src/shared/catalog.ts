@@ -25,6 +25,7 @@ export const OTHER_CATEGORIES = [
   'vegetation',       // haies, buissons, massifs
   'street_furniture', // bancs, lampadaires, abribus, poubelles...
   'prop',             // autres décors
+  'transport',        // pièces du port et de l'aéroport (composées par le module `hubs`, phase 2C)
 ] as const;
 export type OtherCategory = (typeof OTHER_CATEGORIES)[number];
 
@@ -52,6 +53,7 @@ export const MIN_TRIANGLES_LOD0: Record<AssetCategory, number> = {
   vegetation: 100,
   street_furniture: 60,
   prop: 60,
+  transport: 200,
 };
 
 /** Un niveau de détail : un fichier GLB et la distance caméra max à laquelle il s'affiche. */
