@@ -101,6 +101,7 @@ output { color: var(--text); font-variant-numeric: tabular-nums; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; min-width: 40px; padding: 6px 8px; font-size: 12px; }
 .seg button.active { background: var(--accent-soft); color: var(--accent); }
+.seg button.spd-x { font-size: 11.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
 #btn-cinematic[aria-pressed=true] { border-color: var(--accent-2); color: var(--accent-2); }
 
 /* ---------- Barre d'outils + tiroir ---------- */
@@ -247,7 +248,8 @@ output { color: var(--text); font-variant-numeric: tabular-nums; }
   #tool-options { bottom: calc(max(12px, var(--safe-b)) + 158px); }
   .panel { bottom: calc(max(12px, var(--safe-b)) + 160px); max-height: 44dvh; }
   #touch-confirm { bottom: calc(max(12px, var(--safe-b)) + 162px); }
-  #hud .seg button { min-width: 40px; padding: 6px 4px; }
+  #hud .seg button { min-width: 0; flex: 1 1 0; padding: 6px 2px; }
+  #hud .seg { flex: 1 1 auto; min-width: 0; }
   #hud > .hud-group:last-child { gap: 4px; }
   #toolbar .tl { font-size: 9.5px; letter-spacing: -0.1px; }
 }

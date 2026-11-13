@@ -1,27 +1,30 @@
 /**
  * Durée de la journée (recette QA n° 2 : « cycle jour/nuit de 72 s, trop rapide ») : une journée de jeu dure
- * 7 200 ticks = 12 min réelles à x1 ; l'horloge ne dérive pas en cumulant des pas de 0,2 min ; les événements
+ * 1 440 ticks = 2 min 24 s réelles à x1, et un mois reste jouable (72 min à x1, 4 min 30 à x16) ; l'horloge ne dérive pas ; les événements
  * au rythme réel (immigration, synchronisation du trafic) gardent leur cadence en ticks ; une sauvegarde faite
  * avec l'ancienne horloge (périodes 360 / 60 min) se recharge et reprend les nouvelles périodes.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GAME_MINUTES_PER_TICK, SIM_TICKS_PER_SECOND } from '../../src/shared/constants';
+import { GAME_MINUTES_PER_TICK, SIM_SPEEDS, SIM_TICKS_PER_SECOND } from '../../src/shared/constants';
 import { GameClock, MINUTES_PER_DAY } from '../../src/sim/clock';
 import { SimEvent } from '../../src/sim/scheduler';
 import { buildTown, newTownSim } from './fixtures';
 
-test('journée de jeu = 12 min réelles à x1 (entre 12 et 24 min demandées)', () => {
+test('journée de jeu = 2 min 24 s réelles à x1 ; mois de jeu jouable aux vitesses rapides', () => {
   const ticksPerDay = MINUTES_PER_DAY / GAME_MINUTES_PER_TICK;
-  assert.equal(Math.round(ticksPerDay), 7200);
+  assert.equal(Math.round(ticksPerDay), 1440);
   const realMinutes = ticksPerDay / SIM_TICKS_PER_SECOND / 60;
-  assert.ok(realMinutes >= 12 && realMinutes <= 24, `${realMinutes} min`);
+  assert.ok(realMinutes >= 2 && realMinutes <= 3, `${realMinutes} min`);
+  const fastest = Math.max(...SIM_SPEEDS);
+  const monthAtFastest = (30 * ticksPerDay) / SIM_TICKS_PER_SECOND / fastest / 60;
+  assert.ok(monthAtFastest <= 6, `un mois à x${fastest} = ${monthAtFastest} min réelles`);
 });
 
-test('horloge : 7 200 pas de 0,2 min = exactement un jour, sans dérive', () => {
+test('horloge : un jour de pas = exactement un jour, sans dérive', () => {
   const c = new GameClock();
   let days = 0;
-  for (let i = 0; i < 7200 * 3; i++) if (c.advance(GAME_MINUTES_PER_TICK).dayChanged) days++;
+  for (let i = 0; i < (MINUTES_PER_DAY / GAME_MINUTES_PER_TICK) * 3; i++) if (c.advance(GAME_MINUTES_PER_TICK).dayChanged) days++;
   assert.equal(c.totalMinutes, 3 * MINUTES_PER_DAY);
   assert.equal(days, 3);
 });
@@ -35,9 +38,9 @@ test('simulation : immigration au même rythme réel (une vague / 180 ticks), jo
   assert.equal(Math.round(mig.every / GAME_MINUTES_PER_TICK), 180);
   assert.equal(Math.round(sync.every / GAME_MINUTES_PER_TICK), 30);
   const pop0 = s.demography!.population;
-  for (let i = 0; i < 1800; i++) s.tick(); // 3 min réelles, 6 h de jeu
+  for (let i = 0; i < 1800; i++) s.tick(); // 3 min réelles à x1
   assert.ok(s.demography!.population > pop0, `la ville se peuple en quelques minutes réelles (${pop0} -> ${s.demography!.population})`);
-  assert.equal(s.getStats().date.day, 1);
+  assert.ok(s.getStats().date.day <= 2);
 });
 
 test('sauvegarde de l’ancienne horloge : chargée, périodes temps réel remises à jour', () => {

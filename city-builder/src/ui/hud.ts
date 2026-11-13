@@ -275,6 +275,8 @@ export function initUI(h: UIHandlers): UIHandle {
     else if (e.code === 'Digit1') h.onSpeed(1);
     else if (e.code === 'Digit2') h.onSpeed(2);
     else if (e.code === 'Digit3') h.onSpeed(4);
+    else if (e.code === 'Digit4') h.onSpeed(8);
+    else if (e.code === 'Digit5') h.onSpeed(16);
     else if (e.code === 'KeyV') h.onToggleCamera();
   });
 

@@ -1,7 +1,7 @@
 /**
  * Boucle de simulation à PAS FIXE découplée du rendu (accumulateur de temps).
  * Un pas = 1000 / SIM_TICKS_PER_SECOND ms réelles ; à chaque pas, `speed` ticks de jeu
- * (0 = pause, 1, 2, 4). Si le worker prend du retard (onglet en arrière-plan, machine lente),
+ * (0 = pause, 1, 2, 4, 8, 16). Si le worker prend du retard (onglet en arrière-plan, machine lente),
  * au plus MAX_CATCHUP_STEPS pas sont rattrapés puis le retard est abandonné (pas de « spirale »).
  * Testable en Node : l'horloge réelle est injectée.
  * TypeScript pur : AUCUN import de three ni du DOM.
