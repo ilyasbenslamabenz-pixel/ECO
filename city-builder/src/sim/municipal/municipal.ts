@@ -16,7 +16,7 @@ import { geometryFor } from './grid';
 import { IndicatorGrids } from './grids';
 import { Networks } from './network';
 import { MultiRateScheduler } from './scheduler';
-import type { MunicipalSave } from '../save-sections/municipal';
+import type { MunicipalSave } from './save';
 
 /** Nom du service inter-modules (`ctx.use<Municipal>(MUNICIPAL_SERVICE)`). */
 export const MUNICIPAL_SERVICE = 'municipal';

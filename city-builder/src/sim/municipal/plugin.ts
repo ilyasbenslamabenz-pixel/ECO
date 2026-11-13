@@ -11,7 +11,7 @@
  */
 import type { IndicatorId, MunicipalDelta, MunicipalSnapshot } from '../../shared/municipal/types';
 import type { PluginCommandResult, PluginContext, SimPlugin } from '../plugins/types';
-import { MUNICIPAL_SAVE_VERSION, migrateMunicipal } from '../save-sections/municipal';
+import { MUNICIPAL_SAVE_VERSION, migrateMunicipal } from './save';
 import type { EconomyMonthLike } from './budget';
 import { geometryFor } from './grid';
 import { DEFAULT_CELL_SIZE, Municipal, MUNICIPAL_SERVICE } from './municipal';

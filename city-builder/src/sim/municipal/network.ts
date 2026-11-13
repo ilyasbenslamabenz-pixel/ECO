@@ -208,7 +208,8 @@ export class ResourceNetwork {
             if (!this.nodes.get(v)!.enabled) continue;
             const nd = d - Math.log(1 - e.loss);
             const old = dist.get(v);
-            if (old === undefined || nd < old - EPS || (Math.abs(nd - old) <= EPS && eid < prevEdge.get(v)!)) {
+            // Inégalité stricte : en cas d'égalité, le premier chemin trouvé (ordre du tas puis des arêtes) est gardé.
+            if (old === undefined || nd < old - EPS) {
               dist.set(v, nd); prevEdge.set(v, eid); heap.push(nd, v);
             }
           }

@@ -11,3 +11,4 @@ export { MultiRateScheduler, type MunicipalTask, type TaskInfo, type TaskStats }
 export { Municipal, MUNICIPAL_SERVICE, DEFAULT_CELL_SIZE, BUILTIN_TASK_ORDER } from './municipal';
 export { createMunicipalPlugin, municipalPlugin, type MunicipalPluginOptions } from './plugin';
 export { encodeFloat32, decodeFloat32 } from './codec';
+export { emptyMunicipalSave, migrateMunicipal, MUNICIPAL_SAVE_VERSION, type MunicipalSave } from './save';
