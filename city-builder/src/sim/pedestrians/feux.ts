@@ -56,11 +56,53 @@ export interface TraficPort {
 
 const isFn = (v: unknown): v is (...args: never[]) => unknown => typeof v === 'function';
 
-/** Adapte le service publié sous « feux » ; null s'il est absent ou n'a pas la forme attendue. */
+/**
+ * Forme minimale de l'API des feux réellement publiée par la circulation (`FeuxApi`,
+ * src/shared/protocol-ext/circulation.ts) : un passage par BRAS, identifié par `idTronçon × 2 + (0 extrémité a |
+ * 1 extrémité b)`, `walk` ∈ {0 vert, 1 orange, 2 rouge} (mêmes valeurs que FEU_*), `remaining` en secondes.
+ * Dupliquée ici (structurellement) pour que les piétons n'importent rien du module circulation.
+ */
+interface CirculationCrossing { junctionId: number; walk: number; remaining: number; controlled: boolean }
+interface CirculationFeuxApi { crossing(id: number): CirculationCrossing | null | undefined }
+
+/**
+ * Adaptateur d'intégration (superviseur) : `FeuxApi` de la circulation → `FeuxPort` des piétons.
+ * (nodeId, segId) → passage `segId*2` ou `segId*2+1` dont `junctionId === nodeId` ; carrefour non régulé
+ * (`controlled = false`) ou bras sans passage → false (traversée prudente).
+ */
+function adaptCirculationFeux(api: CirculationFeuxApi): FeuxPort {
+  const pick = (nodeId: number, segId: number): CirculationCrossing | null => {
+    for (let end = 0; end < 2; end++) {
+      const c = api.crossing(segId * 2 + end);
+      if (c && c.junctionId === nodeId) return c;
+    }
+    return null;
+  };
+  return {
+    passage(nodeId, segId, out) {
+      let c: CirculationCrossing | null;
+      try { c = pick(nodeId, segId); } catch { return false; }
+      if (!c || c.controlled !== true) return false;
+      const etat = c.walk;
+      if (etat !== FEU_VERT && etat !== FEU_DEGAGEMENT && etat !== FEU_ROUGE) return false;
+      out.etat = etat;
+      out.restant = typeof c.remaining === 'number' && c.remaining >= 0 ? c.remaining : Infinity;
+      return true;
+    },
+  };
+}
+
+/**
+ * Adapte le service publié sous « feux » ; null s'il est absent ou n'a pas la forme attendue.
+ * Deux formes acceptées : `FeuxService` (passage(nodeId, segId)) ou la `FeuxApi` de la circulation (crossing(id)).
+ */
 export function adaptFeux(raw: unknown): FeuxPort | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const svc = raw as Partial<FeuxService>;
-  if (!isFn(svc.passage)) return null;
+  if (!isFn(svc.passage)) {
+    const api = raw as Partial<CirculationFeuxApi>;
+    return isFn(api.crossing) ? adaptCirculationFeux(api as CirculationFeuxApi) : null;
+  }
   return {
     passage(nodeId, segId, out) {
       let r: EtatPassage | null | undefined;

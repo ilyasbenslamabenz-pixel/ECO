@@ -22,7 +22,7 @@ import { buildTown, runDays, townCatalog } from '../sim/fixtures';
  * une section de sauvegarde. Les contrôles « module vide = aucun effet » ci-dessous portent sur les AUTRES
  * (le mécanisme reste vérifié : registre complet, plugin de test injecté, sections, commandes).
  */
-const IMPLEMENTED = new Set(['circulation']);
+const IMPLEMENTED = new Set(['circulation', 'pietons']);
 const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id));
 
 function town(plugins?: readonly SimPlugin[]): Simulation {
@@ -292,7 +292,7 @@ test('pluginCommand : validation du message, module inconnu, codes d\'erreur, ex
   const d = new Simulation();
   d.setCatalog(townCatalog());
   d.newGame({ seed: 1, mapChunks: 4, startMoney: 1e6, cityName: 'C', terrain: { hydrology: 'aucune', rivers: 0 } });
-  const r = d.pluginCommand({ plugin: 'pietons', name: 'feux' });
+  const r = d.pluginCommand({ plugin: 'chantiers', name: 'feux' });
   assert.ok(!r.ok && r.error.code === 'NOT_IMPLEMENTED');
 });
 

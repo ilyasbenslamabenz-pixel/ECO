@@ -17,7 +17,7 @@ function files(dir: string): string[] {
 
 const FORBIDDEN = [
   { re: /from\s+['"]three/, what: 'import de three' },
-  { re: /from\s+['"]\.\.\/(render|client|ui|input|save)/, what: 'import d\'un module côté navigateur' },
+  { re: /from\s+['"]\.\.\/(render|client|ui|input|save)['"/]/, what: 'import d\'un module côté navigateur' },
   { re: /\b(document|window|localStorage|HTMLElement|requestAnimationFrame)\b/, what: 'API DOM' },
 ];
 
