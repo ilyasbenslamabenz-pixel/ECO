@@ -12,7 +12,7 @@
 import { geometryFor } from '../municipal/grid';
 import { DEFAULT_CELL_SIZE, Municipal, MUNICIPAL_SERVICE } from '../municipal/municipal';
 import { migrateMunicipal, MUNICIPAL_SAVE_VERSION } from '../municipal/save';
-import { EAU_SAVE_VERSION, migrateEau, type EauSave } from '../save-sections/eau';
+import { EAU_SAVE_VERSION, migrateEau, type EauSave } from '../water-network/save';
 import { WaterSystem } from '../water-network/system';
 import type { WaterSettings } from '../../shared/water-network/types';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
