@@ -10,6 +10,7 @@ import { handleCommand } from '../../src/sim/handler';
 import { SIM_PLUGINS, type PluginContext, type SimPlugin } from '../../src/sim/plugins';
 import { SAVE_SECTIONS } from '../../src/sim/save-sections';
 import { PHASE2_MODULES } from '../../src/shared/protocol-ext';
+import { ATMOSPHERE_MODULES } from '../../src/shared/weather/types';
 import { RENDER_PLUGINS } from '../../src/render/plugins';
 import { UI_PANELS } from '../../src/ui/panels/index';
 import { PROTOCOL_VERSION } from '../../src/shared/constants';
@@ -23,7 +24,9 @@ import { buildTown, runDays, townCatalog } from '../sim/fixtures';
  * (le mécanisme reste vérifié : registre complet, plugin de test injecté, sections, commandes).
  */
 const IMPLEMENTED = new Set(['circulation', 'pietons']);
-const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id));
+const isAtmosphere = (id: string): boolean => (ATMOSPHERE_MODULES as readonly string[]).includes(id);
+/** Modules d'atmosphère (phase 2C) exclus aussi : leur absence d'effet sur la base est testée dans tests/weather. */
+const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id));
 
 function town(plugins?: readonly SimPlugin[]): Simulation {
   const s = plugins ? new Simulation(plugins) : new Simulation();
@@ -76,8 +79,10 @@ function recorder(id = 'essai', opts: { failTick?: boolean } = {}): SimPlugin & 
 
 test('registres : les quatre modules sont enregistrés partout, vides, avec leur section de sauvegarde', () => {
   const ids = [...PHASE2_MODULES];
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), ids);
-  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), ids);
+  // Modules d'atmosphère (phase 2C, tests/weather) : enregistrés en simulation et rendu, testés à part.
+  const all = [...PHASE2_MODULES, ...ATMOSPHERE_MODULES];
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), all);
+  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), all);
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
   assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), ids);
   for (const p of EMPTY_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
@@ -86,7 +91,7 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), ids);
+  assert.deepEqual(new Simulation().plugins.ids(), all);
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 

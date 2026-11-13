@@ -49,6 +49,8 @@ export interface NewGameParams {
   terrain?: MapGenOptions;
   /** Heure de départ de l'horloge (0..23,99) ; défaut 0 h. */
   startHour?: number;
+  /** Mois de départ du calendrier (1..12, 1er du mois) ; défaut 1 (janvier). Le jeu démarre au printemps (avril). */
+  startMonth?: number;
 }
 
 /** Options de carte exposées à l'écran « Nouvelle partie » (sous-ensemble de WorldGenParams). */

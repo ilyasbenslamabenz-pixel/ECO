@@ -205,7 +205,8 @@ export class Simulation {
     this.buildingIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
     this.edgeIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
     if (this.catalog) this.setCatalog(this.catalog);
-    this.clock.totalMinutes = Math.round(Math.max(0, Math.min(23.99, p.startHour ?? 0)) * 60);
+    this.clock.totalMinutes = Math.round(Math.max(0, Math.min(23.99, p.startHour ?? 0)) * 60)
+      + (Math.max(1, Math.min(12, Math.floor(p.startMonth ?? 1))) - 1) * MINUTES_PER_MONTH;
     this.economy.reset(p.startMoney);
     this.buildings.clear();
     this.vehicles.clear();

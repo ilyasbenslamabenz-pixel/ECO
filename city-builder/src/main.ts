@@ -27,6 +27,8 @@ import { Autosaver, SaveStore } from './save';
 
 const QUICK_SLOT = 'rapide';
 const DEMO_SEED = 7;
+/** Mois de départ des parties et de la démo : avril (printemps : arbres en feuilles avec l'atmosphère, docs/requests/atmosphere.md §7). */
+const START_MONTH = 4;
 /** Budget de la démo : la ville construite coûte ≈ 138 M ¢ ; il reste une trésorerie crédible (≈ 12 M ¢). */
 const DEMO_START_MONEY = 150_000_000;
 
@@ -360,6 +362,7 @@ async function boot(): Promise<void> {
         startMoney: p.startMoney ?? DEFAULT_START_MONEY,
         cityName: p.cityName ?? 'Nouvelle-Aube',
         startHour: params.has('h') ? Number(params.get('h')) : 9,
+        startMonth: START_MONTH,
       });
       await snap;
       focusCamera(0, 0, 420, 0.6);
@@ -380,7 +383,7 @@ async function boot(): Promise<void> {
       ui.hideMenu();
       ui.setLoading(0.55, 'Scène de démonstration : génération du terrain…');
       let snap = waitSnapshot();
-      await b.send('newGame', { seed: DEMO_SEED, mapChunks: 8, startMoney: DEMO_START_MONEY, cityName: 'Aube-sur-Mer (démonstration)', startHour: params.has('h') ? Number(params.get('h')) : 10.5 });
+      await b.send('newGame', { seed: DEMO_SEED, mapChunks: 8, startMoney: DEMO_START_MONEY, cityName: 'Aube-sur-Mer (démonstration)', startHour: params.has('h') ? Number(params.get('h')) : 10.5, startMonth: START_MONTH });
       await snap;
       ui.setLoading(0.65, 'Construction de la ville (routes, ponts, bâtiments, habitants)…');
       snap = waitSnapshot();

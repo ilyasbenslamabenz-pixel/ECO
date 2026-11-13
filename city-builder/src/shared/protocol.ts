@@ -237,6 +237,7 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
       if (!isNum(a.seed) || !isNum(a.mapChunks) || !isNum(a.startMoney) || typeof a.cityName !== 'string') return bad('Paramètres de partie invalides');
       if (a.mapChunks < 1 || a.mapChunks > 32) return bad('Taille de carte hors limites (1..32 chunks)');
       if (a.startHour !== undefined && (!isNum(a.startHour) || a.startHour < 0 || a.startHour >= 24)) return bad('Heure de départ invalide');
+      if (a.startMonth !== undefined && (!isNum(a.startMonth) || !Number.isInteger(a.startMonth) || a.startMonth < 1 || a.startMonth > 12)) return bad('Mois de départ invalide');
       if (a.terrain !== undefined && (typeof a.terrain !== 'object' || a.terrain === null)) return bad('Paramètres de carte invalides');
       return null;
     case 'buildRoad': {

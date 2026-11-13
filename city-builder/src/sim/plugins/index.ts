@@ -8,6 +8,7 @@ import { batimentsPlugin } from './batiments';
 import { circulationPlugin } from './circulation';
 import { pietonsPlugin } from './pietons';
 import { chantiersPlugin } from './chantiers';
+import { weatherPlugin } from './weather';
 import type { SimPlugin } from './types';
 
 export type { PluginCommandResult, PluginContext, PluginSaveField, PluginSaveSection, SimPlugin } from './types';
@@ -18,4 +19,5 @@ export const SIM_PLUGINS: readonly SimPlugin[] = [
   circulationPlugin,
   pietonsPlugin,
   chantiersPlugin,
+  weatherPlugin,
 ];
