@@ -77,3 +77,33 @@ test('chantiers/panneau : durées et ligne de chantier en français', async () =
   const info = { kind: 'demolition', nomFr: 'Pavillon', phaseFr: 'Déblaiement', avancement: 0.426, resteCalendaire: 90 } as unknown as Parameters<typeof ligneChantier>[0];
   assert.equal(ligneChantier(info), 'Démolition — Pavillon · Déblaiement · 43 % · reste 1 h 30');
 });
+
+test('chantiers/rendu : masque de repli — instance neutralisée pendant le chantier puis restituée', async () => {
+  const THREE = await import('three');
+  const { BuildingMask } = await import('../../src/render/construction/mask');
+  const scene = new THREE.Scene();
+  const group = new THREE.Group();
+  group.name = 'batiments';
+  scene.add(group);
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial(), 2);
+  mesh.name = 'maison#0_lod0';
+  group.add(mesh);
+  const m = new THREE.Matrix4().compose(new THREE.Vector3(10, 2, -5), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.7), new THREE.Vector3(1, 1.5, 1));
+  mesh.setMatrixAt(0, m);
+  mesh.setMatrixAt(1, new THREE.Matrix4().makeTranslation(40, 0, 40));
+  const before = Array.from(mesh.instanceMatrix.array);
+  const mask = new BuildingMask(scene);
+  mask.hide(7, 'maison', 0, 10, 2, -5);
+  mask.apply();
+  assert.equal(mask.masked, 1);
+  const arr = mesh.instanceMatrix.array;
+  assert.equal(arr[0], 0); assert.equal(arr[5], 0); assert.equal(arr[10], 0);
+  assert.equal(arr[12], 10, 'translation conservée');
+  assert.deepEqual(Array.from(arr.slice(16, 32)), before.slice(16, 32), 'autre instance intacte');
+  mask.apply();
+  assert.equal(mask.masked, 1, 'déjà neutralisée : comptée sans réécriture');
+  mask.show(7);
+  mask.apply();
+  assert.equal(mask.masked, 0);
+  assert.deepEqual(Array.from(mesh.instanceMatrix.array), before, 'matrice restituée à l\'identique');
+});
