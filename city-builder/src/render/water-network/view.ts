@@ -42,6 +42,6 @@ export const WATER_LEGEND: Record<Exclude<WaterViewMode, 'off'>, { color: string
   ],
   pollution: [
     { color: '#3d8fd6', label: 'Eau propre' }, { color: '#9a8f3a', label: 'Indice 10' }, { color: '#8b4a22', label: 'Indice ≥ 20' },
-    { color: '#b07a45', label: 'Égout (épaisseur = charge)' },
+    { color: '#b07a45', label: 'Égout (clair = en charge)' },
   ],
 };

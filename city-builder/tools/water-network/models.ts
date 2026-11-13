@@ -432,6 +432,7 @@ export const emissaire: BuildingDef = {
   variants: [
     { id: 'origine', nameFr: 'Béton' },
     { id: 'pierre', nameFr: 'Parement de pierre', materialOverrides: { facade: { textureSet: 'pierre_rustique', color: '#ddd5c5' } } },
+    { id: 'brique', nameFr: 'Brique, conduite verte', materialOverrides: { facade: { textureSet: 'brique_rouge', color: '#ffffff' }, conduite_b: { color: '#3f6b4a' } } },
   ],
   build(ctx) {
     const pn = seg(ctx, 16, 10, 6);

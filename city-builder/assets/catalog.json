@@ -8615,10 +8615,24 @@
               "color": "#ddd5c5"
             }
           }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique, conduite verte",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_rouge",
+              "color": "#ffffff"
+            },
+            "conduite_b": {
+              "color": "#3f6b4a"
+            }
+          }
         }
       ],
       "textureSets": [
         "beton_facade",
+        "brique_rouge",
         "metal_conteneur",
         "metal_larme",
         "metal_rideau",
