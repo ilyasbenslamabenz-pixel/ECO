@@ -115,7 +115,7 @@ output { color: var(--text); font-variant-numeric: tabular-nums; }
 #hud { position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: flex; align-items: center; gap: 4px;
   padding: max(6px, var(--safe-t)) max(10px, var(--safe-r)) 6px max(10px, var(--safe-l)); min-height: 60px;
   background: linear-gradient(180deg, rgba(9,13,17,.92), rgba(11,16,21,.8)); border-bottom: 1px solid var(--line);
-  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: 0 6px 24px rgba(0,0,0,.25); animation: drop-in .35s ease-out; }
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: 0 6px 24px rgba(0,0,0,.25); animation: fade .35s ease-out; }
 #hud > * { flex: 0 0 auto; }
 #hud > * + *:not(.hud-actions):not(#btn-sidebar) { position: relative; }
 #hud > .hud-time, #hud > .hud-stat { border-left: 1px solid var(--line); border-radius: 0; }
@@ -166,7 +166,7 @@ button.hud-stat:hover:not(:disabled) { background: rgba(255,255,255,.05); }
 #sidebar { position: fixed; z-index: 15; left: max(10px, var(--safe-l)); top: calc(var(--hud-h) + 10px); width: 96px;
   max-height: calc(100dvh - var(--hud-h) - 252px); overflow-y: auto; scrollbar-width: none;
   display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
-  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: slide-r .35s ease-out; }
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: fade .35s ease-out; }
 #sidebar::-webkit-scrollbar { display: none; }
 #sidebar button { flex-direction: column; gap: 3px; min-height: 49px; padding: 5px 2px; border: 1px solid transparent; background: transparent; border-radius: 12px; position: relative; flex: 0 0 auto; }
 #sidebar button .tl { font-size: 11px; line-height: 1.15; text-align: center; color: #dbe3ea; white-space: nowrap; }
@@ -185,7 +185,7 @@ button.hud-stat:hover:not(:disabled) { background: rgba(255,255,255,.05); }
 
 /* Mini-carte */
 #minimap { flex: 0 0 auto; display: flex; gap: 6px; padding: 6px; background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
-  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: rise .35s ease-out; }
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: fade .35s ease-out; }
 .mm-map { position: relative; width: 196px; height: 196px; border-radius: 12px; overflow: hidden; background: #1c2a22; cursor: crosshair; touch-action: none;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
 .mm-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -201,7 +201,7 @@ button.hud-stat:hover:not(:disabled) { background: rgba(255,255,255,.05); }
 #build-center > * { pointer-events: auto; max-width: 100%; }
 
 #toolbar { display: flex; align-items: stretch; gap: 2px; padding: 6px; background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
-  overflow-x: auto; scrollbar-width: none; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: rise .35s ease-out; }
+  overflow-x: auto; scrollbar-width: none; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: fade .35s ease-out; }
 #toolbar::-webkit-scrollbar { display: none; }
 #toolbar button { flex: 0 0 auto; position: relative; flex-direction: column; gap: 4px; width: 62px; min-height: 58px; padding: 7px 2px 6px; font-size: 11.5px; font-weight: 550;
   border: 1px solid transparent; background: transparent; border-radius: 13px; white-space: nowrap; }
@@ -531,17 +531,16 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 
 /* Téléphone en paysage (écran bas) : barre supérieure sur une rangée, outils sur une rangée. */
 @media (max-height: 500px) and (orientation: landscape) {
-  #hud { flex-wrap: nowrap; min-height: 0; padding-top: max(4px, var(--safe-t)); padding-bottom: 4px; gap: 3px; }
+  #hud { flex-wrap: nowrap; min-height: 0; padding: max(4px, var(--safe-t)) max(6px, var(--safe-r)) 4px max(6px, var(--safe-l)); gap: 2px; }
   #btn-sidebar { display: inline-flex; }
   .hud-brand { padding: 0 4px; flex: 0 1 auto; min-width: 0; }
-  .hud-brand .logo { width: 26px; height: 26px; }
-  .brand-txt { display: none; }
+  .hud-brand { display: none; }
   #hud .speed { margin: 0 4px; }
   #hud .speed button { min-width: 40px; min-height: 40px; padding: 2px 4px; }
   .hud-time { flex-direction: column; align-items: flex-start; gap: 0; padding: 0 6px; line-height: 1.1; }
   .hud-time .day { font-size: 11px; } .hud-time .clock { font-size: 13px; }
   #hud-weather { display: none !important; }
-  .hud-stat { padding: 0 6px; gap: 5px; min-height: 40px; }
+  .hud-stat { padding: 0 5px; gap: 4px; min-height: 40px; }
   .hud-stat svg.ic { width: 20px; height: 20px; }
   .hud-stat .lbl, .hud-stat .delta { display: none; }
   .hud-stat b { font-size: 13px; }
