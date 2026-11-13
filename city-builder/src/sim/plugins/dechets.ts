@@ -108,10 +108,10 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
     takeDelta(ctx): DechetsDelta | undefined {
       if (!active()) return undefined;
       const d: DechetsDelta = {};
-      const transfer: ArrayBufferLike[] = [];
+      const transfer: ArrayBufferView[] = [];
       if (waste.runs.length || lastTrucks) {
         d.trucks = waste.truckPoses(ctx.clock.totalMinutes);
-        transfer.push(d.trucks.buffer);
+        transfer.push(d.trucks);
         lastTrucks = waste.runs.length;
       }
       const hour = Math.floor(ctx.clock.totalMinutes / 60);
@@ -120,9 +120,9 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
         layerHour = hour;
         d.summary = waste.summary(ctx.clock.dayIndex);
         const l = layer(ctx);
-        if (l) { d.layer = l; transfer.push(l.nuisance.buffer, l.soil.buffer, l.bins.buffer); }
+        if (l) { d.layer = l; transfer.push(l.nuisance, l.soil, l.bins); }
         d.containers = containers(ctx);
-        transfer.push(d.containers.buffer);
+        transfer.push(d.containers);
       }
       if (!d.trucks && !d.summary) return undefined;
       if (transfer.length) d[PLUGIN_TRANSFER_KEY] = transfer;

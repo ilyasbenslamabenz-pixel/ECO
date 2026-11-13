@@ -32,7 +32,8 @@ export interface DechetsDelta {
   layer?: DechetsLayer;
   /** Points d'apport (conteneurs de tri), envoyés avec le calque. */
   containers?: Float32Array;
-  $transfer?: ArrayBufferLike[];
+  /** Tableaux typés à transférer (non copiés). */
+  $transfer?: ArrayBufferView[];
 }
 
 /** Charge utile de `snapshot.ext.dechets` : état complet. */

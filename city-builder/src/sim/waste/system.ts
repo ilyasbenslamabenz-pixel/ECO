@@ -327,7 +327,7 @@ export class WasteSystem {
       const depot = depots[Math.min(depots.length - 1, this.depotIndexFor(k, depots))]!;
       const depotNode = g.attached.get(depot.id)!.node;
       const run: TruckRun = { truck: k, depot: depot.id, depart: departAbs + k * 3, pts: [], times: [], events: [], next: 0, rec: 0, res: 0, stops: 0 };
-      let pos = depotNode, t = 0, load = 0, rec = 0, taken = 0;
+      let pos = depotNode, t = 0, load = 0, rec = 0, taken = 0, trips = 0;
       const pushLeg = (dst: number): boolean => {
         const pts: number[] = [];
         const dt = g.pathTo(dst, pts);
@@ -365,18 +365,22 @@ export class WasteSystem {
         let best: Stop | null = null;
         for (const s of stops.values()) if (Number.isFinite(dist[s.node]!) && (!best || dist[s.node]! < dist[best.node]! || (dist[s.node] === dist[best.node] && s.ref < best.ref))) best = s;
         if (!best) break;
-        if (t + dist[best.node]! + P.serviceMinutesPerStop > P.shiftMinutes) break;
+        const take = Math.min(best.kg, P.truckCapacityKg - load);
+        const service = P.serviceMinutesPerStop + (take / 100) * P.serviceMinutesPer100Kg;
+        if (t + dist[best.node]! + service > P.shiftMinutes) break;
         pushLeg(best.node);
-        t += P.serviceMinutesPerStop; hold(run, t);
+        t += service; hold(run, t);
         run.events.push({ t, kind: 'pickup', ref: best.ref });
         run.stops++;
-        const take = Math.min(best.kg, P.truckCapacityKg - load);
         const b = this.bins.get(best.ref)!;
         const recPart = b.rec + b.res > 0 ? (take * b.rec) / (b.rec + b.res) : 0;
         load += take; rec += recPart; taken += take;
         best.kg -= take;
         if (best.kg <= 1) stops.delete(best.node);
-        if (load >= P.truckCapacityKg * 0.95) unload();
+        if (load >= P.truckCapacityKg * 0.95) {
+          unload();
+          if (++trips >= P.maxTripsPerShift) break;
+        }
       }
       if (run.stops === 0) continue;
       unload();

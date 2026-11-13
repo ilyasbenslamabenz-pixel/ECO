@@ -47,15 +47,19 @@ export const WASTE_PARAMS = {
   kgPerJobDefault: 0.6,
   /** Stockage local (bacs) : jours de production tenus, minimum en kg. */
   storageDays: 4,
-  storageMinKg: 120,
+  storageMinKg: 30,
   /** Camion-benne : charge utile (kg), coût de fonctionnement mensuel (¢, salaires + carburant + entretien). */
   truckCapacityKg: 8000,
   truckCostPerMonth: 1800,
   /** Tournée : départ du dépôt (minute du jour), durée maximale (min), service par arrêt, vidage. */
   departureMinute: 6 * 60,
   shiftMinutes: 7 * 60,
-  serviceMinutesPerStop: 2,
+  serviceMinutesPerStop: 1,
+  /** Chargement des bacs : minutes par 100 kg levés (bacs de 660 L ≈ 60–80 kg, ~45 s chacun). */
+  serviceMinutesPer100Kg: 0.8,
   unloadMinutes: 15,
+  /** Vidages au plus par tournée (pratique des équipages : 2 rotations par service). */
+  maxTripsPerShift: 2,
   /** Vitesse commerciale d'un camion-benne (km/h) : bornée par la vitesse de la voie. */
   truckSpeedKmh: 18,
   /** Arrêt de collecte minimal (kg en stock pour justifier un arrêt). */
@@ -69,14 +73,14 @@ export const WASTE_PARAMS = {
   airPerTonneBurned: 0.9,
   soilPerTonneLandfilled: 0.06,
   waterPerTonneLandfilled: 0.03,
-  soilPerTonneUncollected: 1.6,
-  nuisancePerTonneUncollected: 40,
+  soilPerTonneUncollected: 40,
+  nuisancePerTonneUncollected: 400,
   soilPerTonneOverflow: 0.5,
   waterPerTonneOverflow: 0.25,
   nuisancePerTonneOverflow: 6,
   /** Effet des nuisances (indice 0..100) : satisfaction et valeur foncière (décalage par point de nuisance). */
-  satisfactionPerNuisance: -0.4,
-  landValuePerNuisance: -0.5,
+  satisfactionPerNuisance: -0.25,
+  landValuePerNuisance: -0.3,
 } as const;
 
 /** Installation (état public). */

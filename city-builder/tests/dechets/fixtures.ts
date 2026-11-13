@@ -55,3 +55,12 @@ export function buildWasteZone(s: Simulation, assets = ['t_depot', 't_tri', 't_i
   if (!r.ok) throw new Error(`liaison : ${r.error.message}`);
   return ids;
 }
+
+/** Quartier dense au nord du bourg (`rows` rues d'immeubles, z = -240, -280…), relié par la rue x = 220. */
+export function buildDenseDistrict(s: Simulation, rows: number): number[] {
+  const ids: number[] = [];
+  for (let k = 0; k < rows; k++) ids.push(...buildStreet(s, -40 - (k + 1) * 40, -220, 220, new Array<string>(13).fill('immeuble')));
+  const r = s.buildRoad({ type: 'street', points: [220, -40 - rows * 40, 220, 0] });
+  if (!r.ok) throw new Error(`liaison nord : ${r.error.message}`);
+  return ids;
+}
