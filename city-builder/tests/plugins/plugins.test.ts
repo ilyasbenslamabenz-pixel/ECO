@@ -72,7 +72,12 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), ids);
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
   assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), ids);
-  for (const p of SIM_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
+  // Modules encore vides : chaque branche de phase 2 retire le sien de cette liste en le remplissant.
+  const REMPLIS = new Set(['chantiers']);
+  for (const p of SIM_PLUGINS) {
+    if (REMPLIS.has(p.id)) continue;
+    assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
+  }
   for (const sec of SAVE_SECTIONS) {
     assert.deepEqual(sec.migrate(sec.empty(), sec.version), sec.empty());
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
