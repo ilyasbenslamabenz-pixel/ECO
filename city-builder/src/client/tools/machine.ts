@@ -24,16 +24,6 @@ import { RoadDraft, snapRoadPoint, type RoadMode, type SnapPoint } from './road-
 import { proposePlacement, type PlacementProposal } from './snapping';
 import { UndoStack, type UndoStep } from './undo';
 
-/**
- * Pôles de transport (module `hubs`, phase 2C) — ajout minimal à l'outil de pose : une entrée du catalogue
- * portant le tag `hub` (Port, Aéroport) se pose par la commande `pluginCommand hubs.place` (validée par la
- * simulation : littoral / cours d'eau navigable, terrain plat, servitudes) au lieu de `placeBuilding`,
- * en placement libre (pas d'aimantation aux routes), rotation par huitièmes de tour (orientation de la piste).
- * Les bâtiments ordinaires passent en plus le contrôle des servitudes aéronautiques (`hubs.checkBuilding`)
- * quand le module est présent. Voir docs/HUBS.md.
- */
-export const isHubAsset = (a: CatalogAsset | null | undefined): boolean => !!a && a.tags.includes('hub');
-
 /** Ce dont les outils ont besoin du pont de simulation (SimBridge l'implémente). */
 export interface SimPort {
   send<K extends CommandName>(name: K, args: CommandArgs<K>): Promise<CommandResult<K>>;
@@ -132,7 +122,7 @@ export class ConstructionTools {
     if (phase !== null) { this.notify(`Outil disponible en phase ${phase}`, 'info'); return false; }
     if (t === 'building') {
       const a = opts?.assetId ? this.mirror.asset(opts.assetId) : this.asset;
-      if (!a || (!isBuildingCategory(a.category) && !isHubAsset(a))) { this.notify('Choisissez un bâtiment du catalogue', 'error'); return false; }
+      if (!a || !isBuildingCategory(a.category)) { this.notify('Choisissez un bâtiment du catalogue', 'error'); return false; }
       if (a !== this.asset) { this.asset = a; this.variant = this.randomVariant(a); }
     }
     if (opts?.roadType && roadDef(opts.roadType)) this.roadType = opts.roadType;
@@ -150,9 +140,7 @@ export class ConstructionTools {
   rotate(dir = 1): void {
     if (this.tool !== 'building') return;
     const cur = this.preview.kind === 'building' ? this.preview.proposal.rot : this.rot;
-    // Pôles : huitièmes de tour (piste orientable) ; bâtiments : quarts de tour.
-    const step = isHubAsset(this.asset) ? 0.5 : 1;
-    this.rot = normRot(Math.round(cur / step) * step + dir * step);
+    this.rot = normRot(Math.round(cur) + dir);
     this.autoAlign = false;
     this.refresh();
   }
@@ -194,8 +182,7 @@ export class ConstructionTools {
       case 'building': {
         const a = this.asset;
         if (!a || !g) { this.preview = { kind: 'none' }; break; }
-        const hub = isHubAsset(a);
-        const proposal = proposePlacement(this.mirror, a, g.x, g.z, hub ? { rot: this.rot, autoAlign: false, reach: -1e9 } : { rot: this.rot, autoAlign: this.autoAlign, magnet: this.magnet });
+        const proposal = proposePlacement(this.mirror, a, g.x, g.z, { rot: this.rot, autoAlign: this.autoAlign, magnet: this.magnet });
         const prev = this.preview;
         const same = prev.kind === 'building' && prev.asset === a && prev.proposal.x === proposal.x && prev.proposal.z === proposal.z && prev.proposal.rot === proposal.rot && prev.variant === this.variant;
         if (same && prev.kind === 'building' && (prev.validity === 'pending' || this.validatedVersion === this.mirror.version)) {
@@ -240,16 +227,8 @@ export class ConstructionTools {
       if (seq !== this.previewSeq) return; // un aperçu plus récent attend déjà
       let validity: Validity; let message = ''; let cost = p.cost;
       try {
-        if (isHubAsset(p.asset)) {
-          const r = await this.sim.send('pluginCommand', { plugin: 'hubs', name: 'place', payload: { assetId: args.assetId, x: args.x, z: args.z, rot: args.rot, dryRun: true } });
-          cost = (r.data as { cost: number }).cost;
-        } else {
-          const r = await this.sim.send('placeBuilding', args);
-          cost = r.cost;
-          const refusal = await this.easementRefusal(args);
-          if (refusal) throw { error: { code: 'INVALID_ARGS', message: refusal } };
-        }
-        validity = 'ok';
+        const r = await this.sim.send('placeBuilding', args);
+        validity = 'ok'; cost = r.cost;
       } catch (e) { validity = 'error'; message = errorOf(e).message; }
       const cur = this.preview;
       if (cur.kind === 'building' && cur.asset.id === args.assetId && cur.proposal.x === args.x && cur.proposal.z === args.z && cur.proposal.rot === args.rot) {
@@ -305,32 +284,9 @@ export class ConstructionTools {
     } finally { this.busy = false; }
   }
 
-  /** Servitudes aéronautiques (module `hubs`) : message de refus, ou null (module absent = pas de contrainte). */
-  private async easementRefusal(a: { assetId: string; x: number; z: number; rot: number; variant: number }): Promise<string | null> {
-    try {
-      await this.sim.send('pluginCommand', { plugin: 'hubs', name: 'checkBuilding', payload: { assetId: a.assetId, x: a.x, z: a.z, rot: a.rot, variant: a.variant } });
-      return null;
-    } catch (e) {
-      const msg = errorOf(e).message;
-      return msg.startsWith('Servitude aéronautique') ? msg : null;
-    }
-  }
-
   private async placeCurrent(): Promise<void> {
     const p = this.preview;
     if (p.kind !== 'building') return;
-    if (isHubAsset(p.asset)) {
-      try {
-        const r = await this.sim.send('pluginCommand', { plugin: 'hubs', name: 'place', payload: { assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot } });
-        this.applied++;
-        this.notify(`${p.asset.nameFr} construit (−${fmt((r.data as { cost: number }).cost)} ¢)`, 'ok');
-        this.preview = { kind: 'none' };
-        this.refresh();
-      } catch (e) { this.notify(`Construction refusée : ${errorOf(e).message}`, 'error'); }
-      return;
-    }
-    const refusal = await this.easementRefusal({ assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot, variant: p.variant });
-    if (refusal) { this.notify(`Construction refusée : ${refusal}`, 'error'); return; }
     try {
       const r = await this.sim.send('placeBuilding', { assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot, variant: p.variant });
       this.applied++;

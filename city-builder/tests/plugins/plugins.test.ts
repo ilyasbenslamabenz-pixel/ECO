@@ -11,7 +11,6 @@ import { SIM_PLUGINS, type PluginContext, type SimPlugin } from '../../src/sim/p
 import { SAVE_SECTIONS } from '../../src/sim/save-sections';
 import { PHASE2_MODULES } from '../../src/shared/protocol-ext';
 import { ATMOSPHERE_MODULES } from '../../src/shared/weather/types';
-import { ELECTRICITE_MODULES } from '../../src/shared/power/types';
 import { RENDER_PLUGINS } from '../../src/render/plugins';
 import { UI_PANELS } from '../../src/ui/panels/index';
 import { PROTOCOL_VERSION } from '../../src/shared/constants';
@@ -28,20 +27,8 @@ const IMPLEMENTED = new Set(['chantiers', 'circulation', 'pietons']);
 const isAtmosphere = (id: string): boolean => (ATMOSPHERE_MODULES as readonly string[]).includes(id);
 /** Modules de simulation sans rendu ni panneau (phase 2B, docs/requests/municipal.md §2). */
 const SIM_ONLY: readonly string[] = ['municipal'];
-/**
- * Modules de phase 2B/2C intégrés après l'électricité, dans l'ordre d'enregistrement (rendu, panneau, section de
- * sauvegarde ; testés dans leur dossier). Ils figurent aussi dans PHASE2_MODULES.
- */
-const LATE_MODULES: readonly string[] = ['dechets', 'hubs', 'eau'];
-/**
- * Parmi eux, ceux qui agissent dès une partie neuve (charges `ext`) : exclus du contrôle « module vide = aucun effet ».
- * Les autres (hubs, eau : docs/requests/eau.md §1) sont livrés, non vides, mais dormants tant que le joueur ne les utilise pas.
- */
-const LATE_ACTIVE: readonly string[] = ['dechets'];
-/** Modules de phase 2A (PHASE2_MODULES sans les modules intégrés plus tard). */
-const BASE_MODULES: readonly string[] = PHASE2_MODULES.filter((id) => !LATE_MODULES.includes(id));
 /** Modules d'atmosphère (phase 2C) exclus aussi : leur absence d'effet sur la base est testée dans tests/weather. */
-const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id) && !LATE_ACTIVE.includes(p.id));
+const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id));
 
 function town(plugins?: readonly SimPlugin[]): Simulation {
   const s = plugins ? new Simulation(plugins) : new Simulation();
@@ -92,17 +79,14 @@ function recorder(id = 'essai', opts: { failTick?: boolean } = {}): SimPlugin & 
   };
 }
 
-test('registres : les modules sont enregistrés partout, avec leur section de sauvegarde', () => {
+test('registres : les quatre modules sont enregistrés partout, vides, avec leur section de sauvegarde', () => {
+  const ids = [...PHASE2_MODULES];
   // Modules d'atmosphère (phase 2C, tests/weather) : enregistrés en simulation et rendu, testés à part.
-  // Électricité (phase 2B, tests/electricite) et modules intégrés ensuite (LATE_MODULES) : enregistrés partout, testés à part.
-  const ids = [...BASE_MODULES];
-  const all = [...ids, ...ATMOSPHERE_MODULES];
-  const late = [...ELECTRICITE_MODULES, ...LATE_MODULES];
-  assert.deepEqual([...PHASE2_MODULES].sort(), [...ids, ...LATE_MODULES].sort());
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late]);
-  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late]);
-  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late]);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late]);
+  const all = [...PHASE2_MODULES, ...ATMOSPHERE_MODULES];
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY]);
+  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), all);
+  assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
   const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];
   for (const p of SIM_PLUGINS) {
@@ -117,7 +101,7 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late]);
+  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY]);
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 
