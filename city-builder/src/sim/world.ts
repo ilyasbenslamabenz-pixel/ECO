@@ -44,6 +44,7 @@ import {
   ROAD_KINDS, RoadNetwork, commitRoadPlan, cubic, cubicBounds, gradeTerrainForRoads, halfWidth, isRoadKind,
   networkRecords, planRoad, polyline, SLOPE_WIDTH, type ProfileEnv, type RoadKindId, type RoadRequest,
 } from './roads';
+import { commitUpgrade, planUpgrade, type UpgradeBlocker } from './roads/upgrade';
 import { NO_WATER, extractPatch, generateWorld, type WorldTerrain } from './terrain';
 import { Rng } from './rng';
 import { EventScheduler, SimEvent } from './scheduler';
@@ -650,6 +651,44 @@ export class Simulation {
     this.economy.refund(refund);
     this.applyNetworkChanges(true);
     return { ok: true, data: { refund } };
+  }
+
+  /** Bâtiment qui gêne le plus une emprise de demi-largeur `half` le long de `curve` (outil « Améliorer »). */
+  private readonly upgradeBlocker = (curve: Float64Array, half: number): UpgradeBlocker | null => {
+    const [x0, z0, x1, z1] = cubicBounds(curve);
+    this.buildingIndex.query(x0 - half, z0 - half, x1 + half, z1 + half, this.q);
+    if (this.q.length === 0) return null;
+    const poly = polyline(curve, Math.max(2, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 4)));
+    let worst: UpgradeBlocker | null = null;
+    for (const id of this.q) {
+      const o = this.obbs.get(id);
+      if (!o) continue;
+      let d = Infinity;
+      for (let k = 0; k + 3 < poly.length; k += 2) d = Math.min(d, distSegmentObb(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, o));
+      if (d < half && (!worst || half - d > worst.missing)) {
+        const bi = this.buildings.indexOf(id);
+        const asset = bi >= 0 ? this.catalog?.assets[this.buildings.assetIndex[bi]!] : undefined;
+        worst = { name: asset?.nameFr ?? 'Bâtiment', missing: half - d };
+      }
+    }
+    return worst;
+  };
+
+  /** Modifie un tronçon sans le démolir : type et/ou sens (src/sim/roads/upgrade.ts). */
+  upgradeRoad(a: CommandArgs<'upgradeRoad'>): CmdOutcome<'upgradeRoad'> {
+    if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
+    const req = { segId: a.edgeId, ...(a.kind && isRoadKind(a.kind) ? { kind: a.kind } : {}), ...(a.reverse ? { reverse: true } : {}) };
+    const p = planUpgrade(this.net, req, { blockedBy: this.upgradeBlocker, refundRate: DEMOLISH_REFUND_RATE, bounds: this.planOptions().bounds });
+    if (!p.ok) return fail(p.error.code, p.error.message, p.error.phase);
+    const { cost, refund, kind } = p.plan;
+    if (cost > 0 && this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : travaux suspendus jusqu\'au retour d\'une trésorerie positive');
+    if (cost > 0 && !this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
+    if (a.dryRun) return { ok: true, data: { edgeId: a.edgeId, kind, cost, refund } };
+    const { edgeId } = commitUpgrade(this.net, p.plan);
+    if (cost > 0) this.economy.spend(cost);
+    if (refund > 0) this.economy.refund(refund);
+    this.applyNetworkChanges(true);
+    return { ok: true, data: { edgeId, kind, cost, refund } };
   }
 
   /** Marge de recherche autour d'une route pour l'accès des bâtiments et le talus. */

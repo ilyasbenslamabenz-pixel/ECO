@@ -18,6 +18,7 @@ export * from './junction';
 export * from './routing';
 export * from './serialize';
 export * from './grading';
+export * from './upgrade';
 
 /**
  * Enregistrement de tronçon ÉTENDU (proposition de contrat, voir docs/requests/routes.md) :

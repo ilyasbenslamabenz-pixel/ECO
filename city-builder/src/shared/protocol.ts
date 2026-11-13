@@ -43,6 +43,16 @@ export interface CommandMap {
     result: { edgeIds: number[]; cost: number };
   };
   removeRoad: { args: { edgeId: number }; result: { refund: number } };
+  /**
+   * Modifie un tronçon existant sans le démolir (ajout rétrocompatible) : nouveau type `kind` et/ou inversion du
+   * sens (`reverse`, rue à sens unique). La géométrie est conservée ; le tronçon reçoit un nouvel identifiant
+   * (`edgeId` de la réponse). `cost` = différence facturée, `refund` = part remboursée lors d'un déclassement.
+   * Refus (COLLISION, TOO_STEEP…) avec un message explicite, p. ex. bâtiment riverain qui gêne l'élargissement.
+   */
+  upgradeRoad: {
+    args: { edgeId: number; kind?: RoadKindId; reverse?: boolean; dryRun?: boolean };
+    result: { edgeId: number; kind: RoadKindId; cost: number; refund: number };
+  };
   placeBuilding: {
     args: { assetId: string; x: number; z: number; rot: number; variant?: number; dryRun?: boolean; /** Lot planifié (quartier généré, rangée mitoyenne) : pas d'écart minimal entre maisons, seul le recouvrement est refusé. */ planned?: boolean };
     result: { buildingId: number; cost: number };
@@ -253,6 +263,13 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
     }
     case 'removeRoad':
       return isNum(a.edgeId) ? null : bad('edgeId invalide');
+    case 'upgradeRoad':
+      if (!isNum(a.edgeId)) return bad('edgeId invalide');
+      if (a.kind !== undefined && !ROAD_KIND_IDS.includes(a.kind as RoadKindId)) return bad('Type de route inconnu');
+      if (a.reverse !== undefined && typeof a.reverse !== 'boolean') return bad('reverse invalide');
+      if (a.dryRun !== undefined && typeof a.dryRun !== 'boolean') return bad('dryRun invalide');
+      if (a.kind === undefined && a.reverse !== true) return bad('Rien à modifier : indiquer un type ou reverse');
+      return null;
     case 'placeBuilding':
       if (typeof a.assetId !== 'string' || !isNum(a.x) || !isNum(a.z) || !isNum(a.rot)) return bad('Placement invalide');
       if (a.variant !== undefined && !isNum(a.variant)) return bad('Variante invalide');
