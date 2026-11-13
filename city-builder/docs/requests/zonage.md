@@ -3,6 +3,7 @@
 Documentation du module : `docs/ZONAGE.md`. Captures : `docs/captures-zonage/`.
 
 ## Livré
+- Parcours `npm run e2e:zonage` entièrement vert (bureau + peinture au doigt sur iPhone).
 - Outil Zones (souris et doigt), 6 types, Retirer, profondeur 1–4 cases, croissance oui/pause, jauge R/C/B/I.
 - Superposition par instanciation + shader, visible seulement avec l'outil (mode allégé iPhone compris).
 - Croissance façade vers la route (règle de l'outil de pose), chantiers ouverts automatiquement, demande par secteur.
@@ -17,8 +18,8 @@ Documentation du module : `docs/ZONAGE.md`. Captures : `docs/captures-zonage/`.
    (`src/input/tools.ts`).
 
 ## Reste à faire
-- Parcours e2e `npm run e2e:zonage` : vert sur bureau (peinture souris, retrait, jauge, croissance en jeu, densification,
-  sauvegarde) ; le passage tactile iPhone a été corrigé (trait limité à l'écran) et doit être revalidé de bout en bout.
+- iPhone : le bouton provisoire « ⚡ Énergie » (module électricité) recouvre la droite de l'en-tête du tiroir Zones
+  (jauge partiellement masquée) — à arbitrer lors de la refonte du montage des panneaux.
 - Lots arrière : remplir la 3e / 4e rangée derrière les petites maisons.
 - Brancher la demande sur l'économie (service `zonage:demande`) et la valeur de quartier sur la grille municipale `valeur_fonciere`.
 - Abandon / dé-densification (logements vides durablement, pollution).
