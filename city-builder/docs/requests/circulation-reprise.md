@@ -17,9 +17,9 @@
 | **Ajouté cette session** : feux stop / clignotants | fait | bits `flags` émis par la simulation (test MOBIL vérifie gauche puis droit), attribut `aFeux` + shader ; `clignotant-droit.jpg` |
 
 ## Résultats réels (cette session)
-- `npm run typecheck` OK ; `npm test` 190/190 avant l'ajout, voir dernier passage ci-dessous ; `npm run build` OK (44,5 Mo).
+- Passage final (build avec clignotants) : `npm run typecheck` OK, `npm test` 190/190, `npm run build` OK (44,5 Mo).
 - `npm run e2e` : SUCCÈS. `npm run e2e:signals` : SUCCÈS en entier (35 bras, 9 carrefours, véhicule 22 arrêté au rouge,
-  58 px rouges de jour, 690 de nuit). `npm run validate:visual` : SUCCÈS.
+  58 px rouges de jour, 690 de nuit) ; relancé après correction de la caméra rue : SUCCÈS (68 / 771 px), `feux-rue.jpg`, `feux-rue-nuit.jpg`. `npm run validate:visual` : SUCCÈS.
 - Banc (Xeon 2,1 GHz 4 cœurs, processeur seul) : grille 14 — tick moyen 1,27 ms, p95 1,87 ms ;
   grille 22 — moyen 1,58 ms, p95 3,26 ms (2 000 véhicules, 600 pas).
 - Captures regardées : carrefour chargé, avenue multivoie, changement de voie, carte de congestion (deux charges),
