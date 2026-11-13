@@ -23,6 +23,8 @@ const DETAIL_DISTANCE = 420;
 const MAX_DETAILED = 8;
 /** Constante de lissage de l'horloge de travail entre deux deltas (s). */
 const CLOCK_SMOOTH = 0.35;
+/** Écart d'horloge (minutes de travail) au-delà duquel on recale sans lissage. */
+const CLOCK_SNAP = 60;
 
 export interface ChantiersRenderOptions {
   scene: THREE.Object3D;
@@ -142,7 +144,8 @@ export class ChantiersRenderer {
   frame(dt: number): void {
     if (!this.actif && this.sites.size === 0) return;
     // Horloge lissée : les deltas arrivent ~10 fois par seconde, l'avancement doit rester continu.
-    const k = Math.min(1, dt / CLOCK_SMOOTH);
+    // Écart important (onglet en arrière-plan, image rendue à la demande, reprise à ×16) : recalage direct.
+    const k = Math.abs(this.horlogeCible - this.horloge) > CLOCK_SNAP ? 1 : Math.min(1, dt / CLOCK_SMOOTH);
     this.horloge += (this.horlogeCible - this.horloge) * k;
     const cam = this.opts.camera;
     cam.getWorldPosition(this.camPos);
