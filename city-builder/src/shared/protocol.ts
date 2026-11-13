@@ -52,6 +52,12 @@ export interface CommandMap {
   terraform: { args: { x: number; z: number; radius: number; delta: number }; result: Record<string, never> };
   save: { args: { slot: string }; result: { slot: string; data: SaveFile } };
   load: { args: { data: SaveFile }; result: { buildings: number } };
+  /**
+   * Commande d'un module de phase 2 (ajout rétrocompatible) : routée vers `SimPlugin.command(ctx, name, payload)`
+   * du module `plugin` (src/sim/plugins/<module>.ts). Module inconnu -> INVALID_ARGS ; module sans commandes ->
+   * NOT_IMPLEMENTED. Types propres à chaque module : src/shared/protocol-ext/<module>.ts.
+   */
+  pluginCommand: { args: { plugin: string; name: string; payload?: unknown }; result: { data?: unknown } };
 }
 
 export type CommandName = keyof CommandMap;
@@ -88,6 +94,8 @@ export interface SnapshotMessage {
   buildings: BuildingRecord[];
   roads: { nodes: RoadNodeRecord[]; edges: RoadEdgeRecord[] };
   stats: SimStats;
+  /** États complets des modules de phase 2 (facultatif) : `ext[id]` pour chaque module qui en fournit un. */
+  ext?: Record<string, unknown>;
 }
 
 /** Positions des véhicules : count * VEHICLE_STRIDE floats ; buffers transférés à chaque envoi. */
@@ -159,7 +167,18 @@ export interface DeltaMessage {
   report?: SimReport;
   /** Feux tricolores (facultatif, rétrocompatible) : présent seulement quand un état ou la disposition change. */
   signals?: SignalFrame;
+  /**
+   * Modules de phase 2 (facultatif, rétrocompatible) : `ext[id]` présent seulement pour les modules qui ont
+   * quelque chose à envoyer ; la clé `ext` est absente si aucun. Types : src/shared/protocol-ext/<module>.ts.
+   */
+  ext?: Record<string, unknown>;
 }
+
+/**
+ * Clé facultative d'une charge utile de module (`delta.ext[id]` / `snapshot.ext[id]`) : tableaux typés à
+ * TRANSFÉRER au lieu de les copier (ils doivent être neufs : le module ne les réutilise pas après l'envoi).
+ */
+export const PLUGIN_TRANSFER_KEY = '$transfer';
 
 export interface LogMessage {
   kind: 'log';
@@ -183,6 +202,12 @@ export function collectTransferables(msg: WorkerToMain): Transferable[] {
     if (v) { add(v.positions); add(v.assetIndices); add(v.ids); add(v.variants); add(v.flags); }
     if (msg.terrainPatch) { add(msg.terrainPatch.heights); add(msg.terrainPatch.waterSurface); }
     if (msg.signals) { add(msg.signals.states); if (msg.signals.layout) { add(msg.signals.layout.heads); add(msg.signals.layout.nodeIds); } }
+  }
+  if ((msg.kind === 'delta' || msg.kind === 'snapshot') && msg.ext) {
+    for (const payload of Object.values(msg.ext)) {
+      const list = isObj(payload) ? payload[PLUGIN_TRANSFER_KEY] : undefined;
+      if (Array.isArray(list)) for (const v of list) add(v);
+    }
   }
   return [...out];
 }
@@ -241,6 +266,11 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
       return typeof a.slot === 'string' && a.slot.length > 0 ? null : bad('Emplacement de sauvegarde invalide');
     case 'load':
       return isObj(a.data) ? null : bad('Données de sauvegarde absentes');
+    case 'pluginCommand':
+      // Le module doit en plus être enregistré dans la simulation (vérifié par Simulation.pluginCommand).
+      if (typeof a.plugin !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(a.plugin)) return bad('Module invalide');
+      if (typeof a.name !== 'string' || a.name.length === 0 || a.name.length > 64) return bad('Nom de commande de module invalide');
+      return null;
     default:
       return bad(`Commande inconnue : ${String(msg.name)}`);
   }

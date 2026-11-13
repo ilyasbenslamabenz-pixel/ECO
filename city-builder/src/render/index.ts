@@ -9,7 +9,9 @@
  *  - routes : RoadNetworkRenderer (tronçons courbes, carrefours, ponts, décor instancié, nuit) ;
  *  - bâtiments : InstancedBuildingRenderer (GLB LOD0/1/2 instanciés, culling, fenêtres la nuit) ;
  *  - véhicules : InstancedVehicleRenderer (trafic interpolé, LOD, phares la nuit) ;
- *  - feux tricolores : TrafficSignalRenderer (poteaux / potences et têtes instanciés, état de la simulation).
+ *  - feux tricolores : TrafficSignalRenderer (poteaux / potences et têtes instanciés, état de la simulation) ;
+ *  - modules de phase 2 : RenderPluginHost (src/render/plugins) reçoit `ext[id]` des instantanés / deltas et
+ *    est appelé à chaque image (`frame`) ; registre de modules vides = aucun effet.
  */
 import * as THREE from 'three';
 import type { AssetCatalog } from '../shared/catalog';
@@ -31,6 +33,7 @@ import { SkySystem } from './sky/sky-system';
 import { TerrainSystem } from './terrain/renderer';
 import { TrafficSignalRenderer } from './traffic/signals';
 import { InstancedVehicleRenderer } from './vehicles/renderer';
+import { RENDER_PLUGINS, RenderPluginHost, type RenderPlugin } from './plugins';
 import { WaterSystem } from './water/water-system';
 
 export interface RenderStats {
@@ -56,6 +59,10 @@ export interface RenderHandle {
   vehicles: InstancedVehicleRenderer;
   signals: TrafficSignalRenderer;
   veg: VegetationSystem;
+  /** Modules de rendu de phase 2 (registre src/render/plugins/index.ts). */
+  plugins: RenderPluginHost;
+  /** Libère les ressources des modules de rendu. */
+  disposePlugins(): void;
   /** Heure simulée -> soleil, lune, fenêtres et lampadaires. */
   setTimeOfDay(hour: number): void;
   /** Cadre des ombres sur la zone regardée. */
@@ -67,7 +74,9 @@ export interface RenderHandle {
   stats(): RenderStats;
 }
 
-export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, catalog: AssetCatalog, assetsBase: URL): Promise<RenderHandle> {
+export async function initRender(
+  canvas: HTMLCanvasElement, lib: AssetLibrary, catalog: AssetCatalog, assetsBase: URL, renderPlugins: readonly RenderPlugin[] = RENDER_PLUGINS,
+): Promise<RenderHandle> {
   const ctx = initScene(canvas);
   const sky = await SkySystem.create({
     renderer: ctx.renderer, scene: ctx.scene, sun: ctx.sun, hemi: ctx.hemi, catalog, assetsBase,
@@ -88,6 +97,11 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
   const assets = new Map(catalog.assets.map((a) => [a.id, a]));
   let lastHour = -1;
   let frameMs = 0;
+  let night = 0;
+  const plugins = new RenderPluginHost(renderPlugins);
+  await plugins.init({
+    scene: ctx.scene, camera: ctx.camera, renderer: ctx.renderer, sun: ctx.sun, catalog, lib, heightAt, nightFactor: () => night,
+  });
 
   const clearVegForBuildings = (list: readonly BuildingRecord[]): void => {
     for (const b of list) {
@@ -112,13 +126,15 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
   };
 
   const handle: RenderHandle = {
-    ctx, sky, terrain, water, roads, buildings, vehicles, signals, veg,
+    ctx, sky, terrain, water, roads, buildings, vehicles, signals, veg, plugins,
+    disposePlugins() { plugins.dispose(); },
     setTimeOfDay(hour) {
       if (Math.abs(hour - lastHour) < 1 / 120) return;
       lastHour = hour;
       sky.setTimeOfDay(hour);
       veg.syncLights(ctx.sun, ctx.hemi, sky.ambientSky, sky.ambientGround);
       const n = nightFactorForHour(hour);
+      night = n;
       buildings.setNight(n);
       roads.setNight(n);
       vehicles.setNight(n);
@@ -141,6 +157,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
       buildings.add(s.buildings);
       for (const b of s.buildings) buildingIds.add(b.id);
       clearVegForBuildings(s.buildings);
+      plugins.applySnapshot(s.ext);
       handle.setTimeOfDay(s.stats.date.hour + s.stats.date.minute / 60);
     },
     applyDelta(d) {
@@ -163,6 +180,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
       if (d.signals) signals.apply(d.signals);
       if (d.vehicles) vehicles.setFrame(d.vehicles);
       else if (vehicles.count > 0) vehicles.setVehicles(new Float32Array(0), new Uint16Array(0), 0);
+      if (d.ext) plugins.applyDelta(d.ext);
       handle.setTimeOfDay(d.stats.date.hour + d.stats.date.minute / 60);
     },
     async whenReady(preloadAll = false) {
@@ -192,6 +210,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
     roads.update(camPos.x, camPos.y, camPos.z);
     buildings.update(camPos.x, camPos.y, camPos.z);
     vehicles.update(dt);
+    plugins.frame(dt);
     frameMs = frameMs * 0.9 + (performance.now() - t0) * 0.1;
   });
   return handle;

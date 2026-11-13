@@ -12,6 +12,14 @@ Principes imposés :
 
 ## 0. Préparation commune (après validation phase 1, avant 2A)
 
+> **Points d'extension et banc de captures : FAITS** (branche locale `prep-phase2`, à fusionner après validation
+> de la phase 1 ; détail : `docs/ARCHITECTURE.md` §9). Fichiers : `src/sim/plugins/{types,host,index}.ts` +
+> `src/sim/plugins/<module>.ts` ; `src/shared/protocol-ext/{index,<module>}.ts` ; `src/sim/save-sections/{types,index,<module>}.ts` ;
+> `src/render/plugins/{types,index,<module>}.ts` ; `src/ui/panels/{types,index,<module>}.ts` ; `tests/plugins/plugins.test.ts`,
+> `tests/<module>/<module>.test.ts` (dans `npm test`) ; `tests/e2e/captures.mjs` (`npm run captures`). Branchements :
+> `src/sim/world.ts`, `src/sim/handler.ts` (commande `pluginCommand`), `src/shared/protocol.ts`, `src/render/index.ts`.
+> Reste à faire par le superviseur : l'audit d'intégration de la phase 1 (point 1, première moitié).
+
 Fait par le superviseur sur la branche principale, en un commit :
 1. **Audit d'intégration** de la phase 1 + banc de captures `npm run captures` (≥ 12 vues, échec sur
    image uniforme, erreur console ou modèle manquant).

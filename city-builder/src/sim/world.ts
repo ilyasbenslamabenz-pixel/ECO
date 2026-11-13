@@ -6,6 +6,7 @@
  * Contenu : bâtiments et routes (SoA + index spatiaux par chunk), accès route des bâtiments
  * (façade), horloge + planificateur d'événements, démographie, économie, trafic
  * (TrafficSystem du module trafic), deltas pour le rendu, sauvegarde versionnée (v2).
+ * Modules de phase 2 : crochets appelés via PluginHost (src/sim/plugins) ; registres vides = aucun effet.
  */
 import {
   CHUNK_SIZE,
@@ -49,6 +50,7 @@ import { EventScheduler, SimEvent } from './scheduler';
 import { CURRENT_SAVE_VERSION, SAVE_FORMAT_ID, validateSave, type SaveFileV2 } from './save-format';
 import { buildCity } from './city-builder';
 import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimReport } from './sim-protocol';
+import { PluginHost, SIM_PLUGINS, type PluginSaveField, type SimPlugin } from './plugins';
 
 export type CmdOutcome<K extends CommandName> = { ok: true; data: CommandResult<K> } | { ok: false; error: CommandError };
 export type ExtOutcome<K extends ExtCommandName> = { ok: true; data: ExtCommandResult<K> } | { ok: false; error: CommandError };
@@ -105,6 +107,13 @@ export function distSegmentRect(ax: number, az: number, bx: number, bz: number, 
 }
 
 export class Simulation {
+  /** Modules de phase 2 (registre src/sim/plugins/index.ts ; les tests peuvent injecter leur propre liste). */
+  readonly plugins: PluginHost;
+
+  constructor(plugins: readonly SimPlugin[] = SIM_PLUGINS) {
+    this.plugins = new PluginHost(this, plugins);
+  }
+
   catalog: AssetCatalog | null = null;
   private assetIndex = new Map<string, number>();
   params: NewGameParams | null = null;
@@ -169,6 +178,7 @@ export class Simulation {
     const ctx = { catalog: cat, buildings: this.buildings, buildingIndex: this.buildingIndex, rng: this.rng };
     if (this.demography) this.demography.setContext(ctx);
     else { this.demography = new DemographySystem(ctx); this.demography.setContext(ctx); }
+    this.plugins.init();
   }
 
   getAsset(id: string): CatalogAsset | undefined {
@@ -212,6 +222,7 @@ export class Simulation {
     this.traffic.setNetwork(inputFromRoadNetwork(this.net));
     this.trafficBuildingsDirty = true;
     this.clearPending();
+    this.plugins.onNewGame();
   }
 
   /** Environnement des profils en long : terrain NATUREL, mer et surfaces d'eau locales (rivières, lacs). */
@@ -643,6 +654,7 @@ export class Simulation {
           this.economy.serviceWorkers = tb.serviceWorkers;
           this.trafficBuildingsDirty = true;
         }
+        this.plugins.onDayStart();
         break;
       case SimEvent.Migration:
         if (demo) {
@@ -664,6 +676,7 @@ export class Simulation {
         if (this.economy.bankrupt && !wasBankrupt) this.notify('danger', 'Faillite : trésorerie négative depuis trois mois. Constructions et emprunts suspendus.');
         else if (!this.economy.bankrupt && wasBankrupt) this.notify('info', 'Sortie de faillite : la trésorerie est redevenue positive.');
         else if (this.economy.monthsInDeficit > 0) this.notify('warn', `Trésorerie négative (${rec.moneyEnd} crédits) : faillite dans ${3 - this.economy.monthsInDeficit} mois sans redressement.`);
+        this.plugins.onMonthStart();
         break;
       }
       case SimEvent.YearStart:
@@ -710,6 +723,7 @@ export class Simulation {
       demo.drainTrips(TRIPS_PER_TICK, this.sendTrip);
     }
     this.traffic.step(0.1, this.clock.hourOfDay);
+    this.plugins.onTick(minutes);
     this.tickCount++;
   }
 
@@ -770,6 +784,8 @@ export class Simulation {
     }
     const signals = this.takeSignalFrame();
     if (signals) msg.signals = signals;
+    const ext = this.plugins.takeDelta();
+    if (ext) msg.ext = ext;
     return msg;
   }
 
@@ -805,7 +821,7 @@ export class Simulation {
     this.clearPending();
     // Le rendu repart de zéro après un instantané : la disposition des feux sera renvoyée au prochain delta.
     this.signalVersionSent = -1;
-    return {
+    const msg: SnapshotMessage = {
       kind: 'snapshot',
       params: { ...this.params! },
       // Toutes les couches sont COPIÉES : les copies sont transférées (collectTransferables).
@@ -818,6 +834,9 @@ export class Simulation {
       roads: this.roadRecords(),
       stats: { ...this.getStats(), date: { ...this.stats.date } },
     };
+    const ext = this.plugins.snapshot();
+    if (ext) msg.ext = ext;
+    return msg;
   }
 
   buildingRecords(): BuildingRecord[] {
@@ -937,10 +956,16 @@ export class Simulation {
     return out as ExtOutcome<K>;
   }
 
+  /** Commande d'un module de phase 2 (module inconnu : INVALID_ARGS ; exceptions du module attrapées). */
+  pluginCommand(a: CommandArgs<'pluginCommand'>): CmdOutcome<'pluginCommand'> {
+    if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
+    return this.plugins.command(a.plugin, a.name, a.payload);
+  }
+
   /* ---------------------------- Sauvegarde ---------------------------- */
 
-  toSave(): SaveFileV2 {
-    return {
+  toSave(): SaveFileV2 & PluginSaveField {
+    const save: SaveFileV2 & PluginSaveField = {
       format: SAVE_FORMAT_ID,
       version: CURRENT_SAVE_VERSION,
       savedAt: new Date().toISOString(),
@@ -953,6 +978,10 @@ export class Simulation {
       population: this.demo.toJSON(),
       sim: { rng: this.rng.getState(), scheduler: this.scheduler.toJSON() },
     };
+    // Sections des modules (champ facultatif, absent si aucune) : sections inconnues conservées telles quelles.
+    const plugins = this.plugins.save();
+    if (plugins) save.plugins = plugins;
+    return save;
   }
 
   /**
@@ -1032,6 +1061,8 @@ export class Simulation {
     this.economy.serviceWorkers = tb.serviceWorkers;
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;
+    // Modules : après l'état de base ; une section en erreur est notifiée et n'empêche pas le chargement.
+    this.plugins.load((s as SaveFileV2 & PluginSaveField).plugins);
     this.clearPending();
     return null;
   }

@@ -11,7 +11,7 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test tests/unit/*.test.ts tests/sim/*.test.ts tests/roads/*.test.ts tests/terrain/*.test.ts tests/vehicles/*.test.ts tests/construction/*.test.ts tests/integration/*.test.ts",
+    "test": "tsx --test tests/unit/*.test.ts tests/sim/*.test.ts tests/roads/*.test.ts tests/terrain/*.test.ts tests/vehicles/*.test.ts tests/construction/*.test.ts tests/integration/*.test.ts tests/plugins/*.test.ts tests/batiments/*.test.ts tests/circulation/*.test.ts tests/pietons/*.test.ts tests/chantiers/*.test.ts",
     "assets": "tsx tools/pipeline.ts",
     "validate:assets": "tsx tools/validate-models.ts",
     "validate:visual": "node tests/e2e/validate-visual.mjs",
@@ -35,7 +35,8 @@
     "stress": "node tests/e2e/stress.mjs",
     "e2e:game": "node tests/e2e/gameplay.mjs",
     "e2e:play": "node tests/e2e/play.mjs",
-    "e2e:signals": "node tests/e2e/signals.mjs"
+    "e2e:signals": "node tests/e2e/signals.mjs",
+    "captures": "node tests/e2e/captures.mjs"
   },
   "dependencies": {
     "three": "0.187.0"
