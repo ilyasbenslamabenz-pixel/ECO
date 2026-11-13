@@ -61,7 +61,7 @@ réponse `{ kind:'result', reqId, ok:true, data }` ou `{ ok:false, error:{ code,
 | `placeBuilding` | assetId, x, z (au cm, pas de grille), rot (quarts de tour, **décimal autorisé** : 0,5 = 45°), variant?, dryRun? | buildingId, cost | asset bâtiment, empreinte ORIENTÉE (`src/shared/footprint.ts`) : collision bâtiments (séparation par axes) et routes courbes (distance segment/rectangle orienté), relief, eau, fonds |
 | `demolish` | buildingId | refund (25 %) | existence |
 | `setSpeed` | 0/1/2/4 | speed | valeur |
-| `terraform` | x, z, radius, delta | — | **NOT_IMPLEMENTED (phase 2)** |
+| `terraform` | x, z, radius, delta | — | **NOT_IMPLEMENTED (phase 2)** — les éditions du joueur passent par la commande étendue `terrainEdit` (§10) |
 | `save` | slot | SaveFile JSON | partie en cours |
 | `load` | SaveFile | buildings (+ instantané) | format, version, assets connus |
 | `pluginCommand` | plugin, name, payload? | data? | forme (§9), module enregistré, puis le module |
@@ -199,3 +199,37 @@ attrapées (console.error une fois par module et crochet).
 **Banc de captures** : `npm run captures` (`tests/e2e/captures.mjs`) — 15 vues de la démo (aérien, horizon, rue,
 carrefour à feux, 4 quartiers, nuit, iPhone portrait) dans `tests/e2e/out/captures/` ; échec sur image quasi uniforme
 (écart-type < 10), erreur de page / console / requête ou modèle manquant.
+
+## 10. Carte v2 et éditions du terrain (retour propriétaire : arbres, côtes, rivières)
+
+- **Génération v2** (`src/sim/terrain/generate.ts`, `WorldGenParams.genVersion = 2`, défaut des nouvelles parties) :
+  forêt en bosquets regroupés, seuil par quantile (`FOREST_V2_SHARE` × `forest` du terrain sec : ≈ 3 fois moins
+  d'arbres qu'en v1, plaine centrale dégagée à plus de 80 %) ; rivières selon `riverMode` : `aucune`, `une` (défaut :
+  un seul cours, de la source la plus lointaine du bassin principal à la mer ou au bord, tracé D8 lissé et
+  rééchantillonné, lit de 8 à 22 m, pas de lacs d'altitude) ou `plusieurs` (réseau d'origine selon `rivers`).
+  `MapGenOptions` (contrat) porte `riverMode` et `genVersion` ; l'écran Nouvelle partie propose Rivières et Côte
+  (`hydrology` mer / aucune). **La v1 reste identique** (test d'empreinte) : `Simulation.newGame` fixe et enregistre
+  `params.terrain.genVersion` ; une sauvegarde qui n'en porte pas est régénérée en v1 (`applySave`).
+- **Éditions du terrain** (`src/sim/terrain/edits.ts`, pur) : `clear` (Défricher : forêt à 0 dans un disque),
+  `quay` (Quai / remblai : ligne droite ; l'eau côté terre — côté qui compte le plus d'échantillons secs dans une bande
+  de 160 m — est remblayée jusqu'à la ligne au niveau eau + 1,2 m ; pied du mur approfondi à eau − 5 m ; une ligne en
+  travers d'une rivière la comble d'un côté), `dig` (Creuser : bassin ou canal de 16 à 96 m, en eau au niveau de l'eau
+  voisine la plus basse, sinon bassin isolé ; berges aplanies). `planEdit` (aucune modification : échantillons,
+  coût, murs, contour) puis `commitEdit`. Coûts `EDIT_COSTS` (terre au m³, mur au m, défrichage au m² de forêt).
+- **Simulation** : commande étendue `terrainEdit { edit, dryRun? } -> { cost, volume, forestM2, wallLength, outline }`
+  (`sim-protocol.ts`, validée). Refus : tracé invalide / sans eau (`INVALID_ARGS`), bâtiment, route ou talus sur un
+  échantillon modifié (`COLLISION`), fonds. Les éditions modifient les hauteurs NATURELLES (base des profils de
+  routes), l'eau et la forêt, puis le nivellement de toutes les routes est recalculé. Bâtiments toujours interdits
+  sur l'eau (`wetAt`), les routes franchissent un canal par un pont (eau au-dessus du terrain naturel).
+- **Protocole** (rétrocompatible) : `WorldTerrain.quays?` (murs à plat, `QUAY_STRIDE` = 8 nombres : extrémités,
+  dessus, pied, normale vers l'eau ; tableau simple, jamais transféré) dans l'instantané ; le `terrainPatch` d'un
+  delta peut porter `forest` (région), `quays` (liste complète) et `cleared` (disques défrichés).
+- **Sauvegarde** : champ facultatif `terrainEdits` (liste ordonnée, format v2 inchangé) rejoué sur le terrain régénéré
+  AVANT les routes ; résultat identique (testé : hauteurs, eau, forêt, murs).
+- **Rendu** : `src/render/water/quays.ts` (un maillage fusionné à couleurs de sommets : parement, margelle, plateforme
+  de 12,5 m qui couvre la bande de 1,5 case préparée côté terre, jupe, joues ; ni texture ni canevas) ; la végétation
+  est semée avec un tirage par cellule (stable quand une zone change) et retirée des disques défrichés et, dans la
+  région d'un patch, là où elle serait dans l'eau, flottante ou enterrée (`removeInDiscs`, `removeInvalid`).
+- **Client** : `src/client/tools/terrain-tool.ts` (pur) sous l'outil `terraform` de la machine ; aperçu 3D
+  `src/input/terrain-preview.ts` ; tiroir `src/ui/terrain-drawer.ts`. E2E : `tests/e2e/carte.mjs` ; captures
+  `node tests/e2e/carte-captures.mjs <préfixe>` dans `docs/captures-carte/`.

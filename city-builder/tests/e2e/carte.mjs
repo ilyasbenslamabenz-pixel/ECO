@@ -31,8 +31,10 @@ try {
       const dx = Math.cos((k / 32) * Math.PI * 2), dz = Math.sin((k / 32) * Math.PI * 2);
       for (let d = 0; d < 1000; d += 4) {
         if (a.isWet(dx * d, dz * d)) {
+          // Mer ouverte (et non embouchure ou rivière) : eau sur 200 m au-delà et de part et d'autre.
           let open = true;
-          for (let e = 8; e <= 60; e += 8) if (!a.isWet(dx * (d + e), dz * (d + e))) open = false;
+          for (let e = 8; e <= 200; e += 8) if (!a.isWet(dx * (d + e), dz * (d + e))) open = false;
+          for (const s of [-1, 1]) if (!a.isWet(dx * (d + 60) - dz * 90 * s, dz * (d + 60) + dx * 90 * s)) open = false;
           if (open && (!best || d < best.dist)) best = { dx, dz, dist: d };
           break;
         }

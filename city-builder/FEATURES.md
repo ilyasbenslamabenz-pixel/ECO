@@ -36,6 +36,8 @@ Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration)
 |---|---|
 | Menu → nouvelle partie → partie ; charger, options, quitter | `npm run e2e`, `npm run e2e:game` |
 | Terrain procédural (relief, érosion, mer/lac, rivières, plages, forêts) en chunks LOD maillés en worker, PBR, eau animée, ciel HDRI | `tests/terrain/*.test.ts` ; captures |
+| Carte v2 : forêt ≈ ÷3 en bosquets et grandes clairières, une rivière étroite et lissée par défaut, choix Rivières (aucune / une / plusieurs) et Côte (mer / sans mer) ; anciennes sauvegardes régénérées en v1 | `tests/terrain/carte.test.ts` ; `docs/captures-carte/` |
+| Outils Terrain : Défricher (pinceau), Quai / remblai (ligne droite, mur de quai, comble ou dévie une rivière), Creuser (bassin, canal) ; coût, aperçu validé, sauvegarde | `tests/terrain/editions.test.ts`, `tests/terrain/outil-terrain.test.ts`, `tests/e2e/carte.mjs` |
 | **Routes : les 6 types de la simulation constructibles depuis l'interface** (rue, avenue, boulevard, sens unique, rue piétonne, autoroute), droites ou **courbes (une vraie Bézier envoyée à la simulation)**, carrefours automatiques, ponts automatiques, nivellement | `npm run e2e:play` (tiroir à 6 cartes ; rue courbe tracée à la souris = tronçons courbes c1/c2) ; `tests/construction/tools.test.ts` « rue courbe = une vraie Bézier » (sens unique) ; `tests/roads/*.test.ts` |
 | **Une route coupée par un carrefour reste affichée** (correction : les nœuds d'extrémité réutilisés par les morceaux n'étaient plus connus du rendu) | `tests/roads/render.test.ts` « tronçon coupé par un carrefour » ; `npm run e2e:play` « rendu = simulation : 4 tronçons affichés / 4 simulés » (`play-courbe-carrefour.png`) |
 | **Placement libre des bâtiments : angle libre et position au centimètre** ; empreinte orientée exacte (collisions bâtiments par séparation d'axes, routes courbes par distance segment/rectangle orienté) | `src/shared/footprint.ts` ; `tests/construction/tools.test.ts` « position et angle libres » |
@@ -72,7 +74,7 @@ Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration)
 | Fonctionnalité | Phase |
 |---|---|
 | Fusion des matériaux par bâtiment (atlas) pour réduire les appels de rendu ; culling par chunk des bâtiments | 2 |
-| Zonage (R/C/I) et croissance automatique ; terraformation (`terraform` renvoie NOT_IMPLEMENTED) | 2 |
+| Zonage (R/C/I) et croissance automatique ; terraformation libre (élever, abaisser, niveler : `terraform` renvoie NOT_IMPLEMENTED ; quais, remblais, canaux et défrichage disponibles) | 2 |
 | Inspection détaillée d'un habitant / d'un bâtiment (`inspectBuilding`, `inspectCitizen` existent côté simulation) | 2 |
 | Lignes de bus, piétons, feux stop des véhicules, gyrophares | 3 |
 | Échangeurs, passages dénivelés | 4 |
