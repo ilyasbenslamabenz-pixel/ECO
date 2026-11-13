@@ -1,16 +1,19 @@
 /**
  * Imposteurs d'arbres (rendu lointain) : chaque essence est rendue une fois, au chargement, sous
- * 8 azimuts x 3 élévations dans deux atlas (albedo sRGB + normales monde). Au-delà de quelques
+ * 8 azimuts x 4 élévations (dont une vue zénithale : sans elle, un arbre vu du dessus affichait sa vue
+ * oblique couchée au sol, en lamelle ou en silhouette sombre) dans deux atlas (albedo sRGB + normales monde). Au-delà de quelques
  * centaines de mètres, chaque arbre devient un quad orienté vers la caméra qui affiche la vue
  * précalculée la plus proche ; il est éclairé (soleil + ciel) avec ses vraies normales et reçoit le brouillard.
  * C'est une vraie vue du modèle GLB, pas un sprite dessiné à la main.
  */
 import * as THREE from 'three';
 
+/** Biais de mip de la capture d'albédo (voir ALBEDO_FRAG). */
+const ALBEDO_MIP_BIAS = -3;
 export const IMP_AZ = 8;
-export const IMP_EL = 3;
-/** Élévations des vues (rad). */
-export const IMP_ELEVATIONS = [THREE.MathUtils.degToRad(8), THREE.MathUtils.degToRad(38), THREE.MathUtils.degToRad(72)];
+export const IMP_EL = 4;
+/** Élévations des vues (rad) ; la dernière est la vue du dessus (89° : l'azimut garde un sens pour l'orientation). */
+export const IMP_ELEVATIONS = [THREE.MathUtils.degToRad(8), THREE.MathUtils.degToRad(36), THREE.MathUtils.degToRad(63), THREE.MathUtils.degToRad(89)];
 
 export interface ImpostorAtlas {
   albedo: THREE.Texture;
@@ -19,6 +22,8 @@ export interface ImpostorAtlas {
   radius: number;
   centerY: number;
   frame: number;
+  /** Intensité spéculaire du feuillage du modèle (0..1 ; 1 = diélectrique par défaut). */
+  specular: number;
   /** Diagnostic : couleur moyenne (0..255) des pixels couverts et taux de couverture de l'atlas albedo. */
   check: { meanRgb: [number, number, number]; coverage: number };
   dispose(): void;
@@ -45,6 +50,38 @@ void main() {
   gl_FragColor = vec4(n * 0.5 + 0.5, 1.0);
 }`;
 
+/**
+ * Albédo de capture : texture lue avec un biais de mip négatif (uniforme `bias`). Dans une case de 128 px, le
+ * feuillage est sinon lu dans des niveaux de mip élevés où les texels transparents (noirs) assombrissent la couleur
+ * (épicéa presque noir, liserés sombres). Couleur du matériau et couleurs de sommet appliquées comme sur le modèle.
+ */
+const ALBEDO_VERT = /* glsl */ `
+uniform mat3 uvTransform;
+varying vec2 vUv;
+varying vec3 vCol;
+void main() {
+  vUv = (uvTransform * vec3(uv, 1.0)).xy;
+  vCol = vec3(1.0);
+  #ifdef USE_COLOR
+  vCol = color.rgb;
+  #endif
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const ALBEDO_FRAG = /* glsl */ `
+uniform sampler2D map;
+uniform float useMap;
+uniform float alphaTest;
+uniform float bias;
+uniform vec3 tint;
+varying vec2 vUv;
+varying vec3 vCol;
+void main() {
+  vec4 t = useMap > 0.5 ? texture2D(map, vUv, bias) : vec4(1.0);
+  if (t.a < alphaTest) discard;
+  gl_FragColor = vec4(t.rgb * tint * vCol, 1.0);
+  #include <colorspace_fragment>
+}`;
+
 /** Fabrique l'atlas d'imposteur d'un modèle (racine glTF chargée). */
 export function bakeImpostor(renderer: THREE.WebGLRenderer, model: THREE.Object3D, frame = 128): ImpostorAtlas {
   const box = new THREE.Box3().setFromObject(model);
@@ -67,20 +104,29 @@ export function bakeImpostor(renderer: THREE.WebGLRenderer, model: THREE.Object3
   const rtA = mk(true);
   const rtN = mk(false);
   // Matériaux de capture : albedo non éclairé (couleur + texture + alpha test) et normales monde.
-  const albedoMats = new Map<THREE.Material, THREE.Material>();
+  const albedoMats = new Map<THREE.Material, THREE.ShaderMaterial>();
   const normalMats = new Map<THREE.Material, THREE.ShaderMaterial>();
+  let foliage = 0, specular = 0;
   clone.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
     const src = m.material as THREE.MeshStandardMaterial;
     if (!albedoMats.has(src)) {
-      albedoMats.set(src, new THREE.MeshBasicMaterial({ map: src.map ?? null, color: src.color ?? new THREE.Color(1, 1, 1), alphaTest: Math.max(0.35, src.alphaTest || 0), side: THREE.DoubleSide, transparent: false }));
+      src.map?.updateMatrix();
+      albedoMats.set(src, new THREE.ShaderMaterial({
+        uniforms: {
+          map: { value: src.map ?? null }, useMap: { value: src.map ? 1 : 0 }, alphaTest: { value: Math.max(0.35, src.alphaTest || 0) },
+          bias: { value: ALBEDO_MIP_BIAS }, tint: { value: src.color ?? new THREE.Color(1, 1, 1) }, uvTransform: { value: src.map?.matrix ?? new THREE.Matrix3() },
+        },
+        vertexShader: ALBEDO_VERT, fragmentShader: ALBEDO_FRAG, side: THREE.DoubleSide, vertexColors: src.vertexColors === true,
+      }));
       normalMats.set(src, new THREE.ShaderMaterial({
         uniforms: { map: { value: src.map ?? null }, useMap: { value: src.map ? 1 : 0 }, alphaTest: { value: Math.max(0.35, src.alphaTest || 0) } },
         vertexShader: NORMAL_VERT, fragmentShader: NORMAL_FRAG, side: THREE.DoubleSide,
       }));
     }
     m.userData['impSrc'] = src;
+    if ((src.alphaTest || 0) > 0) { foliage++; specular += (src as THREE.MeshPhysicalMaterial).specularIntensity ?? 1; }
   });
   const cam = new THREE.OrthographicCamera(-r, r, r, -r, 0.01, r * 4);
   const prevTarget = renderer.getRenderTarget();
@@ -144,6 +190,7 @@ export function bakeImpostor(renderer: THREE.WebGLRenderer, model: THREE.Object3
     radius: r,
     centerY: sphere.center.y,
     frame,
+    specular: foliage ? specular / foliage : 1,
     check,
     dispose() { rtA.dispose(); rtN.dispose(); },
   };
@@ -176,8 +223,10 @@ void main() {
   if (az < 0.0) az += 6.2831853;
   float ai = mod(floor(az / 6.2831853 * ${IMP_AZ.toFixed(1)} + 0.5), ${IMP_AZ.toFixed(1)});
   float el = asin(clamp(lv.y, -1.0, 1.0));
-  float ei = el < ${((IMP_ELEVATIONS[0]! + IMP_ELEVATIONS[1]!) / 2).toFixed(4)} ? 0.0 : (el < ${((IMP_ELEVATIONS[1]! + IMP_ELEVATIONS[2]!) / 2).toFixed(4)} ? 1.0 : 2.0);
-  vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), v));
+  float ei = el < ${((IMP_ELEVATIONS[0]! + IMP_ELEVATIONS[1]!) / 2).toFixed(4)} ? 0.0 : (el < ${((IMP_ELEVATIONS[1]! + IMP_ELEVATIONS[2]!) / 2).toFixed(4)} ? 1.0 : (el < ${((IMP_ELEVATIONS[2]! + IMP_ELEVATIONS[3]!) / 2).toFixed(4)} ? 2.0 : 3.0));
+  // Caméra à la verticale exacte de l'arbre : le produit vectoriel s'annule, on garde un axe fixe.
+  vec3 rv = cross(vec3(0.0, 1.0, 0.0), v);
+  vec3 right = dot(rv, rv) > 1e-8 ? normalize(rv) : vec3(1.0, 0.0, 0.0);
   vec3 up = cross(v, right);
   float R = uRadius * s;
   vec3 wp = center + right * position.x * R + up * position.y * R;
@@ -201,6 +250,7 @@ uniform vec3 uSunColor;
 uniform vec3 uSky;
 uniform vec3 uGround;
 uniform float uEnv;
+uniform float uSpec;
 varying vec2 vUv;
 varying float vRot;
 varying vec3 vTint;
@@ -221,7 +271,9 @@ void main() {
   // Feuillage : transmission diffuse légère (lumière traversant les feuilles).
   float wrap = max(dot(-n, uSunDir), 0.0) * 0.25;
   vec3 amb = mix(uGround, uSky, n.y * 0.5 + 0.5) * uEnv;
-  vec3 col = alb * (uSunColor * (ndl + wrap) * 0.95 + amb);
+  // Reflet spéculaire du ciel et du soleil, comme en reçoit le matériau PBR du modèle (uSpec = intensité spéculaire
+  // de son feuillage) : sans lui, une essence à albédo sombre (épicéa) sort presque noire alors que le modèle est gris-bleu.
+  vec3 col = alb * (uSunColor * (ndl + wrap) * 0.95 + amb) + (amb + uSunColor * ndl * 0.5) * (0.09 * uSpec);
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -244,6 +296,7 @@ export function makeImpostorMaterial(atlas: ImpostorAtlas, lights: ImpostorMater
     tNor: { value: atlas.normal },
     uRadius: { value: atlas.radius },
     uCenterY: { value: atlas.centerY },
+    uSpec: { value: atlas.specular },
     ...lights,
   };
   return new THREE.ShaderMaterial({ name: 'imposteur_arbre', uniforms, vertexShader: IMP_VERT, fragmentShader: IMP_FRAG, fog: true, side: THREE.DoubleSide });

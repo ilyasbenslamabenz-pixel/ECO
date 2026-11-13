@@ -57,6 +57,9 @@ interface SpeciesRender {
   baseHeight: number;
 }
 
+/** Seuil (triangles) sous lequel un LOD est un jeu de « cartes croisées » et non un modèle. */
+export const CARD_LOD_TRIANGLES = 16;
+
 /** Choisit le rôle d'un asset de végétation d'après sa catégorie et ses tags. */
 export function roleOf(a: CatalogAsset): VegRole | null {
   const tags = a.tags.map((t) => t.toLowerCase());
@@ -183,7 +186,10 @@ export class VegetationSystem {
     if (this.species.length > 255) this.species.length = 255;
     this.renders = [];
     for (const sp of this.species) {
-      const lodCount = Math.min(3, sp.asset.lods.length);
+      // Dernier LOD en « cartes croisées » (≤ 16 triangles, arbres générés) : illisible vu du dessus (lamelles) ;
+      // on ne le charge pas, l'imposteur orienté caméra (vraies vues du modèle, dont la vue zénithale) prend le relais.
+      const cardLod = sp.impostor && !!r && sp.asset.lods.length >= 3 && (sp.asset.lods[2]?.triangles ?? 1e9) <= CARD_LOD_TRIANGLES;
+      const lodCount = Math.min(cardLod ? 2 : 3, sp.asset.lods.length);
       const roots = await Promise.all(Array.from({ length: lodCount }, (_, l) => this.lib.load(sp.asset.id, l)));
       const rec: SpeciesRender = { sp, lods: [], imp: null, baseHeight: sp.asset.dimensions.height };
       roots.forEach((root, l) => {
@@ -227,6 +233,16 @@ export class VegetationSystem {
   }
 
   get speciesList(): readonly VegSpecies[] { return this.species; }
+
+  /**
+   * Matériau d'imposteur d'une essence (partagé, éclairage déjà synchronisé par syncLights), ou null. Sert au
+   * décor routier : ses arbres d'alignement lointains utilisent le même imposteur que la végétation.
+   * Géométrie attendue : PlaneGeometry(2, 2) instanciée + attribut instancié `instanceTint` (vec3).
+   */
+  impostorMaterial(assetId: string): THREE.Material | null {
+    const r = this.renders.find((x) => x.sp.asset.id === assetId);
+    return r?.imp ? (r.imp.mesh.material as THREE.Material) : null;
+  }
 
   /** Définit les essences sans charger de modèle (semis et suppressions seuls : outils, tests). */
   setSpecies(species: VegSpecies[]): void {

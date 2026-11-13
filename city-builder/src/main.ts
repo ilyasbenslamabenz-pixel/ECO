@@ -70,6 +70,8 @@ interface DebugInfo {
   worldToScreen?: (x: number, z: number) => { x: number; y: number };
   /** Feux tricolores dessinés (e2e) : bras, positions, états, instances. */
   signals?: () => unknown;
+  /** Décor routier posé (e2e) : type et position de chaque lampadaire, arbre, banc… */
+  roadDecor?: () => { kind: string; x: number; z: number }[];
   /** Copie de la dernière trame véhicules reçue (e2e : véhicules arrêtés aux feux). */
   lastVehicles?: { tick: number; ids: number[]; positions: number[] } | null;
   /** Active la copie `lastVehicles` (désactivée par défaut : aucune allocation en jeu). */
@@ -127,7 +129,14 @@ async function boot(): Promise<void> {
     },
     onOptions: (o) => applyGraphicsOptions(o, { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera }),
     onSpeed: (speed) => { void needBridge().send('setSpeed', { speed }).catch((e: unknown) => ui.toast(errText(e), 'error')); },
-    onToggleCamera: () => { input.camera.setMode(input.camera.mode === 'aerial' ? 'street' : 'aerial'); },
+    onToggleCamera: () => {
+      if (input.camera.mode === 'aerial') {
+        // Démo : tant que la vue aérienne est restée sur le centre (un carrefour), la vue rue part du trottoir prévu.
+        const p = input.camera.getPose();
+        if (demoRunning && demoViews && Math.hypot(p.targetX - demoViews.ax, p.targetZ - demoViews.az) < 40) setDemoCamera('street');
+        else input.camera.setMode('street');
+      } else input.camera.setMode('aerial');
+    },
     onSave: () => { void saveSlot(QUICK_SLOT); },
     onMenu: () => {
       speedBeforeMenu = (state.stats?.speed ?? 1) || 1;
@@ -172,6 +181,7 @@ async function boot(): Promise<void> {
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
   debug.signals = () => render.signals.debug();
+  debug.roadDecor = () => render.roads.decorItems();
   debug.heightAt = (x, z) => render.terrain.heightAt(x, z);
   debug.streetLook = (x, z, lx, lz) => {
     input.camera.setStreetPosition(x, z, Math.atan2(-(lx - x), -(lz - z)));

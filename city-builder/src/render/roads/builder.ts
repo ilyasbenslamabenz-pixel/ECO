@@ -191,7 +191,13 @@ function flatQuad(b: LayerBuffer, x0: number, y0: number, z0: number, x1: number
 export interface BuildContext {
   net: RoadNetwork;
   junctions: Map<number, JunctionInfo>;
+  /** Obstacles au sol que le décor doit éviter (paires x, z : pieds des mâts de feux tricolores). */
+  avoid?: readonly number[];
 }
+
+/** Distance libre (m) entre un obstacle (mât de feu) et un lampadaire / un autre élément de décor. */
+const AVOID_LAMP = 6;
+const AVOID_OTHER = 3.5;
 
 export function junctionOf(ctx: BuildContext, nodeId: number): JunctionInfo {
   let j = ctx.junctions.get(nodeId);
@@ -523,7 +529,7 @@ function arrow(P: LayerBuffer, sm: SegSampler, sCenter: number, off: number, for
 }
 
 /** Décor d'un tronçon : lampadaires, arbres d'alignement, mobilier des rues piétonnes. */
-function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1: number, segId: number): void {
+function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1: number, segId: number, avoid?: readonly number[]): void {
   const hc = carriagewayWidth(k) / 2;
   const ht = totalWidth(k) / 2;
   const curb = k.curbHeight;
@@ -532,7 +538,22 @@ function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1:
   if (b <= a) return;
   const put = (kind: DecorKind, s: number, off: number, dy: number, rotExtra: number, scale: number): void => {
     sm.at(s);
-    const x = sm.x + sm.nx * off, z = sm.z + sm.nz * off;
+    let x = sm.x + sm.nx * off, z = sm.z + sm.nz * off;
+    if (avoid && avoid.length) {
+      // Trop près d'un mât de feu : on glisse l'élément le long du tronçon, vers son milieu (abandon au-delà).
+      const clear = kind === 'lamp' ? AVOID_LAMP : AVOID_OTHER;
+      const mid = (a + b) / 2, dir = s <= mid ? 1 : -1;
+      const blocked = (): boolean => {
+        for (let i = 0; i + 1 < avoid.length; i += 2) if (Math.hypot(avoid[i]! - x, avoid[i + 1]! - z) < clear) return true;
+        return false;
+      };
+      for (let tries = 0; blocked(); tries++) {
+        s += dir * 1.5;
+        if (tries >= 8 || (dir > 0 ? s > mid : s < mid)) return;
+        sm.at(s);
+        x = sm.x + sm.nx * off; z = sm.z + sm.nz * off;
+      }
+    }
     // Rotation autour de Y : face du modèle (+Z) tournée vers l'axe de la route.
     const fx = -Math.sign(off) * sm.nx, fz = -Math.sign(off) * sm.nz;
     out.decor.push({ kind, x, y: sm.y + dy, z, rot: Math.atan2(fx, fz) + rotExtra, scale });
@@ -619,7 +640,7 @@ export function buildSegment(out: BuildOutput, ctx: BuildContext, segId: number)
   if (k.median === 'planted') plantedMedian(out, k, sm, s0, s1, ja.type !== 'continuous', jb.type !== 'continuous');
   piers(out, k, sm, net.env.waterLevel, s0, s1);
   markings(out, ctx, k, sm, s0, s1, ja, jb);
-  decor(out, k, sm, s0, s1, segId);
+  decor(out, k, sm, s0, s1, segId, ctx.avoid);
   if (ja.type === 'end') deadEnd(out, k, st[0]!, -1);
   if (jb.type === 'end') deadEnd(out, k, st[st.length - 1]!, 1);
   return { s0, s1 };

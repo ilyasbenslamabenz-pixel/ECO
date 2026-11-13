@@ -25,6 +25,11 @@ export interface RoadRendererDeps {
   lib?: AssetLibrary;
   materials?: MaterialLibrary;
   waterLevel?: number;
+  /**
+   * Matériau d'imposteur orienté caméra d'un arbre (fourni par la végétation), ou null. S'il existe, il remplace
+   * le dernier LOD en « cartes croisées » des arbres d'alignement lointains (lamelles vues du dessus).
+   */
+  treeImpostor?: (assetId: string) => THREE.Material | null;
 }
 
 /** Assets du catalogue utilisés pour le décor routier. */
@@ -65,6 +70,12 @@ const FALLBACK: Record<LayerId, number> = {
   grass: 0x4b6a2e, concrete: 0xa29f98, metal: 0xb8bcc0, paint: 0xe8e8e2, skirt: 0x6e6559,
 };
 
+/** Marqueur : « ce LOD est un imposteur » (la vraie géométrie, avec sa teinte par instance, est créée par lot). */
+const IMPOSTOR_QUAD = new THREE.BufferGeometry();
+function disposeDecorMesh(m: THREE.InstancedMesh): void {
+  if (m.geometry.userData['ownedByBatch']) m.geometry.dispose();
+  m.dispose();
+}
 const LAMP_GLASS_COLOR = new THREE.Color(0xffc887);
 
 export class RoadNetworkRenderer implements IRoadRenderer {
@@ -81,6 +92,9 @@ export class RoadNetworkRenderer implements IRoadRenderer {
   /** Prototypes de décor : par asset, par LOD, liste (géométrie, matériau). */
   private readonly decorProto = new Map<string, { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[][]>();
   private decorReady: Promise<void> = Promise.resolve();
+  private readonly treeImpostor: ((assetId: string) => THREE.Material | null) | null;
+  private avoid: number[] = [];
+  private avoidKeys = new Map<number, string>();
   private night = 0;
   private readonly lampGlass: THREE.MeshStandardMaterial[] = [];
   private readonly poolMaterial: THREE.MeshBasicMaterial;
@@ -106,6 +120,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
     scene.add(this.group);
     this.net = new RoadNetwork({ heightAt, waterLevel: deps.waterLevel ?? WATER_LEVEL });
     this.lib = deps.lib ?? null;
+    this.treeImpostor = deps.treeImpostor ?? null;
     this.matLib = deps.materials ?? (deps.lib ? new MaterialLibrary(deps.lib.catalog, new URL('.', deps.lib.url('catalog.json'))) : null);
     this.initMaterials();
     this.poolGeometry = new THREE.PlaneGeometry(1, 1);
@@ -148,7 +163,14 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       const lods: { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[][] = [];
       // Proche : LOD0 (LOD1 pour les arbres, très denses) ; loin : dernier LOD.
       const near = a.category === 'tree' ? Math.min(1, a.lods.length - 1) : 0;
-      for (const lod of [near, a.lods.length - 1]) {
+      const far = a.lods.length - 1;
+      const imp = a.category === 'tree' && far > near && (a.lods[far]?.triangles ?? 1e9) <= 16 ? this.treeImpostor?.(id) ?? null : null;
+      for (const lod of [near, far]) {
+        if (imp && lod === far) {
+          // Loin : imposteur de la végétation (quad orienté caméra ; la géométrie est créée par lot, voir rebuildDecor).
+          lods.push([{ geometry: IMPOSTOR_QUAD, material: imp }]);
+          continue;
+        }
         const root = await lib.load(id, lod);
         root.updateMatrixWorld(true);
         const parts: { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[] = [];
@@ -330,11 +352,41 @@ export class RoadNetworkRenderer implements IRoadRenderer {
     }
   }
 
+  /**
+   * Obstacles que le décor routier doit éviter : pieds des mâts de feux tricolores (x, z) et nœud de leur
+   * carrefour. Seuls les carrefours dont les obstacles ont changé sont remaillés (lecture seule de la
+   * disposition des feux : rien n'est modifié côté feux).
+   */
+  setDecorObstacles(xz: ArrayLike<number>, nodeIds: ArrayLike<number>): void {
+    const next = new Map<number, string>();
+    const flat: number[] = [];
+    for (let i = 0; i < nodeIds.length; i++) {
+      const x = xz[i * 2]!, z = xz[i * 2 + 1]!;
+      flat.push(x, z);
+      const n = nodeIds[i]!;
+      next.set(n, `${next.get(n) ?? ''}${x.toFixed(1)},${z.toFixed(1)};`);
+    }
+    const changed: number[] = [];
+    for (const [n, k] of next) if (this.avoidKeys.get(n) !== k) changed.push(n);
+    for (const n of this.avoidKeys.keys()) if (!next.has(n)) changed.push(n);
+    this.avoid = flat;
+    this.avoidKeys = next;
+    for (const n of changed) if (this.net.hasNode(n)) this.markNode(n);
+    this.flush();
+  }
+
+  /** Décor posé (diagnostic, tests) : type et position de chaque élément. */
+  decorItems(): { kind: DecorKind; x: number; z: number }[] {
+    const res: { kind: DecorKind; x: number; z: number }[] = [];
+    for (const c of this.chunks.values()) for (const d of c.decor) res.push({ kind: d.kind, x: d.x, z: d.z });
+    return res;
+  }
+
   /** Reconstruit les chunks en attente. */
   flush(): void {
     if (this.dirty.size === 0) return;
     const t0 = performance.now();
-    const ctx: BuildContext = { net: this.net, junctions: new Map() };
+    const ctx: BuildContext = { net: this.net, junctions: new Map(), avoid: this.avoid };
     for (const key of this.dirty) {
       const c = this.chunks.get(key);
       if (!c) continue;
@@ -372,7 +424,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
   }
 
   private rebuildDecor(c: Chunk): void {
-    for (const b of c.batches) for (const lod of b.meshes) for (const m of lod) { c.group.remove(m); m.dispose(); }
+    for (const b of c.batches) for (const lod of b.meshes) for (const m of lod) { c.group.remove(m); disposeDecorMesh(m); }
     c.batches = [];
     if (c.pools) { c.group.remove(c.pools); c.pools.dispose(); c.pools = null; }
     if (this.decorProto.size === 0 || c.decor.length === 0) return;
@@ -400,13 +452,24 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       proto.forEach((parts, lod) => {
         const list: THREE.InstancedMesh[] = [];
         for (const p of parts) {
-          const im = new THREE.InstancedMesh(p.geometry, p.material, items.length);
+          const impostor = p.geometry === IMPOSTOR_QUAD;
+          let geometry = p.geometry;
+          if (impostor) {
+            // Quad propre au lot : l'attribut instancié de teinte (blanc) a la taille du lot.
+            geometry = new THREE.PlaneGeometry(2, 2);
+            geometry.setAttribute('instanceTint', new THREE.InstancedBufferAttribute(new Float32Array(items.length * 3).fill(1), 3));
+            geometry.userData['ownedByBatch'] = true;
+          }
+          const im = new THREE.InstancedMesh(geometry, p.material, items.length);
           im.instanceMatrix = matrix; // matrices partagées entre LOD et sous-maillages
-          im.name = `roads_decor_${id}_lod${lod}`;
-          im.castShadow = true;
-          im.receiveShadow = true;
+          im.name = `roads_decor_${id}_${impostor ? 'imposteur' : `lod${lod}`}`;
+          im.castShadow = !impostor;
+          im.receiveShadow = !impostor;
           im.frustumCulled = true;
-          im.computeBoundingSphere();
+          // Imposteur : le quad est déplacé par le shader ; on reprend la sphère englobante du LOD détaillé.
+          const ref = impostor ? batch.meshes[0]?.[0] : undefined;
+          if (ref?.boundingSphere) im.boundingSphere = ref.boundingSphere.clone();
+          else im.computeBoundingSphere();
           im.visible = lod === 0;
           c.group.add(im);
           list.push(im);
@@ -447,7 +510,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
 
   private disposeChunk(c: Chunk): void {
     for (const m of c.layerMeshes) m.geometry.dispose();
-    for (const b of c.batches) for (const lod of b.meshes) for (const m of lod) m.dispose();
+    for (const b of c.batches) for (const lod of b.meshes) for (const m of lod) disposeDecorMesh(m);
     c.pools?.dispose();
     c.group.removeFromParent();
     this.chunks.delete(c.key);
