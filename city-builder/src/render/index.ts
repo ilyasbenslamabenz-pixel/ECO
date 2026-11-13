@@ -8,7 +8,8 @@
  *  - végétation : VegetationSystem (semis déterministe, instancié, imposteurs lointains) ;
  *  - routes : RoadNetworkRenderer (tronçons courbes, carrefours, ponts, décor instancié, nuit) ;
  *  - bâtiments : InstancedBuildingRenderer (GLB LOD0/1/2 instanciés, culling, fenêtres la nuit) ;
- *  - véhicules : InstancedVehicleRenderer (trafic interpolé, LOD, phares la nuit).
+ *  - véhicules : InstancedVehicleRenderer (trafic interpolé, LOD, phares la nuit) ;
+ *  - feux tricolores : TrafficSignalRenderer (poteaux / potences et têtes instanciés, état de la simulation).
  */
 import * as THREE from 'three';
 import type { AssetCatalog } from '../shared/catalog';
@@ -28,6 +29,7 @@ import { RoadNetworkRenderer } from './roads/renderer';
 import { initScene, type RenderContext } from './scene';
 import { SkySystem } from './sky/sky-system';
 import { TerrainSystem } from './terrain/renderer';
+import { TrafficSignalRenderer } from './traffic/signals';
 import { InstancedVehicleRenderer } from './vehicles/renderer';
 import { WaterSystem } from './water/water-system';
 
@@ -52,6 +54,7 @@ export interface RenderHandle {
   roads: RoadNetworkRenderer;
   buildings: InstancedBuildingRenderer;
   vehicles: InstancedVehicleRenderer;
+  signals: TrafficSignalRenderer;
   veg: VegetationSystem;
   /** Heure simulée -> soleil, lune, fenêtres et lampadaires. */
   setTimeOfDay(hour: number): void;
@@ -80,6 +83,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
   buildings.attachCamera(ctx.camera);
   const vehicles = new InstancedVehicleRenderer(ctx.scene, lib);
   vehicles.attachCamera(ctx.camera);
+  const signals = new TrafficSignalRenderer(ctx.scene);
   const buildingIds = new Set<number>();
   const assets = new Map(catalog.assets.map((a) => [a.id, a]));
   let lastHour = -1;
@@ -108,7 +112,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
   };
 
   const handle: RenderHandle = {
-    ctx, sky, terrain, water, roads, buildings, vehicles, veg,
+    ctx, sky, terrain, water, roads, buildings, vehicles, signals, veg,
     setTimeOfDay(hour) {
       if (Math.abs(hour - lastHour) < 1 / 120) return;
       lastHour = hour;
@@ -118,6 +122,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
       buildings.setNight(n);
       roads.setNight(n);
       vehicles.setNight(n);
+      signals.setNight(n);
     },
     followView(p) {
       sky.followView(p.targetX, p.targetY, p.targetZ, Math.min(900, Math.max(60, p.distance)));
@@ -130,6 +135,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
       buildings.remove([...buildingIds]);
       buildingIds.clear();
       vehicles.setVehicles(new Float32Array(0), new Uint16Array(0), 0);
+      signals.clear(); // la disposition des feux arrive avec le delta suivant
       roads.addRoads(s.roads.nodes, s.roads.edges);
       clearVegForRoads(s.roads.nodes, s.roads.edges);
       buildings.add(s.buildings);
@@ -154,6 +160,7 @@ export async function initRender(canvas: HTMLCanvasElement, lib: AssetLibrary, c
         for (const b of d.buildingsAdded) buildingIds.add(b.id);
         clearVegForBuildings(d.buildingsAdded);
       }
+      if (d.signals) signals.apply(d.signals);
       if (d.vehicles) vehicles.setFrame(d.vehicles);
       else if (vehicles.count > 0) vehicles.setVehicles(new Float32Array(0), new Uint16Array(0), 0);
       handle.setTimeOfDay(d.stats.date.hour + d.stats.date.minute / 60);

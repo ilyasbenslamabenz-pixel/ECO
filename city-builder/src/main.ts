@@ -67,6 +67,14 @@ interface DebugInfo {
   snapshotStats?: SimStats;
   /** Projection écran (px CSS) d'un point au sol (e2e : clics souris à des positions monde précises). */
   worldToScreen?: (x: number, z: number) => { x: number; y: number };
+  /** Feux tricolores dessinés (e2e) : bras, positions, états, instances. */
+  signals?: () => unknown;
+  /** Copie de la dernière trame véhicules reçue (e2e : véhicules arrêtés aux feux). */
+  lastVehicles?: { tick: number; ids: number[]; positions: number[] } | null;
+  /** Active la copie `lastVehicles` (désactivée par défaut : aucune allocation en jeu). */
+  trackVehicles?: boolean;
+  /** Caméra rue placée en (x, z) regardant (lookX, lookZ). */
+  streetLook?: (x: number, z: number, lookX: number, lookZ: number) => void;
 }
 declare global { interface Window { __aube: DebugInfo } }
 
@@ -157,6 +165,11 @@ async function boot(): Promise<void> {
   const input = initInput(render.ctx.camera, canvas, (x, z) => render.terrain.heightAt(x, z));
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
+  debug.signals = () => render.signals.debug();
+  debug.streetLook = (x, z, lx, lz) => {
+    input.camera.setStreetPosition(x, z, Math.atan2(-(lx - x), -(lz - z)));
+    if (input.camera.mode !== 'street') input.camera.setMode('street');
+  };
   debug.lookAt = (x, z, distance) => {
     if (input.camera.mode === 'street') input.camera.setMode('aerial');
     input.camera.setPose({ targetX: x, targetZ: z, targetY: render.terrain.heightAt(x, z), distance });
@@ -239,6 +252,8 @@ async function boot(): Promise<void> {
   });
   b.onDelta((d) => {
     debug.deltas++;
+    // Copie pour les tests (les tampons sont ensuite confiés au rendu) : quelques centaines de nombres par trame.
+    if (debug.trackVehicles && d.vehicles) debug.lastVehicles = { tick: d.tick, ids: Array.from(d.vehicles.ids ?? []), positions: Array.from(d.vehicles.positions.subarray(0, d.vehicles.count * 4)) };
     render.applyDelta(d);
     state.stats = d.stats;
     debug.lastStats = d.stats;
