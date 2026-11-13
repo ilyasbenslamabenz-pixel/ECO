@@ -9,6 +9,7 @@ import { circulationSaveSection } from './circulation';
 import { electriciteSaveSection } from './electricite';
 import { pietonsSaveSection } from './pietons';
 import { municipalSaveSection } from './municipal';
+import { zonageSaveSection } from './zonage';
 import type { SaveSectionSpec } from './types';
 
 export type { SaveSectionSpec } from './types';
@@ -21,4 +22,5 @@ export const SAVE_SECTIONS: readonly SaveSectionSpec<unknown>[] = [
   chantiersSaveSection,
   municipalSaveSection,
   electriciteSaveSection,
+  zonageSaveSection,
 ];

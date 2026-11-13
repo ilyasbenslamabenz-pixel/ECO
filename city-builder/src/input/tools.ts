@@ -57,6 +57,9 @@ export class ToolController implements IToolController, PointerToolSink {
   private roadStartedThisGesture = false;
   private pendingTouchConfirm = false;
   private disposers: (() => void)[] = [];
+  /** Outil d'un module (ex. zonage) qui capture temporairement les gestes ; null = machine à états. */
+  private override: PointerToolSink | null = null;
+  private overrideRelease: (() => void) | null = null;
 
   get activeTool(): ToolId { return this.deps?.machine.tool ?? 'select'; }
   get machine(): ConstructionTools | null { return this.deps?.machine ?? null; }
@@ -85,14 +88,41 @@ export class ToolController implements IToolController, PointerToolSink {
 
   setTool(tool: ToolId, options?: { roadType?: RoadKindId; assetId?: string }): void {
     if (!this.deps) return;
+    if (tool !== 'select' && this.override) this.setPointerOverride(null);
     this.hooks?.touchConfirm(null);
     this.pendingTouchConfirm = false;
     if (this.deps.machine.setTool(tool, options) && tool !== 'select') this.select(null);
   }
 
+  /**
+   * Point d'extension (phase 2B) : un outil de module capture les gestes (survol, appui, glisser, relâcher)
+   * à la place de la machine à états — un doigt peint, deux doigts gardent la caméra. L'outil courant revient
+   * à la Sélection ; choisir un autre outil (ou Échap) rend la main et appelle `onRelease`.
+   */
+  setPointerOverride(sink: PointerToolSink | null, onRelease?: () => void): void {
+    const prev = this.overrideRelease;
+    this.override = sink;
+    this.overrideRelease = sink ? onRelease ?? null : null;
+    this.pendingHover = null;
+    this.pendingTouchConfirm = false;
+    this.hooks?.touchConfirm(null);
+    this.hooks?.cursorTag(null, 'info', 0, 0);
+    if (sink && this.deps) {
+      if (this.deps.machine.tool !== 'select') this.deps.machine.setTool('select');
+      this.select(null);
+    }
+    if (!sink && prev) prev();
+  }
+
+  get pointerOverride(): PointerToolSink | null { return this.override; }
+
+  /** Point du sol sous un point de l'écran (px CSS), null hors terrain. */
+  groundAt(sx: number, sy: number): { x: number; y: number; z: number } | null { return this.deps?.camera.groundAt(sx, sy) ?? null; }
+
   /* ----------------------------- PointerToolSink ----------------------------- */
 
-  capturesPrimary(_type: string): boolean {
+  capturesPrimary(type: string): boolean {
+    if (this.override) return this.override.capturesPrimary(type);
     const t = this.activeTool;
     return !!this.deps && (t === 'building' || t === 'road' || t === 'bulldoze');
   }
@@ -112,12 +142,14 @@ export class ToolController implements IToolController, PointerToolSink {
 
   /** Survol : mémorisé puis traité une fois par image dans update() (picking + snapping coûtent O(n)). */
   hover(sx: number, sy: number, type: string): void {
+    if (this.override) { this.override.hover(sx, sy, type); return; }
     if (this.pendingTouchConfirm) return;
     this.pendingHover = { x: sx, y: sy, type };
   }
   private pendingHover: { x: number; y: number; type: string } | null = null;
 
   down(sx: number, sy: number, type: string): void {
+    if (this.override) { this.override.down(sx, sy, type); return; }
     const d = this.deps;
     if (!d) return;
     this.hooks?.touchConfirm(null);
@@ -131,9 +163,13 @@ export class ToolController implements IToolController, PointerToolSink {
     }
   }
 
-  move(sx: number, sy: number, type: string): void { this.pendingHover = { x: sx, y: sy, type }; }
+  move(sx: number, sy: number, type: string): void {
+    if (this.override) { this.override.move(sx, sy, type); return; }
+    this.pendingHover = { x: sx, y: sy, type };
+  }
 
   up(sx: number, sy: number, type: string, tap: boolean): void {
+    if (this.override) { this.override.up(sx, sy, type, tap); return; }
     const d = this.deps;
     if (!d) return;
     this.pendingHover = null;
@@ -158,11 +194,13 @@ export class ToolController implements IToolController, PointerToolSink {
   }
 
   cancel(): void {
+    if (this.override) { this.override.cancel(); return; }
     this.pendingTouchConfirm = false;
     this.hooks?.touchConfirm(null);
   }
 
   secondary(): void {
+    if (this.override) { this.override.secondary(); return; }
     this.deps?.machine.secondary();
     this.hooks?.touchConfirm(null);
   }
@@ -201,6 +239,7 @@ export class ToolController implements IToolController, PointerToolSink {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     switch (e.code) {
       case 'Escape':
+        if (this.override) { consume(); this.setPointerOverride(null); return; }
         if (this.pendingTouchConfirm) { consume(); this.cancelTouch(); return; }
         if (m.tool !== 'select' || m.draft.phase !== 'idle') { consume(); m.secondary(); return; }
         if (this.selected) { consume(); this.select(null); return; }

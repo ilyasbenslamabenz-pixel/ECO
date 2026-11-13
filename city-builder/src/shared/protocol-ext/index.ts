@@ -9,6 +9,7 @@ import type { ChantiersCommands, ChantiersDelta, ChantiersSnapshot } from './cha
 import type { CirculationCommands, CirculationDelta, CirculationSnapshot } from './circulation';
 import type { PietonsCommands, PietonsDelta, PietonsSnapshot } from './pietons';
 export type * from './electricite';
+export type * from './zonage';
 
 export type * from './batiments';
 export type * from './circulation';

@@ -12,6 +12,7 @@ import { SAVE_SECTIONS } from '../../src/sim/save-sections';
 import { PHASE2_MODULES } from '../../src/shared/protocol-ext';
 import { ATMOSPHERE_MODULES } from '../../src/shared/weather/types';
 import { ELECTRICITE_MODULES } from '../../src/shared/power/types';
+import { ZONAGE_MODULES } from '../../src/shared/protocol-ext/zonage';
 import { RENDER_PLUGINS } from '../../src/render/plugins';
 import { UI_PANELS } from '../../src/ui/panels/index';
 import { PROTOCOL_VERSION } from '../../src/shared/constants';
@@ -85,7 +86,8 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
   // Modules d'atmosphère (phase 2C, tests/weather) : enregistrés en simulation et rendu, testés à part.
   // Électricité (phase 2B, tests/electricite) : enregistrée partout, testée à part.
   const all = [...PHASE2_MODULES, ...ATMOSPHERE_MODULES];
-  const elec = [...ELECTRICITE_MODULES];
+  // Zonage (phase 2B, tests/zonage) : enregistré partout, inerte sans zone (vérifié ci-dessous), testé à part.
+  const elec = [...ELECTRICITE_MODULES, ...ZONAGE_MODULES];
   assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...elec]);
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...elec]);
   assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...elec]);

@@ -180,6 +180,11 @@ par la graine de la partie et l'id, sauvegardé avec la section : il ne perturbe
 `provide` / `use` (services inter-modules, ex. API des feux publiée par la circulation pour les piétons). Aucun objet
 interne mutable (économie, planificateur, PRNG de base) n'est exposé ; besoin supplémentaire → `docs/requests/<module>.md`.
 
+**Écriture minimale** (`PluginContext.development`, phase 2B) : promotion privée — `place({ assetId, x, z, rot, variant? })`
+avec les contrôles de `placeBuilding` mais sans coût pour la ville, `demolish(id)` sans remboursement ni notification.
+Utilisée par le zonage (`docs/ZONAGE.md`). Côté interface : tiroir fourni par un module (`DrawerProvider`,
+`src/ui/buildbar.ts`) et capture temporaire des gestes (`ToolController.setPointerOverride`, `src/input/tools.ts`).
+
 **Protocole** (ajouts rétrocompatibles) : `DeltaMessage.ext?` (clé absente si aucun module n'envoie rien),
 `SnapshotMessage.ext?`, commande `pluginCommand { plugin, name, payload? } -> { data? }` (forme validée par
 `validateCommandMessage` ; module non enregistré → `INVALID_ARGS « Module inconnu »` ; module sans commandes →

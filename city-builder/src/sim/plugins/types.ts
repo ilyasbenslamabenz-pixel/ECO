@@ -116,6 +116,20 @@ export interface PluginEconomy {
   lastMonth(): MonthRecord | undefined;
 }
 
+/** Résultat d'une écriture de promotion privée (`PluginDevelopment`). */
+export type DevelopmentResult<T> = { ok: true; data: T } | { ok: false; code: string; message: string };
+
+/**
+ * ÉCRITURE minimale offerte aux modules : la « promotion privée » (croissance des zones, phase 2B).
+ * Mêmes contrôles que la commande `placeBuilding` du joueur (carte, collisions, route, pente, eau), mais la
+ * construction n'est PAS payée par la ville (promoteur privé) et la démolition ne rembourse rien et ne
+ * notifie pas. Le bâtiment posé est un bâtiment ordinaire (entretien, habitants, emplois, deltas, chantiers).
+ */
+export interface PluginDevelopment {
+  place(a: { assetId: string; x: number; z: number; rot: number; variant?: number }): DevelopmentResult<{ buildingId: number }>;
+  demolish(buildingId: number): DevelopmentResult<Record<string, never>>;
+}
+
 /**
  * Façade de la simulation passée à chaque crochet. Lecture seule, minimale et typée : les modules
  * ne reçoivent aucun objet interne mutable de la simulation (économie, planificateur, PRNG de base…).
@@ -148,6 +162,8 @@ export interface PluginContext {
   readonly rng: Rng;
   /** Notification joueur (bandeau de l'interface, via le rapport périodique). */
   notify(level: SimNotice['level'], message: string): void;
+  /** Promotion privée (écriture minimale, voir `PluginDevelopment`) ; absente des façades de test. */
+  readonly development?: PluginDevelopment;
   /**
    * Services inter-modules : un module publie une API (ex. la circulation publie l'état des feux pour les
    * piétons) ; un autre la consulte. `use` renvoie undefined si le service n'existe pas (module absent) :

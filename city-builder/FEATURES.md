@@ -72,7 +72,7 @@ Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration)
 | Fonctionnalité | Phase |
 |---|---|
 | Fusion des matériaux par bâtiment (atlas) pour réduire les appels de rendu ; culling par chunk des bâtiments | 2 |
-| Zonage (R/C/I) et croissance automatique ; terraformation (`terraform` renvoie NOT_IMPLEMENTED) | 2 |
+| Terraformation (`terraform` renvoie NOT_IMPLEMENTED) ; zones agricole et spéciales | 2 |
 | Inspection détaillée d'un habitant / d'un bâtiment (`inspectBuilding`, `inspectCitizen` existent côté simulation) | 2 |
 | Lignes de bus, piétons, feux stop des véhicules, gyrophares | 3 |
 | Échangeurs, passages dénivelés | 4 |
