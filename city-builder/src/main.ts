@@ -131,7 +131,7 @@ async function boot(): Promise<void> {
   // Journal du lancement précédent : affiché si la page a été fermée par un plantage (chargement ou partie).
   const prevTrace = previousTrace();
   const crashReport = prevTrace && (crashedBefore || prevTrace.playing) && prevTrace.steps.length
-    ? `Arrêt précédent (${prevTrace.playing ? 'en jeu' : 'au chargement'}) après : ${prevTrace.steps.slice(-3).join(' › ')}` : null;
+    ? `Arrêt précédent (${prevTrace.playing ? 'après le chargement' : 'au chargement'}) après : ${prevTrace.steps.slice(-3).join(' › ')}` : null;
   traceStart();
   tracePlaying(false);
   const enteredSafeMode = crashedBefore && !isSafeMode();
@@ -661,6 +661,10 @@ async function boot(): Promise<void> {
   else await refreshMenu();
   debug.ready = true;
   traceStep('prêt');
+  // Surveillance continue (menu compris) : un plantage après le chargement est aussi signalé au relancement.
+  tracePlaying(true);
+  let beat = 0;
+  window.setInterval(() => { beat += 20; traceStep(`${state.inGame ? 'en jeu' : 'menu'} ${beat}s`); }, 20000);
   bootDone();
   if (crashReport) { console.warn(crashReport); ui.toast(crashReport, 'error'); }
   if (enteredSafeMode) ui.toast('Le chargement précédent a échoué : mode sûr activé (qualité basse, affichage allégé). Réglages pour revenir à la qualité normale.', 'info');

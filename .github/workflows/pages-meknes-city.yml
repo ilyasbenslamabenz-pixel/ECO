@@ -7,7 +7,7 @@ name: Publier Meknes City sur GitHub Pages
 
 on:
   push:
-    branches: [claude/amazing-meitner-vtryts]
+    branches: [claude/amazing-meitner-vtryts, claude/test-iphone]
     paths: ["city-builder/**", "moon-dust/**", ".github/workflows/pages-meknes-city.yml"]
   workflow_dispatch:
 
@@ -23,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: claude/amazing-meitner-vtryts
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -44,11 +47,20 @@ jobs:
         working-directory: city-builder
         run: npm run build
 
+      - name: Compiler la version de test (branche claude/test-iphone -> /test/)
+        run: |
+          if git ls-remote --exit-code --heads origin claude/test-iphone >/dev/null; then
+            git fetch -q origin claude/test-iphone
+            git worktree add -q ../test-iphone FETCH_HEAD
+            cd ../test-iphone/city-builder && npm ci --no-audit --no-fund && npm run build
+          fi
+
       - name: Assembler le site
         run: |
           mkdir -p _site
           cp -r city-builder/dist/. _site/
           if [ -d moon-dust ]; then mkdir -p _site/moon-dust && cp -r moon-dust/. _site/moon-dust/; fi
+          if [ -d ../test-iphone/city-builder/dist ]; then mkdir -p _site/test && cp -r ../test-iphone/city-builder/dist/. _site/test/; fi
           touch _site/.nojekyll
           du -sh _site
 
