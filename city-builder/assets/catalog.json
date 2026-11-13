@@ -23347,6 +23347,550 @@
         "modele:aero_tour_controle",
         "description:piste orientable de 900 m, aérogare, tour, hangar ; terrain plat ; servitudes de hauteur dans l'axe"
       ]
+    },
+    {
+      "id": "eau_station_pompage",
+      "nameFr": "Station de pompage",
+      "category": "public",
+      "lods": [
+        {
+          "file": "models/water-network/eau_station_pompage_lod0.glb",
+          "maxDistance": 180,
+          "triangles": 6112
+        },
+        {
+          "file": "models/water-network/eau_station_pompage_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 1339
+        },
+        {
+          "file": "models/water-network/eau_station_pompage_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 432
+        }
+      ],
+      "dimensions": {
+        "width": 23.28,
+        "depth": 23.04,
+        "height": 10.41
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 3
+      },
+      "cost": 420000,
+      "upkeepPerMonth": 650,
+      "capacity": {
+        "residents": 0,
+        "jobs": 6
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 11.52,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Brique rouge, ardoise"
+        },
+        {
+          "id": "pierre",
+          "nameFr": "Moellons et tuiles",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "pierre_moellons",
+              "color": "#e9e2d4"
+            },
+            "toiture": {
+              "textureSet": "toit_tuiles"
+            }
+          }
+        },
+        {
+          "id": "enduit",
+          "nameFr": "Enduit clair, menuiseries vertes",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "enduit_creme"
+            },
+            "menuiserie": {
+              "color": "#3f6b4a"
+            },
+            "porte": {
+              "color": "#3f6b4a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "brique_rouge",
+        "enduit_blanc",
+        "enduit_creme",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_moellons",
+        "pierre_taille",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "toit_ardoise",
+        "toit_tole_ondulee",
+        "toit_tuiles",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/water-network/models.ts#stationPompage",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "eau",
+        "pompage",
+        "captage",
+        "service:eau",
+        "reseau:eau",
+        "style:equipement_eau",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "eau_usine_potabilisation",
+      "nameFr": "Usine de potabilisation",
+      "category": "public",
+      "lods": [
+        {
+          "file": "models/water-network/eau_usine_potabilisation_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 9108
+        },
+        {
+          "file": "models/water-network/eau_usine_potabilisation_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 2613
+        },
+        {
+          "file": "models/water-network/eau_usine_potabilisation_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 668
+        }
+      ],
+      "dimensions": {
+        "width": 39.28,
+        "depth": 32.04,
+        "height": 9.23
+      },
+      "footprint": {
+        "tilesX": 5,
+        "tilesZ": 4
+      },
+      "cost": 1350000,
+      "upkeepPerMonth": 1600,
+      "capacity": {
+        "residents": 0,
+        "jobs": 22
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 16.02,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Bardage gris clair, menuiseries bleues"
+        },
+        {
+          "id": "brique",
+          "nameFr": "Parement brique",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_parement",
+              "color": "#ffffff"
+            }
+          }
+        },
+        {
+          "id": "sombre",
+          "nameFr": "Panneaux sombres, menuiseries cuivre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "panneaux_facade_sombres",
+              "color": "#ffffff"
+            },
+            "menuiserie": {
+              "color": "#9a6a3c"
+            },
+            "encadrement": {
+              "color": "#9a6a3c"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_composite",
+        "beton_facade",
+        "brique_parement",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "panneaux_facade_sombres",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "terrain_herbe",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/water-network/models.ts#usinePotabilisation",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "eau",
+        "potabilisation",
+        "traitement",
+        "service:eau",
+        "reseau:eau",
+        "style:equipement_eau",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "eau_chateau_eau",
+      "nameFr": "Château d'eau",
+      "category": "public",
+      "lods": [
+        {
+          "file": "models/water-network/eau_chateau_eau_lod0.glb",
+          "maxDistance": 260,
+          "triangles": 4856
+        },
+        {
+          "file": "models/water-network/eau_chateau_eau_lod1.glb",
+          "maxDistance": 1100,
+          "triangles": 1414
+        },
+        {
+          "file": "models/water-network/eau_chateau_eau_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 276
+        }
+      ],
+      "dimensions": {
+        "width": 15.6,
+        "depth": 15.6,
+        "height": 36.4
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 380000,
+      "upkeepPerMonth": 300,
+      "capacity": {
+        "residents": 0,
+        "jobs": 1
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 7.8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Béton clair, cuve bleu ciel"
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Cuve blanche à bandeau bleu",
+          "materialOverrides": {
+            "facade_b": {
+              "textureSet": "enduit_blanc",
+              "color": "#f4f4f0"
+            }
+          }
+        },
+        {
+          "id": "terre",
+          "nameFr": "Béton ocré, cuve sable",
+          "materialOverrides": {
+            "facade": {
+              "color": "#e2cfae"
+            },
+            "facade_b": {
+              "color": "#d8b98a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "toit_tole_ondulee",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/water-network/models.ts#chateauEau",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "eau",
+        "reservoir",
+        "chateau_eau",
+        "repere",
+        "service:eau",
+        "reseau:eau",
+        "style:equipement_eau",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
+      "id": "eau_station_epuration",
+      "nameFr": "Station d'épuration",
+      "category": "public",
+      "lods": [
+        {
+          "file": "models/water-network/eau_station_epuration_lod0.glb",
+          "maxDistance": 240,
+          "triangles": 10068
+        },
+        {
+          "file": "models/water-network/eau_station_epuration_lod1.glb",
+          "maxDistance": 950,
+          "triangles": 2477
+        },
+        {
+          "file": "models/water-network/eau_station_epuration_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 500
+        }
+      ],
+      "dimensions": {
+        "width": 47.68,
+        "depth": 40.14,
+        "height": 9.46
+      },
+      "footprint": {
+        "tilesX": 6,
+        "tilesZ": 5
+      },
+      "cost": 1600000,
+      "upkeepPerMonth": 1900,
+      "capacity": {
+        "residents": 0,
+        "jobs": 18
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 20.07,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Enduit crème, menuiseries vert olive"
+        },
+        {
+          "id": "bois",
+          "nameFr": "Bardage bois",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "bardage_bois",
+              "color": "#e8d2b4"
+            }
+          }
+        },
+        {
+          "id": "beton",
+          "nameFr": "Béton brut, menuiseries rouges",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "beton_facade",
+              "color": "#dad6cf"
+            },
+            "menuiserie": {
+              "color": "#9e3b2c"
+            },
+            "porte": {
+              "color": "#9e3b2c"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_bois",
+        "beton_facade",
+        "enduit_blanc",
+        "enduit_creme",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "toit_bac_acier",
+        "toit_tole_ondulee"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/water-network/models.ts#stationEpuration",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "eau",
+        "assainissement",
+        "epuration",
+        "service:assainissement",
+        "reseau:egouts",
+        "odeurs:1",
+        "style:equipement_eau",
+        "densite:moyenne",
+        "genere"
+      ]
+    },
+    {
+      "id": "eau_emissaire",
+      "nameFr": "Émissaire de rejet",
+      "category": "public",
+      "lods": [
+        {
+          "file": "models/water-network/eau_emissaire_lod0.glb",
+          "maxDistance": 150,
+          "triangles": 2032
+        },
+        {
+          "file": "models/water-network/eau_emissaire_lod1.glb",
+          "maxDistance": 600,
+          "triangles": 664
+        },
+        {
+          "file": "models/water-network/eau_emissaire_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 160
+        }
+      ],
+      "dimensions": {
+        "width": 15.28,
+        "depth": 16,
+        "height": 3.74
+      },
+      "footprint": {
+        "tilesX": 2,
+        "tilesZ": 2
+      },
+      "cost": 120000,
+      "upkeepPerMonth": 90,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Béton"
+        },
+        {
+          "id": "pierre",
+          "nameFr": "Parement de pierre",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "pierre_rustique",
+              "color": "#ddd5c5"
+            }
+          }
+        },
+        {
+          "id": "brique",
+          "nameFr": "Brique, conduite verte",
+          "materialOverrides": {
+            "facade": {
+              "textureSet": "brique_rouge",
+              "color": "#ffffff"
+            },
+            "conduite_b": {
+              "color": "#3f6b4a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "brique_rouge",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_rustique",
+        "pierre_taille",
+        "sol_beton_brut",
+        "terrain_gravier"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/water-network/models.ts#emissaire",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "eau",
+        "assainissement",
+        "emissaire",
+        "rejet",
+        "service:assainissement",
+        "reseau:egouts",
+        "style:equipement_eau",
+        "densite:faible",
+        "genere"
+      ]
     }
   ],
   "textureSets": [

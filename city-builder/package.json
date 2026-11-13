@@ -11,7 +11,7 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test tests/unit/*.test.ts tests/sim/*.test.ts tests/roads/*.test.ts tests/terrain/*.test.ts tests/vehicles/*.test.ts tests/construction/*.test.ts tests/integration/*.test.ts tests/plugins/*.test.ts tests/batiments/*.test.ts tests/circulation/*.test.ts tests/pietons/*.test.ts tests/chantiers/*.test.ts tests/props/*.test.ts tests/weather/*.test.ts tests/municipal/*.test.ts tests/save/*.test.ts tests/electricite/*.test.ts tests/dechets/*.test.ts tests/hubs/*.test.ts",
+    "test": "tsx --test tests/unit/*.test.ts tests/sim/*.test.ts tests/roads/*.test.ts tests/terrain/*.test.ts tests/vehicles/*.test.ts tests/construction/*.test.ts tests/integration/*.test.ts tests/plugins/*.test.ts tests/batiments/*.test.ts tests/circulation/*.test.ts tests/pietons/*.test.ts tests/chantiers/*.test.ts tests/props/*.test.ts tests/weather/*.test.ts tests/municipal/*.test.ts tests/save/*.test.ts tests/electricite/*.test.ts tests/dechets/*.test.ts tests/hubs/*.test.ts tests/eau/*.test.ts",
     "assets": "tsx tools/pipeline.ts",
     "validate:assets": "tsx tools/validate-models.ts",
     "validate:visual": "node tests/e2e/validate-visual.mjs",
@@ -44,7 +44,9 @@
     "circulation:bench": "tsx tests/circulation/bench.ts",
     "power:build": "tsx tools/power/build.ts",
     "e2e:electricite": "node tests/electricite/e2e.mjs",
-    "waste:build": "tsx tools/waste/build.ts"
+    "waste:build": "tsx tools/waste/build.ts",
+    "eau:models": "tsx tools/water-network/build.ts",
+    "eau:captures": "node tests/eau/capture.mjs"
   },
   "dependencies": {
     "three": "0.187.0"

@@ -11,6 +11,7 @@ import type { PietonsCommands, PietonsDelta, PietonsSnapshot } from './pietons';
 export type * from './electricite';
 import type { DechetsCommands, DechetsDelta, DechetsSnapshot } from './dechets';
 import type { HubsCommands, HubsDelta, HubsSnapshot } from './hubs';
+import type { EauCommands, EauDelta, EauSnapshot } from './eau';
 
 export type * from './batiments';
 export type * from './circulation';
@@ -18,9 +19,10 @@ export type * from './pietons';
 export type * from './chantiers';
 export type * from './dechets';
 export type * from './hubs';
+export type * from './eau';
 
 /** Identifiants des modules de phase 2 (= `SimPlugin.id`, `RenderPlugin.id`, `UiPanel.id`). */
-export const PHASE2_MODULES = ['batiments', 'circulation', 'pietons', 'chantiers', 'dechets', 'hubs'] as const;
+export const PHASE2_MODULES = ['batiments', 'circulation', 'pietons', 'chantiers', 'dechets', 'hubs', 'eau'] as const;
 export type Phase2ModuleId = (typeof PHASE2_MODULES)[number];
 
 export interface PluginDeltaMap {
@@ -30,6 +32,7 @@ export interface PluginDeltaMap {
   chantiers: ChantiersDelta;
   dechets: DechetsDelta;
   hubs: HubsDelta;
+  eau: EauDelta;
 }
 
 export interface PluginSnapshotMap {
@@ -39,6 +42,7 @@ export interface PluginSnapshotMap {
   chantiers: ChantiersSnapshot;
   dechets: DechetsSnapshot;
   hubs: HubsSnapshot;
+  eau: EauSnapshot;
 }
 
 export interface PluginCommandMaps {
@@ -48,6 +52,7 @@ export interface PluginCommandMaps {
   chantiers: ChantiersCommands;
   dechets: DechetsCommands;
   hubs: HubsCommands;
+  eau: EauCommands;
 }
 
 /** Lecture typée de la charge utile d'un module dans `delta.ext` (undefined si absente). */

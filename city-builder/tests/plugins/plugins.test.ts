@@ -32,8 +32,11 @@ const SIM_ONLY: readonly string[] = ['municipal'];
  * Modules de phase 2B/2C intégrés après l'électricité, dans l'ordre d'enregistrement (rendu, panneau, section de
  * sauvegarde ; testés dans leur dossier). Ils figurent aussi dans PHASE2_MODULES.
  */
-const LATE_MODULES: readonly string[] = ['dechets', 'hubs'];
-/** Parmi eux, ceux qui agissent dès une partie neuve (charges `ext`) : exclus du contrôle « module vide = aucun effet ». */
+const LATE_MODULES: readonly string[] = ['dechets', 'hubs', 'eau'];
+/**
+ * Parmi eux, ceux qui agissent dès une partie neuve (charges `ext`) : exclus du contrôle « module vide = aucun effet ».
+ * Les autres (hubs, eau : docs/requests/eau.md §1) sont livrés, non vides, mais dormants tant que le joueur ne les utilise pas.
+ */
 const LATE_ACTIVE: readonly string[] = ['dechets'];
 /** Modules de phase 2A (PHASE2_MODULES sans les modules intégrés plus tard). */
 const BASE_MODULES: readonly string[] = PHASE2_MODULES.filter((id) => !LATE_MODULES.includes(id));
@@ -89,7 +92,7 @@ function recorder(id = 'essai', opts: { failTick?: boolean } = {}): SimPlugin & 
   };
 }
 
-test('registres : les quatre modules sont enregistrés partout, vides, avec leur section de sauvegarde', () => {
+test('registres : les modules sont enregistrés partout, avec leur section de sauvegarde', () => {
   // Modules d'atmosphère (phase 2C, tests/weather) : enregistrés en simulation et rendu, testés à part.
   // Électricité (phase 2B, tests/electricite) et modules intégrés ensuite (LATE_MODULES) : enregistrés partout, testés à part.
   const ids = [...BASE_MODULES];
