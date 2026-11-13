@@ -462,19 +462,21 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
   }
 
   /** Sonde e2e : instances par bit d'état (1 frein, 2 / 4 clignotants), bandes de plaques distinctes, shader. */
-  probe(): { instances: number; brake: number; left: number; right: number; inFrame: number; plateRows: number; plates: number; detailShader: string } {
+  probe(): { instances: number; brake: number; left: number; right: number; inFrame: number; plateRows: number; plates: number; detailShader: string; emissiveMap: boolean; blinking: number[] | null } {
     let instances = 0, brake = 0, left = 0, right = 0;
+    let blinking: number[] | null = null;
     const plates = new Set<number>();
     for (const m of this.models) if (m) for (const lot of m.lods) for (let i = 0; i < lot.count; i++) {
       instances++;
       const f = lot.lights[i]!;
       if (f & 1) brake++; if (f & 2) left++; if (f & 4) right++;
+      if (!blinking && (f & 6) && lot === m.lods[0]) blinking = [lot.matrices[i * 16 + 12]!, lot.matrices[i * 16 + 14]!, Math.atan2(lot.matrices[i * 16 + 8]!, lot.matrices[i * 16 + 10]!), f];
       if (lot.plate) plates.add(lot.plates[i]!);
     }
     let inFrame = 0;
     for (let i = 0; i < this.curCount; i++) if (this.curFlags[i]! & 6) inFrame++;
     const key = this.detailMat ? String((this.detailMat as { customProgramCacheKey: () => string }).customProgramCacheKey()) : '';
-    return { instances, brake, left, right, inFrame, plateRows: this.plateRows, plates: plates.size, detailShader: key };
+    return { instances, brake, left, right, inFrame, plateRows: this.plateRows, plates: plates.size, detailShader: key, emissiveMap: !!this.detailMat?.emissiveMap, blinking };
   }
 
   /* ----------------------------- mise à jour ----------------------------- */
