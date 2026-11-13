@@ -45,7 +45,7 @@ export function bakeSkeleton(root: THREE.Object3D, mesh: THREE.SkinnedMesh, clip
       root.updateMatrixWorld(true);
       skeleton.update();
       for (let b = 0; b < nb; b++) {
-        m.fromArray(skeleton.boneMatrices, b * 16).multiply(mesh.bindMatrix);
+        m.fromArray(skeleton.boneMatrices!, b * 16).multiply(mesh.bindMatrix);
         data.set(m.elements, (row * width + b * 4) * 4);
       }
       row++;

@@ -1,0 +1,287 @@
+{
+  "checks": [
+    {
+      "ok": true,
+      "msg": "personnages chargés et cuits",
+      "extra": {
+        "pret": true,
+        "erreur": null
+      }
+    },
+    {
+      "ok": true,
+      "msg": "graphe piéton et marcheurs issus de la démographie (637 marcheurs, 213 dans la rue)"
+    },
+    {
+      "ok": true,
+      "msg": "foule imposée atteinte (1507 / 1500)"
+    },
+    {
+      "ok": true,
+      "msg": "vue rue : piétons dessinés en LOD0 (23/31/442/170)"
+    },
+    {
+      "ok": true,
+      "msg": "mouvement entre deux images : 30/30 déplacés, 29 phases d'animation changées"
+    },
+    {
+      "ok": true,
+      "msg": "aérien proche : LOD1/LOD2 utilisés (0/66/211/0)"
+    },
+    {
+      "ok": true,
+      "msg": "aérien lointain : imposteurs utilisés (0/0/0/1508, 1 appels)"
+    },
+    {
+      "ok": true,
+      "msg": "compteur HUD affiché (1 508)"
+    },
+    {
+      "ok": true,
+      "msg": "aucune erreur de page / console / interne",
+      "extra": []
+    }
+  ],
+  "shots": [
+    {
+      "name": "01-rue-trottoir",
+      "ped": {
+        "id": 1,
+        "x": -461.5340270996094,
+        "y": 12.279956817626953,
+        "z": 244.75653076171875,
+        "h": 3.1415927410125732,
+        "idle": false,
+        "model": "pieton_sportive",
+        "phase": 0.422680412371134,
+        "info": {
+          "id": 1,
+          "etat": "traversee",
+          "age": "adulte",
+          "genre": "femme",
+          "role": "actif",
+          "motif": "travail",
+          "x": -453.5504455566406,
+          "z": 249.61143493652344,
+          "vitesse": 1.36,
+          "origine": 15,
+          "destination": 16,
+          "resteM": 43
+        }
+      },
+      "rendu": {
+        "pietons": 1507,
+        "dessines": 666,
+        "lod": [
+          23,
+          31,
+          442,
+          170
+        ],
+        "appels": 34
+      },
+      "compteur": "1 507"
+    },
+    {
+      "name": "02-rue-trottoir-1s-apres",
+      "ped": {
+        "id": 1,
+        "x": -451.51190185546875,
+        "y": 12.337005615234375,
+        "z": 249.62181091308594,
+        "h": 1.5707961320877075,
+        "idle": false,
+        "model": "pieton_sportive",
+        "phase": 0.722383730282588
+      },
+      "rendu": {
+        "pietons": 1508,
+        "dessines": 454,
+        "lod": [
+          13,
+          62,
+          180,
+          199
+        ],
+        "appels": 33
+      },
+      "compteur": "1 508"
+    },
+    {
+      "name": "03-rue-traversee",
+      "ped": {
+        "id": 1,
+        "x": -451.51190185546875,
+        "y": 12.337005615234375,
+        "z": 249.62181091308594,
+        "h": 1.5707961320877075,
+        "idle": false,
+        "model": "pieton_sportive",
+        "phase": 0.722383730282588
+      },
+      "rendu": {
+        "pietons": 1508,
+        "dessines": 33,
+        "lod": [
+          2,
+          17,
+          14,
+          0
+        ],
+        "appels": 20
+      },
+      "compteur": "1 508"
+    },
+    {
+      "name": "04-aerien-proche",
+      "rendu": {
+        "pietons": 1508,
+        "dessines": 277,
+        "lod": [
+          0,
+          66,
+          211,
+          0
+        ],
+        "appels": 24
+      },
+      "compteur": "1 508"
+    },
+    {
+      "name": "05-aerien-ville",
+      "rendu": {
+        "pietons": 1508,
+        "dessines": 1508,
+        "lod": [
+          0,
+          0,
+          0,
+          1508
+        ],
+        "appels": 1
+      },
+      "compteur": "1 508"
+    }
+  ],
+  "horaires": {
+    "pietons": 213,
+    "enMarche": 171,
+    "enAttente": 1,
+    "enTraversee": 41,
+    "marcheurs": 637,
+    "roles": {
+      "actifs": 289,
+      "ecoliers": 158,
+      "retraites": 72,
+      "autres": 118
+    },
+    "motifs": {
+      "travail": 112,
+      "ecole": 50,
+      "courses": 36,
+      "loisirs": 0,
+      "retour": 15,
+      "flanerie": 0
+    },
+    "graphe": {
+      "noeuds": 352,
+      "aretes": 446,
+      "trottoirsM": 8772,
+      "passages": 93,
+      "passagesMarques": 80,
+      "passagesRegules": 0
+    },
+    "feux": false,
+    "trafic": false,
+    "cumul": {
+      "trajets": 213,
+      "arrivees": 0,
+      "traversees": 46,
+      "traverseesAuVert": 0,
+      "traverseesPrudentes": 46,
+      "traverseesForcees": 0,
+      "nonMarchables": 12,
+      "itineraires": 225
+    },
+    "tickMs": {
+      "moyenne": 0.411,
+      "p95": 0.7,
+      "max": 30.2,
+      "echantillons": 247
+    }
+  },
+  "foule": {
+    "pietons": 1507,
+    "enMarche": 1459,
+    "enAttente": 0,
+    "enTraversee": 48,
+    "marcheurs": 637,
+    "roles": {
+      "actifs": 289,
+      "ecoliers": 158,
+      "retraites": 72,
+      "autres": 118
+    },
+    "motifs": {
+      "travail": 109,
+      "ecole": 50,
+      "courses": 44,
+      "loisirs": 0,
+      "retour": 35,
+      "flanerie": 1269
+    },
+    "graphe": {
+      "noeuds": 352,
+      "aretes": 446,
+      "trottoirsM": 8772,
+      "passages": 93,
+      "passagesMarques": 80,
+      "passagesRegules": 0
+    },
+    "feux": false,
+    "trafic": false,
+    "cumul": {
+      "trajets": 1510,
+      "arrivees": 3,
+      "traversees": 72,
+      "traverseesAuVert": 0,
+      "traverseesPrudentes": 72,
+      "traverseesForcees": 0,
+      "nonMarchables": 12,
+      "itineraires": 1712
+    },
+    "tickMs": {
+      "moyenne": 0.534,
+      "p95": 1.2,
+      "max": 30.2,
+      "echantillons": 347
+    }
+  },
+  "cible": {
+    "target": null,
+    "crossing": {
+      "id": 1,
+      "x": -461.5340270996094,
+      "y": 12.279956817626953,
+      "z": 244.75653076171875,
+      "h": 3.1415927410125732,
+      "idle": false,
+      "model": "pieton_sportive",
+      "phase": 0.422680412371134,
+      "info": {
+        "id": 1,
+        "etat": "traversee",
+        "age": "adulte",
+        "genre": "femme",
+        "role": "actif",
+        "motif": "travail",
+        "x": -453.5504455566406,
+        "z": 249.61143493652344,
+        "vitesse": 1.36,
+        "origine": 15,
+        "destination": 16,
+        "resteM": 43
+      }
+    }
+  }
+}
