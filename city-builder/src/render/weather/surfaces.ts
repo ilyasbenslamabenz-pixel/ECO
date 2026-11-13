@@ -193,6 +193,7 @@ function injectImpostor(shader: THREE.WebGLProgramParametersWithUniforms, decidu
 export class SurfacePatcher {
   readonly uniforms = createSurfaceUniforms();
   private readonly patched = new Map<THREE.Material, { prev: THREE.Material['onBeforeCompile']; prevKey: THREE.Material['customProgramCacheKey']; hadOwnKey: boolean; hadOwnHook: boolean }>();
+  private generation = 0;
   /** Matériaux patchés (diagnostic). */
   get count(): number { return this.patched.size; }
 
@@ -215,7 +216,10 @@ export class SurfacePatcher {
     };
     // Clé de cache : celle d'origine (patchs des autres systèmes) + rôle atmosphère.
     const baseKey = hadOwnKey ? prevKey.call(m) : hadOwnHook ? prev.toString() : 'std';
-    m.customProgramCacheKey = (): string => `${baseKey}|atmo-${role}`;
+    // La génération change à chaque `restore` : three garde par matériau les programmes déjà compilés (par clé) et ne
+    // rappelle pas onBeforeCompile pour une clé connue — les uniformes partagés ne seraient plus liés.
+    const gen = this.generation;
+    m.customProgramCacheKey = (): string => `${baseKey}|atmo-${role}-${gen}`;
     m.needsUpdate = true;
     this.patched.set(m, { prev, prevKey, hadOwnKey, hadOwnHook });
     return true;
@@ -223,6 +227,7 @@ export class SurfacePatcher {
 
   /** Retire tous les patchs (qualité « désactivée ») : programmes d'origine recompilés. */
   restore(): void {
+    if (this.patched.size) this.generation++;
     for (const [m, r] of this.patched) {
       if (r.hadOwnHook) m.onBeforeCompile = r.prev; else delete (m as { onBeforeCompile?: unknown }).onBeforeCompile;
       if (r.hadOwnKey) m.customProgramCacheKey = r.prevKey; else delete (m as { customProgramCacheKey?: unknown }).customProgramCacheKey;
