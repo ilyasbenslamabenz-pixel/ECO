@@ -32,7 +32,9 @@ const chantiers = (page) => page.evaluate(() => (window.__aube.chantiers ? windo
 
 /** Capture + mesure de variance (une image quasi uniforme = scène vide ou rendu cassé). */
 async function shot(page, name, label) {
-  await render(page, 2);
+  // Les deltas reçus pendant la pause sont appliqués par le rendu aux images suivantes.
+  await page.waitForTimeout(500);
+  await render(page, 3);
   const file = join(out, `${name}.png`);
   const png = await page.screenshot({ path: file, timeout: 600000 });
   // Mesure sur la capture elle-même (le tampon WebGL n'est pas conservé : drawImage du canvas donne du noir).
@@ -193,7 +195,7 @@ try {
       const s = (e.chantiers ?? []).find((x) => x.kind === 'demolition');
       return !s || order.indexOf(s.phase) >= order.indexOf(ph);
     }, 1, 300000);
-    await page.evaluate(() => window.__aube.lookAt(-120, -26, 70, 0.42));
+    await page.evaluate(() => window.__aube.lookAt(-120, -26, 70, 0.85));
     const info = await shot(page, `demolition-${ph}`, `démolition : ${ph}`);
     const s = (info?.sites ?? []).find((x) => x.kind === 'demolition');
     demShots[ph] = s?.phase ?? 'fini';
