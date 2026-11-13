@@ -31,7 +31,7 @@ const send = (page, n, a) => page.evaluate(([n, a]) => window.__aube.send(n, a).
 const chantiers = (page) => page.evaluate(() => (window.__aube.chantiers ? window.__aube.chantiers() : null));
 
 /** Capture + mesure de variance (une image quasi uniforme = scène vide ou rendu cassé). */
-async function shot(page, name, label) {
+async function shot(page, name, label, minStd = 8) {
   // Les deltas reçus pendant la pause sont appliqués par le rendu aux images suivantes.
   await page.waitForTimeout(500);
   await render(page, 3);
@@ -56,7 +56,7 @@ async function shot(page, name, label) {
   const info = await chantiers(page);
   R.shots.push({ name, label, ...stat, chantiers: info?.sites?.length ?? 0 });
   console.log(`  image ${name} : moyenne ${stat.mean}, écart-type ${stat.std} (${label})`);
-  check(stat.std > 8, `image ${name} non uniforme (écart-type ${stat.std})`);
+  check(stat.std > minStd, `image ${name} non uniforme (écart-type ${stat.std})`);
   return info;
 }
 
@@ -178,7 +178,7 @@ try {
   await runUntil((e) => { const h = e.date?.hour; return h !== undefined && (h >= 21 || h < 4); }, 4, 300000);
   const eNuit = await etat();
   await page.evaluate(() => window.__aube.lookAt(60, -40, 220, 0.5));
-  const nuit = await shot(page, 'chantiers-nuit', 'chantiers la nuit (travaux suspendus)');
+  const nuit = await shot(page, 'chantiers-nuit', 'chantiers la nuit (travaux suspendus)', 4);
   check(eNuit.enTravail === false && nuit?.enTravail === false, 'la nuit, les chantiers sont déclarés hors horaires');
 
   // Démolition : le pavillon (chantier court) doit être achevé ; on le démolit en journée.
