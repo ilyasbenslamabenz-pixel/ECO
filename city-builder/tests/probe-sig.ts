@@ -1,0 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { Simulation } from '../src/sim/world';
+const catalog = JSON.parse(readFileSync('assets/catalog.json', 'utf8'));
+const s = new Simulation(); s.setCatalog(catalog);
+const seed = Number(process.argv[2] ?? 7);
+s.newGame({ seed, mapChunks: 8, startMoney: 150_000_000, cityName: 'x', startHour: 10.5 });
+const r = s.runExt('buildCity', { preset: 'demo', vehicles: 140 });
+const t = (s as any).traffic;
+console.log('signals', t.stats.signals, 'prio', t.stats.priorityJunctions, 'yield', t.stats.yieldJunctions, JSON.stringify((r as any).data.views));
+const sig = t.signalStates();
+console.log(sig.length, JSON.stringify(sig.slice(0, 8)));
+const recs = s.roadRecords();
+console.log(recs.edges.map((e: any) => e.kind).join(','));
