@@ -23,7 +23,7 @@ import { buildTown, runDays, townCatalog } from '../sim/fixtures';
  * une section de sauvegarde. Les contrôles « module vide = aucun effet » ci-dessous portent sur les AUTRES
  * (le mécanisme reste vérifié : registre complet, plugin de test injecté, sections, commandes).
  */
-const IMPLEMENTED = new Set(['circulation', 'pietons']);
+const IMPLEMENTED = new Set(['chantiers', 'circulation', 'pietons']);
 const isAtmosphere = (id: string): boolean => (ATMOSPHERE_MODULES as readonly string[]).includes(id);
 /** Modules de simulation sans rendu ni panneau (phase 2B, docs/requests/municipal.md §2). */
 const SIM_ONLY: readonly string[] = ['municipal'];
