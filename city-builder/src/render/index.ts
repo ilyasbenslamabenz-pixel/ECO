@@ -22,7 +22,7 @@ import { SIGNAL_HEAD_STRIDE, type DeltaMessage, type SignalLayoutMsg, type Snaps
 import { cubic, polyline } from '../sim/roads/bezier';
 import { halfWidth, isRoadKind } from '../sim/roads/types';
 import { isWorldTerrain } from '../sim/terrain';
-import type { TerrainPatch } from '../sim/terrain/types';
+import type { TerrainPatch, WorldTerrain } from '../sim/terrain/types';
 import { AssetLibrary } from './assets';
 import { InstancedBuildingRenderer } from './buildings/renderer';
 import { nightFactorForHour } from './buildings/materials';
@@ -35,6 +35,7 @@ import { TrafficSignalRenderer } from './traffic/signals';
 import { InstancedVehicleRenderer } from './vehicles/renderer';
 import { RENDER_PLUGINS, RenderPluginHost, type RenderPlugin } from './plugins';
 import { WaterSystem } from './water/water-system';
+import { QuayRenderer } from './water/quays';
 import { deviceProfile, isSafeMode, type DeviceProfile, type QualitySetting } from './device-profile';
 
 export interface RenderStats {
@@ -64,6 +65,8 @@ export interface RenderHandle {
   vehicles: InstancedVehicleRenderer;
   signals: TrafficSignalRenderer;
   veg: VegetationSystem;
+  /** Murs de quai des éditions du terrain (Quai / remblai, Creuser). */
+  quays: QuayRenderer;
   /** Modules de rendu de phase 2 (registre src/render/plugins/index.ts). */
   plugins: RenderPluginHost;
   /** Libère les ressources des modules de rendu. */
@@ -96,6 +99,7 @@ export async function initRender(
   // Textures du sol (3 tableaux de 5 couches) : 1024 px sur ordinateur, 512 en mode allégé, 256 en mode sûr.
   const terrain = new TerrainSystem(ctx.scene, { catalog, assetsBase, textureSize: profile.lite ? (isSafeMode() ? 256 : 512) : 1024 });
   const water = new WaterSystem(ctx.scene);
+  const quays = new QuayRenderer(ctx.scene);
   const heightAt = (x: number, z: number): number => terrain.heightAt(x, z);
   const veg = new VegetationSystem(ctx.scene, lib, { heightAt, renderer: ctx.renderer, distances: profile.vegDistances });
   await veg.load();
@@ -147,7 +151,7 @@ export async function initRender(
   };
 
   const handle: RenderHandle = {
-    ctx, profile, sky, terrain, water, roads, buildings, vehicles, signals, veg, plugins,
+    ctx, profile, sky, terrain, water, roads, buildings, vehicles, signals, veg, quays, plugins,
     disposePlugins() { plugins.dispose(); },
     rebuildGpu() { sky.rebuildEnvironment(); veg.rebakeImpostors(ctx.renderer); buildings.invalidate(); },
     setTimeOfDay(hour) {
@@ -171,6 +175,7 @@ export async function initRender(
     applySnapshot(s) {
       terrain.build(s.terrain);
       water.build(s.terrain);
+      quays.set((s.terrain as Partial<WorldTerrain>).quays);
       if (isWorldTerrain(s.terrain)) veg.scatter(s.terrain);
       roads.removeRoadEdges(roads.net.segmentIds());
       buildings.remove([...buildingIds]);
@@ -191,6 +196,21 @@ export async function initRender(
         const p = d.terrainPatch as TerrainPatch;
         terrain.applyPatch(p);
         water.applyPatch(p);
+        if (p.quays) quays.set(p.quays);
+        // Défrichage, puis végétation devenue invalide (dans l'eau, flottante ou enterrée) dans la zone modifiée.
+        if (p.cleared?.length) veg.removeInDiscs(p.cleared);
+        const t = terrain.terrain;
+        if (t) {
+          const ws = t.waterSurface;
+          const wet = (x: number, z: number): boolean => {
+            if (!ws) return false;
+            const i = Math.round((x - t.originX) / t.spacing), j = Math.round((z - t.originZ) / t.spacing);
+            if (i < 0 || j < 0 || i >= t.samplesX || j >= t.samplesZ) return false;
+            const k = j * t.samplesX + i;
+            return ws[k]! > t.heights[k]! + 0.05;
+          };
+          veg.removeInvalid(t.originX + p.i0 * t.spacing, t.originZ + p.j0 * t.spacing, t.originX + p.i1 * t.spacing, t.originZ + p.j1 * t.spacing, wet);
+        }
       }
       if (d.roadEdgesRemoved.length) roads.removeRoadEdges(d.roadEdgesRemoved);
       if (d.roadNodesAdded.length || d.roadEdgesAdded.length) {

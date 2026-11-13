@@ -99,6 +99,9 @@ interface DebugInfo {
   plantVeg?: (items: { x: number; z: number; assetId: string }[]) => number;
   /** Blocs de rivière maillés (e2e : cadrer une berge). */
   riverBlocks?: () => { x: number; z: number; tris: number }[];
+  quays?: () => number[];
+  forestSpot?: () => { x: number; z: number } | null;
+  isWet?: (x: number, z: number) => boolean;
   /** Copie de la dernière trame véhicules reçue (e2e : véhicules arrêtés aux feux). */
   lastVehicles?: { tick: number; ids: number[]; positions: number[] } | null;
   /** Active la copie `lastVehicles` (désactivée par défaut : aucune allocation en jeu). */
@@ -156,7 +159,7 @@ async function boot(): Promise<void> {
 
   const ui = initUI({
     onNewGame: () => { void startNewGame(); },
-    onNewGameWith: (p) => { void startNewGame({ cityName: p.cityName, seed: p.seed, mapChunks: p.mapChunks, startMoney: p.startMoney }); },
+    onNewGameWith: (p) => { void startNewGame({ cityName: p.cityName, seed: p.seed, mapChunks: p.mapChunks, startMoney: p.startMoney, terrain: { riverMode: p.riverMode ?? 'une', hydrology: p.hydrology ?? 'mer' } }); },
     onContinue: () => {
       if (state.inGame) { ui.hideMenu(); void needBridge().send('setSpeed', { speed: speedBeforeMenu }); return; }
       void loadSlot(continueSlot ?? QUICK_SLOT);
@@ -248,6 +251,27 @@ async function boot(): Promise<void> {
   debug.roadDecor = () => render.roads.decorItems();
   debug.heightAt = (x, z) => render.terrain.heightAt(x, z);
   debug.riverBlocks = () => render.water.inlandCenters();
+  debug.quays = () => render.quays.list();
+  debug.forestSpot = () => {
+    // Échantillon le plus boisé (moyenne sur un disque de 24 m) : cible de l'e2e Défricher.
+    const t = render.terrain.terrain;
+    if (!t?.forest) return null;
+    let best = 0, bx = 0, bz = 0;
+    for (let j = 3; j < t.samplesZ - 3; j += 2) for (let i = 3; i < t.samplesX - 3; i += 2) {
+      let s = 0;
+      for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) s += t.forest[(j + dj) * t.samplesX + i + di]!;
+      if (s > best) { best = s; bx = t.originX + i * t.spacing; bz = t.originZ + j * t.spacing; }
+    }
+    return best > 0 ? { x: bx, z: bz } : null;
+  };
+  debug.isWet = (x, z) => {
+    const t = render.terrain.terrain;
+    if (!t?.waterSurface) return false;
+    const i = Math.round((x - t.originX) / t.spacing), j = Math.round((z - t.originZ) / t.spacing);
+    if (i < 0 || j < 0 || i >= t.samplesX || j >= t.samplesZ) return false;
+    const k = j * t.samplesX + i;
+    return t.waterSurface[k]! > t.heights[k]! + 0.05;
+  };
   debug.plantVeg = (items) => render.veg.plant(items);
   debug.streetLook = (x, z, lx, lz) => {
     input.camera.setStreetPosition(x, z, Math.atan2(-(lx - x), -(lz - z)));
@@ -322,6 +346,7 @@ async function boot(): Promise<void> {
     const p = cons.machine.preview;
     if (p.kind === 'building') return { kind: p.kind, assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot, snapped: p.proposal.snapped, validity: p.validity, message: p.message };
     if (p.kind === 'road') return { kind: p.kind, type: p.type, mode: p.mode, validity: p.validity, message: p.message, length: p.length };
+    if (p.kind === 'terrain') return { kind: p.kind, mode: p.mode, validity: p.validity, message: p.message, cost: p.cost, length: p.length, start: p.start };
     return { kind: p.kind };
   };
 
@@ -546,6 +571,11 @@ async function boot(): Promise<void> {
         cityName: p.cityName ?? 'Nouvelle-Aube',
         startHour: params.has('h') ? Number(params.get('h')) : 9,
         startMonth: START_MONTH,
+        // Carte : choix de l'écran Nouvelle partie, ou ?rivieres=aucune|une|plusieurs&cote=mer|aucune (tests).
+        terrain: p.terrain ?? {
+          ...(params.has('rivieres') ? { riverMode: params.get('rivieres') as 'aucune' | 'une' | 'plusieurs' } : {}),
+          ...(params.has('cote') ? { hydrology: params.get('cote') === 'aucune' ? 'aucune' as const : 'mer' as const } : {}),
+        },
       });
       await snap;
       focusCamera(0, 0, 420, 0.6);

@@ -45,6 +45,21 @@
             </select>
           </label>
         </div>
+        <div class="row2">
+          <label>Rivières
+            <select id="new-rivers" name="riverMode">
+              <option value="aucune">Aucune</option>
+              <option value="une" selected>Une — étroite, peu sinueuse</option>
+              <option value="plusieurs">Plusieurs — réseau complet</option>
+            </select>
+          </label>
+          <label>Côte
+            <select id="new-coast" name="hydrology">
+              <option value="mer" selected>Mer</option>
+              <option value="aucune">Sans mer</option>
+            </select>
+          </label>
+        </div>
         <label>Graine du relief
           <span class="inline"><input id="new-seed" name="seed" inputmode="numeric" pattern="-?[0-9]{1,10}" required autocomplete="off"><button type="button" id="new-seed-dice" class="icon-btn" title="Graine aléatoire" aria-label="Graine aléatoire"><i data-icon="undo"></i></button></span>
         </label>

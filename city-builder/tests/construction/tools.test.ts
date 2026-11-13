@@ -217,7 +217,13 @@ test('machine (MockSim) : aperçu validé par dryRun, pose, refus expliqué, ann
   const sim = flatMock();
   const { m, tools, notes } = setup(sim, sim.catalog);
   sim.start(0);
-  assert.equal(tools.setTool('terraform'), false, 'terraformation indisponible (phase 2)');
+  // Outil Terrain (Défricher, Quai, Creuser) disponible ; sans commandes étendues, l'aperçu est refusé proprement.
+  assert.equal(tools.setTool('terraform'), true, 'outil Terrain disponible');
+  tools.hover({ x: 20, z: 20 }, null);
+  const tp = (): { kind: string; validity?: string } => tools.preview as { kind: string; validity?: string };
+  assert.equal(tp().kind, 'terrain');
+  await settle();
+  assert.equal(tp().validity, 'error');
   assert.ok(tools.setTool('building', { assetId: 'maison_test' }));
   tools.hover({ x: 20, z: 20 }, null);
   assert.equal(tools.preview.kind === 'building' && tools.preview.validity, 'pending');

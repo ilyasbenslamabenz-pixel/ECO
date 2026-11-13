@@ -20,6 +20,7 @@ import { TOOL_PHASE, type ConstructionTools, type ToolPreview } from '../client/
 import { roadWidth, type PickResult } from '../client/tools/mirror';
 import type { CameraController, PointerToolSink } from './camera';
 import { COLORS, GhostPreview, RoadPreview, SelectionMarker, type ModelSource } from './previews';
+import { TerrainEditPreview } from './terrain-preview';
 
 export { TOOL_PHASE };
 
@@ -51,6 +52,7 @@ export class ToolController implements IToolController, PointerToolSink {
   private road: RoadPreview | null = null;
   private hoverMarker: SelectionMarker | null = null;
   private selMarker: SelectionMarker | null = null;
+  private terrainPrev: TerrainEditPreview | null = null;
   private selected: PickResult | null = null;
   private lastScreen = { x: 0, y: 0 };
   private lastType = 'mouse';
@@ -71,6 +73,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.road = new RoadPreview(deps.scene, deps.heightAt);
     this.hoverMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.select);
     this.selMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.select);
+    this.terrainPrev = new TerrainEditPreview(deps.scene, deps.heightAt, () => deps.machine.mirror.terrain);
     deps.camera.toolSink = this;
     deps.machine.onPreview((p) => this.render(p));
     deps.machine.onSelect = (p) => this.select(p);
@@ -94,7 +97,7 @@ export class ToolController implements IToolController, PointerToolSink {
 
   capturesPrimary(_type: string): boolean {
     const t = this.activeTool;
-    return !!this.deps && (t === 'building' || t === 'road' || t === 'bulldoze');
+    return !!this.deps && (t === 'building' || t === 'road' || t === 'bulldoze' || t === 'terraform');
   }
 
   private feed(sx: number, sy: number, type: string): void {
@@ -129,6 +132,11 @@ export class ToolController implements IToolController, PointerToolSink {
       this.roadStartedThisGesture = true;
       void d.machine.primary();
     }
+    // Quai / Creuser à la souris : départ posé à l'appui (clic-clic ou glisser).
+    if (type !== 'touch' && d.machine.tool === 'terraform' && d.machine.terrain.mode !== 'clear' && !d.machine.terrain.hasStart) {
+      this.roadStartedThisGesture = true;
+      void d.machine.primary();
+    }
   }
 
   move(sx: number, sy: number, type: string): void { this.pendingHover = { x: sx, y: sy, type }; }
@@ -143,12 +151,14 @@ export class ToolController implements IToolController, PointerToolSink {
       // Route : les étapes intermédiaires se posent au relâcher ; l'action finale se confirme.
       if (m.tool === 'road' && (m.draft.phase === 'idle' || (m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
       if (m.tool === 'bulldoze' && !(m.preview.kind === 'bulldoze' && m.preview.target)) return;
+      // Quai / Creuser : le départ se pose au relâcher ; l'application se confirme.
+      if (m.tool === 'terraform' && m.terrain.mode !== 'clear' && !m.terrain.hasStart) { void m.primary(); return; }
       this.pendingTouchConfirm = true;
-      const label = m.tool === 'building' ? 'Construire' : m.tool === 'road' ? 'Tracer la route' : 'Démolir';
+      const label = m.tool === 'building' ? 'Construire' : m.tool === 'road' ? 'Tracer la route' : m.tool === 'terraform' ? terrainLabel(m.terrain.mode) : 'Démolir';
       this.hooks?.touchConfirm({ label, canRotate: m.tool === 'building' });
       return;
     }
-    if (m.tool === 'road') {
+    if (m.tool === 'road' || (m.tool === 'terraform' && this.roadStartedThisGesture)) {
       if (tap && this.roadStartedThisGesture) return; // simple clic de départ
       void m.primary();
       return;
@@ -221,7 +231,7 @@ export class ToolController implements IToolController, PointerToolSink {
         if (this.selected && this.selected.kind !== 'vehicle') { consume(); void this.demolishSelection(); }
         return;
       case 'ShiftLeft': case 'ShiftRight':
-        if (m.tool === 'road' && !m.angleSnap) { m.angleSnap = true; m.refresh(); }
+        if ((m.tool === 'road' || m.tool === 'terraform') && !m.angleSnap) { m.angleSnap = true; m.refresh(); }
         return;
       default: return;
     }
@@ -272,6 +282,7 @@ export class ToolController implements IToolController, PointerToolSink {
     if (p.kind !== 'building') this.ghost.hide();
     if (p.kind !== 'road') this.road.hide();
     if (p.kind !== 'select' && p.kind !== 'bulldoze') this.hoverMarker.hide();
+    if (p.kind !== 'terrain') this.terrainPrev?.hide();
     switch (p.kind) {
       case 'building': {
         const y = footprintGroundY(d.heightAt, p.proposal.obb, p.asset.footprint.tilesX, p.asset.footprint.tilesZ);
@@ -297,6 +308,15 @@ export class ToolController implements IToolController, PointerToolSink {
           tag(`Démolir : ${name}\nRemboursement +${fmt(p.refund)} ¢`, 'error');
         } else tag(null, 'info');
         break;
+      case 'terrain': {
+        this.terrainPrev?.show(p);
+        const head = terrainLabel(p.mode);
+        if (p.mode !== 'clear' && !p.start) tag(`${head}\n${p.message}`, 'info');
+        else if (!p.hover) tag(null, 'info');
+        else if (p.validity === 'error') tag(`${head}${p.length ? ` · ${fmt(p.length)} m` : ''}\n${p.message}`, 'error');
+        else tag(`${head}${p.length ? ` · ${fmt(p.length)} m` : ''}\n${p.validity === 'ok' ? p.message : 'Calcul du coût…'}`, p.validity === 'ok' ? 'ok' : 'pending');
+        break;
+      }
       case 'select':
         this.hoverMarker.setColor(COLORS.select);
         if (p.hover && this.lastType !== 'touch' && !(this.selected && samePick(p.hover, this.selected))) this.showMarker(this.hoverMarker, p.hover);
@@ -315,6 +335,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.ghost?.update(dt);
     this.hoverMarker?.update(dt);
     this.selMarker?.update(dt);
+    this.terrainPrev?.update(dt);
   }
 
   /** Diagnostic (e2e) : le fantôme affiche-t-il le vrai modèle ? */
@@ -323,9 +344,13 @@ export class ToolController implements IToolController, PointerToolSink {
   dispose(): void {
     for (const d of this.disposers) d();
     this.disposers = [];
-    this.ghost?.dispose(); this.road?.dispose(); this.hoverMarker?.dispose(); this.selMarker?.dispose();
+    this.ghost?.dispose(); this.road?.dispose(); this.hoverMarker?.dispose(); this.selMarker?.dispose(); this.terrainPrev?.dispose();
     if (this.deps) this.deps.camera.toolSink = null;
   }
+}
+
+function terrainLabel(m: 'clear' | 'quay' | 'dig'): string {
+  return m === 'clear' ? 'Défricher' : m === 'quay' ? 'Quai / remblai' : 'Creuser';
 }
 
 function samePick(a: PickResult, b: PickResult): boolean {

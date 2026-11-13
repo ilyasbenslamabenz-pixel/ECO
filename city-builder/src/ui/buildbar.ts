@@ -14,6 +14,7 @@ import type { ToolController } from '../input/tools';
 import { $, el, fmt, money, phaseBadge } from './dom';
 import { iconEl } from './icons';
 import type { ThumbnailSource } from './thumbnails';
+import { renderTerrainDrawer, terrainHint, terrainToolActions } from './terrain-drawer';
 
 export type DrawerId = 'road' | 'building' | 'services' | 'transport' | 'environment' | 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
 type CatalogDrawer = 'building' | 'services' | 'transport' | 'environment';
@@ -178,7 +179,7 @@ export interface BuildBarDeps {
   notify: (t: string, k?: 'info' | 'error' | 'ok') => void;
 }
 
-const PLANNED_IDS: readonly string[] = ['zones', 'energy', 'water', 'waste', 'terrain'];
+const PLANNED_IDS: readonly string[] = ['zones', 'energy', 'water', 'waste'];
 
 export class BuildBar {
   private drawer = $('build-drawer');
@@ -201,7 +202,7 @@ export class BuildBar {
       transport: 'Transports : gare de voyageurs ; bus, tramway, port, aéroport (phase 2C)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
       zones: 'Zones (résidentiel, commercial, industriel, bureaux, agricole) : aperçu — phase 2B', energy: 'Énergie : aperçu des équipements — phase 2B',
-      water: 'Eau et assainissement : aperçu — phase 2B', waste: 'Déchets : aperçu — phase 2B', terrain: 'Terraformation : aperçu — phase 2B',
+      water: 'Eau et assainissement : aperçu — phase 2B', waste: 'Déchets : aperçu — phase 2B', terrain: 'Terrain : défricher, quais et remblais, bassins et canaux',
     };
     for (const b of Array.from(this.toolbar.querySelectorAll<HTMLButtonElement>('button[data-tool], button[data-cat]'))) {
       const tool = b.dataset['tool'] as ToolId | undefined;
@@ -210,6 +211,7 @@ export class BuildBar {
       if (!enable) continue;
       b.disabled = false;
       if (!cat || !PLANNED_IDS.includes(cat)) b.querySelector('.phase')?.remove();
+      if (cat === 'terrain') b.classList.remove('soon');
       b.dataset['tip'] = tips[tool ?? cat ?? ''] ?? b.dataset['tip'] ?? '';
     }
     this.toolbar.addEventListener('click', (e) => {
@@ -265,6 +267,7 @@ export class BuildBar {
     this.titleEl.className = `drawer-title ${meta.cls}`;
     this.titleEl.replaceChildren(iconEl(meta.icon), el('span', { text: meta.title }));
     if (id === 'road') { this.renderRoads(); return; }
+    if (id === 'terrain') { renderTerrainDrawer(this.tabsEl, this.body, this.d.machine, this.d.tools, PLANNED.terrain.map((p) => this.plannedTile(p)), () => this.closeDrawer()); return; }
     if ((PLANNED_IDS as readonly string[]).includes(id)) {
       this.tabsEl.append(el('span', { cls: 'drawer-note' }, el('span', { text: 'Aperçu des outils prévus' }), phaseBadge(PLANNED[id as PlannedDrawer][0]!.phase)));
       for (const p of PLANNED[id as PlannedDrawer]) this.body.append(this.plannedTile(p));
@@ -380,6 +383,7 @@ export class BuildBar {
     }
     if (m.tool === 'road') return `${ROAD_KINDS[m.roadType].nameFr} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'clic départ, clic arrivée'} — clic droit : étape précédente`;
     if (m.tool === 'bulldoze') return 'Démolir : cliquez un bâtiment ou un tronçon de route (remboursement 25 %)';
+    if (m.tool === 'terraform') return terrainHint(m);
     return '';
   }
 
@@ -400,7 +404,7 @@ export class BuildBar {
       const bt = b.dataset['tool']; const bc = b.dataset['cat'];
       let active = false;
       if (this.open) active = (this.open === 'road' && bt === 'road') || (this.open === 'building' && bt === 'building') || this.open === bc;
-      else active = (bt === t && (t === 'select' || t === 'bulldoze' || t === 'road')) || (t === 'building' && ((bt === 'building' && bcat === 'building') || (bc !== undefined && bc === bcat)));
+      else active = (bt === t && (t === 'select' || t === 'bulldoze' || t === 'road')) || (t === 'building' && ((bt === 'building' && bcat === 'building') || (bc !== undefined && bc === bcat))) || (t === 'terraform' && bc === 'terrain');
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', String(active));
     }
@@ -423,6 +427,8 @@ export class BuildBar {
     } else if (t === 'road') {
       act('Droite', 'Tracé droit', () => m.setRoadMode('straight'), m.draft.mode === 'straight');
       act('Courbe', 'Tracé courbe', () => m.setRoadMode('curve'), m.draft.mode === 'curve');
+    } else if (t === 'terraform') {
+      terrainToolActions(m, act);
     }
     this.hint.textContent = this.hintText();
     act('Terminer', 'Revenir à la sélection (Échap)', () => { this.d.tools.setTool('select'); this.closeDrawer(); });
