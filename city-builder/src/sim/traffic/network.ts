@@ -28,6 +28,20 @@ export interface TrafficEdgeInput {
   speedKmh: number;
   /** Rang hiérarchique (0 rue, 1 avenue, 2 boulevard, 3 voie rapide) : priorités et feux. */
   rank: number;
+  /**
+   * Distance (m, le long de l'axe) du nœud a / b à la LIGNE D'ARRÊT : fin des voies entrantes et début des voies
+   * sortantes. Absent : rognage calculé d'après la largeur des voies du carrefour (comportement d'origine).
+   */
+  stopA?: number;
+  stopB?: number;
+  /**
+   * Distance (m) du nœud a / b au CENTRE du passage piéton qui traverse le tronçon à cette extrémité ;
+   * valeur négative = pas de passage. Absent : passage par défaut aux carrefours (2,8 m avant la ligne d'arrêt).
+   */
+  crossA?: number;
+  crossB?: number;
+  /** Demi-largeur de la chaussée traversée par le passage (m, bordure à bordure / 2). Absent : d'après les voies. */
+  crossHalf?: number;
 }
 export interface TrafficNodeInput { id: number; x: number; y: number; z: number }
 export interface TrafficNetworkInput { nodes: TrafficNodeInput[]; edges: TrafficEdgeInput[] }
@@ -55,6 +69,30 @@ export class TrafficGraph {
   readonly armPhase: Uint8Array;
   readonly armRankPrio: Uint8Array; // 1 = bras prioritaire (cédez-le-passage)
   readonly armAngle: Float32Array; // direction d'arrivée (rad)
+  /** Branche (tronçon incident) de chaque bras : index dans les tableaux `leg*`. */
+  readonly armLeg: Int32Array;
+
+  /* ---------- branches et passages piétons ---------- */
+  /** CSR des branches (tronçons incidents, avec ou sans voie entrante) par nœud. */
+  readonly nodeLegStart: Int32Array;
+  readonly legNode: Int32Array;
+  readonly legEdge: Int32Array;
+  /** Identifiant stable du passage : idTronçon × 2 + (0 extrémité a | 1 extrémité b). */
+  readonly legId: Int32Array;
+  /** Bras entrant de la branche (index de bras), −1 si la branche n'a pas de voie entrante. */
+  readonly legArm: Int32Array;
+  /** Distance du nœud à la ligne d'arrêt de la branche (m). */
+  readonly legStop: Float32Array;
+  /** Distance du nœud au centre du passage piéton (m) ; −1 = pas de passage. */
+  readonly legCross: Float32Array;
+  /** Demi-largeur de chaussée traversée (m). */
+  readonly legHalf: Float32Array;
+  /** Passage : centre (x, y, z) et deux extrémités sur les bordures (a = côté gauche du sens sortant, b = côté droit). */
+  readonly legX: Float32Array; readonly legY: Float32Array; readonly legZ: Float32Array;
+  readonly legAX: Float32Array; readonly legAZ: Float32Array; readonly legBX: Float32Array; readonly legBZ: Float32Array;
+  /** Bits des phases de feu pendant lesquelles des véhicules franchissent le passage en mouvement protégé (tout droit ou bras de la branche). */
+  readonly legPhaseMask: Uint8Array;
+  private readonly legIndexOf = new Map<number, number>();
 
   /* ---------- tronçons ---------- */
   readonly edgeCount: number;
@@ -67,6 +105,8 @@ export class TrafficGraph {
   readonly edgeLanes: Uint8Array; // 2 par tronçon : [avant, arrière]
   readonly edgeLaneWidth: Float32Array;
   readonly edgeMedian: Float32Array;
+  /** Distance nœud → ligne d'arrêt imposée par l'entrée (2 par tronçon : [a, b]) ; NaN = rognage par défaut. */
+  readonly edgeStop: Float32Array;
   readonly edgePtStart: Int32Array; // CSR des points de polyligne
   readonly ptX: Float32Array;
   readonly ptY: Float32Array;
@@ -93,6 +133,9 @@ export class TrafficGraph {
   connTo: Int32Array = new Int32Array(0); // voie aval
   connTurn: Uint8Array = new Uint8Array(0);
   connArm: Int32Array = new Int32Array(0); // bras d'entrée (index dans armArc)
+  /** Branche de sortie de chaque connecteur (index de branche) et abscisse du connecteur où commence le passage piéton de sortie (−1 : aucun). */
+  connOutLeg: Int32Array = new Int32Array(0);
+  connOutCrossS: Float32Array = new Float32Array(0);
   connP: Float32Array = new Float32Array(0); // 9 flottants : p0, p1 (contrôle), p2
   conflictStart: Int32Array = new Int32Array(0);
   conflicts: Int32Array = new Int32Array(0);
@@ -125,6 +168,7 @@ export class TrafficGraph {
     this.edgeId = new Int32Array(E); this.edgeA = new Int32Array(E); this.edgeB = new Int32Array(E);
     this.edgeLen = new Float32Array(E); this.edgeSpeed = new Float32Array(E); this.edgeRank = new Uint8Array(E);
     this.edgeLanes = new Uint8Array(E * 2); this.edgeLaneWidth = new Float32Array(E); this.edgeMedian = new Float32Array(E);
+    this.edgeStop = new Float32Array(E * 2).fill(NaN);
     this.edgePtStart = new Int32Array(E + 1);
     let np = 0;
     for (const e of edges) np += e.points.length / 3;
@@ -136,6 +180,8 @@ export class TrafficGraph {
       this.edgeSpeed[i] = Math.max(1, e.speedKmh / 3.6); this.edgeRank[i] = e.rank;
       this.edgeLanes[i * 2] = e.lanesForward; this.edgeLanes[i * 2 + 1] = e.lanesBackward;
       this.edgeLaneWidth[i] = e.laneWidth; this.edgeMedian[i] = e.median;
+      if (e.stopA !== undefined && e.stopA >= 0) this.edgeStop[i * 2] = e.stopA;
+      if (e.stopB !== undefined && e.stopB >= 0) this.edgeStop[i * 2 + 1] = e.stopB;
       this.edgePtStart[i] = k;
       let s = 0;
       for (let p = 0; p < e.points.length; p += 3) {
@@ -174,6 +220,16 @@ export class TrafficGraph {
     for (let e = 0; e < E; e++) { incident[this.edgeA[e]!]!.push(e); incident[this.edgeB[e]!]!.push(e); }
     const arms: number[] = [];
     const armPhase: number[] = [], armPrio: number[] = [], armAngle: number[] = [];
+    // branches : une par tronçon incident (dans l'ordre d'entrée des tronçons)
+    this.nodeLegStart = new Int32Array(this.nodeCount + 1);
+    { let nlegs = 0; for (let n = 0; n < this.nodeCount; n++) { this.nodeLegStart[n] = nlegs; nlegs += incident[n]!.length; } this.nodeLegStart[this.nodeCount] = nlegs; }
+    const NL = this.nodeLegStart[this.nodeCount]!;
+    this.legNode = new Int32Array(NL); this.legEdge = new Int32Array(NL); this.legId = new Int32Array(NL); this.legArm = new Int32Array(NL).fill(-1);
+    this.legStop = new Float32Array(NL); this.legCross = new Float32Array(NL).fill(-1); this.legHalf = new Float32Array(NL);
+    this.legX = new Float32Array(NL); this.legY = new Float32Array(NL); this.legZ = new Float32Array(NL);
+    this.legAX = new Float32Array(NL); this.legAZ = new Float32Array(NL); this.legBX = new Float32Array(NL); this.legBZ = new Float32Array(NL);
+    this.legPhaseMask = new Uint8Array(NL);
+    const armLeg: number[] = [];
     for (let n = 0; n < this.nodeCount; n++) {
       this.nodeArmStart[n] = arms.length;
       const inc = incident[n]!;
@@ -182,13 +238,15 @@ export class TrafficGraph {
       for (const e of inc) maxHalf = Math.max(maxHalf, this.halfWidth(e));
       this.nodeTrim[n] = d >= 3 ? maxHalf + 1.5 : d === 2 ? Math.min(4, this.kinkTrim(n, inc)) : 0;
       // bras entrants
-      const nodeArms: { arc: number; angle: number; rank: number; lanes: number }[] = [];
-      for (const e of inc) {
+      const nodeArms: { arc: number; angle: number; rank: number; lanes: number; leg: number }[] = [];
+      inc.forEach((e, li) => {
+        const leg = this.nodeLegStart[n]! + li;
+        this.legNode[leg] = n; this.legEdge[leg] = e;
         const arcIn = this.edgeB[e] === n ? e * 2 : e * 2 + 1;
-        if (this.edgeLanes[arcIn]! === 0) continue; // pas de voie entrante (sens unique sortant)
+        if (this.edgeLanes[arcIn]! === 0) return; // pas de voie entrante (sens unique sortant)
         const [dx, dz] = this.arcEndDir(arcIn);
-        nodeArms.push({ arc: arcIn, angle: Math.atan2(dx, dz), rank: this.edgeRank[e]!, lanes: this.edgeLanes[arcIn]! });
-      }
+        nodeArms.push({ arc: arcIn, angle: Math.atan2(dx, dz), rank: this.edgeRank[e]!, lanes: this.edgeLanes[arcIn]!, leg });
+      });
       let control = Control.None;
       if (d === 1) control = Control.DeadEnd;
       else if (d >= 3) {
@@ -224,6 +282,7 @@ export class TrafficGraph {
         this.nodeGreen[n * 4 + p] = 14 + 5 * lanes;
       }
       nodeArms.forEach((a, i) => {
+        this.legArm[a.leg] = arms.length; armLeg.push(a.leg);
         arms.push(a.arc); armPhase.push(Math.min(3, phaseOf[i]!)); armAngle.push(a.angle);
         armPrio.push(control === Control.Yield && a.rank === maxRank ? 1 : 0);
       });
@@ -233,10 +292,59 @@ export class TrafficGraph {
     this.armPhase = Uint8Array.from(armPhase);
     this.armRankPrio = Uint8Array.from(armPrio);
     this.armAngle = Float32Array.from(armAngle);
+    this.armLeg = Int32Array.from(armLeg);
+
+    // lignes d'arrêt effectives (mêmes proportions que le rognage des voies) et passages piétons
+    const crossIn = new Float32Array(E * 2).fill(NaN), halfIn = new Float32Array(E).fill(NaN);
+    edges.forEach((e, i) => {
+      if (e.crossA !== undefined) crossIn[i * 2] = e.crossA;
+      if (e.crossB !== undefined) crossIn[i * 2 + 1] = e.crossB;
+      if (e.crossHalf !== undefined) halfIn[i] = e.crossHalf;
+    });
+    const tmp = new Float32Array(4);
+    for (let leg = 0; leg < NL; leg++) {
+      const n = this.legNode[leg]!, e = this.legEdge[leg]!;
+      const atA = this.edgeA[e] === n;
+      this.legId[leg] = this.edgeId[e]! * 2 + (atA ? 0 : 1);
+      this.legIndexOf.set(this.legId[leg]!, leg);
+      const [t0, t1] = this.edgeTrims(e);
+      const stop = atA ? t0 : t1;
+      this.legStop[leg] = stop;
+      const d = this.nodeLegStart[n + 1]! - this.nodeLegStart[n]!;
+      const ci = crossIn[e * 2 + (atA ? 0 : 1)]!;
+      let cross = Number.isNaN(ci) ? (d >= 3 ? stop - 2.8 : -1) : ci;
+      if (cross >= 0) cross = Math.min(Math.max(cross, 0.5), Math.max(0.5, stop - 0.5));
+      if (cross < 0 || d < 2 || stop < 2.5) cross = -1;
+      this.legCross[leg] = cross;
+      const half = Number.isNaN(halfIn[e]!) ? this.halfWidth(e) - 1 : halfIn[e]!;
+      this.legHalf[leg] = half;
+      // géométrie : sens sortant du nœud
+      const dir = atA ? 1 : -1;
+      const sAxis = atA ? Math.max(0, cross) : this.edgeLen[e]! - Math.max(0, cross);
+      this.edgePoint(e, sAxis, dir, 0, tmp, 0);
+      this.legX[leg] = tmp[0]!; this.legY[leg] = tmp[1]!; this.legZ[leg] = tmp[2]!;
+      this.edgePoint(e, sAxis, dir, -half, tmp, 0);
+      this.legAX[leg] = tmp[0]!; this.legAZ[leg] = tmp[2]!;
+      this.edgePoint(e, sAxis, dir, half, tmp, 0);
+      this.legBX[leg] = tmp[0]!; this.legBZ[leg] = tmp[2]!;
+    }
 
     this.arcFirstLane = new Int32Array(E * 2).fill(-1);
     this.arcLaneCount = new Uint8Array(E * 2);
     this.buildLinks();
+  }
+
+  /** Index de branche d'un passage (identifiant stable `legId`), −1 si inconnu. */
+  legIndex(id: number): number { return this.legIndexOf.get(id) ?? -1; }
+
+  /** Distances nœud → début/fin des voies aux deux extrémités d'un tronçon [côté a, côté b] (m). */
+  edgeTrims(e: number): [number, number] {
+    const L = this.edgeLen[e]!;
+    const sa = this.edgeStop[e * 2]!, sb = this.edgeStop[e * 2 + 1]!;
+    let t0 = Number.isNaN(sa) ? this.nodeTrim[this.edgeA[e]!]! : sa;
+    let t1 = Number.isNaN(sb) ? this.nodeTrim[this.edgeB[e]!]! : sb;
+    if (t0 + t1 > L * 0.8) { const k = (L * 0.8) / (t0 + t1); t0 *= k; t1 *= k; }
+    return [t0, t1];
   }
 
   nodeIndex(id: number): number { return this.nodeIndexOf.get(id) ?? -1; }
@@ -350,10 +458,9 @@ export class TrafficGraph {
       const e = arc >> 1;
       const n = this.edgeLanes[arc]!;
       if (n === 0) continue;
-      const from = this.arcFrom(arc), to = this.arcTo(arc);
       const L = this.edgeLen[e]!;
-      let t0 = this.nodeTrim[from]!, t1 = this.nodeTrim[to]!;
-      if (t0 + t1 > L * 0.8) { const k = (L * 0.8) / (t0 + t1); t0 *= k; t1 *= k; }
+      const [ta, tb] = this.edgeTrims(e);
+      const t0 = (arc & 1) === 0 ? ta : tb, t1 = (arc & 1) === 0 ? tb : ta;
       this.arcFirstLane[arc] = laneArc.length;
       this.arcLaneCount[arc] = n;
       for (let r = 0; r < n; r++) {
@@ -365,6 +472,7 @@ export class TrafficGraph {
     this.laneCount = nl;
     // connecteurs
     const cFrom: number[] = [], cTo: number[] = [], cTurn: number[] = [], cArm: number[] = [], cP: number[] = [], cLen: number[] = [], cSpeed: number[] = [];
+    const cOutLeg: number[] = [], cDegTwo: number[] = [];
     const tmp = new Float32Array(8);
     for (let l = 0; l < nl; l++) {
       const arc = laneArc[l]!;
@@ -426,6 +534,9 @@ export class TrafficGraph {
           len += Math.hypot(x - px, z - pz); px = x; pz = z;
         }
         cFrom.push(l); cTo.push(target); cTurn.push(o.turn); cArm.push(armIdx); cLen.push(Math.max(0.3, len));
+        let outLeg = -1;
+        for (let k = this.nodeLegStart[node]!; k < this.nodeLegStart[node + 1]!; k++) if (this.legEdge[k] === (o.arc >> 1)) outLeg = k;
+        cOutLeg.push(outLeg); cDegTwo.push(degTwo ? 1 : 0);
         const vIn = laneSpeed[l]!;
         cSpeed.push(o.turn === Turn.Straight || degTwo ? vIn : o.turn === Turn.UTurn ? 4 : o.turn === Turn.Right ? 5.5 : 7);
       }
@@ -444,6 +555,18 @@ export class TrafficGraph {
     }
     this.connFrom = Int32Array.from(cFrom); this.connTo = Int32Array.from(cTo); this.connTurn = Uint8Array.from(cTurn);
     this.connArm = Int32Array.from(cArm); this.connP = Float32Array.from(cP);
+    this.connOutLeg = Int32Array.from(cOutLeg);
+    this.connOutCrossS = new Float32Array(nc).fill(-1);
+    for (let c = 0; c < nc; c++) {
+      const leg = cOutLeg[c]!;
+      if (leg >= 0 && this.legCross[leg]! >= 0) {
+        // le passage de sortie occupe [cross − 2, cross + 2] depuis le nœud ; le connecteur finit à la ligne d'arrêt
+        this.connOutCrossS[c] = Math.max(0, cLen[c]! - (this.legStop[leg]! - (this.legCross[leg]! - 2)));
+        // mouvement protégé (tout droit) : sa phase interdit le passage aux piétons
+        if ((cTurn[c] === Turn.Straight || cDegTwo[c]) && cArm[c]! >= 0) this.legPhaseMask[leg]! |= 1 << this.armPhase[cArm[c]!]!;
+      }
+    }
+    for (let a = 0; a < this.armArc.length; a++) this.legPhaseMask[this.armLeg[a]!]! |= 1 << this.armPhase[a]!;
     for (let c = 0; c < nc; c++) {
       const L = nl + c;
       this.linkKind[L] = 1; this.linkLen[L] = cLen[c]!; this.linkSpeed[L] = cSpeed[c]!;

@@ -17,6 +17,14 @@ import { collectTransferables, validateCommandMessage, type DeltaMessage, type R
 import { validateSave } from '../../src/sim/save-format';
 import { buildTown, runDays, townCatalog } from '../sim/fixtures';
 
+/**
+ * Modules de phase 2A DÉJÀ IMPLÉMENTÉS par une branche : ils ont des crochets, envoient des `ext` et écrivent
+ * une section de sauvegarde. Les contrôles « module vide = aucun effet » ci-dessous portent sur les AUTRES
+ * (le mécanisme reste vérifié : registre complet, plugin de test injecté, sections, commandes).
+ */
+const IMPLEMENTED = new Set(['circulation']);
+const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id));
+
 function town(plugins?: readonly SimPlugin[]): Simulation {
   const s = plugins ? new Simulation(plugins) : new Simulation();
   s.setCatalog(townCatalog());
@@ -72,7 +80,7 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), ids);
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
   assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), ids);
-  for (const p of SIM_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
+  for (const p of EMPTY_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
   for (const sec of SAVE_SECTIONS) {
     assert.deepEqual(sec.migrate(sec.empty(), sec.version), sec.empty());
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
@@ -84,7 +92,7 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
 
 test('modules vides : simulation identique tick à tick avec et sans le registre', () => {
   const a = town([]);
-  const b = town(); // registre SIM_PLUGINS (vide)
+  const b = town(EMPTY_PLUGINS); // registre des modules encore vides
   buildTown(a);
   buildTown(b);
   assert.deepEqual(a.takeDelta(), b.takeDelta());
@@ -284,7 +292,7 @@ test('pluginCommand : validation du message, module inconnu, codes d\'erreur, ex
   const d = new Simulation();
   d.setCatalog(townCatalog());
   d.newGame({ seed: 1, mapChunks: 4, startMoney: 1e6, cityName: 'C', terrain: { hydrology: 'aucune', rivers: 0 } });
-  const r = d.pluginCommand({ plugin: 'circulation', name: 'feux' });
+  const r = d.pluginCommand({ plugin: 'pietons', name: 'feux' });
   assert.ok(!r.ok && r.error.code === 'NOT_IMPLEMENTED');
 });
 

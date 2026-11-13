@@ -11,6 +11,8 @@ import { rotAngle } from '../../shared/footprint';
 import type { BuildingStore, RoadGraph } from '../ecs';
 import { ROAD_TYPE_ORDER } from '../pathfinding';
 import { evalCubic, profileHeightAt, ROAD_KINDS, ROAD_KIND_ORDER, type RoadNetwork } from '../roads/index';
+import { segmentTrims, type JunctionInfo } from '../roads/junction';
+import { carriagewayWidth } from '../roads/types';
 import type { TrafficEdgeInput, TrafficNetworkInput } from './network';
 import type { TrafficBuilding } from './system';
 
@@ -37,8 +39,20 @@ export function inputFromRoadGraph(g: RoadGraph): TrafficNetworkInput {
   return { nodes, edges };
 }
 
-/** Échantillonne les tronçons courbes du module routes (pas ≈ 6 m, hauteurs du profil en long). */
+/** Distance (m) du recul de carrefour au centre du passage piéton peint, et à la ligne d'arrêt (mêmes cotes que src/render/roads/builder.ts). */
+export const CROSSWALK_CENTER = 2.8;
+export const STOP_LINE_SIDEWALK = 5.6;
+export const STOP_LINE_PLAIN = 1.5;
+/** Longueur minimale de chaussée (entre reculs) pour que le rendu peigne passages et lignes d'arrêt. */
+export const MARKINGS_MIN_LENGTH = 14;
+
+/**
+ * Échantillonne les tronçons courbes du module routes (pas ≈ 6 m, hauteurs du profil en long).
+ * Les lignes d'arrêt et les passages piétons sont placés aux MÊMES cotes que les marquages peints par le rendu
+ * (recul du carrefour + 5,6 m / + 2,8 m) : les véhicules s'arrêtent avant le passage dessiné.
+ */
 export function inputFromRoadNetwork(net: RoadNetwork, step = 6): TrafficNetworkInput {
+  const junctions = new Map<number, JunctionInfo>();
   const nodes = [];
   for (let i = 0; i < net.nodeCount; i++) nodes.push({ id: net.nodeId[i]!, x: net.nodeX[i]!, y: net.nodeY[i]!, z: net.nodeZ[i]! });
   const edges: TrafficEdgeInput[] = [];
@@ -58,11 +72,20 @@ export function inputFromRoadNetwork(net: RoadNetwork, step = 6): TrafficNetwork
       evalCubic(curve, arc.tAt(s), p);
       pts.push(p[0]!, profileHeightAt(prof, s), p[1]!);
     }
-    edges.push({
+    const edge: TrafficEdgeInput = {
       id, a: net.segA[k]!, b: net.segB[k]!, points: pts,
       lanesForward: kind.lanesForward, lanesBackward: kind.lanesBackward, laneWidth: kind.laneWidth, median: kind.medianWidth,
-      speedKmh: kind.speedKmh, rank: RANK[kindId] ?? 0,
-    });
+      speedKmh: kind.speedKmh, rank: RANK[kindId] ?? 0, crossHalf: carriagewayWidth(kind) / 2,
+    };
+    const tr = segmentTrims(net, id, junctions);
+    const L = arc.length;
+    const s0 = Math.min(tr.start, L * 0.49), s1 = Math.max(L - tr.end, L * 0.51);
+    const marked = s1 - s0 >= MARKINGS_MIN_LENGTH;
+    const walk = kind.pedestrians && kind.sidewalk > 0;
+    const stopOff = marked ? (kind.sidewalk > 0 ? STOP_LINE_SIDEWALK : STOP_LINE_PLAIN) : 0.5;
+    if (tr.startType === 'junction') { edge.stopA = s0 + stopOff; edge.crossA = marked && walk ? s0 + CROSSWALK_CENTER : -1; }
+    if (tr.endType === 'junction') { edge.stopB = L - s1 + stopOff; edge.crossB = marked && walk ? L - s1 + CROSSWALK_CENTER : -1; }
+    edges.push(edge);
   }
   return { nodes, edges };
 }

@@ -19,9 +19,12 @@
 import type { AssetCatalog } from '../../shared/catalog';
 import { VEHICLE_STRIDE } from '../../shared/constants';
 import { SIGNAL_HEAD_STRIDE, type VehicleFrame } from '../../shared/protocol';
+import { congestionLevel, FEU_ORANGE, FEU_ROUGE, FEU_VERT, type CongestionFrame, type CongestionLayout, type CrossingState, type FeuArmState, type FeuJunctionState, type FeuxApi } from '../../shared/protocol-ext/circulation';
 import { FREE_GAP, IDM_BY_KIND, idmAccel } from './idm';
+import { MOBIL_DEFAULT, mandatoryBSafe, mobilGain, mobilSafe, type MobilParams } from './mobil';
 import { Control, EdgeGrid, TrafficGraph, Turn, type TrafficNetworkInput } from './network';
 import { ArcRouter } from './router';
+import { setActiveTraffic } from './registry';
 
 /** Trame véhicules étendue (champs optionnels compris par src/render/vehicles). */
 export interface TrafficVehicleFrame extends VehicleFrame {
@@ -55,6 +58,10 @@ export interface TrafficOptions {
   accessDistance?: number;
   /** Génération automatique des trajets (défaut vrai ; faux pour des scénarios pilotés). */
   demand?: boolean;
+  /** Réacheminement en cours de route selon la congestion (défaut vrai). */
+  reroute?: boolean;
+  /** Paramètres MOBIL des changements de voie de confort. */
+  mobil?: Partial<MobilParams>;
 }
 
 export interface TrafficStats {
@@ -70,7 +77,22 @@ export interface TrafficStats {
   connectedBuildings: number;
   routeQueries: number;
   laneChanges: number;
+  /** Changements de voie obligatoires (présélection) parmi `laneChanges`. */
+  mandatoryLaneChanges: number;
+  /** Itinéraires recalculés en route à cause de la congestion (adoptés). */
+  rerouted: number;
+  /** Véhicules sortis d'une voie sans issue pour leur itinéraire par un nouvel itinéraire (anti-blocage). */
+  unblocked: number;
+  /** Refus d'accès à un carrefour pour laisser passer des piétons (cumul de pas·véhicule). */
+  pedestrianYields: number;
 }
+
+/** États d'un feu (véhicules ou piétons) — mêmes valeurs que `FEU_*` de protocol-ext/circulation. */
+export const SIG_GREEN = FEU_VERT, SIG_AMBER = FEU_ORANGE, SIG_RED = FEU_ROUGE;
+/** Durées fixes du cycle (s) : orange, rouge intégral. */
+export const AMBER_S = 3, ALL_RED_S = 2;
+/** Vitesse de marche de référence pour le temps de dégagement d'un passage (m/s). */
+export const WALK_SPEED = 1.2;
 
 type Usage = 'prive' | 'taxi' | 'police' | 'livraison' | 'ambulance' | 'fret' | 'bus' | 'pompiers' | 'proprete';
 const RESIDENTIAL = new Set(['house', 'townhouse', 'apartment_low', 'apartment_mid', 'apartment_high']);
@@ -89,6 +111,9 @@ export function demandShare(hour: number): number {
   return 0.004;
 }
 
+/** État sauvegardé d'un carrefour à feux (par identifiant de nœud du monde). */
+export interface SignalSnapshot { nodeId: number; phase: number; stage: number; timer: number }
+
 export class TrafficSystem {
   graph: TrafficGraph | null = null;
   router: ArcRouter | null = null;
@@ -100,6 +125,8 @@ export class TrafficSystem {
   demandEnabled: boolean;
   private readonly spawnPerStep: number;
   private readonly accessDistance: number;
+  rerouteEnabled: boolean;
+  readonly mobil: MobilParams;
   private time = 0;
   private dt = 0.1;
   private laneStamp = new Uint32Array(0);
@@ -131,7 +158,9 @@ export class TrafficSystem {
   waitT = new Float32Array(0);
   holdConn = new Int32Array(0);
   granted = new Uint8Array(0);
-  /** Diagnostic : raison du dernier refus d'accès au carrefour (0 aucun, 1 feu, 2 priorité, 3 conflit occupé, 4 sortie encombrée). */
+  /** Instant (temps du trafic) avant lequel l'itinéraire du véhicule n'est pas réexaminé. */
+  rrNext = new Float32Array(0);
+  /** Diagnostic : raison du dernier refus d'accès au carrefour (0 aucun, 1 feu, 2 priorité, 3 conflit occupé, 4 sortie encombrée, 5 piétons). */
   denyReason = new Uint8Array(0);
   wasGranted = new Uint8Array(0);
   flags = new Uint8Array(0);
@@ -172,7 +201,18 @@ export class TrafficSystem {
   edgeSpeed = new Float32Array(0);
   private edgeCountTmp = new Float32Array(0);
   private edgeSpeedTmp = new Float32Array(0);
+  /** Par arc (tronçon × 2 + sens) : densité (véh/km/voie) et vitesse moyenne (m/s) lissées, véhicules à l'arrêt. */
+  arcDensity = new Float32Array(0);
+  arcSpeed = new Float32Array(0);
+  private arcCountTmp = new Float32Array(0);
+  private arcSpeedTmp = new Float32Array(0);
   private statTimer = 0;
+  /** Passages piétons : instant (temps du trafic) jusqu'auquel des piétons sont annoncés sur le passage de chaque branche. */
+  private legBusyUntil = new Float32Array(0);
+  private rrCursor = 0;
+  private pendingSignals: SignalSnapshot[] | null = null;
+  /** Tampon d'itinéraire candidat (réacheminement / déblocage) : évite toute allocation dans l'arène. */
+  private readonly scratch = new Int32Array(ROUTE_MAX);
   // bâtiments
   private buildings: TrafficBuilding[] = [];
   private access: { b: TrafficBuilding; arc: number; sLane: number; edge: number }[] = [];
@@ -187,7 +227,7 @@ export class TrafficSystem {
   private buildingsDirty = false;
   private readonly tmp4 = new Float32Array(4);
 
-  readonly stats: TrafficStats = { vehicles: 0, spawned: 0, arrived: 0, removedStuck: 0, meanSpeedKmh: 0, stopped: 0, signals: 0, priorityJunctions: 0, yieldJunctions: 0, connectedBuildings: 0, routeQueries: 0, laneChanges: 0 };
+  readonly stats: TrafficStats = { vehicles: 0, spawned: 0, arrived: 0, removedStuck: 0, meanSpeedKmh: 0, stopped: 0, signals: 0, priorityJunctions: 0, yieldJunctions: 0, connectedBuildings: 0, routeQueries: 0, laneChanges: 0, mandatoryLaneChanges: 0, rerouted: 0, unblocked: 0, pedestrianYields: 0 };
 
   constructor(opts: TrafficOptions = {}) {
     this.rng = (opts.seed ?? 12345) >>> 0 || 1;
@@ -196,7 +236,10 @@ export class TrafficSystem {
     this.spawnPerStep = opts.spawnPerStep ?? 8;
     this.accessDistance = opts.accessDistance ?? 40;
     this.demandEnabled = opts.demand ?? true;
+    this.rerouteEnabled = opts.reroute ?? true;
+    this.mobil = { ...MOBIL_DEFAULT, ...opts.mobil };
     this.growVehicles(256);
+    setActiveTraffic(this);
   }
 
   /* ------------------------------------------------------------------ */
@@ -232,7 +275,7 @@ export class TrafficSystem {
     this.len = f32(this.len); this.vDes = f32(this.vDes); this.aMax = f32(this.aMax); this.bComf = f32(this.bComf); this.T = f32(this.T); this.s0 = f32(this.s0);
     this.routeOff = i32(this.routeOff); this.routeLen = i32(this.routeLen); this.routeIdx = i32(this.routeIdx); this.destS = f32(this.destS);
     this.nextLink = i32(this.nextLink); { const b = new Int8Array(n); b.set(this.needLane); this.needLane = b; }
-    this.latOff = f32(this.latOff); this.lcCool = f32(this.lcCool); this.waitT = f32(this.waitT); this.holdConn = i32(this.holdConn);
+    this.latOff = f32(this.latOff); this.lcCool = f32(this.lcCool); this.waitT = f32(this.waitT); this.rrNext = f32(this.rrNext); this.holdConn = i32(this.holdConn);
     this.granted = u8(this.granted); this.denyReason = u8(this.denyReason); this.wasGranted = u8(this.wasGranted); this.flags = u8(this.flags);
     this.act = i32(this.act); this.actPos = i32(this.actPos);
     const nf = new Int32Array(n);
@@ -296,6 +339,9 @@ export class TrafficSystem {
         keep.push({ v, edgeId: old.edgeId[arc >> 1]!, dir: arc & 1, rank: old.linkRank[l]!, sAxis: old.linkS0[l]! + s, destEdgeId: old.edgeId[dArc >> 1]!, destDir: dArc & 1, destAxis: old.linkS0[destLane]! + this.destS[v]! });
       }
     }
+    // état des feux conservé par identifiant de nœud (un chantier ailleurs ne remet pas tous les feux à zéro)
+    const sigKeep = this.pendingSignals ?? this.signalSnapshot();
+    this.pendingSignals = null;
     this.graph = new TrafficGraph(input);
     this.router = new ArcRouter(this.graph);
     this.grid = new EdgeGrid(this.graph);
@@ -314,6 +360,14 @@ export class TrafficSystem {
     this.edgeSpeed = new Float32Array(g.edgeCount);
     this.edgeCountTmp = new Float32Array(g.edgeCount);
     this.edgeSpeedTmp = new Float32Array(g.edgeCount);
+    this.arcDensity = new Float32Array(g.edgeCount * 2);
+    this.arcSpeed = new Float32Array(g.edgeCount * 2);
+    for (let a = 0; a < g.edgeCount * 2; a++) this.arcSpeed[a] = g.edgeSpeed[a >> 1]!;
+    for (let e = 0; e < g.edgeCount; e++) this.edgeSpeed[e] = g.edgeSpeed[e]!;
+    this.arcCountTmp = new Float32Array(g.edgeCount * 2);
+    this.arcSpeedTmp = new Float32Array(g.edgeCount * 2);
+    this.legBusyUntil = new Float32Array(g.legNode.length);
+    this.rrCursor = 0;
     let sig = 0, pr = 0, yi = 0;
     for (let n = 0; n < g.nodeCount; n++) {
       const c = g.nodeControl[n]!;
@@ -322,6 +376,7 @@ export class TrafficSystem {
       else if (c === Control.Yield) yi++;
     }
     this.stats.signals = sig; this.stats.priorityJunctions = pr; this.stats.yieldJunctions = yi;
+    this.applySignals(sigKeep);
     // report des véhicules
     for (const k of keep) {
       const e = g.edgeIndex(k.edgeId), de = g.edgeIndex(k.destEdgeId);
@@ -338,6 +393,7 @@ export class TrafficSystem {
       if (n < 1) { this.routeLen[k.v] = 0; this.despawn(k.v); continue; }
       this.routeOff[k.v] = off; this.routeLen[k.v] = n; this.routeIdx[k.v] = 0;
       this.arenaUsed = off + n; this.arenaLive -= ROUTE_MAX - n;
+      this.granted[k.v] = 0; this.wasGranted[k.v] = 0;
       this.chooseNext(k.v);
     }
     this.networkDirty = false;
@@ -457,6 +513,7 @@ export class TrafficSystem {
     this.destS[v] = destS;
     this.latOff[v] = lateral; // sortie du bas-côté (amortie)
     this.lcCool[v] = 2;
+    this.rrNext[v] = this.time + 8 + this.rand() * 10;
     this.waitT[v] = 0;
     this.holdConn[v] = -1;
     this.granted[v] = 0; this.wasGranted[v] = 0;
@@ -541,6 +598,7 @@ export class TrafficSystem {
     this.laneChanges(dt);
     this.buildBuckets();
     this.move(dt);
+    if (this.rerouteEnabled) this.reroute();
     if (this.demandEnabled) this.spawn(hour);
     this.statTimer += dt;
     if (this.statTimer >= 1) { this.updateStats(this.statTimer); this.statTimer = 0; }
@@ -554,7 +612,7 @@ export class TrafficSystem {
       if (g.nodeControl[n] !== Control.Signal) continue;
       this.sigTimer[n]! += dt;
       const st = this.sigStage[n]!;
-      const dur = st === 0 ? g.nodeGreen[n * 4 + this.sigPhase[n]!]! : st === 1 ? 3 : 2;
+      const dur = st === 0 ? g.nodeGreen[n * 4 + this.sigPhase[n]!]! : st === 1 ? AMBER_S : ALL_RED_S;
       if (this.sigTimer[n]! >= dur) {
         this.sigTimer[n] = 0;
         if (st === 0) this.sigStage[n] = 1;
@@ -620,8 +678,16 @@ export class TrafficSystem {
       if (c < 0) { this.granted[v] = 1; continue; }
       const node = g.linkToNode[l]!;
       const ctl = g.nodeControl[node]!;
-      if (ctl === Control.None || ctl === Control.DeadEnd) { this.granted[v] = 1; continue; }
       const dist = g.linkLen[l]! - this.s[v]! - this.len[v]! / 2;
+      if (ctl === Control.None || ctl === Control.DeadEnd) {
+        // pas de régime de priorité : seul un passage piéton occupé arrête le véhicule (s'il peut encore s'arrêter)
+        this.granted[v] = 1;
+        if (g.linkKind[c] === 1 && dist < APPROACH && this.pedestriansOn(c)) {
+          const committed = this.wasGranted[v] === 1 && dist < (this.v[v]! * this.v[v]!) / (2 * this.bComf[v]!) + 1.5;
+          if (!committed) { this.granted[v] = 0; this.denyReason[v] = 5; this.stats.pedestrianYields++; }
+        }
+        continue;
+      }
       if (dist > APPROACH) { this.granted[v] = 0; continue; }
       // tous les véhicules proches demandent l'accès (peloton : un suiveur est autorisé avec son meneur,
       // ce qui évite un arrêt à la ligne pour chaque véhicule) ; l'ordre de passage reste celui de la file (IDM)
@@ -688,8 +754,10 @@ export class TrafficSystem {
         const inConn = this.tailOf(c);
         if (can && inConn >= 0 && this.v[inConn]! < 0.5) can = false;
       }
+      let ped = false;
+      if (can && this.reqOk[r] !== 1 && this.pedestriansOn(c)) { can = false; ped = true; this.stats.pedestrianYields++; }
       this.reqCan[r] = can ? 1 : 0;
-      this.denyReason[v] = can ? 0 : ctl === Control.Signal && this.reqOk[r] !== 1 && this.signalState(node, g.connArm[ci]!) !== 0 ? 1 : 4;
+      this.denyReason[v] = can ? 0 : ped ? 5 : ctl === Control.Signal && this.reqOk[r] !== 1 && this.signalState(node, g.connArm[ci]!) !== 0 ? 1 : 4;
     }
     for (let k = i0; k < i1; k++) {
       const r = idx(k);
@@ -766,8 +834,21 @@ export class TrafficSystem {
   }
   private readonly nb = new Int32Array(2);
 
+  /** Accélération IDM du véhicule `v` derrière un meneur `lead` (−1 : voie libre) à la position `sv`. */
+  private accelBehind(v: number, lead: number, sv: number): number {
+    const gap = lead >= 0 ? this.s[lead]! - this.len[lead]! / 2 - (sv + this.len[v]! / 2) : FREE_GAP;
+    const dv = lead >= 0 ? this.v[v]! - this.v[lead]! : 0;
+    return idmAccel(this.v[v]!, this.vDes[v]!, Math.max(gap, -0.5), dv, this.aMax[v]!, this.bComf[v]!, this.T[v]!, this.s0[v]!);
+  }
+
+  /**
+   * Changements de voie : obligatoires (présélection avant une manœuvre, sécurité seule, de plus en plus
+   * tolérante à l'approche du carrefour) et de confort (critère MOBIL complet : sécurité + gain pondéré par
+   * la politesse et le biais vers la droite).
+   */
   private laneChanges(dt: number): void {
     const g = this.graph!;
+    const P = this.mobil;
     for (let i = 0; i < this.actCount; i++) {
       const v = this.act[i]!;
       if (this.lcCool[v]! > 0) { this.lcCool[v]! -= dt; continue; }
@@ -779,28 +860,37 @@ export class TrafficSystem {
       const r = g.linkRank[l]!;
       const s = this.s[v]!;
       const remain = g.linkLen[l]! - s;
-      let dirWanted = this.needLane[v]!;
-      let mandatory = dirWanted !== 0;
-      if (!mandatory) {
-        // confort : meneur lent et proche
-        const pos = this.bucketPos[v]!;
-        const lead = pos > this.bucketStart[l]! ? this.bucketVeh[pos - 1]! : -1;
-        if (lead < 0 || remain < 40 || this.v[lead]! > this.vDes[v]! * 0.75 || this.s[lead]! - s > 45) continue;
-        dirWanted = r + 1 < n ? 1 : -1;
-        mandatory = false;
-      }
-      const tr = r + dirWanted;
-      if (tr < 0 || tr >= n) continue;
-      const target = g.arcFirstLane[arc]! + tr;
-      if (this.laneStamp[target] === this.tickStamp) continue; // un seul changement vers une voie par pas
-      if (!mandatory) {
-        // incitation (MOBIL) : la voie cible doit offrir nettement plus d'espace devant
+      const need = this.needLane[v]!;
+      // candidats : la direction obligatoire, sinon les deux voisines (meilleur gain MOBIL)
+      // les changements de confort cessent à l'approche du carrefour (présélection déjà en cours)
+      if (need === 0 && remain < 40) continue;
+      const dirs = need !== 0 ? [need] : r + 1 < n && r - 1 >= 0 ? [1, -1] : r + 1 < n ? [1] : [-1];
+      let bestDir = 0, bestGain = P.threshold;
+      for (const dirWanted of dirs) {
+        const tr = r + dirWanted;
+        if (tr < 0 || tr >= n) continue;
+        const target = g.arcFirstLane[arc]! + tr;
+        if (this.laneStamp[target] === this.tickStamp) continue; // un seul changement vers une voie par pas
         this.neighbours(target, s, this.nb);
-        const pos = this.bucketPos[v]!;
-        const curLead = pos > this.bucketStart[l]! ? this.bucketVeh[pos - 1]! : -1;
-        const curGap = curLead >= 0 ? this.s[curLead]! - s : 1e4;
-        const newGap = this.nb[0]! >= 0 ? this.s[this.nb[0]!]! - s : 1e4;
-        if (newGap < curGap + 12) continue;
+        const lead = this.nb[0]!, fol = this.nb[1]!;
+        const half = this.len[v]! / 2;
+        const pos0 = this.bucketPos[v]!;
+        const oldLead = pos0 > this.bucketStart[l]! ? this.bucketVeh[pos0 - 1]! : -1;
+        const oldFol = pos0 + 1 < this.bucketStart[l + 1]! ? this.bucketVeh[pos0 + 1]! : -1;
+        // écarts bruts : aucun chevauchement, ni dans la voie cible, ni dans la voie quittée (le véhicule
+        // chevauche les deux pendant la transition latérale animée par le rendu)
+        const gapAhead = (u: number): number => (u < 0 ? FREE_GAP : this.s[u]! - this.len[u]! / 2 - (s + half));
+        const gapBehind = (u: number): number => (u < 0 ? FREE_GAP : s - half - (this.s[u]! + this.len[u]! / 2));
+        const leadGap = gapAhead(lead);
+        if (leadGap < this.s0[v]! + 0.5) continue;
+        if (fol >= 0 && gapBehind(fol) < this.s0[fol]! + 0.5) continue;
+        if (gapAhead(oldLead) < 0.6 || gapBehind(oldFol) < 0.6) continue;
+        if (need === 0 && leadGap < this.v[v]! * this.T[v]! * 0.8) continue;
+        const bSafe = need !== 0 ? mandatoryBSafe(remain) : P.bSafe;
+        const aSelfAfter = this.accelBehind(v, lead, s);
+        const aFolAfter = fol >= 0 ? this.accelBehind(fol, v, this.s[fol]!) : 0;
+        if (!mobilSafe(aFolAfter, aSelfAfter, bSafe)) continue;
+        if (need !== 0) { bestDir = dirWanted; bestGain = Infinity; break; }
         // la voie cible doit permettre la suite de l'itinéraire
         const ri = this.routeIdx[v]!;
         if (ri + 1 < this.routeLen[v]!) {
@@ -809,33 +899,28 @@ export class TrafficSystem {
           for (let q = g.laneConnStart[target]!; q < g.laneConnStart[target + 1]!; q++) if (g.linkArc[g.laneConns[q]!] === nextArc) okNext = true;
           if (!okNext) continue;
         }
+        // gain MOBIL : véhicule, nouveau suiveur, ancien suiveur
+        const pos = this.bucketPos[v]!;
+        const curLead = pos > this.bucketStart[l]! ? this.bucketVeh[pos - 1]! : -1;
+        const curFol = pos + 1 < this.bucketStart[l + 1]! ? this.bucketVeh[pos + 1]! : -1;
+        const aSelfBefore = this.accelBehind(v, curLead, s);
+        const aNewFolBefore = fol >= 0 ? this.accelBehind(fol, lead, this.s[fol]!) : 0;
+        const aOldFolBefore = curFol >= 0 ? this.accelBehind(curFol, v, this.s[curFol]!) : 0;
+        const aOldFolAfter = curFol >= 0 ? this.accelBehind(curFol, curLead, this.s[curFol]!) : 0;
+        // la voie de droite a le rang le plus élevé (rang 0 = près de l'axe)
+        const gain = mobilGain(aSelfAfter, aSelfBefore, aFolAfter, aNewFolBefore, aOldFolAfter, aOldFolBefore, dirWanted > 0 ? 1 : -1, P);
+        if (gain > bestGain) { bestGain = gain; bestDir = dirWanted; }
       }
-      this.neighbours(target, s, this.nb);
-      const lead = this.nb[0]!, fol = this.nb[1]!;
-      const halfV = this.len[v]! / 2;
-      // sécurité (MOBIL) : écarts suffisants et décélération imposée au suiveur acceptable
-      let safe = true;
-      if (lead >= 0) {
-        const gap = this.s[lead]! - this.len[lead]! / 2 - (s + halfV);
-        if (gap < this.s0[v]! + 0.5) safe = false;
-        else if (!mandatory && gap < this.v[v]! * this.T[v]! * 0.8) safe = false;
-      }
-      if (safe && fol >= 0) {
-        const gap = s - halfV - (this.s[fol]! + this.len[fol]! / 2);
-        if (gap < this.s0[fol]! + 0.5) safe = false;
-        else {
-          const aF = idmAccel(this.v[fol]!, this.vDes[fol]!, gap, this.v[fol]! - this.v[v]!, this.aMax[fol]!, this.bComf[fol]!, this.T[fol]!, this.s0[fol]!);
-          if (aF < (mandatory ? -3.5 : -1.5)) safe = false;
-        }
-      }
-      if (!safe) continue;
+      if (bestDir === 0) continue;
+      const target = g.arcFirstLane[arc]! + r + bestDir;
       this.link[v] = target;
       this.laneStamp[target] = this.tickStamp;
       this.laneStamp[l] = this.tickStamp;
-      // décalage latéral résiduel animé (rendu) : la voie cible est à droite si dirWanted > 0
-      this.latOff[v] = -dirWanted * g.edgeLaneWidth[arc >> 1]!;
-      this.lcCool[v] = mandatory ? 1.5 : 4;
+      // décalage latéral résiduel animé (rendu) : la voie cible est à droite si bestDir > 0
+      this.latOff[v] = -bestDir * g.edgeLaneWidth[arc >> 1]!;
+      this.lcCool[v] = need !== 0 ? 1.5 : 4;
       this.stats.laneChanges++;
+      if (need !== 0) this.stats.mandatoryLaneChanges++;
       this.chooseNext(v);
     }
   }
@@ -928,7 +1013,10 @@ export class TrafficSystem {
         if (g.linkKind[cur] === 0 && !this.granted[v]) { ns = g.linkLen[cur]!; this.v[v] = 0; break; }
         ns -= g.linkLen[cur]!;
         if (g.linkKind[next] === 1) {
-          // entrée dans le carrefour : occupation du connecteur jusqu'à dégagement de l'arrière
+          // entrée dans le carrefour : la trajectoire du connecteur porte seule le véhicule (plus de décalage
+          // latéral résiduel d'un changement de voie, qui le ferait mordre sur la trajectoire voisine)
+          this.latOff[v] = 0;
+          // occupation du connecteur jusqu'à dégagement de l'arrière
           if (this.holdConn[v]! >= 0) this.connOcc[this.holdConn[v]! - nl]!--;
           this.holdConn[v] = next;
           this.connOcc[next - nl]!++;
@@ -945,10 +1033,218 @@ export class TrafficSystem {
         this.connOcc[this.holdConn[v]! - nl]!--;
         this.holdConn[v] = -1;
       }
+      // voie sans issue pour l'itinéraire depuis un moment : itinéraire de secours (anti-blocage)
+      if (this.waitT[v]! > 12 && g.linkKind[this.link[v]!] === 0 && this.nextLink[v]! < 0 && this.routeIdx[v]! + 1 < this.routeLen[v]!) {
+        if (this.unblock(v)) this.waitT[v] = 0;
+      }
       // véhicule bloqué très longtemps (interblocage) : retiré (compté)
       if (this.waitT[v]! > 150) { this.stats.removedStuck++; this.despawn(v); i--; }
     }
   }
+
+  /* ----------------------------- réacheminement ----------------------------- */
+
+  /**
+   * Réacheminement en cours de route : quelques véhicules par pas réexaminent leur itinéraire avec les coûts
+   * observés (retards de congestion mis à jour par `updateStats`) et l'adoptent s'il fait gagner du temps.
+   * Les véhicules engagés dans un carrefour ou tout près de la ligne d'arrêt ne sont pas touchés.
+   */
+  private reroute(): void {
+    const g = this.graph, router = this.router;
+    if (!g || !router || this.actCount === 0) return;
+    const budget = Math.max(1, Math.min(8, this.actCount >> 5));
+    for (let k = 0; k < budget; k++) {
+      if (this.rrCursor >= this.actCount) this.rrCursor = 0;
+      const v = this.act[this.rrCursor++]!;
+      if (this.time < this.rrNext[v]!) continue;
+      this.rrNext[v] = this.time + 12 + this.rand() * 12;
+      const l = this.link[v]!;
+      if (g.linkKind[l] !== 0) continue;
+      const off0 = this.routeOff[v]!, n = this.routeLen[v]!, ri = this.routeIdx[v]!;
+      if (ri + 2 >= n) continue; // presque arrivé : plus rien à optimiser
+      if (g.linkLen[l]! - this.s[v]! < 25) continue; // engagement imminent
+      const cur = this.arena[off0 + ri]!, dest = this.arena[off0 + n - 1]!;
+      const oldCost = router.pathCost(this.arena, off0 + ri, n - ri);
+      const m = router.route(cur, dest, this.scratch, 0, ROUTE_MAX);
+      if (m < 2) continue;
+      const newCost = router.pathCost(this.scratch, 0, m);
+      // marge : on ne change que pour un gain net (évite les oscillations d'itinéraire)
+      if (newCost > oldCost - Math.max(6, oldCost * 0.08)) continue;
+      this.adoptRoute(v, m);
+      this.stats.rerouted++;
+    }
+  }
+
+  /** Remplace l'itinéraire du véhicule par les `m` arcs de `scratch` (le premier est l'arc courant). */
+  private adoptRoute(v: number, m: number): void {
+    const off = this.allocRoute(m);
+    this.arena.set(this.scratch.subarray(0, m), off);
+    this.arenaLive -= this.routeLen[v]!;
+    this.routeOff[v] = off; this.routeLen[v] = m; this.routeIdx[v] = 0;
+    this.chooseNext(v);
+  }
+
+  /**
+   * Anti-blocage : véhicule arrêté sur une voie d'où aucune manœuvre ne mène à la suite de son itinéraire
+   * (changement de voie impossible). On repart par la meilleure manœuvre réellement disponible.
+   * Renvoie vrai si un itinéraire de secours a été adopté.
+   */
+  private unblock(v: number): boolean {
+    const g = this.graph, router = this.router;
+    if (!g || !router) return false;
+    const l = this.link[v]!;
+    if (g.linkKind[l] !== 0) return false;
+    const cur = g.linkArc[l]!;
+    const dest = this.arena[this.routeOff[v]! + this.routeLen[v]! - 1]!;
+    let bestCost = Infinity, bestLen = 0;
+    const tmp = new Int32Array(ROUTE_MAX);
+    for (let k = g.laneConnStart[l]!; k < g.laneConnStart[l + 1]!; k++) {
+      const a = g.linkArc[g.laneConns[k]!]!;
+      const m = router.route(a, dest, tmp, 0, ROUTE_MAX - 1);
+      if (m < 1) continue;
+      const cost = router.arcCost(a) + router.pathCost(tmp, 0, m);
+      if (cost < bestCost) {
+        bestCost = cost;
+        this.scratch[0] = cur;
+        this.scratch.set(tmp.subarray(0, m), 1);
+        bestLen = m + 1;
+      }
+    }
+    if (bestLen < 2) return false;
+    this.adoptRoute(v, bestLen);
+    this.stats.unblocked++;
+    return true;
+  }
+
+  /* ----------------------------- feux et passages piétons ----------------------------- */
+
+  /** État complet des feux (par identifiant de nœud) : conservé d'un réseau à l'autre. */
+  signalSnapshot(): SignalSnapshot[] {
+    const g = this.graph;
+    const out: SignalSnapshot[] = [];
+    if (!g) return out;
+    for (let n = 0; n < g.nodeCount; n++) {
+      if (g.nodeControl[n] !== Control.Signal) continue;
+      out.push({ nodeId: g.nodeId[n]!, phase: this.sigPhase[n]!, stage: this.sigStage[n]!, timer: this.sigTimer[n]! });
+    }
+    return out;
+  }
+
+  /**
+   * Restaure les feux d'une sauvegarde : appliqués tout de suite si le graphe est à jour, sinon à la
+   * prochaine reconstruction (le réseau est rechargé avant les sections de module).
+   */
+  restoreSignals(list: readonly SignalSnapshot[]): void {
+    if (this.graph && !this.networkDirty) this.applySignals(list);
+    else this.pendingSignals = list.slice();
+  }
+
+  /** Restaure les feux par identifiant de nœud (les carrefours absents gardent leur cycle décalé). */
+  applySignals(list: readonly SignalSnapshot[]): void {
+    const g = this.graph;
+    if (!g || list.length === 0) return;
+    for (const r of list) {
+      const n = g.nodeIndex(r.nodeId);
+      if (n < 0 || g.nodeControl[n] !== Control.Signal) continue;
+      const phases = Math.max(1, g.nodePhases[n]!);
+      this.sigPhase[n] = r.phase % phases;
+      this.sigStage[n] = Math.min(2, Math.max(0, r.stage)) as number;
+      this.sigTimer[n] = Math.max(0, r.timer);
+    }
+  }
+
+  /** Durée (s) de l'étape courante d'un carrefour à feux. */
+  private stageDuration(node: number, stage: number, phase: number): number {
+    const g = this.graph!;
+    return stage === 0 ? g.nodeGreen[node * 4 + phase]! : stage === 1 ? AMBER_S : ALL_RED_S;
+  }
+
+  /**
+   * Temps (s) jusqu'au prochain DÉBUT DE VERT d'une phase dont le bit de `mask` vaut `want`.
+   * Renvoie Infinity si aucune phase ne correspond.
+   */
+  private timeToPhase(node: number, mask: number, want: boolean): number {
+    const g = this.graph!;
+    const P = Math.max(1, g.nodePhases[node]!);
+    let phase = this.sigPhase[node]!, stage = this.sigStage[node]!;
+    let t = this.stageDuration(node, stage, phase) - this.sigTimer[node]!;
+    if (t < 0) t = 0;
+    for (let i = 0; i < P * 3 + 3; i++) {
+      if (stage === 2) { phase = (phase + 1) % P; stage = 0; if (((mask >> phase) & 1) === (want ? 1 : 0)) return t; }
+      else stage++;
+      t += this.stageDuration(node, stage, phase);
+    }
+    return Infinity;
+  }
+
+  /** Temps de dégagement d'un passage (s) : largeur traversée à la vitesse de marche, plus une marge. */
+  private clearanceTime(leg: number): number {
+    const g = this.graph!;
+    return (2 * g.legHalf[leg]!) / WALK_SPEED + 2;
+  }
+
+  /**
+   * État d'un passage piéton (index de branche) : feu piéton, temps restant dans cet état, feu véhicules du bras.
+   * Carrefour sans feux : `controlled` faux, feu piéton vert (traversée prudente côté piétons).
+   */
+  crossingState(leg: number, out: CrossingState): CrossingState {
+    const g = this.graph!;
+    const node = g.legNode[leg]!;
+    const arm = g.legArm[leg]!;
+    out.id = g.legId[leg]!;
+    out.junctionId = g.nodeId[node]!;
+    out.x = g.legX[leg]!; out.y = g.legY[leg]!; out.z = g.legZ[leg]!;
+    out.ax = g.legAX[leg]!; out.az = g.legAZ[leg]!; out.bx = g.legBX[leg]!; out.bz = g.legBZ[leg]!;
+    out.widthM = 2 * g.legHalf[leg]!;
+    out.vehicle = arm >= 0 && g.nodeControl[node] === Control.Signal ? (this.signalState(node, arm) as 0 | 1 | 2) : -1;
+    if (g.nodeControl[node] !== Control.Signal) {
+      out.controlled = false; out.walk = SIG_GREEN; out.remaining = 0;
+      return out;
+    }
+    out.controlled = true;
+    const mask = g.legPhaseMask[leg]!;
+    const phase = this.sigPhase[node]!, stage = this.sigStage[node]!;
+    if (((mask >> phase) & 1) === 1 && stage <= 1) {
+      out.walk = SIG_RED;
+      const t = this.timeToPhase(node, mask, false);
+      out.remaining = Number.isFinite(t) ? t : 0;
+      return out;
+    }
+    const tc = this.timeToPhase(node, mask, true);
+    const clear = this.clearanceTime(leg);
+    if (tc > clear) { out.walk = SIG_GREEN; out.remaining = Number.isFinite(tc) ? tc - clear : 0; }
+    else { out.walk = SIG_AMBER; out.remaining = Math.max(0, tc); }
+    return out;
+  }
+
+  /** Gabarit d'état de passage (allocation unique côté appelant). */
+  static emptyCrossingState(): CrossingState {
+    return { id: -1, junctionId: -1, walk: SIG_GREEN, remaining: 0, vehicle: -1, controlled: false, x: 0, y: 0, z: 0, ax: 0, az: 0, bx: 0, bz: 0, widthM: 0 };
+  }
+
+  /** Annonce des piétons sur le passage `legId` pendant `seconds` : les véhicules qui le franchissent cèdent. */
+  announcePedestrians(legId: number, seconds: number): boolean {
+    const g = this.graph;
+    if (!g) return false;
+    const leg = g.legIndex(legId);
+    if (leg < 0 || g.legCross[leg]! < 0) return false;
+    this.legBusyUntil[leg] = Math.max(this.legBusyUntil[leg]!, this.time + Math.max(0, Math.min(30, seconds)));
+    return true;
+  }
+
+  /** Vrai si des piétons sont annoncés sur un passage que ce connecteur franchit (entrée ou sortie du carrefour). */
+  private pedestriansOn(conn: number): boolean {
+    const g = this.graph!;
+    const ci = conn - g.laneCount;
+    const outLeg = g.connOutLeg[ci]!;
+    if (outLeg >= 0 && this.legBusyUntil[outLeg]! > this.time) return true;
+    const arm = g.connArm[ci]!;
+    if (arm >= 0) { const inLeg = g.armLeg[arm]!; if (inLeg >= 0 && this.legBusyUntil[inLeg]! > this.time) return true; }
+    return false;
+  }
+
+  /** Temps courant de la simulation de trafic (s). */
+  get now(): number { return this.time; }
 
   /* ----------------------------- demande ----------------------------- */
 
@@ -983,7 +1279,8 @@ export class TrafficSystem {
   private updateStats(dt: number): void {
     const g = this.graph!;
     const C = this.edgeCountTmp, S = this.edgeSpeedTmp;
-    C.fill(0); S.fill(0);
+    const AC = this.arcCountTmp, AS = this.arcSpeedTmp;
+    C.fill(0); S.fill(0); AC.fill(0); AS.fill(0);
     let sum = 0, stopped = 0;
     for (let i = 0; i < this.actCount; i++) {
       const v = this.act[i]!;
@@ -991,8 +1288,10 @@ export class TrafficSystem {
       if (this.v[v]! < 0.5) stopped++;
       const l = this.link[v]!;
       if (g.linkKind[l] !== 0) continue;
-      const e = g.linkArc[l]! >> 1;
+      const arc = g.linkArc[l]!;
+      const e = arc >> 1;
       C[e]!++; S[e]! += this.v[v]!;
+      AC[arc]!++; AS[arc]! += this.v[v]!;
     }
     this.stats.meanSpeedKmh = this.actCount ? (sum / this.actCount) * 3.6 : 0;
     this.stats.stopped = stopped;
@@ -1004,11 +1303,16 @@ export class TrafficSystem {
       this.edgeDensity[e] = this.edgeDensity[e]! + (dens - this.edgeDensity[e]!) * k;
       const sp = C[e]! > 0 ? S[e]! / C[e]! : g.edgeSpeed[e]!;
       this.edgeSpeed[e] = this.edgeSpeed[e]! + (sp - this.edgeSpeed[e]!) * k;
-      // retard observé -> coût A* (congestion)
+      // retard observé PAR SENS -> coût A* (congestion ; un sens bouché ne pénalise pas l'autre)
       const free = g.edgeLen[e]! / g.edgeSpeed[e]!;
-      const obs = g.edgeLen[e]! / Math.max(1, this.edgeSpeed[e]!);
-      const d = Math.max(0, obs - free);
-      router.delay[e * 2] = d; router.delay[e * 2 + 1] = d;
+      for (const arc of [e * 2, e * 2 + 1]) {
+        const lanesA = Math.max(1, g.edgeLanes[arc]!);
+        const densA = AC[arc]! / Math.max(0.01, g.edgeLen[e]! / 1000) / lanesA;
+        this.arcDensity[arc] = this.arcDensity[arc]! + (densA - this.arcDensity[arc]!) * k;
+        const spA = AC[arc]! > 0 ? AS[arc]! / AC[arc]! : g.edgeSpeed[e]!;
+        this.arcSpeed[arc] = this.arcSpeed[arc]! + (spA - this.arcSpeed[arc]!) * k;
+        router.delay[arc] = Math.max(0, g.edgeLen[e]! / Math.max(1, this.arcSpeed[arc]!) - free);
+      }
     }
   }
 
@@ -1037,6 +1341,132 @@ export class TrafficSystem {
       }
     }
     return { count: n, positions, assetIndices, ids, variants, flags };
+  }
+
+  /** Carte de congestion par tronçon (tampons neufs, transférables) : densité, vitesse, rapport et niveau. */
+  congestionFrame(): CongestionFrame {
+    const g = this.graph;
+    if (!g) return { edgeIds: new Int32Array(0), density: new Float32Array(0), speed: new Float32Array(0), ratio: new Float32Array(0), level: new Uint8Array(0) };
+    const n = g.edgeCount;
+    const edgeIds = g.edgeId.slice(), density = this.edgeDensity.slice(), speed = this.edgeSpeed.slice();
+    const ratio = new Float32Array(n), level = new Uint8Array(n);
+    for (let e = 0; e < n; e++) {
+      const r = Math.max(0, Math.min(1, speed[e]! / Math.max(1, g.edgeSpeed[e]!)));
+      ratio[e] = r; level[e] = congestionLevel(r);
+    }
+    return { edgeIds, density, speed, ratio, level };
+  }
+
+  /** Géométrie des tronçons suivis pour la carte de congestion (tampons neufs, transférables). */
+  congestionLayout(): CongestionLayout {
+    const g = this.graph;
+    if (!g) return { version: this.signalLayoutVersion, edgeIds: new Int32Array(0), ptStart: new Int32Array(1), x: new Float32Array(0), y: new Float32Array(0), z: new Float32Array(0), half: new Float32Array(0) };
+    const n = g.edgeCount, np = g.ptX.length;
+    const half = new Float32Array(n);
+    for (let e = 0; e < n; e++) half[e] = g.halfWidth(e) - 1;
+    return {
+      version: this.signalLayoutVersion,
+      edgeIds: g.edgeId.slice(), ptStart: g.edgePtStart.slice(),
+      x: g.ptX.slice(0, np), y: g.ptY.slice(0, np), z: g.ptZ.slice(0, np), half,
+    };
+  }
+
+  /** Longueur de réseau (m) au niveau de congestion ≥ `min`, et longueur totale. */
+  congestedLength(min = 2): { congested: number; total: number } {
+    const g = this.graph;
+    let c = 0, t = 0;
+    if (!g) return { congested: 0, total: 0 };
+    for (let e = 0; e < g.edgeCount; e++) {
+      const L = g.edgeLen[e]!;
+      t += L;
+      const r = Math.max(0, Math.min(1, this.edgeSpeed[e]! / Math.max(1, g.edgeSpeed[e]!)));
+      if (congestionLevel(r) >= min) c += L;
+    }
+    return { congested: c, total: t };
+  }
+
+  /** Tous les passages piétons du réseau (un par bras de carrefour qui en porte un). */
+  crossings(): CrossingState[] {
+    const g = this.graph;
+    const out: CrossingState[] = [];
+    if (!g) return out;
+    for (let leg = 0; leg < g.legNode.length; leg++) {
+      if (g.legCross[leg]! < 0) continue;
+      out.push(this.crossingState(leg, TrafficSystem.emptyCrossingState()));
+    }
+    return out;
+  }
+
+  /** État des carrefours à feux, bras par bras (API piétons et diagnostic). */
+  signalJunctions(): FeuJunctionState[] {
+    const g = this.graph;
+    const out: FeuJunctionState[] = [];
+    if (!g) return out;
+    for (let n = 0; n < g.nodeCount; n++) {
+      if (g.nodeControl[n] !== Control.Signal) continue;
+      const arms: FeuArmState[] = [];
+      for (let a = g.nodeArmStart[n]!; a < g.nodeArmStart[n + 1]!; a++) {
+        const leg = g.armLeg[a]!;
+        const state = this.signalState(n, a) as 0 | 1 | 2;
+        const mask = 1 << g.armPhase[a]!;
+        const remaining = state === 0
+          ? Math.max(0, this.stageDuration(n, 0, this.sigPhase[n]!) - this.sigTimer[n]!)
+          : this.timeToPhaseFinite(n, mask, true);
+        arms.push({
+          arm: a - g.nodeArmStart[n]!, state, remaining,
+          phase: g.armPhase[a]!, heading: g.armAngle[a]!,
+          crossingId: leg >= 0 && g.legCross[leg]! >= 0 ? g.legId[leg]! : -1,
+        });
+      }
+      out.push({
+        junctionId: g.nodeId[n]!, x: g.nodeX[n]!, y: g.nodeY[n]!, z: g.nodeZ[n]!,
+        phases: g.nodePhases[n]!, phase: this.sigPhase[n]!, stage: this.sigStage[n]!,
+        remaining: Math.max(0, this.stageDuration(n, this.sigStage[n]!, this.sigPhase[n]!) - this.sigTimer[n]!),
+        arms,
+      });
+    }
+    return out;
+  }
+
+  private timeToPhaseFinite(node: number, mask: number, want: boolean): number {
+    const t = this.timeToPhase(node, mask, want);
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  /**
+   * API des feux publiée aux autres modules (service « feux », voir src/shared/protocol-ext/circulation.ts).
+   * Objet stable : il peut être conservé par l'appelant ; `version` change quand le réseau est reconstruit.
+   */
+  feuxApi(): FeuxApi {
+    const sys = this;
+    return {
+      get version() { return sys.signalLayoutVersion; },
+      crossings: () => sys.crossings(),
+      crossing: (id) => {
+        const g = sys.graph;
+        if (!g) return null;
+        const leg = g.legIndex(id);
+        if (leg < 0 || g.legCross[leg]! < 0) return null;
+        return sys.crossingState(leg, TrafficSystem.emptyCrossingState());
+      },
+      crossingsNear: (x, z, radius) => {
+        const g = sys.graph;
+        if (!g) return [];
+        const r2 = radius * radius;
+        const out: { c: CrossingState; d: number }[] = [];
+        for (let leg = 0; leg < g.legNode.length; leg++) {
+          if (g.legCross[leg]! < 0) continue;
+          const dx = g.legX[leg]! - x, dz = g.legZ[leg]! - z;
+          const d = dx * dx + dz * dz;
+          if (d <= r2) out.push({ c: sys.crossingState(leg, TrafficSystem.emptyCrossingState()), d });
+        }
+        out.sort((a, b) => a.d - b.d);
+        return out.map((o) => o.c);
+      },
+      junctions: () => sys.signalJunctions(),
+      junction: (id) => sys.signalJunctions().find((j) => j.junctionId === id) ?? null,
+      announcePedestrians: (id, seconds) => sys.announcePedestrians(id, seconds),
+    };
   }
 
   /** Densité par tronçon (ids du monde, véh/km/voie, vitesse moyenne m/s) pour cartes de chaleur. */

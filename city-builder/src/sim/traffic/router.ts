@@ -75,6 +75,13 @@ export class ArcRouter {
     return top;
   }
 
+  /** Coût (s) du reste d'un itinéraire stocké dans `arr[off .. off+n-1]` : arcs intermédiaires (ni le premier, déjà engagé, ni le dernier). */
+  pathCost(arr: Int32Array, off: number, n: number): number {
+    let c = 0;
+    for (let i = 1; i < n - 1; i++) c += this.arcCost(arr[off + i]!);
+    return c;
+  }
+
   /**
    * Itinéraire de l'arc `from` (déjà engagé) à l'arc `to` (inclus). Écrit la suite d'arcs dans `out`
    * à partir de `outOff` (from inclus) et renvoie sa longueur, ou −1 si inaccessible / trop longue.
