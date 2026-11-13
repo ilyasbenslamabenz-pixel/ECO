@@ -8114,6 +8114,1369 @@
         "source": "tools/generators/generate_trees.py#arbre_platane",
         "author": "Œuvre originale générée par le projet (generate_trees.py, Blender/Cycles + numpy)"
       }
+    },
+    {
+      "id": "abribus",
+      "nameFr": "Abribus vitré",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/abribus_lod0.glb",
+          "maxDistance": 50,
+          "triangles": 348
+        },
+        {
+          "file": "models/props/abribus_lod1.glb",
+          "maxDistance": 160,
+          "triangles": 258
+        },
+        {
+          "file": "models/props/abribus_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 144
+        }
+      ],
+      "dimensions": {
+        "width": 4.2,
+        "depth": 1.625,
+        "height": 2.95
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 600,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#abribus",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "transport",
+        "bus",
+        "arrêt",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "abri_tram",
+      "nameFr": "Abri de station de tram",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/abri_tram_lod0.glb",
+          "maxDistance": 50,
+          "triangles": 300
+        },
+        {
+          "file": "models/props/abri_tram_lod1.glb",
+          "maxDistance": 160,
+          "triangles": 264
+        },
+        {
+          "file": "models/props/abri_tram_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 180
+        }
+      ],
+      "dimensions": {
+        "width": 6,
+        "depth": 2.025,
+        "height": 3.225
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 1200,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#abri_tram",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "transport",
+        "tram",
+        "arrêt",
+        "quai"
+      ]
+    },
+    {
+      "id": "totem_arret",
+      "nameFr": "Poteau d’arrêt (bus/tram)",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/totem_arret_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 144
+        },
+        {
+          "file": "models/props/totem_arret_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 90
+        },
+        {
+          "file": "models/props/totem_arret_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 36
+        }
+      ],
+      "dimensions": {
+        "width": 0.45,
+        "depth": 0.2,
+        "height": 2.97
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 120,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#totem_arret",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "transport",
+        "arrêt",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "panneau_danger",
+      "nameFr": "Panneau « autres dangers »",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/panneau_danger_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 140
+        },
+        {
+          "file": "models/props/panneau_danger_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 68
+        },
+        {
+          "file": "models/props/panneau_danger_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 20
+        }
+      ],
+      "dimensions": {
+        "width": 0.9,
+        "depth": 0.12,
+        "height": 2.77
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 60,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#panneau_danger",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "signalisation",
+        "voirie"
+      ]
+    },
+    {
+      "id": "panneau_sens_interdit",
+      "nameFr": "Panneau « sens interdit »",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/panneau_sens_interdit_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 256
+        },
+        {
+          "file": "models/props/panneau_sens_interdit_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 120
+        },
+        {
+          "file": "models/props/panneau_sens_interdit_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 40
+        }
+      ],
+      "dimensions": {
+        "width": 0.7,
+        "depth": 0.12,
+        "height": 2.55
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 60,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#panneau_sens_interdit",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "signalisation",
+        "voirie"
+      ]
+    },
+    {
+      "id": "panneau_stop",
+      "nameFr": "Panneau STOP",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/panneau_stop_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 160
+        },
+        {
+          "file": "models/props/panneau_stop_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 88
+        },
+        {
+          "file": "models/props/panneau_stop_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 40
+        }
+      ],
+      "dimensions": {
+        "width": 0.8,
+        "depth": 0.12,
+        "height": 2.6
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 60,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#panneau_stop",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "signalisation",
+        "voirie",
+        "carrefour"
+      ]
+    },
+    {
+      "id": "panneau_passage_pieton",
+      "nameFr": "Panneau « passage pour piétons »",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/panneau_passage_pieton_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 144
+        },
+        {
+          "file": "models/props/panneau_passage_pieton_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 72
+        },
+        {
+          "file": "models/props/panneau_passage_pieton_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 24
+        }
+      ],
+      "dimensions": {
+        "width": 0.7,
+        "depth": 0.12,
+        "height": 2.6
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 60,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#panneau_passage_pieton",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "signalisation",
+        "voirie",
+        "piétons"
+      ]
+    },
+    {
+      "id": "arceaux_velo",
+      "nameFr": "Arceaux de stationnement vélo (×3)",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/arceaux_velo_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 1380
+        },
+        {
+          "file": "models/props/arceaux_velo_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 576
+        },
+        {
+          "file": "models/props/arceaux_velo_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 288
+        }
+      ],
+      "dimensions": {
+        "width": 1.895,
+        "depth": 0.9,
+        "height": 0.793
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 90,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#arceaux_velo",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "vélo",
+        "stationnement",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "velo",
+      "nameFr": "Vélo de ville stationné",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/velo_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 2348
+        },
+        {
+          "file": "models/props/velo_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1056
+        },
+        {
+          "file": "models/props/velo_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 292
+        }
+      ],
+      "dimensions": {
+        "width": 1.745,
+        "depth": 0.62,
+        "height": 1.021
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#velo",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "vélo",
+        "décor"
+      ]
+    },
+    {
+      "id": "banc_beton",
+      "nameFr": "Banc bloc béton à assise bois",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/banc_beton_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 96
+        },
+        {
+          "file": "models/props/banc_beton_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 36
+        },
+        {
+          "file": "models/props/banc_beton_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 24
+        }
+      ],
+      "dimensions": {
+        "width": 2,
+        "depth": 0.5,
+        "height": 0.43
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 70,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#banc_beton",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "assise",
+        "place",
+        "parc"
+      ]
+    },
+    {
+      "id": "poubelles_tri",
+      "nameFr": "Corbeilles de tri sélectif (×3)",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/poubelles_tri_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 780
+        },
+        {
+          "file": "models/props/poubelles_tri_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 456
+        },
+        {
+          "file": "models/props/poubelles_tri_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 246
+        }
+      ],
+      "dimensions": {
+        "width": 1.6,
+        "depth": 0.5,
+        "height": 1.03
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 90,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#poubelles_tri",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "propreté",
+        "tri",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "potelet",
+      "nameFr": "Potelet anti-stationnement",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/potelet_lod0.glb",
+          "maxDistance": 30,
+          "triangles": 560
+        },
+        {
+          "file": "models/props/potelet_lod1.glb",
+          "maxDistance": 80,
+          "triangles": 216
+        },
+        {
+          "file": "models/props/potelet_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 100
+        }
+      ],
+      "dimensions": {
+        "width": 0.15,
+        "depth": 0.15,
+        "height": 1.04
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 15,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#potelet",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "protection",
+        "trottoir",
+        "carrefour"
+      ]
+    },
+    {
+      "id": "barriere_vauban",
+      "nameFr": "Barrière de police (type Vauban)",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/barriere_vauban_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 320
+        },
+        {
+          "file": "models/props/barriere_vauban_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 204
+        },
+        {
+          "file": "models/props/barriere_vauban_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 112
+        }
+      ],
+      "dimensions": {
+        "width": 2.3,
+        "depth": 0.62,
+        "height": 1.118
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 25,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#barriere_vauban",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "protection",
+        "chantier",
+        "événement"
+      ]
+    },
+    {
+      "id": "jardiniere_beton",
+      "nameFr": "Jardinière béton plantée",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/jardiniere_beton_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 848
+        },
+        {
+          "file": "models/props/jardiniere_beton_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 216
+        },
+        {
+          "file": "models/props/jardiniere_beton_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 76
+        }
+      ],
+      "dimensions": {
+        "width": 1.2,
+        "depth": 1.2,
+        "height": 1.344
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 80,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#jardiniere_beton",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "jardinière",
+        "végétal",
+        "place",
+        "protection"
+      ]
+    },
+    {
+      "id": "fontaine_eau",
+      "nameFr": "Fontaine à boire",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/fontaine_eau_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 520
+        },
+        {
+          "file": "models/props/fontaine_eau_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 278
+        },
+        {
+          "file": "models/props/fontaine_eau_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 136
+        }
+      ],
+      "dimensions": {
+        "width": 0.54,
+        "depth": 0.54,
+        "height": 1.13
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 150,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#fontaine_eau",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "eau",
+        "parc",
+        "place"
+      ]
+    },
+    {
+      "id": "colonne_morris",
+      "nameFr": "Colonne d’affichage (colonne Morris)",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/colonne_morris_lod0.glb",
+          "maxDistance": 50,
+          "triangles": 1136
+        },
+        {
+          "file": "models/props/colonne_morris_lod1.glb",
+          "maxDistance": 160,
+          "triangles": 432
+        },
+        {
+          "file": "models/props/colonne_morris_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 152
+        }
+      ],
+      "dimensions": {
+        "width": 1.44,
+        "depth": 1.44,
+        "height": 3.58
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 300,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#colonne_morris",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "affichage",
+        "place",
+        "centre"
+      ]
+    },
+    {
+      "id": "kiosque_journaux",
+      "nameFr": "Kiosque à journaux",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/kiosque_journaux_lod0.glb",
+          "maxDistance": 50,
+          "triangles": 260
+        },
+        {
+          "file": "models/props/kiosque_journaux_lod1.glb",
+          "maxDistance": 160,
+          "triangles": 204
+        },
+        {
+          "file": "models/props/kiosque_journaux_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 132
+        }
+      ],
+      "dimensions": {
+        "width": 2.9,
+        "depth": 2.9,
+        "height": 3.15
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 800,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#kiosque_journaux",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "commerce",
+        "place",
+        "centre"
+      ]
+    },
+    {
+      "id": "borne_recharge",
+      "nameFr": "Borne de recharge pour véhicules électriques",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/borne_recharge_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 208
+        },
+        {
+          "file": "models/props/borne_recharge_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 156
+        },
+        {
+          "file": "models/props/borne_recharge_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 96
+        }
+      ],
+      "dimensions": {
+        "width": 0.565,
+        "depth": 0.3,
+        "height": 1.48
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 400,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#borne_recharge",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "énergie",
+        "stationnement",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "horodateur",
+      "nameFr": "Horodateur de stationnement",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/props/horodateur_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 108
+        },
+        {
+          "file": "models/props/horodateur_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 90
+        },
+        {
+          "file": "models/props/horodateur_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 48
+        }
+      ],
+      "dimensions": {
+        "width": 0.38,
+        "depth": 0.32,
+        "height": 1.83
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 200,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/props/models.ts#horodateur",
+        "author": "Œuvre originale générée par le projet (tools/props : géométrie paramétrique + atlas dessiné, gltf-transform + sharp)"
+      },
+      "tags": [
+        "procedural",
+        "mobilier_p2c",
+        "stationnement",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "banc_modulaire",
+      "nameFr": "Banc urbain à dossier (bois et acier)",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/banc_modulaire_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 6039
+        },
+        {
+          "file": "models/polyhaven/street_furniture/banc_modulaire_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 2086
+        },
+        {
+          "file": "models/polyhaven/street_furniture/banc_modulaire_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 669
+        }
+      ],
+      "dimensions": {
+        "width": 2.452,
+        "depth": 0.67,
+        "height": 0.867
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 80,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/modular_street_seating",
+        "author": "Stuart Attenborrow"
+      },
+      "tags": [
+        "polyhaven",
+        "assise",
+        "place",
+        "trottoir"
+      ]
+    },
+    {
+      "id": "jardiniere_bac_bois",
+      "nameFr": "Jardinière longue en bois",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/jardiniere_bac_bois_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 5000
+        },
+        {
+          "file": "models/polyhaven/street_furniture/jardiniere_bac_bois_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1744
+        },
+        {
+          "file": "models/polyhaven/street_furniture/jardiniere_bac_bois_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 500
+        }
+      ],
+      "dimensions": {
+        "width": 1.251,
+        "depth": 0.467,
+        "height": 0.453
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 45,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/planter_box_02",
+        "author": "James Ray Cock"
+      },
+      "tags": [
+        "polyhaven",
+        "jardinière",
+        "terrasse",
+        "rue piétonne"
+      ]
+    },
+    {
+      "id": "jardiniere_haute_bois",
+      "nameFr": "Jardinière haute en bois",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/jardiniere_haute_bois_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 5000
+        },
+        {
+          "file": "models/polyhaven/street_furniture/jardiniere_haute_bois_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1746
+        },
+        {
+          "file": "models/polyhaven/street_furniture/jardiniere_haute_bois_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 500
+        }
+      ],
+      "dimensions": {
+        "width": 0.914,
+        "depth": 0.656,
+        "height": 0.855
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 55,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/planter_box_03",
+        "author": "James Ray Cock"
+      },
+      "tags": [
+        "polyhaven",
+        "jardinière",
+        "terrasse",
+        "rue piétonne"
+      ]
+    },
+    {
+      "id": "plaque_egout",
+      "nameFr": "Plaque d’égout en fonte",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/plaque_egout_lod0.glb",
+          "maxDistance": 30,
+          "triangles": 2500
+        },
+        {
+          "file": "models/polyhaven/street_furniture/plaque_egout_lod1.glb",
+          "maxDistance": 80,
+          "triangles": 875
+        },
+        {
+          "file": "models/polyhaven/street_furniture/plaque_egout_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 281
+        }
+      ],
+      "dimensions": {
+        "width": 0.691,
+        "depth": 0.691,
+        "height": 0.068
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/water_manhole_cover",
+        "author": "Raunox"
+      },
+      "tags": [
+        "polyhaven",
+        "réseau",
+        "chaussée",
+        "trottoir",
+        "au sol"
+      ]
+    },
+    {
+      "id": "separateur_beton_bas",
+      "nameFr": "Bloc béton de protection (bas)",
+      "category": "street_furniture",
+      "lods": [
+        {
+          "file": "models/polyhaven/street_furniture/separateur_beton_bas_lod0.glb",
+          "maxDistance": 35,
+          "triangles": 3000
+        },
+        {
+          "file": "models/polyhaven/street_furniture/separateur_beton_bas_lod1.glb",
+          "maxDistance": 100,
+          "triangles": 1050
+        },
+        {
+          "file": "models/polyhaven/street_furniture/separateur_beton_bas_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 300
+        }
+      ],
+      "dimensions": {
+        "width": 1.564,
+        "depth": 0.442,
+        "height": 1.111
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 50,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "standard",
+          "nameFr": "Standard"
+        }
+      ],
+      "textureSets": [],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "https://polyhaven.com/a/concrete_road_barrier_02",
+        "author": "Amal Kumar"
+      },
+      "tags": [
+        "polyhaven",
+        "chantier",
+        "voirie",
+        "sécurité"
+      ]
     }
   ],
   "textureSets": [
