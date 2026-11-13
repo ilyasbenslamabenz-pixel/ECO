@@ -92,3 +92,22 @@ centre du vitrage). Pour harmoniser : vitrage des lanternes `emissiveIntensity =
 (`nightFactorForHour`, bâtiments) suivent déjà le même facteur de nuit ; proposé côté routes : flaques de lumière au sol
 `roads_lamp_pools` plus larges (×1,3) quand `wetness > 0.5` (reflets sur sol mouillé), via une méthode
 `setWetness(w)` que l'atmosphère appellerait.
+
+## 7. Décision à prendre : saison de départ de la démo / des nouvelles parties
+
+Les parties commencent le 1er janvier : avec les saisons, la démo (et les bancs de captures des autres modules)
+s'affiche désormais **en hiver** (feuillus nus, herbe terne ; pas de neige au sol au départ : le premier épisode
+météo est toujours ensoleillé ou nuageux). Options : démarrer la démo en mai (`newGame` : ajouter un mois de départ,
+propriétaire simulation) ou forcer `pluginCommand weather force { dayOfYear: 135 }` dans la démo (propriétaire main.ts).
+
+## 8. Coût mesuré (SwiftShader, scène de démonstration, `tests/weather/captures.mjs`)
+
+| Vue rue, pluie forte | appels | triangles | ajouts atmosphère |
+|---|---|---|---|
+| `?atmo=off` | 2113 | 4 886 990 | 0 |
+| `bas` | 2114 | 4 890 624 | 1 appel, 3 634 triangles (1 817 gouttes) |
+| `haut` | 2114 | 4 901 736 | 1 appel, 13 082 triangles (6 541 gouttes) |
+
+Orage (`haut`) : 1 appel, 18 000 triangles. Nuit : + 1 appel (halos). Précipitations ≤ 2 appels (pluie + neige
+mêlées). Surfaces : 568 matériaux patchés une fois (une recompilation chacun), aucun appel ajouté ; ciel : nuages
+dans le shader du dôme existant (bruit fbm 5 octaves par pixel de ciel).
