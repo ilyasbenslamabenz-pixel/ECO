@@ -185,9 +185,13 @@ function injectImpostor(shader: THREE.WebGLProgramParametersWithUniforms, decidu
     float seed = fract(sin(dot(vTint, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
     vec3 tint = atmoAutumnTint(seed);
     alb = mix(alb, tint * (lum / max(atmoLuma(tint), 0.05)) * 1.08, green * clamp(uAtmoAutumn * 1.2, 0.0, 1.0));
-    float keep = atmoH21(floor(vUv * 64.0) + seed * 17.0);
-    if (green > 0.25 && keep < uAtmoBare * 0.9) discard;
-    alb = mix(alb, vec3(0.42, 0.27, 0.13) * (lum * 2.2 + 0.05), green * smoothstep(0.2, 0.8, uAtmoBare));
+    // Défoliation au loin : le houppier se réduit en douceur (seuil d'alpha relevé, bords nets) et prend la teinte
+    // gris-brun d'une ramure. L'ancien tirage par blocs de l'atlas donnait des taches brun-noir déchiquetées.
+    if (green > 0.25 && a.a < 0.3 + 0.55 * uAtmoBare) discard;
+    // Ramure ajourée : tramage fin (≈ 2 px de l'atlas, 64 cellules par vue) au lieu de gros blocs.
+    if (green > 0.25 && atmoH21(floor(vUv * 512.0) + seed * 17.0) < uAtmoBare * 0.6) discard;
+    vec3 twigs = vec3(0.25, 0.21, 0.18) * (0.6 + 0.7 * lum);
+    alb = mix(alb, twigs, green * smoothstep(0.15, 0.85, uAtmoBare));
     alb = mix(alb, alb * vec3(0.9, 1.15, 0.82), green * uAtmoSpring * 0.5);
     alb = mix(alb, vec3(0.86, 0.89, 0.94), uAtmoSnow * 0.25 * (1.0 - green));
   }` : /* glsl */ `

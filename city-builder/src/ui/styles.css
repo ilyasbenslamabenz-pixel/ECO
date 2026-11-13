@@ -461,8 +461,11 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   #hud-pop-btn { order: 3; } #hud-happy-btn { order: 4; } #hud-money-btn { order: 5; }
   #hud > .hud-stat { flex: 1 1 30%; min-width: 0; border-left: 0; padding: 3px 6px; min-height: 44px; gap: 6px; border-radius: 12px; background: rgba(255,255,255,.045); justify-content: flex-start; }
   #hud-weather { display: none !important; }
-  #hud-pop-btn, #hud-happy-btn { flex: 1 1 24%; }
-  #hud-money-btn { flex: 1.6 1 38%; }
+  #hud > #hud-pop-btn, #hud > #hud-happy-btn { flex: 1 1 22%; }
+  /* Trésorerie : carte plus large et marge intérieure à droite, le montant ne touche plus le bord de l'écran. */
+  #hud > #hud-money-btn { flex: 2 1 44%; padding-right: 10px; overflow: hidden; }
+  #hud-money-btn .mrow { min-width: 0; }
+  #hud-money { font-size: 13px; white-space: nowrap; }
   .hud-stat .per { display: none; }
   .hud-stat svg.ic { width: 22px; height: 22px; }
   .hud-stat b { font-size: 14px; }
@@ -498,6 +501,8 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   #toolbar button { width: auto; min-width: 0; min-height: 50px; padding: 6px 1px 4px; font-size: 9.5px; gap: 3px; letter-spacing: -0.01em; }
   #toolbar button svg.ic { width: 21px; height: 21px; }
   #toolbar button .tl { max-width: 100%; overflow: hidden; text-overflow: clip; }
+  /* Libellé le plus long de la barre : resserré pour tenir entier dans sa colonne (iPhone SE compris). */
+  #toolbar button[data-cat=transport] .tl { font-size: 9px; letter-spacing: -0.045em; }
   #toolbar .phase { font-size: 7.5px; top: 1px; right: 1px; padding: 0 2px; }
   #build-drawer { width: 100%; max-height: 40dvh; border-radius: 16px; }
   .drawer-head { padding: 6px 6px 0 10px; flex-wrap: wrap; row-gap: 4px; }
