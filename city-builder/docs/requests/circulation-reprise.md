@@ -8,7 +8,7 @@
 | Intersections avec réservation de conflits | fait | tests `circulation.test.ts` ; `carrefour-charge.jpg` (cœur du carrefour dégagé malgré 4 files) |
 | Feux à phases, priorités, cédez-le-passage | fait | `e2e:signals` (véhicule arrêté au rouge, lentilles allumées jour / nuit) |
 | Anti-blocage | fait | test + `unblocked` / `removedStuck` dans les statistiques |
-| Embouteillages émergents | fait | ville de charge : de 38 % (faible demande) à 69 % du réseau saturé (2 000 véhicules) |
+| Embouteillages émergents | fait | réseau saturé (longueur) : ville de charge 51 % (800 véhicules demandés) et 69 % (2 000) ; banc 37,6 % (grille 22) à 77,7 % (grille 14) |
 | Carte de congestion | fait | `congestion-charge-moyenne.jpg` (vert → rouge), `congestion-saturation.jpg` ; comptages concordants sim / rendu (diagnostic Node) |
 | Réacheminement | fait | test + `rerouted` |
 | Plaques variées | fait | 24 bandes distinctes (sonde), numéros différents lisibles en capture |
