@@ -258,6 +258,7 @@ output { color: var(--text); font-variant-numeric: tabular-nums; }
   #hud { flex-wrap: nowrap; gap: 6px; padding-top: max(4px, var(--safe-t)); padding-bottom: 4px; font-size: 12px; }
   #hud > .hud-group { flex-wrap: nowrap; min-width: 0; }
   #hud > .hud-group:first-child { flex: 0 1 auto; }
+  #hud .city { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
   #hud .tl, #hud .pill .lbl, .pill-balance, #btn-cinematic { display: none !important; }
   #hud .ico { display: inline; font-size: 16px; }
   #hud button, #hud .pill, #hud .pill-btn { min-height: 40px; }
