@@ -142,8 +142,8 @@ try {
   report.junction = { node: arm.node, x: cx, z: cz, arms: same.length };
   await page.evaluate(([x, z, yaw]) => window.__aube.lookAt(x, z, 85, 0.95, yaw), [cx, cz, arm.heading + Math.PI]);
   await shoot(page, 'feux-aerien.png');
-  // vue rue : sur le bord du trottoir, 15 m avant la ligne d'arrêt, regard vers la tête suspendue
-  const camX = arm.x - dx * 15 - rx * 0.3, camZ = arm.z - dz * 15 - rz * 0.3;
+  // vue rue : dans la chaussée à 1,3 m de la bordure (hors des lampadaires du trottoir), 15 m avant la ligne d'arrêt, regard vers la tête suspendue
+  const camX = arm.x - dx * 15 - rx * 1.3, camZ = arm.z - dz * 15 - rz * 1.3;
   const lookX = arm.x + dx * 2 - rx * arm.reach * 0.55, lookZ = arm.z + dz * 2 - rz * arm.reach * 0.55;
   report.street = { camX, camZ, lookX, lookZ, arm };
   await page.evaluate(([x, z, lx, lz]) => window.__aube.streetLook(x, z, lx, lz), [camX, camZ, lookX, lookZ]);
