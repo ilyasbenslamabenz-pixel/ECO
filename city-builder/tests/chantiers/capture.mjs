@@ -124,55 +124,73 @@ try {
   await page.evaluate(() => window.__aube.lookAt(0, -30, 330, 0.62));
   noteSites(await shot(page, 'chantiers-depart', 'quatre chantiers au terrassement'));
 
-  // Accélération : on laisse la simulation avancer et on capture à plusieurs moments.
-  await send(page, 'setSpeed', { speed: 16 });
-  const etapes = [
-    { attente: 14000, nom: 'fondations', vue: () => page.evaluate(() => window.__aube.lookAt(0, -30, 330, 0.62)) },
-    { attente: 20000, nom: 'structure', vue: () => page.evaluate(() => window.__aube.lookAt(0, -30, 330, 0.62)) },
-    { attente: 28000, nom: 'facades', vue: () => page.evaluate(() => window.__aube.lookAt(0, -30, 300, 0.55)) },
-  ];
-  for (const e of etapes) {
-    await page.waitForTimeout(e.attente);
+  // Avancement piloté par le TEMPS DE JEU : pour chaque phase, on fait tourner la simulation jusqu'à ce que
+  // le chantier suivi l'atteigne, puis jusqu'à une heure de jour (9 h - 17 h), et on capture à l'arrêt.
+  const siteOf = (nom) => page.evaluate((id) => (window.__aube.chantiers?.()?.sites ?? []).find((s) => s.buildingId === id) ?? null, ids[nom]);
+  async function runUntil(pred, arg, speed, timeout = 600000) {
+    await send(page, 'setSpeed', { speed });
+    const ok = await page.waitForFunction(pred, arg, { timeout, polling: 250 }).then(() => true, () => false);
     await send(page, 'setSpeed', { speed: 0 });
-    await e.vue();
-    noteSites(await shot(page, `chantiers-${e.nom}`, `avancement : ${e.nom}`));
-    await send(page, 'setSpeed', { speed: 16 });
+    return ok;
   }
+  const dayPred = () => { const h = window.__aube.lastStats?.date?.hour; return h !== undefined && h >= 9 && h < 17; };
+  const ORDER = ['terrassement', 'fondations', 'structure', 'facades', 'finitions'];
+  async function capturePhase(nom, phase, vue, label) {
+    const reached = await runUntil(([id, ph, order]) => {
+      const s = (window.__aube.chantiers?.()?.sites ?? []).find((x) => x.buildingId === id);
+      return !s || order.indexOf(s.phase) >= order.indexOf(ph);
+    }, [ids[nom], phase, ORDER], 4);
+    let s = await siteOf(nom);
+    if (s && s.phase === phase) {
+      await runUntil(dayPred, null, 2, 300000);
+      s = await siteOf(nom);
+    }
+    const vu = s?.phase ?? 'achevé';
+    R.notes[`${nom}-${phase}`] = s;
+    check(reached && vu === phase, `${nom} capturé en phase ${phase} (vu : ${vu})`);
+    await page.evaluate(vue);
+    noteSites(await shot(page, `${nom}-${phase}`, label ?? `${nom} : ${phase}`));
+  }
+  const vueImmeuble = () => window.__aube.lookAt(40, -30, 110, 0.5);
+  for (const ph of ORDER) await capturePhase('immeuble', ph, vueImmeuble);
 
-  // Vue rapprochée de la tour (grue, échafaudages, ossature) puis vue de rue.
-  await send(page, 'setSpeed', { speed: 0 });
-  await page.evaluate(() => window.__aube.lookAt(120, -40, 150, 0.45));
-  noteSites(await shot(page, 'chantiers-tour', 'grue et ossature de la tour'));
+  // Tour : ossature haute et grue, puis vue de rue.
+  await capturePhase('tour', 'structure', () => window.__aube.lookAt(120, -40, 170, 0.45), 'grue et ossature de la tour');
   await page.evaluate(() => window.__aube.streetLook(120, 60, 120, -40));
-  noteSites(await shot(page, 'chantiers-rue', 'vue de rue : palissade, baraque, engins'));
-
-  // Pavillon : chantier court, vu de près.
-  await page.evaluate(() => window.__aube.lookAt(-120, -26, 70, 0.4));
-  noteSites(await shot(page, 'chantiers-pavillon', 'petit chantier vu de près'));
+  noteSites(await shot(page, 'tour-rue', 'vue de rue : palissade, baraque, engins'));
+  await page.evaluate(() => window.__aube.lookAt(0, -30, 330, 0.62));
+  noteSites(await shot(page, 'chantiers-ensemble', 'vue d\'ensemble'));
 
   // Nuit : hors horaires, tout est à l'arrêt.
-  await send(page, 'setSpeed', { speed: 16 });
+  await send(page, 'setSpeed', { speed: 4 });
   await page.waitForFunction(() => { const h = window.__aube.lastStats?.date?.hour; return h !== undefined && (h >= 21 || h < 4); }, null, { timeout: 180000, polling: 500 });
   await send(page, 'setSpeed', { speed: 0 });
   await page.evaluate(() => window.__aube.lookAt(60, -40, 220, 0.5));
   const nuit = await shot(page, 'chantiers-nuit', 'chantiers la nuit (travaux suspendus)');
   check(nuit && nuit.enTravail === false, 'la nuit, les chantiers sont déclarés hors horaires');
 
-  // Démolition : on attend qu'un chantier s'achève puis on démolit le bâtiment.
-  await send(page, 'setSpeed', { speed: 16 });
-  await page.waitForFunction(() => {
-    const d = window.__aube.chantiers?.();
-    return d && !d.sites.some((s) => s.buildingId === window.__chantierPavillon);
-  }, null, { timeout: 240000, polling: 1000 }).catch(() => undefined);
-  await page.evaluate((id) => { window.__chantierPavillon = id; }, ids.pavillon ?? 0);
-  await send(page, 'setSpeed', { speed: 0 });
+  // Démolition : le pavillon (chantier court) doit être achevé ; on le démolit en journée.
+  const fini = await runUntil((id) => !(window.__aube.chantiers?.()?.sites ?? []).some((s) => s.buildingId === id), ids.pavillon, 8);
+  check(fini, 'pavillon achevé avant démolition');
+  await runUntil(dayPred, null, 4, 300000);
   const dem = await send(page, 'demolish', { buildingId: ids.pavillon });
   check(dem.ok, `démolition du pavillon${dem.ok ? '' : ' : ' + dem.e}`);
-  await send(page, 'setSpeed', { speed: 2 });
-  await page.waitForTimeout(3000);
-  await send(page, 'setSpeed', { speed: 0 });
-  await page.evaluate(() => window.__aube.lookAt(-120, -26, 80, 0.42));
-  const demInfo = await shot(page, 'chantiers-demolition', 'chantier de démolition');
+  const demShots = {};
+  let demInfo = null;
+  for (const ph of ['preparation', 'abattage', 'deblaiement']) {
+    await runUntil(([ph]) => {
+      const order = ['preparation', 'abattage', 'deblaiement'];
+      const s = (window.__aube.chantiers?.()?.sites ?? []).find((x) => x.kind === 'demolition');
+      return !s || order.indexOf(s.phase) >= order.indexOf(ph);
+    }, [ph], 1, 300000);
+    await page.evaluate(() => window.__aube.lookAt(-120, -26, 70, 0.42));
+    const info = await shot(page, `demolition-${ph}`, `démolition : ${ph}`);
+    const s = (info?.sites ?? []).find((x) => x.kind === 'demolition');
+    demShots[ph] = s?.phase ?? 'fini';
+    if (s) demInfo = info;
+    noteSites(info);
+  }
+  R.notes.demolition = demShots;
   noteSites(demInfo);
   check((demInfo?.sites ?? []).some((s) => s.kind === 'demolition'), 'un chantier de démolition est dessiné');
 
@@ -181,7 +199,7 @@ try {
   R.notes.dernierEtat = info;
   R.notes.erreursPage = errors;
   check(errors.length === 0, `aucune erreur de page (${errors.slice(0, 3).join(' | ')})`);
-  for (const p of ['construction:terrassement', 'construction:fondations', 'construction:structure']) {
+  for (const p of ['construction:terrassement', 'construction:fondations', 'construction:structure', 'construction:facades', 'construction:finitions', 'demolition:abattage']) {
     check(R.phases[p] > 0, `phase observée : ${p}`);
   }
 } catch (e) {
