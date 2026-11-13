@@ -225,7 +225,13 @@ function jetee(m: TModel): void {
     mb.box('gris_fonce', x - 0.2, 0, -Z - 3, x + 0.2, 3.5, -Z - 2.6);
     mb.box('atlas', x - 1.4, 3.5, -Z - 3.05, x + 1.4, 4.2, -Z - 2.95, '', { nz: { region: 'panneau_taxi' }, pz: { region: 'panneau_taxi' } });
   }
-  if (lod === 0) for (let x = -X + 4; x < X; x += 8) mb.tube('gris', [x, 0, -Z - 0.15], [x, H1, -Z - 0.15], 0.08, 6, false);
+  if (lod === 0) {
+    for (let x = -X + 4; x < X; x += 8) mb.tube('gris', [x, 0, -Z - 0.15], [x, H1, -Z - 0.15], 0.08, 6, false);
+    // brise-soleil (lames horizontales) devant le vitrage côté ville, centrales de traitement d'air en toiture
+    for (let x = -X + 2; x < X - 2; x += 11) for (const y of [6.2, 8.2]) mb.box('gris_clair', x, y, Z + 0.1, x + 9, y + 0.15, Z + 0.9);
+    for (const x of [-14, 0, 14]) { mb.box('gris_clair', x - 2, H2 + 1.6, -2, x + 2, H2 + 3.1, 2); mb.box('atlas', x - 2.01, H2 + 1.8, -2.01, x + 2.01, H2 + 2.9, 2.01, 'ny py', { region: 'aeration' }); }
+    for (const x of [-X + 1, X - 1]) mb.tube('gris', [x, 0, Z + 0.2], [x, H2, Z + 0.2], 0.1, 6, false);
+  }
 }
 
 function tour(m: TModel): void {
@@ -522,7 +528,7 @@ export const AIRPORT_DEFS: TransportDef[] = [
     footprint: { tilesX: 8, tilesZ: 5 }, cost: 2400000, upkeepPerMonth: 14000, capacity: { residents: 0, jobs: 260 },
     frontage: [{ x: 0, z: 20, nx: 0, nz: 1, kind: 'pedestrian' }, { x: -20, z: 20, nx: 0, nz: 1, kind: 'vehicle' }], tags: ['module'] },
   { id: 'aero_aerogare_jetee', nameFr: 'Aérogare — jetée d’embarquement (module)', group: 'aeroport', category: 'public', kind: 'terminal', lodDistances: [300, 1000], build: jetee,
-    footprint: { tilesX: 6, tilesZ: 3 }, cost: 900000, upkeepPerMonth: 5200, capacity: { residents: 0, jobs: 60 }, frontage: [{ x: 0, z: 9, nx: 0, nz: 1, kind: 'delivery' }], tags: ['module', 'portes:2'] },
+    footprint: { tilesX: 7, tilesZ: 3 }, cost: 900000, upkeepPerMonth: 5200, capacity: { residents: 0, jobs: 60 }, frontage: [{ x: 0, z: 9, nx: 0, nz: 1, kind: 'delivery' }], tags: ['module', 'portes:2'] },
   { id: 'aero_tour_controle', nameFr: 'Tour de contrôle', group: 'aeroport', category: 'public', kind: 'tour_controle', lodDistances: [400, 1400], build: tour,
     footprint: { tilesX: 3, tilesZ: 2 }, cost: 1200000, upkeepPerMonth: 6000, capacity: { residents: 0, jobs: 40 }, frontage: [{ x: 0, z: 8, nx: 0, nz: 1, kind: 'pedestrian' }] },
   { id: 'aero_hangar', nameFr: 'Hangar de maintenance', group: 'aeroport', category: 'industrial', kind: 'hangar', lodDistances: [300, 1000], build: hangar,

@@ -1071,7 +1071,7 @@
         "height": 33.3
       },
       "footprint": {
-        "tilesX": 3,
+        "tilesX": 4,
         "tilesZ": 2
       },
       "cost": 380000,
@@ -1143,7 +1143,7 @@
       },
       "footprint": {
         "tilesX": 7,
-        "tilesZ": 6
+        "tilesZ": 7
       },
       "cost": 950000,
       "upkeepPerMonth": 5200,
@@ -1154,14 +1154,14 @@
       "frontage": [
         {
           "x": 0,
-          "z": 18,
+          "z": 25,
           "nx": 0,
           "nz": 1,
           "kind": "pedestrian"
         },
         {
           "x": 12,
-          "z": 18,
+          "z": 25,
           "nx": 0,
           "nz": 1,
           "kind": "vehicle"
@@ -1795,7 +1795,7 @@
         {
           "file": "models/transport/_src/aeroport/aero_aerogare_jetee_lod0.glb",
           "maxDistance": 300,
-          "triangles": 440
+          "triangles": 620
         },
         {
           "file": "models/transport/_src/aeroport/aero_aerogare_jetee_lod1.glb",
@@ -1810,11 +1810,11 @@
       ],
       "dimensions": {
         "width": 48.8,
-        "depth": 20.85,
-        "height": 11.6
+        "depth": 20.95,
+        "height": 13.1
       },
       "footprint": {
-        "tilesX": 6,
+        "tilesX": 7,
         "tilesZ": 3
       },
       "cost": 900000,
