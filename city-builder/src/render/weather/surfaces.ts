@@ -55,6 +55,8 @@ float atmoNoise(vec2 p) {
 float atmoLuma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 /** Part « verte » d'une couleur (feuillage, herbe) 0..1. */
 float atmoGreen(vec3 c) { return smoothstep(0.03, 0.16, (c.g - max(c.r, c.b)) / (c.g + 0.002)); }
+/** Feuillage (tolérant : verts olive des textures de feuilles) ; l'écorce brune ou grise donne 0. */
+float atmoLeafness(vec3 c) { return smoothstep(-0.02, 0.07, (c.g - max(c.r, c.b)) / (c.g + 0.002)); }
 /** Teinte d'automne d'un arbre (graine 0..1) : jaune, orange, roux, encore vert. */
 vec3 atmoAutumnTint(float seed) {
   vec3 a = seed < 0.3 ? vec3(0.95, 0.68, 0.12) : seed < 0.62 ? vec3(0.92, 0.42, 0.08) : seed < 0.85 ? vec3(0.66, 0.16, 0.06) : vec3(0.55, 0.62, 0.16);
@@ -108,9 +110,10 @@ const FRAG_MAIN = /* glsl */ `
     c = mix(c, straw, green * uAtmoDry * (0.45 + 0.4 * n3));
     vec3 dull = vec3(lum * 1.04, lum * 1.0, lum * 0.8);
     c = mix(c, dull, green * uAtmoDormant * 0.55);
-    c = mix(c, c * vec3(0.96, 1.12, 0.86), green * uAtmoSpring * 0.6);
+    c = mix(c, c * vec3(0.9, 1.2, 0.78), green * uAtmoSpring * 0.75);
   #endif
   #ifdef ATMO_LEAF
+    green = atmoLeafness(c);
     leafMask = green;
     // Automne : chaque arbre prend sa teinte (graine d'instance), avec des variations à l'intérieur du houppier.
     float seed = fract(vAtmoSeed + n2 * 0.12);
@@ -120,7 +123,7 @@ const FRAG_MAIN = /* glsl */ `
     c = mix(c, autumn, green * progress);
     // Hiver : défoliation — les fragments de feuillage disparaissent, quelques feuilles sèches restent.
     float keep = atmoH21(floor(vAtmoWorld.xz * 3.1) + floor(vAtmoWorld.y * 3.1) * 7.13);
-    if (green > 0.5 && keep < uAtmoBare * 0.9) discard;
+    if (green > 0.25 && keep < uAtmoBare * 0.97) discard;
     c = mix(c, vec3(0.42, 0.27, 0.13) * (lum * 2.2 + 0.05), green * smoothstep(0.2, 0.8, uAtmoBare));
     c = mix(c, c * vec3(0.9, 1.15, 0.82), green * uAtmoSpring * 0.5);
   #endif
@@ -130,19 +133,25 @@ const FRAG_MAIN = /* glsl */ `
   // Neige : faces tournées vers le ciel, plaques irrégulières ; routes déneigées (traces), feuillage clairsemé.
   float snowAmt = uAtmoSnow;
   #ifdef ATMO_ROAD
-    snowAmt *= 0.5;
+    snowAmt *= 0.3;
   #endif
   #ifdef ATMO_LEAF
     snowAmt *= 0.6;
   #endif
   float patchN = n1 * 0.65 + n2 * 0.35;
-  float snowMask = smoothstep(0.38, 0.78, atmoUp) * smoothstep(0.0, 0.22, snowAmt * 1.35 - (1.0 - patchN) * 0.85);
+  float snowMask = smoothstep(0.38, 0.78, atmoUp) * smoothstep(0.0, 0.45, snowAmt * 1.5 - (1.0 - patchN) * 0.8);
   // Sol mouillé : les surfaces exposées foncent et brillent, les flaques s'étendent sur le plat.
   float wet = uAtmoWet * (0.25 + 0.75 * smoothstep(0.2, 0.85, atmoUp)) * (1.0 - snowMask) * (1.0 - leafMask * 0.7);
-  float puddle = uAtmoWet * smoothstep(0.93, 0.985, atmoUp) * smoothstep(0.58, 0.72, n1 * 0.7 + n3 * 0.3 + uAtmoWet * 0.12) * (1.0 - snowMask);
-  c *= 1.0 - 0.32 * wet - 0.25 * puddle;
-  roughnessFactor = mix(roughnessFactor, min(roughnessFactor, 0.28), wet * 0.85);
-  roughnessFactor = mix(roughnessFactor, 0.04, puddle);
+  float puddle = 0.0;
+  #ifndef ATMO_GRASS
+  puddle = uAtmoWet * smoothstep(0.93, 0.985, atmoUp) * smoothstep(0.58, 0.72, n1 * 0.7 + n3 * 0.3 + uAtmoWet * 0.12) * (1.0 - snowMask);
+  #endif
+  #ifdef ATMO_GRASS
+    wet *= 0.6; // l'herbe fonce mais ne miroite pas
+  #endif
+  c *= 1.0 - 0.38 * wet - 0.2 * puddle;
+  roughnessFactor = mix(roughnessFactor, min(roughnessFactor, 0.42), wet * 0.8);
+  roughnessFactor = mix(roughnessFactor, 0.12, puddle);
   metalnessFactor = mix(metalnessFactor, 0.0, puddle);
   vec3 snowCol = vec3(0.86, 0.89, 0.94) * (0.92 + 0.08 * n2);
   c = mix(c, snowCol, snowMask);
@@ -171,13 +180,13 @@ function injectImpostor(shader: THREE.WebGLProgramParametersWithUniforms, decidu
   Object.assign(shader.uniforms, u);
   const code = deciduous ? /* glsl */ `
   {
-    float green = atmoGreen(alb);
+    float green = atmoLeafness(alb);
     float lum = atmoLuma(alb);
     float seed = fract(sin(dot(vTint, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
     vec3 tint = atmoAutumnTint(seed);
     alb = mix(alb, tint * (lum / max(atmoLuma(tint), 0.05)) * 1.08, green * clamp(uAtmoAutumn * 1.2, 0.0, 1.0));
     float keep = atmoH21(floor(vUv * 64.0) + seed * 17.0);
-    if (green > 0.45 && keep < uAtmoBare * 0.82) discard;
+    if (green > 0.25 && keep < uAtmoBare * 0.9) discard;
     alb = mix(alb, vec3(0.42, 0.27, 0.13) * (lum * 2.2 + 0.05), green * smoothstep(0.2, 0.8, uAtmoBare));
     alb = mix(alb, alb * vec3(0.9, 1.15, 0.82), green * uAtmoSpring * 0.5);
     alb = mix(alb, vec3(0.86, 0.89, 0.94), uAtmoSnow * 0.25 * (1.0 - green));

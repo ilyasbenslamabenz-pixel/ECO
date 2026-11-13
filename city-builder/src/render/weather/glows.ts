@@ -140,8 +140,8 @@ export class LampGlows {
     this.mesh.visible = on;
     if (!on) return;
     const u = (this.mesh.material as THREE.ShaderMaterial).uniforms;
-    u['uIntensity']!.value = night * (0.55 + 0.5 * fog + 0.3 * precip);
-    u['uSize']!.value = 3.0 * (1 + 0.9 * fog + 0.4 * precip);
+    u['uIntensity']!.value = night * (0.8 + 0.6 * fog + 0.35 * precip);
+    u['uSize']!.value = 3.8 * (1 + 0.9 * fog + 0.4 * precip);
   }
 
   /** Force une relecture des positions au prochain update. */

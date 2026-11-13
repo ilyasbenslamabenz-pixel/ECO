@@ -61,7 +61,7 @@ export function seasonVisuals(doyIn: number): SeasonVisuals {
   const autumn = bump(d, 245, 285, 318, 338);
   const bare = Math.max(bump(dw, 300, 335, 440, 465), 0);
   const spring = bump(d, 75, 100, 135, 165);
-  const dryGrass = Math.max(bump(d, 180, 215, 240, 262) * 0.55, bump(d, 285, 310, 330, 345) * 0.5);
+  const dryGrass = Math.max(bump(d, 180, 215, 240, 262) * 0.3, bump(d, 285, 310, 330, 345) * 0.5);
   const dormant = bump(dw, 320, 345, 420, 445);
   const bloom = bump(d, 80, 95, 115, 130);
   return { autumn, bare, spring, dryGrass, dormant, bloom };

@@ -1,6 +1,7 @@
 /**
  * Banc de captures « Atmosphère » (phase 2C) : saisons, météo, nuit, coucher de soleil sur la scène de démonstration.
  *   npm run build && node tests/weather/captures.mjs        (ONLY=jour,soir,nuit ; QUALITY=haut|bas|off)
+ * PICK=ete,hiver,… : seulement ces scénarios (sans la mesure de coût).
  * Chaque scénario force la météo par la commande du module (`pluginCommand weather force`), l'applique au rendu
  * (`__atmo.apply`), rend et capture. Mesure le coût : appels de rendu et triangles avec et sans atmosphère.
  * Sorties : tests/weather/out/<nn>-<scénario>.png + rapport.json. Rendu logiciel (SwiftShader) : lent.
@@ -14,6 +15,7 @@ const out = join(root, 'tests/weather/out');
 mkdirSync(out, { recursive: true });
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const QUALITY = process.env.QUALITY ?? 'haut';
+const PICK = process.env.PICK ? process.env.PICK.split(',') : null;
 const report = { quality: QUALITY, views: [], cost: [], errors: [] };
 let index = 0;
 let failed = false;
@@ -99,7 +101,7 @@ try {
     const t0 = Date.now();
     const { ctx, page, errors, views } = await openDemo(def.h);
     console.log(`Session ${session} (h=${def.h}) prête en ${((Date.now() - t0) / 1000).toFixed(0)} s`);
-    if (session === 'jour') {
+    if (session === 'jour' && !PICK) {
       // Coût de l'atmosphère : même vue, pluie forte, qualité haute puis désactivée.
       await force(page, { kind: 'pluie', dayOfYear: 280 });
       await camera(page, views, 'rue');
@@ -114,6 +116,7 @@ try {
       console.log('Coût (rue, pluie) :', JSON.stringify(Object.fromEntries(Object.entries(cost).map(([k, v]) => [k, { calls: v.r.calls, triangles: v.r.triangles, extra: v.a }]))));
     }
     for (const [name, payload, cams] of def.list) {
+      if (PICK && !PICK.includes(name)) continue;
       const w = await force(page, payload);
       for (const cam of cams) {
         await camera(page, views, cam);

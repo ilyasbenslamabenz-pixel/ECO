@@ -283,7 +283,7 @@ export class SkySystem {
     this.ambientGround.copy(this.ambientSky).multiplyScalar(0.35);
     // Densité : brouillard météo (visibilité réduite mais ville lisible), pluie et neige épaississent l'air.
     this.fog.density = this.fogDensity * (1 + duskW * 0.6 + night * 0.3) * (1 + overcast * 0.5)
-      + 0.0042 * Math.pow(w.fog, 1.4) + 0.0009 * w.rain + 0.0016 * w.snow;
+      + 0.0024 * Math.pow(w.fog, 1.4) + 0.0009 * w.rain + 0.0016 * w.snow;
     // Nuages : couverture, assombrissement, éclairage (ambiance du ciel + soleil, grisé par la pluie).
     u['uCloud']!.value = w.cloud;
     u['uCloudDark']!.value = Math.min(1, precip * 1.1 + w.storm * 0.4);
