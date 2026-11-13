@@ -34,19 +34,23 @@ const chantiers = (page) => page.evaluate(() => (window.__aube.chantiers ? windo
 async function shot(page, name, label) {
   await render(page, 2);
   const file = join(out, `${name}.png`);
-  await page.screenshot({ path: file, timeout: 600000 });
-  const stat = await page.evaluate(() => {
-    const c = document.querySelector('canvas');
+  const png = await page.screenshot({ path: file, timeout: 600000 });
+  // Mesure sur la capture elle-même (le tampon WebGL n'est pas conservé : drawImage du canvas donne du noir).
+  const stat = await page.evaluate(async (b64) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
     const g = document.createElement('canvas');
     g.width = 160; g.height = 100;
     const ctx = g.getContext('2d');
-    ctx.drawImage(c, 0, 0, 160, 100);
+    // Bande centrale seulement : la barre d'outils et le bandeau du haut ne comptent pas.
+    ctx.drawImage(img, 0, img.height * 0.15, img.width, img.height * 0.65, 0, 0, 160, 100);
     const d = ctx.getImageData(0, 0, 160, 100).data;
     let s = 0, s2 = 0, n = 0;
     for (let i = 0; i < d.length; i += 4) { const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; s += l; s2 += l * l; n++; }
     const m = s / n;
     return { mean: Math.round(m * 10) / 10, std: Math.round(Math.sqrt(Math.max(0, s2 / n - m * m)) * 10) / 10 };
-  });
+  }, png.toString('base64'));
   const info = await chantiers(page);
   R.shots.push({ name, label, ...stat, chantiers: info?.sites?.length ?? 0 });
   console.log(`  image ${name} : moyenne ${stat.mean}, écart-type ${stat.std} (${label})`);
@@ -104,7 +108,7 @@ try {
   for (const p of plan) {
     const r = await send(page, 'placeBuilding', { assetId: p.id, x: p.x, z: p.z, rot: 0 });
     check(r.ok, `pose ${p.nom} (${p.id})${r.ok ? '' : ' : ' + r.e}`);
-    if (r.ok) ids[p.nom] = r.r.data.buildingId;
+    if (r.ok) ids[p.nom] = r.r?.buildingId ?? r.r?.data?.buildingId;
   }
   await page.waitForTimeout(600);
   await send(page, 'setSpeed', { speed: 1 });

@@ -115,18 +115,20 @@ onBuildingRemoved?(ctx: PluginContext, buildingId: number): void;
    private computeRoadAccess(bi: number): boolean {
 +    if (!this.buildings.active[bi]) return false;
      const o = this.obbs.get(this.buildings.id[bi]!);
-@@ demolish(...)  // juste avant this.buildings.remove(a.buildingId);
+@@ demolish(a: CommandArgs<'demolish'>)
+     const asset = this.catalog!.assets[this.buildings.assetIndex[i]!]!;
++    const wasActive = this.buildings.active[i] === 1;
+     this.obbs.delete(a.buildingId);
+     const displaced = this.buildings.residents[i]!;
 +    this.plugins.onBuildingRemoved(a.buildingId);
      this.demography?.onBuildingRemoved(a.buildingId, this.clock.totalMinutes);
--    this.buildings.remove(a.buildingId);
-+    this.buildings.remove(a.buildingId);
-+    if (!this.buildings.active[... ]) /* rien : l'entretien n'avait pas été ajouté */
+     this.buildings.remove(a.buildingId);
+     this.buildingIndex.remove(a.buildingId);
 -    this.economy.removeUpkeep(asset.upkeepPerMonth, 'buildings');
-+    // (lire `active` AVANT remove ; voir note ci-dessous)
++    if (wasActive) this.economy.removeUpkeep(asset.upkeepPerMonth, 'buildings');
 ```
-Note sur `demolish` : lire `const wasActive = this.buildings.active[i] === 1;` au début (l'index `i` est déjà
-calculé ligne 462) puis `if (wasActive) this.economy.removeUpkeep(...)`. Même remarque pour `applySave` :
-rien à faire, les bâtiments sont réinsérés actifs puis le module remet en chantier ceux de sa section.
+`applySave` : rien à faire, les bâtiments sont réinsérés actifs puis le module remet en chantier ceux de sa
+section (`setActive(id, false)` au `load`).
 
 `inBatch` : drapeau privé de `Simulation` mis à vrai pendant `runExt('buildCity')` (une ligne au début et à
 la fin du `case 'buildCity'`), pour que la ville de démonstration n'ouvre pas 400 chantiers.
@@ -157,6 +159,34 @@ la fin du `case 'buildCity'`), pour que la ville de démonstration n'ouvre pas 4
 
 ---
 
+## 1bis. Rendu : API de visibilité des bâtiments de base (non bloquante, fortement souhaitée)
+
+### Besoin
+Le bâtiment est envoyé au rendu dès sa pose : le rendu de base (`src/render/buildings/renderer.ts`,
+`InstancedBuildingRenderer`) l'affiche donc achevé pendant tout le chantier. Le module doit le cacher jusqu'aux
+façades, puis le laisser apparaître.
+
+### Repli actuel (sans modification du rendu de base)
+`src/render/construction/mask.ts` retrouve le groupe « batiments » de la scène et met à zéro la partie linéaire des
+matrices d'instance des bâtiments en chantier, à chaque image, après `buildings.update()`. C'est fragile par
+nature (dépend des noms de lots et de la disposition interne) mais sans risque : si la structure change, le
+masque ne fait plus rien et le bâtiment redevient simplement visible.
+
+### API demandée
+```ts
+// src/render/plugins/types.ts — dans le contexte passé à RenderPlugin.init
+buildings?: {
+  /** Cache (ou réaffiche) les instances de ces bâtiments, ombres comprises. Ids inconnus ignorés. */
+  setBuildingsVisible(ids: readonly number[], visible: boolean): void;
+};
+```
+Implémentation suggérée dans `InstancedBuildingRenderer` : un `Set<number>` de bâtiments cachés consulté à
+l'écriture des matrices (matrice nulle, comme pour une instance libérée) et un drapeau « matrices sales ». Le
+module détecte l'API (`typeof ctx.buildings?.setBuildingsVisible === 'function'`) et désactive alors son repli
+(`BuildingMask.usingApi`, visible dans `window.__aube.chantiers().masqueApi`).
+
+---
+
 ## 2. Demandes secondaires (confort, non bloquantes)
 
 1. **`onBuildingAdded` / `onBuildingRemoved`** (diff ci-dessus). Sans eux, le module compare à chaque tick une
@@ -170,6 +200,11 @@ la fin du `case 'buildCity'`), pour que la ville de démonstration n'ouvre pas 4
    « en démolition », retrait effectif à la fin). À arbitrer en phase 2B avec le module bâtiments.
 3. **Coût étalé.** Le coût de construction est débité en une fois à la pose. Un étalement par phase (acomptes)
    demanderait un accès en écriture à l'économie : hors mission, à décider en 2B (fiscalité/budget).
+4. **Garde-fou d'architecture** (`tests/unit/architecture.test.ts:20`). La regex `from '../(render|client|ui|input|save)'`
+   vise le dossier `src/save/` (côté navigateur) mais attrape aussi `src/sim/save-sections/` importé depuis
+   `src/sim/plugins/` (`'../save-sections/chantiers'`), qui est bien côté simulation. Le module contourne avec
+   `'../../sim/save-sections/…'`. Correctif proposé : `/from\s+['"]\.\.\/(render|client|ui|input|save)(['"\/])/`
+   (ne vise que le dossier exact `save`).
 
 ---
 
