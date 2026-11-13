@@ -22,8 +22,11 @@ import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
 import { applyGraphicsOptions } from './ui/options';
-import { gameDateLabel, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
-import { Autosaver, SaveStore } from './save';
+import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
+import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
+import { AutoSaveTriggers, IMPORTANT_COMMANDS, latestSlot } from './save/auto-triggers';
+import { CloudSlotProvider } from './save/cloud';
+import { BackupReminder, deliverFile, exportMeknes, importMeknes, importSlotName, requestPersistentStorage, resolveDownloads, type ExportFile } from './save/file-transfer';
 
 const QUICK_SLOT = 'rapide';
 const DEMO_SEED = 7;
@@ -50,6 +53,10 @@ interface DebugInfo {
   setCamera?: (mode: 'aerial' | 'street' | 'demo-aerial' | 'demo-street') => void;
   send?: (name: string, args: unknown) => Promise<unknown>;
   saveStoreKind?: string;
+  /** Sauvegardes en ligne (artifact claude.ai) : état publié par src/save/cloud.ts. */
+  cloudSave?: CloudSaveStatus;
+  /** navigator.storage.persist() accordé (null : non pris en charge). */
+  storagePersisted?: boolean | null;
   constructionApplied?: () => number;
   validate?: () => Promise<unknown>;
   lastReport?: unknown;
@@ -116,6 +123,9 @@ async function boot(): Promise<void> {
   let bridge: SimBridge | null = null;
   let store: SaveStore | null = null;
   let autosaver: Autosaver | null = null;
+  let autoTriggers: AutoSaveTriggers | null = null;
+  /** Partie la plus récente (locale ou en ligne), proposée par « Continuer ». */
+  let continueSlot: string | null = null;
   let demoRunning = false;
   const needBridge = (): SimBridge => { if (!bridge) throw new Error('Simulation non démarrée'); return bridge; };
 
@@ -124,12 +134,13 @@ async function boot(): Promise<void> {
     onNewGameWith: (p) => { void startNewGame({ cityName: p.cityName, seed: p.seed, mapChunks: p.mapChunks, startMoney: p.startMoney }); },
     onContinue: () => {
       if (state.inGame) { ui.hideMenu(); void needBridge().send('setSpeed', { speed: speedBeforeMenu }); return; }
-      void loadSlot(QUICK_SLOT);
+      void loadSlot(continueSlot ?? QUICK_SLOT);
     },
     onLoadSlot: (slot) => { void loadSlot(slot); },
     onSaveSlot: (slot) => saveSlot(slot),
     onDemo: () => { void startDemo(); },
     onQuit: () => {
+      void autoTriggers?.saveAndFlush();
       autosaver?.stop();
       void bridge?.send('setSpeed', { speed: 0 });
       state.inGame = false;
@@ -149,12 +160,13 @@ async function boot(): Promise<void> {
     onMenu: () => {
       speedBeforeMenu = (state.stats?.speed ?? 1) || 1;
       void bridge?.send('setSpeed', { speed: 0 });
+      void autoTriggers?.saveAndFlush();
       void refreshMenu();
     },
   });
   const refreshMenu = async (): Promise<void> => {
-    const can = state.inGame || (store ? await store.has(QUICK_SLOT) : false);
-    ui.showMenu({ canContinue: can, inGame: state.inGame });
+    continueSlot = store ? latestSlot(await store.list()) : null;
+    ui.showMenu({ canContinue: state.inGame || continueSlot !== null, inGame: state.inGame });
   };
 
   ui.setLoading(0.05, 'Chargement du catalogue d\'assets…');
@@ -242,6 +254,13 @@ async function boot(): Promise<void> {
   ui.setLoading(0.5, 'Démarrage de la simulation…');
   bridge = await SimBridge.create(workerUrl);
   const b = bridge;
+  // Sauvegarde automatique après construction/démolition (au plus 1/min) : src/save/auto-triggers.ts.
+  const rawSend = b.send.bind(b);
+  b.send = ((name, args) => {
+    const p = rawSend(name, args);
+    if (IMPORTANT_COMMANDS.has(name)) void p.then(() => autoTriggers?.noteAction(), () => undefined);
+    return p;
+  }) as typeof b.send;
   debug.send = (name, args) => b.send(name as never, args as never);
   b.onLog((m) => { (m.level === 'error' ? console.error : console.log)(`[sim] ${m.message}`); if (m.level === 'error') debug.errors.push(m.message); });
 
@@ -329,6 +348,10 @@ async function boot(): Promise<void> {
   // Sauvegardes : IndexedDB (gzip) -> localStorage -> mémoire ; emplacements listés par l'interface.
   store = await SaveStore.open();
   debug.saveStoreKind = store.backend.kind;
+  // Sauvegardes en ligne (docs/SAUVEGARDES.md) : dans l'artifact claude.ai, SaveStore synchronisé
+  // (locale immédiate + envoi en arrière-plan) ; ailleurs (window.claude absent), store inchangé.
+  installCloudSaveBadge();
+  store = await attachCloudSaves(store);
   const st = store;
   setSlotProvider({
     list: async () => (await st.list()).map((s): UiSlotInfo => ({
@@ -337,6 +360,44 @@ async function boot(): Promise<void> {
     remove: async (slot) => { await st.remove(slot); return true; },
   });
   autosaver = new Autosaver(async () => (await b.send('save', { slot: 'auto' })).data as SaveFile, st, { onError: (m: string) => ui.toast(m, 'error') });
+  const auto = autosaver;
+  // Sauvegarde entièrement automatique : arrière-plan/fermeture, retour au menu, actions importantes.
+  autoTriggers = new AutoSaveTriggers({
+    saveNow: () => auto.saveNow(), isActive: () => auto.running && !demoRunning,
+    flushCloud: () => (st instanceof CloudSlotProvider ? st.flush() : Promise.resolve()),
+  });
+  autoTriggers.install();
+
+  // Copies de secours en fichier .meknes (export/import), rappel ~30 min sans sauvegarde en ligne,
+  // stockage persistant (Safari) : src/save/file-transfer.ts, docs/SAUVEGARDES.md.
+  void requestPersistentStorage().then((p) => { debug.storagePersisted = p; });
+  const claudeApi = (globalThis as { claude?: { use?: (n: string) => Promise<unknown> } }).claude;
+  void resolveDownloads(claudeApi).then((downloads) => {
+    const fileUi = installSaveFileUi({
+      exportAvailable: typeof claudeApi?.use !== 'function' || downloads !== null,
+      prepareExport: async () => (state.inGame ? exportMeknes((await b.send('save', { slot: 'export' })).data as SaveFile, { artifact: downloads !== null }) : null),
+      deliverExport: async (f) => {
+        try {
+          if ((await deliverFile(f as ExportFile, { downloads })) !== 'cancelled') { reminder.reset(); ui.toast(`Copie de secours : ${(f as ExportFile).filename}`, 'ok'); }
+        } catch (e) { ui.toast(errText(e), 'error'); }
+      },
+      importFile: async (file) => {
+        const r = await importMeknes(file);
+        if (!r.ok) { ui.toast(`Import impossible : ${r.message}`, 'error'); return; }
+        const slot = importSlotName(r.value.params.cityName, (await st.list()).map((s) => s.slot));
+        const w = await st.save(slot, r.value);
+        if (!w.ok) { ui.toast(w.message, 'error'); return; }
+        ui.toast(`Fichier importé dans « ${slot} »`, 'ok');
+        await loadSlot(slot);
+      },
+    });
+    const reminder = new BackupReminder({
+      isPlaying: () => auto.running && !demoRunning && (state.stats?.speed ?? 0) > 0,
+      hasCloud: () => st instanceof CloudSlotProvider && (st.status.state === 'online' || st.status.state === 'syncing'),
+      remind: () => fileUi.remind(() => reminder.disable()),
+    });
+    reminder.start();
+  });
 
   const waitSnapshot = (): Promise<void> => new Promise((res) => { firstSnapshot = res; });
 

@@ -17,4 +17,4 @@ npm run validate:visual  # porte de validation visuelle (planche-contact + captu
 Ouvrir `dist/index.html` via un serveur HTTP statique (les modules ES et le worker ne se chargent pas en `file://`).
 Paramètres d'URL : `?autostart` (partie immédiate), `?demo` (scène de démonstration — phase 1), `?validate` (mode inspection des assets).
 
-Documentation : `docs/ARCHITECTURE.md`, `docs/ASSET_PIPELINE.md`, `AGENT_TASKS.md`, `FEATURES.md`, `PROJECT_STATUS.md`.
+Documentation : `docs/ARCHITECTURE.md`, `docs/ASSET_PIPELINE.md`, `docs/SAUVEGARDES.md` (sauvegardes locales et en ligne dans l'artifact), `AGENT_TASKS.md`, `FEATURES.md`, `PROJECT_STATUS.md`.

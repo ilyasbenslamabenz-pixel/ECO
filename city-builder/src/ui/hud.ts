@@ -379,7 +379,7 @@ export function initUI(h: UIHandlers): UIHandle {
     showMenu({ canContinue, inGame }) {
       inGameFlag = inGame;
       btnContinue.disabled = !canContinue && !inGame;
-      btnContinue.lastChild!.textContent = inGame ? 'Reprendre' : canContinue ? 'Continuer (sauvegarde rapide)' : 'Continuer — aucune sauvegarde';
+      btnContinue.lastChild!.textContent = inGame ? 'Reprendre' : canContinue ? 'Continuer (dernière partie)' : 'Continuer — aucune sauvegarde';
       btnQuit.classList.toggle('hidden', !(inGame && h.onQuit));
       showScreen('home');
       menu.classList.remove('hidden');
