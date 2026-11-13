@@ -112,8 +112,9 @@ en cours de partie (un chantier ailleurs ne remet pas tous les carrefours à zé
 (`vehicules_plaques_*.webp`, format européen `XX-123-YY`, bande d'identification, caractères embossés).
 Chaque GLB porte un sous-maillage de rôle `plaque` dont les UV couvrent la première bande ; le rendu
 (`src/render/vehicles/renderer.ts`) ajoute un attribut d'instance `aPlaque` et décale `vMapUv.y` d'une bande
-par véhicule : toute la flotte partage un matériau et un draw call par lot, mais aucune plaque identique à
-l'écran dans un même champ de vision (24 numéros, tirage par identifiant de véhicule).
+par véhicule : toute la flotte partage un matériau et un draw call par lot. 24 numéros tirés par identifiant
+de véhicule : deux véhicules peuvent porter le même numéro (constaté en capture), mais deux voisins
+rarement (sonde e2e : 24 bandes distinctes utilisées sur ≈ 230 instances).
 
 Régénération : `npx tsx tools/vehicles/build.ts` (écrit `assets/vehicles/**` et
 `assets/catalog.vehicles.json`), puis fusion dans `assets/catalog.json` par `npm run assets`.
@@ -127,3 +128,23 @@ npx tsx tests/circulation/bench.ts --vehicles=2000 --ticks=600 --grid=14
 Écrit `tests/e2e/out/perf/circulation-bench.json` (véhicules, réseau, temps par tick moyen / médian / p95 /
 max, vitesse moyenne, réseau saturé, distance minimale entre véhicules, matériel exact). Mesure **processeur
 seul** (aucun rendu) : contrairement aux images par seconde sous SwiftShader, ces chiffres sont représentatifs.
+
+Mesures du 2026-11-13 (Xeon 2,1 GHz, 4 cœurs, Node 22) : grille 14 (364 tronçons, 88 carrefours à feux) —
+tick moyen **1,27 ms**, p95 **1,87 ms**, max 4,5 ms ; grille 22 (924 tronçons, 228 à feux) — moyen **1,58 ms**,
+p95 **3,26 ms**, max 6,9 ms. Budget du pas de simulation : 100 ms.
+
+## 8. Feux stop et clignotants
+
+La simulation pose les bits d'état `flags` de chaque véhicule (`TrafficSystem.move`) : `1` freinage
+(décélération < −1 m/s²), `2` / `4` clignotant gauche / droit pendant un changement de voie (tant que le
+décalage latéral résiduel dépasse 0,1 m, soit ≈ 2,3 s) et à moins de 35 m d'un virage (sens du connecteur
+suivant, demi-tour = gauche). Le rendu les reçoit dans la trame véhicules et les passe en attribut d'instance
+`aFeux` au matériau des détails : texels émissifs rouges à l'arrière renforcés au freinage, optiques du côté
+indiqué (gauche = +X du modèle) virées à l'orange au rythme de ≈ 1,5 Hz. La phase n'avance que dans la boucle
+d'affichage (les images forcées par `renderNow` la figent). Sonde e2e : `globalThis.__aubeVehicules.probe()`.
+
+## 9. Captures de contrôle
+
+`node tests/circulation/captures.mjs [--v=2000] [--demand=x] [--tag=-suffixe]` (après `npm run build`) :
+ville de charge, carrefour le plus chargé, véhicule en plein changement de voie (vue rue + aérienne), carte de
+congestion. Images commentées : `docs/captures-circulation/` (voir docs/requests/circulation-reprise.md).

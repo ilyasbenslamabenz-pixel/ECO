@@ -470,7 +470,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
       instances++;
       const f = lot.lights[i]!;
       if (f & 1) brake++; if (f & 2) left++; if (f & 4) right++;
-      if (!blinking && (f & 6) && lot === m.lods[0]) blinking = [lot.matrices[i * 16 + 12]!, lot.matrices[i * 16 + 14]!, Math.atan2(lot.matrices[i * 16 + 8]!, lot.matrices[i * 16 + 10]!), f];
+      if (!blinking && (f & 6)) blinking = [lot.matrices[i * 16 + 12]!, lot.matrices[i * 16 + 14]!, Math.atan2(lot.matrices[i * 16 + 8]!, lot.matrices[i * 16 + 10]!), f];
       if (lot.plate) plates.add(lot.plates[i]!);
     }
     let inFrame = 0;
