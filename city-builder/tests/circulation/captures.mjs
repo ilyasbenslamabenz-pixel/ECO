@@ -24,7 +24,7 @@ try {
   const send = (name, args) => page.evaluate(([n, a]) => window.__aube.send(n, a), [name, args]);
   const cmd = (name, payload = {}) => send('pluginCommand', { plugin: 'circulation', name, payload });
   await page.evaluate(() => { window.__aube.trackVehicles = true; });
-  await send('setSpeed', { speed: 3 });
+  await send('setSpeed', { speed: 4 });
   await page.waitForTimeout(45000); // files d'attente qui se forment
   report.statsBefore = await cmd('stats');
   console.log('stats', JSON.stringify(report.statsBefore));
@@ -60,7 +60,7 @@ try {
       const c = await page.evaluate(() => window.__aube.lastVehicles);
       const j = c.ids.indexOf(best.id);
       if (j >= 0) lc = { ...best, x: c.positions[j * 4], z: c.positions[j * 4 + 2], h: c.positions[j * 4 + 3] };
-      else await send('setSpeed', { speed: 3 });
+      else await send('setSpeed', { speed: 4 });
     }
   }
   report.laneChange = lc;
