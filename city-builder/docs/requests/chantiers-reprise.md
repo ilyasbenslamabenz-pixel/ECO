@@ -5,7 +5,7 @@
   simulation/sauvegarde et `tests/chantiers/rendu.test.ts` 5 tests rendu/modèles/panneau/masque).
 - `npm run build` vert : dist 45,1 Mo (budget 60 Mo) ; modèles de chantier 1,6 Mo (< 3 Mo, vérifié par test).
 - `npm run e2e` : SUCCÈS. `npm run validate:visual` : SUCCÈS (démo livrée achevée, aucun chantier parasite).
-- `node tests/chantiers/capture.mjs` (après build) : captures du VRAI jeu dans `tests/chantiers/out/`
+- `node tests/chantiers/capture.mjs` (après build) : 39/39 vérifications, captures du VRAI jeu dans `tests/chantiers/out/`
   (non versionnées) et `rapport.json`. Images REGARDÉES : terrassement (palissade, pelle, baraque, terre),
   fondations (dalle, ferraillage, grue montée, toupie), structure (ossature étage par étage, filets),
   façades (échafaudage + bâche), finitions (échafaudage démonté par le haut, bâtiment révélé), tour (grue
