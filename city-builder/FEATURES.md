@@ -1,69 +1,75 @@
 # FEATURES — état réel des fonctionnalités d'« Aube Urbaine »
 
 Règle : une ligne n'est marquée **Terminé** que si une preuve automatisée ou une vérification documentée existe
-(colonne « Preuve »). Ce qui fonctionne seulement en partie est dans « Partiel », avec la limite exacte.
-Tout le reste est « À faire » avec sa phase. Dernière mise à jour : intégration phase 1 (directeur technique), 2026-11-12.
+(colonne « Preuve ») ET que cette preuve passe à la date indiquée. Ce qui fonctionne seulement en partie est dans
+« Partiel », avec la limite exacte. Tout le reste est « À faire » avec sa phase.
+Dernière mise à jour : corrections après la recette QA n° 1 de la phase 1, 2026-11-13. Résultats chiffrés et liste
+des captures regardées : `PROJECT_STATUS.md`.
 
 Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration), `npm run test:assets`,
-`npm run build`, `npm run e2e`, `npm run e2e:game`, `npm run validate:visual`, `npm run stress`, `npm run assets`.
-Les captures citées sont dans `tests/e2e/out/` et ont été regardées.
+`npm run build`, `npm run e2e`, `npm run e2e:gate`, `npm run e2e:game`, `npm run e2e:play`, `npm run validate:visual`,
+`npm run stress`, `node tests/e2e/demo-night.mjs`. Les captures citées sont dans `tests/e2e/out/` et ont été regardées.
 
 ## Terminé (vérifié)
 
 ### Bibliothèque d'assets 3D (priorité client)
 | Fonctionnalité | Preuve |
 |---|---|
-| **40 bâtiments différents** (silhouettes et hauteurs toutes distinctes, 7 à 233 m) : 7 maisons individuelles de styles variés, 2 rangées de maisons mitoyennes, 2 petits immeubles, 2 immeubles moyens avec commerces, 4 immeubles haute densité, 3 gratte-ciel, 6 commerces (dont bureaux), 5 bâtiments industriels, 9 équipements publics (dont un parc) | `tests/integration/integration.test.ts` « catalogue fusionné » (40 bâtiments, 9 familles, dimensions toutes différentes) ; `tests/buildings/*.test.ts`, `tests/buildings-other/*.test.ts` (102 tests, `npm run test:assets`) ; planche `tests/e2e/out/planche-contact.png` |
-| Chaque bâtiment : 3 LOD (triangles strictement décroissants), 3 ou 4 variantes (textures, teintes, hauteur), métadonnées (coût, entretien, habitants, emplois, accès) | `npm run assets` (validateur : LOD, bornes, licences) ; tests des modules bâtiments |
-| 15 véhicules GLB (citadine, berline, break, SUV, coupé, monospace, pick-up, taxi, police, utilitaire, ambulance, camion, bus, pompiers, benne), 3 LOD, 2 à 6 peintures | validateur `npm run assets` ; `tests/vehicles/traffic.test.ts` ; planche-contact |
-| Végétation et décor : 6 essences d'arbres (4 Poly Haven + épicéa et peuplier générés), arbustes, fleurs, rochers, 12 éléments de mobilier urbain (lampadaire, banc, poubelle, borne incendie, table, terrasse, poteaux, armoires…), fontaine générée | validateur ; planche-contact ; démo (square, parc) |
-| Textures PBR (albedo, normale, ARM) : 39 jeux Poly Haven CC0 + textures générées (véhicules, arbres) ; 2 HDRI ; aucune autre source externe ; licence et source de chaque asset dans `assets/LICENSES.md` | `npm run assets` (« Validation du pipeline : OK », contrôle des licences et des sources autorisées) |
-| Catalogue fusionné automatiquement par `npm run assets` (4 générateurs enregistrés : résidentiel, non résidentiel, véhicules, environnement) — 88 assets | `tools/generators/index.ts` ; sortie du pipeline (POLYHAVEN_OFFLINE=1) |
-| Porte de validation visuelle `npm run validate:visual` : chaque asset réellement chargé dans Chromium (GLB compressés comme en production), triangles ≥ seuil, boîte non triviale, pas de boîte-placeholder, textures décodées + normal maps, couverture de pixels ; planche-contact ; démo : tous les bâtiments posés, chargements sans erreur, véhicules, végétation, décor, captures aérienne et rue non vides et différentes | `tests/e2e/validate-visual.mjs` ; résultat de la dernière exécution dans `PROJECT_STATUS.md` ; `npm run e2e:gate` (la porte rejette un cube et un modèle non texturé) |
+| **40 bâtiments différents** (silhouettes et hauteurs toutes distinctes, 7 à 233 m) : 7 maisons individuelles de styles variés, 2 rangées de maisons mitoyennes, 2 petits immeubles, 2 immeubles moyens avec commerces, 4 immeubles haute densité, 3 gratte-ciel, 6 commerces (dont bureaux), 5 bâtiments industriels, 9 équipements publics (dont un parc) | `tests/integration/integration.test.ts` « catalogue fusionné » ; `npm run test:assets` (102 tests) ; planche `tests/e2e/out/planche-contact.png` |
+| Chaque bâtiment : 3 LOD (triangles strictement décroissants), 3 ou 4 variantes (textures, teintes, hauteur), métadonnées (coût, entretien, habitants, emplois, façade/accès) | `npm run assets` (validateur : LOD, bornes, licences) ; tests des modules bâtiments |
+| 15 véhicules GLB, 3 LOD, 2 à 6 peintures (la planche-contact les montre dans leur matériau de base, blanc/gris : la peinture est appliquée par instance dans le jeu) | validateur ; `tests/vehicles/traffic.test.ts` ; planche-contact ; captures de la démo |
+| Végétation et décor : 6 essences d'arbres (4 Poly Haven + 2 générées), arbustes, fleurs, rochers, 12 éléments de mobilier urbain, fontaine | validateur ; planche-contact ; démo |
+| Textures PBR (albedo, normale, ARM) : jeux Poly Haven CC0 + textures générées ; 2 HDRI ; aucune autre source externe ; licence et source de chaque asset dans `assets/LICENSES.md` | `npm run assets` (contrôle des licences et des sources autorisées) |
+| Porte de validation visuelle `npm run validate:visual` (88 assets chargés dans Chromium, triangles, boîte, textures décodées, normal maps, planche-contact, démo aérienne et rue) | `tests/e2e/validate-visual.mjs` ; `npm run e2e:gate` (rejette un cube et un modèle non texturé) |
 
 ### Scène de démonstration
 | Fonctionnalité | Preuve |
 |---|---|
-| Accessible par le menu (« Scène de démonstration ») et par `?demo` | `tests/e2e/validate-visual.mjs` (`?demo`) ; bouton activé dans `src/ui/hud.ts` via `onDemo` |
-| Ville construite **par la simulation avec les opérations du joueur** (`buildCity` : `buildRoad` / `placeBuilding`, toutes validations) : ~119 bâtiments, **les 40 modèles** au moins une fois avec variantes, 42 tronçons (boulevard, avenues, rues, rue piétonne, sens unique, routes courbes, ponts), quartiers (affaires, collectif, pavillons, activités), habitants installés, ~140 véhicules réels au départ | `tests/integration/integration.test.ts` « ville de démonstration » et « déterministe » ; `tests/e2e/out/demo-rapport.json` |
-| Caméra aérienne et caméra rue (hauteur piéton) basculables par bouton et touche V ; survol cinématique (touche C) | capture `tests/e2e/out/demo-aerien.png`, `demo-rue.png` ; bascule par bouton vérifiée par la porte visuelle ; e2e smoke (bouton + V) |
-| Square (fontaine, bancs, jardinières, lampadaires, table, terrasse) et arbres du parc | `demo-rapport.json` (`props`) ; captures |
+| Accessible par le menu et par `?demo` | `validate-visual.mjs` (`?demo`), e2e smoke |
+| Ville construite **par la simulation avec les opérations du joueur** : ~119 bâtiments, les 40 modèles, 42 tronçons (6 types, courbes, ponts), quartiers, ~3 900 habitants, ~140 véhicules ; trésorerie restante crédible (≈ 12 M ¢ : budget de départ 150 M ¢, ville ≈ 138 M ¢) | `tests/integration/integration.test.ts` ; `tests/e2e/out/demo-rapport.json` |
+| Caméra aérienne et caméra rue (hauteur piéton) basculables par bouton et touche V ; survol cinématique (touche C) | `demo-aerien.png`, `demo-rue.png` ; porte visuelle ; e2e smoke |
+| Éclairage selon l'heure de la simulation, y compris en vue aérienne (nuit sombre, jour clair ; le défaut « plein jour à 00:10 » signalé par la QA n'a pas été reproduit) | `node tests/e2e/demo-night.mjs` (`demo-nuit-aerien.png` / `demo-jour-aerien.png`, luminance comparée) |
 
-### Jeu jouable (première ville)
+### Jeu jouable
 | Fonctionnalité | Preuve |
 |---|---|
-| Menu → nouvelle partie (nom, graine, taille de carte, budget) → partie ; « Charger une partie », « Options », « Quitter » | `tests/e2e/gameplay.mjs` ; `npm run e2e` |
-| Terrain procédural réaliste (WorldTerrain) : relief, érosion, mer ou lac, rivières, plages, forêts, ressources ; rendu par chunks LOD en streaming (maillage en worker), PBR multi-couches, eau animée, ciel HDRI | `tests/terrain/*.test.ts` ; captures démo ; `tests/integration` (couches transférées) |
-| Routes droites et **courbes** (6 types), **carrefours automatiques** (découpe des tronçons croisés), **ponts automatiques** au-dessus de l'eau, nivellement du terrain sous la chaussée transmis au rendu, profils en long calculés par la simulation | `tests/roads/*.test.ts` ; `tests/integration` « routes : courbe, carrefour, pont, nivellement » ; `tests/e2e/gameplay.mjs` (route courbe + rue transversale) |
-| Bâtiments GLB posés le long des routes (outil avec aperçu fantôme, alignement façade/route, refus expliqués) | `tests/construction/*.test.ts` (3 tests contre la vraie simulation) ; `tests/e2e/gameplay.mjs` (pose par commande) |
-| Démographie : emménagement si route, emploi, école, vieillissement, naissances, décès, émigration | `tests/sim/demography.test.ts` ; démo (≈ 4 000 habitants) |
-| Trafic réel : véhicules sur le réseau (voies, carrefours à priorité / feux, IDM, A*), interpolés et rendus instanciés | `tests/vehicles/traffic.test.ts` ; `tests/integration` (≥ 50 véhicules, identifiants uniques) ; captures démo |
-| Économie : coût débité à la construction, impôts et entretien mensuels, emprunts et faillite côté simulation | `tests/sim/economy.test.ts` ; `tests/e2e/gameplay.mjs` (trésorerie débitée) |
-| Cycle jour/nuit : soleil, lune, fenêtres allumées, lampadaires et phares la nuit (heure de la simulation) | tests sky/buildings/routes des modules ; `render/index.ts` `setTimeOfDay` ; captures nuit des modules |
-| Sauvegarde v2 (gzip, IndexedDB → localStorage → mémoire), emplacements nommés dans l'interface, autosauvegarde toutes les 3 min, **rechargement de la page puis chargement à l'identique** (bâtiments, routes courbes, trésorerie, date, population) | `tests/e2e/gameplay.mjs` ; `tests/sim/save.test.ts` ; `tests/integration` « sauvegarde v2 » (terrain nivelé identique) |
-| Simulation en Web Worker, sans three ni DOM ; protocole typé, Transferables (terrain et ses couches, trames véhicules avec ids/variantes/drapeaux, patchs de terrain) | `tests/unit/architecture.test.ts` ; `tests/integration` « protocole » |
-| Souris/clavier et tactile (pincer = zoom, deux doigts = déplacement/inclinaison/rotation) | `tests/e2e/gameplay.mjs` (iPhone 13 émulé, gestes CDP `Input.dispatchTouchEvent`) — **pas testé sur un vrai iPhone** |
-| Build : `dist/index.html` + `dist/artifact.html` (fragment) + `game.js` + `sim.worker.js` + `assets/` relatifs ; GLB compressés `EXT_meshopt_compression` au build ; budget ≤ 60 Mo (≈ 42 Mo) | `npm run build` (contrôle du budget intégré) |
-| Ville de test de charge (500 bâtiments, 1 000 véhicules) et mesures | `npm run stress` → `tests/e2e/out/stress-rapport.json` |
+| Menu → nouvelle partie → partie ; charger, options, quitter | `npm run e2e`, `npm run e2e:game` |
+| Terrain procédural (relief, érosion, mer/lac, rivières, plages, forêts) en chunks LOD maillés en worker, PBR, eau animée, ciel HDRI | `tests/terrain/*.test.ts` ; captures |
+| **Routes : les 6 types de la simulation constructibles depuis l'interface** (rue, avenue, boulevard, sens unique, rue piétonne, autoroute), droites ou **courbes (une vraie Bézier envoyée à la simulation)**, carrefours automatiques, ponts automatiques, nivellement | `npm run e2e:play` (tiroir à 6 cartes ; rue courbe tracée à la souris = tronçons courbes c1/c2) ; `tests/construction/tools.test.ts` « rue courbe = une vraie Bézier » (sens unique) ; `tests/roads/*.test.ts` |
+| **Une route coupée par un carrefour reste affichée** (correction : les nœuds d'extrémité réutilisés par les morceaux n'étaient plus connus du rendu) | `tests/roads/render.test.ts` « tronçon coupé par un carrefour » ; `npm run e2e:play` « rendu = simulation : 4 tronçons affichés / 4 simulés » (`play-courbe-carrefour.png`) |
+| **Placement libre des bâtiments : angle libre et position au centimètre** ; empreinte orientée exacte (collisions bâtiments par séparation d'axes, routes courbes par distance segment/rectangle orienté) | `src/shared/footprint.ts` ; `tests/construction/tools.test.ts` « position et angle libres » |
+| **Aimantation façade → route** sur route droite, **en biais** ou courbe : façade exactement perpendiculaire à la route, bâtiment collé au trottoir, glisse le long de la voie, « façade côté route » au curseur ; aperçu du vrai modèle, rotation (R), variantes, démolition | `npm run e2e:play` (route à 34° : rot 3,626, |cos| = 0,000 ; 2 maisons collées à l'avenue, centre à 20,1 m de l'axe = 11,5 + 8 + 0,6) ; `play-biais-apercu.png`, `play-biais-pose.png` ; `tests/construction/tools.test.ts` |
+| Pose par commandes le long des routes, trésorerie débitée, bâtiments rechargés à l'identique | `npm run e2e:game` (4 bâtiments posés ; le test essayait auparavant un immeuble à 620 000 ¢ avec 434 581 ¢ en caisse et ne posait rien) |
+| **Économie dans l'interface** : recettes fiscales, salaires, échéances d'emprunt ; **impôts réglables par secteur** (0–25 %) ; **emprunts** (offre chiffrée, emprunt, remboursement anticipé) ; graphique de trésorerie | `npm run e2e:play` (impôt résidentiel 14 % relu dans la simulation ; emprunt 200 000 ¢ : trésorerie +200 000 et ligne affichée) ; `play-finances-impots.png`, `play-finances-emprunt.png` ; `tests/sim/economy.test.ts` |
+| **Panneau Population** (clic sur « Habitants ») : habitants, ménages, actifs, emploi, chômage, emplois pourvus/offerts, trajets en cours, véhicules, logements, bonheur, attractivité, revenus, arrivées/départs, demande par secteur, activités, tranches d'âge — tout vient du rapport de la simulation | `npm run e2e:play` (« 8 habitants » = simulation) ; `play-population.png` |
+| Démographie : emménagement si route, emploi, école, vieillissement, naissances, décès, émigration ; flux d'immigration de base pour qu'une petite ville se peuple en 1 à 2 jours de jeu | `tests/sim/demography.test.ts` ; e2e:game (25 habitants après rechargement) |
+| Trafic réel (voies, carrefours à priorité/feux, IDM, A*), véhicules instanciés | `tests/vehicles/traffic.test.ts` ; `tests/integration` |
+| Cycle jour/nuit | `demo-night.mjs` ; captures nuit des modules |
+| Sauvegarde v2 (gzip, IndexedDB → localStorage → mémoire), emplacements nommés, autosauvegarde 3 min, rechargement de la page puis chargement à l'identique (date exacte de l'instantané) ; anciennes sauvegardes (rotation entière) toujours valides | `npm run e2e:game` ; `tests/sim/save.test.ts` |
+| Simulation en Web Worker, sans three ni DOM ; protocole typé, Transferables | `tests/unit/architecture.test.ts` ; `tests/integration` « protocole » |
+| Souris/clavier et tactile : pincer = zoom, deux doigts = déplacement/inclinaison/rotation (un pincement en attente est appliqué au lever des doigts : plus de geste perdu quand aucune image n'a été rendue) | `npm run e2e:game` (iPhone 13 émulé, CDP : 420 → 140 m, inclinaison 0,69 → 0,21) — **pas testé sur un vrai iPhone** |
+| iPhone : barre d'outils sur 2 rangées de 5, entièrement visible ; panneaux au-dessus de la barre ; boutons ≥ 40 px | `npm run e2e:play` (9 outils dans 374 px, panneau sans recouvrement) ; `play-iphone.png` |
+| Build : `dist/index.html` + `dist/artifact.html` (fragment) + `game.js` + `sim.worker.js` + `assets/` relatifs ; budget ≤ 60 Mo (≈ 42 Mo) | `npm run build` |
+| Test de charge (500 bâtiments, 1 000 véhicules) et mesures | `npm run stress` → `tests/e2e/out/stress-rapport.json` (chiffres dans `PROJECT_STATUS.md`) |
 
 ## Partiel (fonctionne, avec limites connues)
 | Fonctionnalité | Limite | Phase |
 |---|---|---|
-| Panneau Finances | affiche l'historique de trésorerie ; curseurs d'impôts et emprunts affichés « Phase 2 » alors que la simulation les gère (`setTaxRate`, `takeLoan`) : interface non branchée | 2 |
-| Rapport de simulation (`report`) | reçu ≈ 1 fois/s ; seules les notifications sont affichées (toasts) ; pyramide des âges, chômage, demande RCI : non affichés | 2 |
-| Outil route de l'interface | trace des courbes en polyligne de tronçons droits (le point de contrôle Bézier est accepté par la simulation, `RoadDraft` ne l'envoie pas encore) ; choix limité aux 3 types hérités | 2 |
-| Annuler (Ctrl+Z) | envoie la commande inverse : remboursement de 25 % seulement | 2 |
+| Autoroute | constructible, mais ne croise aucune route à niveau (refus expliqué) : échangeurs en phase 4 | 4 |
+| Annuler (Ctrl+Z) | envoie la commande inverse : remboursement de 25 % seulement à l'annulation d'une construction | 2 |
 | Décors (arbres, mobilier) | placés par la démo (présentation, non simulés) ; placement par le joueur affiché « Phase 2 » | 2 |
-| Nivellement sous les routes | la démolition d'une route restaure le terrain naturel, mais un bâtiment voisin construit sur un talus n'est pas réajusté | 2 |
-| Performances | voir PROJECT_STATUS.md : ≈ 3 000 appels de rendu en vue aérienne de la démo (bâtiments multi-matériaux), non mesuré sur GPU réel | 2 |
+| Nivellement sous les routes | un bâtiment voisin construit sur un talus n'est pas réajusté après démolition de la route | 2 |
+| Performances | simulation : tick moyen 0,7 ms (p95 1,0 ms) pour 500 bâtiments et 1 000+ véhicules ; rendu : 2 700 à 3 000 appels par image en vue aérienne (bâtiments multi-matériaux), mesuré en rendu LOGICIEL seulement — **aucune mesure sur GPU réel** (détail : `PROJECT_STATUS.md`) | 2 |
+| Forêts vues de haut | sous-bois teinté en vert (lecture de canopée améliorée) ; les imposteurs lointains restent des silhouettes sombres découpées | 2 |
+| Rivières | contours encore anguleux par endroits (maillage de l'eau à la résolution de la grille de terrain) | 2 |
 
 ## À faire
 | Fonctionnalité | Phase |
 |---|---|
 | Fusion des matériaux par bâtiment (atlas) pour réduire les appels de rendu ; culling par chunk des bâtiments | 2 |
 | Zonage (R/C/I) et croissance automatique ; terraformation (`terraform` renvoie NOT_IMPLEMENTED) | 2 |
-| Panneaux budget / population / inspection branchés sur `report`, `inspectBuilding` | 2 |
+| Inspection détaillée d'un habitant / d'un bâtiment (`inspectBuilding`, `inspectCitizen` existent côté simulation) | 2 |
 | Lignes de bus, piétons, feux stop des véhicules, gyrophares | 3 |
-| Échangeurs, passages dénivelés, autoroute constructible depuis l'interface | 4 |
-| Billboards au LOD2 des arbres Poly Haven, imposteurs avec ombre | 2 |
+| Échangeurs, passages dénivelés | 4 |
+| Billboards au LOD2 des arbres Poly Haven, imposteurs avec ombre ; berges de rivières lissées | 2 |
 | Mesures sur GPU réel et sur iPhone réel | 2 |

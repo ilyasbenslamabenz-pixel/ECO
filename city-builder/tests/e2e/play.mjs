@@ -26,6 +26,8 @@ let failed = false;
 const check = (ok, msg) => { R.checks.push({ ok: !!ok, msg }); console.log(`${ok ? 'OK  ' : 'ÉCHEC'} ${msg}`); if (!ok) failed = true; };
 const shot = (page, name) => page.screenshot({ path: join(out, `play-${name}.png`), timeout: 600000 });
 const render = (page, n = 2) => page.evaluate((k) => window.__aube.renderNow(k), n);
+/** Caméra stabilisée (amortissement terminé) avant de projeter des points monde -> écran. */
+const settle = (page) => page.evaluate(() => window.__aube.renderNow(16, 0.5));
 const stats = (page) => page.evaluate(() => window.__aube.lastStats);
 const scr = (page, x, z) => page.evaluate(([a, b]) => window.__aube.worldToScreen(a, b), [x, z]);
 const preview = (page) => page.evaluate(() => window.__aube.toolPreview());
@@ -35,6 +37,7 @@ const tag = (page) => page.evaluate(() => document.querySelector('#cursor-tag')?
 
 async function clickWorld(page, x, z) {
   const p = await scr(page, x, z);
+  if (p.y > 700 || p.y < 110 || p.x < 20 || p.x > 1420) throw new Error(`point (${x}, ${z}) hors de la zone cliquable : écran ${Math.round(p.x)}, ${Math.round(p.y)}`);
   await page.mouse.move(p.x, p.y); await render(page, 1);
   await page.mouse.click(p.x, p.y);
   return p;
@@ -51,22 +54,27 @@ try {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = collectErrors(page);
-  await page.goto(`${base}/index.html?autostart&seed=7&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
+  await page.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 300000, polling: 500 });
   await send(page, 'setSpeed', { speed: 0 });
-  // Zone sèche et plate trouvée par la simulation elle-même (dryRun) autour du centre.
-  let C = null;
-  for (let r = 0; r < 600 && !C; r += 40) for (let a = 0; a < 8 && !C; a++) {
-    const x = Math.round(Math.cos(a) * r), z = Math.round(Math.sin(a) * r);
-    const ok1 = await send(page, 'buildRoad', { type: 'avenue', kind: 'avenue', points: [x - 160, z, x + 160, z], dryRun: true });
-    const ok2 = await send(page, 'buildRoad', { type: 'street', kind: 'street', points: [x + 20, z + 60, x + 170, z + 160], dryRun: true });
-    if (ok1.ok && ok2.ok) C = [x, z];
-  }
+  // Zone sèche et plate trouvée par la simulation elle-même (dryRun d'une maison sur toute la zone de test).
+  // Carte seed 42 : zone repérée hors ligne (scratch) puis REVÉRIFIÉE ici (dryRun d'une maison sur toute la zone).
+  const C0 = [116, 356];
+  const pts = [];
+  for (let dx = -180; dx <= 200; dx += 40) for (let dz = -110; dz <= 180; dz += 40) pts.push([C0[0] + dx, C0[1] + dz]);
+  const dry = await page.evaluate(async (list) => {
+    for (const [px, pz] of list) {
+      try { await window.__aube.send('placeBuilding', { assetId: 'maison_pavillon_enduit', x: px, z: pz, rot: 0, dryRun: true }); } catch (e) { return `${px},${pz}: ${e.message}`; }
+    }
+    return 'ok';
+  }, pts);
+  const C = dry === 'ok' ? C0 : null;
+  R.notes.site = dry;
   check(!!C, `zone constructible trouvée ${JSON.stringify(C)}`);
   const [cx, cz] = C;
-  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z + 40, 300), [cx, cz]);
-  await page.keyboard.press('KeyT'); // vue de dessus si disponible
-  await render(page, 4);
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 560), [cx, cz]);
+  await page.keyboard.press('KeyT'); // vue de dessus
+  await settle(page);
 
   // 1. Tiroir Routes : 6 types.
   await page.click('#toolbar button[data-tool=road]');
@@ -84,6 +92,8 @@ try {
   await page.click('#toolbar button[data-tool=road]');
   await page.click('#drawer-body .road-card[data-road=street]');
   await page.click('#tool-actions button:has-text("Courbe")');
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 520), [cx, cz]);
+  await settle(page);
   await clickWorld(page, cx - 60, cz - 90);
   await clickWorld(page, cx + 70, cz);
   await hoverWorld(page, cx - 60, cz + 90);
@@ -107,6 +117,8 @@ try {
   await page.click('#toolbar button[data-tool=road]');
   await page.click('#drawer-body .road-card[data-road=street]');
   await page.click('#tool-actions button:has-text("Droite")');
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 420), [cx + 95, cz + 110]);
+  await settle(page);
   await clickWorld(page, cx + 20, cz + 60); await clickWorld(page, cx + 170, cz + 160);
   await page.waitForTimeout(1000);
   await page.click('#toolbar button[data-tool=select]');
@@ -117,7 +129,7 @@ try {
   const ux = 150 / Math.hypot(150, 100), uz = 100 / Math.hypot(150, 100);
   const mx = cx + 95 + uz * 20, mz = cz + 110 - ux * 20;
   await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 160), [mx, mz]);
-  await render(page, 2);
+  await settle(page);
   await hoverWorld(page, mx, mz);
   await page.waitForTimeout(400); await render(page, 1);
   const pv = await preview(page);
@@ -143,7 +155,7 @@ try {
   let near = 0;
   for (const [x, side] of [[cx + 110, -1], [cx + 120, 1]]) {
     await page.evaluate(([a, b]) => window.__aube.lookAt(a, b, 160), [x, cz]);
-    await render(page, 1);
+    await settle(page);
     await hoverWorld(page, x, cz + side * 22);
     await page.waitForTimeout(300);
     const p = await preview(page);
@@ -161,8 +173,16 @@ try {
   check(near === 2, `2 maisons posées à la souris au ras de l'avenue (centre à ≤ 22 m de l'axe : trottoir 11,5 m + demi-maison 8 m)`);
   await page.click('#toolbar button[data-tool=select]');
   await page.evaluate(([x, z]) => window.__aube.lookAt(x, z + 50, 260), [cx, cz]);
+  await settle(page);
+  await page.waitForFunction(() => window.__aube.sceneCheck().buildingsLoading === 0, null, { timeout: 120000 }).catch(() => undefined);
   await render(page, 3);
+  const scB = await page.evaluate(() => window.__aube.sceneCheck());
+  check(scB.buildings === sd.buildings.length && scB.buildingErrors.length === 0, `bâtiments affichés = simulés (${scB.buildings} / ${sd.buildings.length}, ${scB.buildingErrors.length} erreur(s) de chargement)`);
   await shot(page, 'batiments');
+  // Gros plan sur le bâtiment en biais.
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 70), [placedBias.x, placedBias.z]);
+  await settle(page); await render(page, 2);
+  await shot(page, 'biais-pose');
 
   // 4. Finances : impôts et emprunt.
   await page.click('#btn-finance');
@@ -234,6 +254,8 @@ try {
   await p2.tap('#hud-pop-btn');
   await p2.waitForTimeout(500);
   await p2.screenshot({ path: join(out, 'play-iphone-population.png'), timeout: 600000 });
+  const ov = await p2.evaluate(() => ({ panel: document.querySelector('#pop-panel').getBoundingClientRect().bottom, toolbar: document.querySelector('#toolbar').getBoundingClientRect().top }));
+  check(ov.panel <= ov.toolbar + 1, `iPhone : le panneau ne recouvre pas la barre d'outils (bas ${Math.round(ov.panel)} ≤ haut ${Math.round(ov.toolbar)})`);
   check(e2.length === 0, `iPhone : aucune erreur ${e2.slice(0, 3).join(' | ')}`);
   await ip.close();
 } catch (e) {

@@ -50,15 +50,20 @@ try {
       scene: window.__aube.sceneCheck(), heapMB: mem ? Math.round(mem.usedJSHeapSize / 1048576) : null, errors: window.__aube.errors,
     };
   });
-  await page.screenshot({ path: join(out, 'stress-aerien.png') });
   const fps = (sample.frames - f0) / ((Date.now() - tStart) / 1000);
+  // Image mesurée de façon synchrone (boucle suspendue) : appels de rendu et triangles de LA vue aérienne de la ville.
+  const bench = await page.evaluate(() => { window.__aube.pauseRender(true); window.__aube.renderNow(2, 0.5); return window.__aube.benchFrame(); });
   browserReport = {
-    readySeconds: readyS, swiftshaderFps: Math.round(fps * 10) / 10, drawCalls: sample.stats.calls, triangles: sample.stats.triangles,
+    readySeconds: readyS, swiftshaderFps: Math.round(fps * 10) / 10, swiftshaderFrameMs: bench.ms, drawCalls: bench.calls, triangles: bench.triangles,
+    loopStatsLastFrame: { calls: sample.stats.calls, triangles: sample.stats.triangles },
     geometries: sample.stats.geometries, textures: sample.stats.textures, renderUpdateMsPerFrame: Math.round(sample.stats.frameMs * 10) / 10,
     workerTickMs: sample.sim?.tickMs, simVehicles: sample.sim?.vehicles, simBuildings: sample.sim?.buildings, population: sample.sim?.population,
     vehiclesDrawn: sample.scene.vehicles.drawn, heapMB: sample.heapMB, pageErrors: errors.slice(0, 5),
   };
   console.log('Chromium :', JSON.stringify(browserReport));
+  // Capture APRÈS les mesures, boucle de rendu suspendue (en rendu logiciel, la boucle active bloque page.screenshot).
+  await page.evaluate(() => window.__aube.renderNow(1));
+  await page.screenshot({ path: join(out, 'stress-aerien.png'), timeout: 600000 });
   if (errors.length) failures.push(`erreurs de page : ${errors.slice(0, 5).join(' | ')}`);
   if ((sample.sim?.buildings ?? 0) < 500) failures.push(`navigateur : ${sample.sim?.buildings} bâtiments`);
 } catch (e) {

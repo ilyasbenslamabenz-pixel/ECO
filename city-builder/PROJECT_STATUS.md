@@ -1,30 +1,72 @@
 # État du projet — Aube Urbaine
 
-## Phase actuelle : 0 → 1 (fondations posées)
+## Phase actuelle : 1 (première ville jouable) — corrections après la recette QA n° 1 (2026-11-13)
 
-Fondations livrées par l'architecte (2026-11-12) : contrats, worker de simulation, rendu de base,
-caméra, interface, build, tests, portes de validation. **Aucun modèle 3D n'existe encore** :
-la ville n'affiche que le terrain, l'eau et le ciel. C'est attendu à ce stade et ce n'est pas
-présenté comme une ville.
+La recette QA n° 1 (score 5,5/10) a relevé un test de parcours en échec, une route qui disparaissait à l'affichage,
+l'absence d'alignement des bâtiments sur les routes en biais, des impôts et emprunts inaccessibles, 3 types de route
+seulement, une démographie invisible, une documentation inexacte et des performances non documentées.
+Ce document liste ce qui a été corrigé, comment c'est vérifié, et ce qui reste. Le détail fonction par fonction est
+dans `FEATURES.md`. **Décider si la phase 1 est close revient à la prochaine recette QA.**
 
-### Résultat des commandes (dernière exécution)
+### Corrections (cause → correction → preuve)
+| Problème QA | Cause trouvée | Correction | Preuve |
+|---|---|---|---|
+| `npm run e2e:game` : 0 bâtiment posé (bloquant) | (1) le test essayait un immeuble à 620 000 ¢ avec 434 581 ¢ en caisse, en boucle ; (2) les bâtiments étaient aimantés à une grille de 8 m, ce qui pouvait les pousser sur la chaussée ; les refus à 14-18 m d'une avenue étaient physiquement justes (demi-avenue 11,5 m + demi-maison 8 m) | test corrigé (modèles abordables, refus journalisés) ; placement libre au centimètre, angle libre, empreinte orientée exacte (`src/shared/footprint.ts`) ; l'outil colle la façade au trottoir | `npm run e2e:game` : SUCCÈS (4 bâtiments) ; `npm run e2e:play` : 2 maisons à 20,1 m de l'axe d'une avenue |
+| Route croisée par une courbe invisible | delta de la simulation = retrait du tronçon coupé PUIS ajout des morceaux ; le rendu supprimait les nœuds devenus orphelins au retrait, et les morceaux (qui réutilisent ces nœuds, absents de `roadNodesAdded`) étaient ignorés | le rendu garde la position des orphelins et les recrée à l'ajout (`src/render/roads/renderer.ts`) | `tests/roads/render.test.ts` ; `e2e:play` « 4 tronçons affichés / 4 simulés » ; `play-courbe-carrefour.png` |
+| Pas d'alignement sur route en biais ; « Façade → route » sans effet | rotation limitée aux quarts de tour ; aimantation calculée sur l'axe droit a→b (courbes ignorées) avec les largeurs du contrat hérité | `rot` décimal (quarts de tour, sauvegardes anciennes valides) ; aimantation sur la polyligne courbe, perpendiculaire à la tangente, largeurs des 6 types ; sélection et collisions orientées côté client | `e2e:play` : route à 34°, rot 3,626, écart à la perpendiculaire 0,000, « façade côté route » ; `play-biais-apercu.png`, `play-biais-pose.png` ; test unitaire machine |
+| Impôts / emprunts « Phase 2 » | interface non branchée sur `setTaxRate` / `loanOffer` / `takeLoan` / `repayLoan` | panneau Finances : recettes, salaires, échéances, curseurs d'impôts par secteur, offre et emprunt, remboursement (`src/ui/city-panels.ts`) | `e2e:play` : impôt 14 % relu dans la simulation, emprunt 200 000 ¢ (trésorerie +200 000) ; `play-finances-*.png` |
+| 3 types de route | tiroir sur l'ancien contrat `ROAD_TYPES` | tiroir sur les 6 types de la simulation (coupes SVG d'après le profil réel) ; la courbe est envoyée comme vraie Bézier (`control`) | `e2e:play` (6 cartes) ; `play-tiroir-routes.png` |
+| Habitants « phase 2 », emploi/trajets invisibles | rapport `demography` non affiché | panneau Population (clic sur « Habitants ») ; libellés « phase 2 » supprimés ; flux d'immigration de base pour les petites villes | `e2e:play` ; `play-population.png` |
+| Démo : 1 861 585 305 ¢ | budget de départ de 2 Md ¢ | budget 150 M ¢ (la ville coûte ≈ 138 M ¢ : reste ≈ 11,6 M ¢) | `demo-aerien.png` |
+| Démo : plein jour à 00:10 en vue aérienne | **non reproduit** : le code d'éclairage n'a pas été modifié | test ajouté : la nuit (01:56) la luminance moyenne de la vue aérienne est 23,9 contre 106,6 le jour | `node tests/e2e/demo-night.mjs` ; `demo-nuit-aerien.png` |
+| iPhone : barre d'outils de 630 px sur 390 | une seule rangée défilante sans indice | 2 rangées de 5 sous 520 px ; panneaux, tiroir et options remontés au-dessus | `e2e:play` (9 outils dans 374 px, panneau sans recouvrement) ; `play-iphone.png` |
+| Pincer perdu sans image rendue (`?norender`) | pincement traité une fois par image uniquement | le pincement en attente est appliqué au lever des doigts | `e2e:game` : 420 → 140 m, inclinaison 0,69 → 0,21 |
+| `npm run stress` sans rapport | la capture pendant la boucle de rendu logiciel dépassait 30 s | capture et mesure d'image boucle suspendue | `tests/e2e/out/stress-rapport.json` (ci-dessous) |
+| Forêts sombres vues de haut | — | sous-bois teinté vert mousse (amélioration partielle) | `demo-aerien.png` — les imposteurs restent des silhouettes sombres |
+
+### Résultat des commandes (dernière exécution, 2026-11-13)
 | Commande | Résultat |
 |---|---|
 | `npm run typecheck` | OK |
-| `npm test` | OK (19 tests) |
-| `npm run build` | OK (dist ≈ 0,7 Mo) |
-| `npm run e2e` | OK (index.html + artifact.html : worker prêt, instantané, deltas, frames, horloge, bascule caméra, 0 erreur de page) |
-| `npm run e2e:gate` | OK (la porte rejette cube et modèle non texturé, accepte un modèle détaillé) |
-| `npm run assets` | OK (catalogue vide) |
-| `npm run validate:assets` | **ÉCHEC attendu** : 0 bâtiment |
-| `npm run validate:visual` | **ÉCHEC attendu** : 0 bâtiment, scène de démo absente |
+| `npm test` | OK, 140/140 |
+| `npm run test:assets` | OK, 102/102 |
+| `npm run build` | OK, 389 fichiers, 41,78 Mo (budget 60 Mo), aucun fichier > 15 Mo |
+| `npm run e2e` | SUCCÈS |
+| `npm run e2e:gate` | SUCCÈS |
+| `npm run e2e:game` | SUCCÈS (18 contrôles) |
+| `npm run e2e:play` (nouveau, à la souris) | SUCCÈS (22 contrôles) |
+| `npm run validate:visual` | SUCCÈS : 88 assets, 40 bâtiments ; démo 119 bâtiments, 40 modèles, 141 véhicules, 42 tronçons |
+| `node tests/e2e/demo-night.mjs` | SUCCÈS |
+| `npm run stress` | OK |
 
-### Revue visuelle
-Captures regardées : `tests/e2e/out/smoke-index-aerien.png` (plaine verte vue de haut, éclairage
-correct après réglage d'exposition), `smoke-index-rue.png` (horizon, ciel), `gate-selftest.png`
-(planche-contact de test). Le terrain est encore une couleur par sommet sans texture :
-à remplacer par l'agent environnement.
+### Performances mesurées (`tests/e2e/out/stress-rapport.json`)
+Ville de test : 500 bâtiments (40 modèles), 166 tronçons, 1 008 véhicules au départ (1 343 après 600 pas), ≈ 6 200 habitants.
+| Mesure | Valeur | Remarque |
+|---|---|---|
+| Génération du terrain (Node) | 0,8 s | carte 10×10 chunks |
+| Construction de la ville (Node) | 1,7 s | opérations du joueur, toutes validations |
+| Tick de simulation (Node, 600 pas) | moyenne 0,7 ms, p95 1,0 ms, max 15 ms | budget fixé à 100 ms (très large) |
+| Tick rapporté par le worker (Chromium) | 1,1 ms | |
+| Tas JS (Node / Chromium) | 63 Mo / 368 Mo | |
+| Image de la vue aérienne (Chromium) | 2 706 appels de rendu, 6,1 M triangles | **rendu logiciel** SwiftShader : 9,8 s par image, 0 i/s en boucle — non représentatif d'un GPU |
+| Mise à jour CPU du rendu par image | 6,6 ms | LOD, culling, interpolation véhicules |
+| Démo (validate:visual) | aérien : 2 966 appels, 2,6 M triangles ; rue : 2 159 appels, 5,8 M triangles | |
+Lecture : la simulation tient largement la charge visée ; le rendu émet trop d'appels (bâtiments multi-matériaux,
+un appel par sous-maillage et par LOD) — la fusion des matériaux en atlas est la priorité perf de la phase 2.
+Aucune mesure sur GPU réel ni sur iPhone réel n'a pu être faite dans cet environnement.
 
-### Prochaines étapes (phase 1)
-Voir `AGENT_TASKS.md` : bibliothèque d'assets (priorité 1), scène de démo, environnement,
-routes, rendu bâtiments, outils de construction. Critères de sortie de phase 1 dans `AGENT_TASKS.md`.
+### Revue visuelle (captures regardées le 2026-11-13)
+`planche-contact.png` (88 assets, 40 bâtiments distincts texturés, aucun cube ; véhicules dans leur matériau de base
+blanc, la peinture étant appliquée par instance), `demo-aerien.png`, `demo-rue.png`, `demo-nuit-aerien.png`,
+`play-courbe-carrefour.png`, `play-biais-apercu.png`, `play-biais-pose.png` (porte et garage côté rue, vérifié aussi
+dans le GLB), `play-batiments.png`, `play-finances-emprunt.png`, `play-population.png`, `play-iphone.png`,
+`play-iphone-population.png`, `stress-aerien.png`.
+Défauts visibles restants : forêts lointaines en silhouettes sombres, berges anguleuses par endroits, flèches des
+gratte-ciel vitrés très claires la nuit.
+
+### Reste à faire / fragile
+- Rien n'a été vérifié sur un vrai GPU ni sur un vrai iPhone (émulation Chromium + rendu logiciel uniquement).
+- Feux de circulation non vérifiés visuellement.
+- L'annulation d'une construction ne rembourse que 25 %.
+- Autoroute : pas de croisement à niveau, échangeurs en phase 4.
+- Phase 2 : zonage, terraformation, atlas de matériaux, décors placés par le joueur (voir `docs/ROADMAP_PHASE2.md`).

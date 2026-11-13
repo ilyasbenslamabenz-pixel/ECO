@@ -56,9 +56,9 @@ réponse `{ kind:'result', reqId, ok:true, data }` ou `{ ok:false, error:{ code,
 |---|---|---|---|
 | `init` | protocolVersion, catalog | protocolVersion | version |
 | `newGame` | seed, mapChunks, startMoney, cityName | seed (+ instantané) | bornes |
-| `buildRoad` | type, points[x,z,…], dryRun? | edgeIds, cost | limites, pente ≤ 12 %, eau (ponts : phase 3), collision bâtiments, fonds |
+| `buildRoad` | type (hérité), kind (6 types), points[x,z,…], control? (courbe quadratique si 2 points), dryRun? | edgeIds, cost | limites, pente par type, eau (ponts automatiques), carrefours automatiques, collision bâtiments, fonds |
 | `removeRoad` | edgeId | refund (25 %) | existence |
-| `placeBuilding` | assetId, x, z, rot(0..3), variant?, dryRun? | buildingId, cost | asset bâtiment, grille, collision bâtiments/routes, pente ≤ 25 %, eau, fonds |
+| `placeBuilding` | assetId, x, z (au cm, pas de grille), rot (quarts de tour, **décimal autorisé** : 0,5 = 45°), variant?, dryRun? | buildingId, cost | asset bâtiment, empreinte ORIENTÉE (`src/shared/footprint.ts`) : collision bâtiments (séparation par axes) et routes courbes (distance segment/rectangle orienté), relief, eau, fonds |
 | `demolish` | buildingId | refund (25 %) | existence |
 | `setSpeed` | 0/1/2/4 | speed | valeur |
 | `terraform` | x, z, radius, delta | — | **NOT_IMPLEMENTED (phase 2)** |
@@ -95,6 +95,13 @@ collisions route/bâtiment et accrochage de nœuds en O(n) → index spatial par
 Mesures réelles : à faire sur GPU réel (impossible dans l'environnement CI actuel).
 
 ## 7. Migration vers Unity / Unreal
+
+Convention de rotation des bâtiments (sauvegarde, protocole) : `rot` en quarts de tour autour de l'axe vertical,
+sens trigonométrique vu du dessus, monde = (lx·cosθ + lz·sinθ, −lx·sinθ + lz·cosθ), θ = rot·π/2 (identique à
+`rotation.y` de three). Unity (main gauche, Y en haut) : `Quaternion.Euler(0, -θ·Rad2Deg, 0)` après inversion de Z ;
+Unreal (Z en haut, cm) : yaw = −θ en degrés, x/z ×100. Les empreintes orientées (`src/shared/footprint.ts`, ≈ 150 lignes)
+se transposent telles quelles.
+
 
 Ce qui est portable tel quel : le **catalogue JSON** (`AssetCatalog`), les **GLB** (importables
 nativement dans Unity via glTFast et dans Unreal via Interchange/glTF), les **textures PBR** et
