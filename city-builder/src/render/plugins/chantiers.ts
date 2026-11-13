@@ -33,7 +33,11 @@ export const chantiersRenderPlugin: RenderPlugin = {
     nightFactor = ctx.nightFactor;
     await r.load();
     const debug = (globalThis as { __aube?: Record<string, unknown> }).__aube;
-    if (debug) debug['chantiers'] = () => r.debug();
+    if (debug) {
+      // Diagnostic e2e / porte visuelle : état des chantiers dessinés et préchargement des modèles.
+      debug['chantiers'] = () => r.debug();
+      debug['chantiersPreload'] = () => r.preload(0);
+    }
   },
 
   applySnapshotExt(payload) { renderer?.applySnapshot(payload); },
