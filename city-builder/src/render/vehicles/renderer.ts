@@ -26,6 +26,8 @@ export interface VehicleFrameExt extends VehicleFrame {
   variants?: Uint8Array;
   /** Bits d'état : 1 = freine, 2 = clignotant gauche, 4 = clignotant droit, 8 = urgence. */
   flags?: Uint8Array;
+  /** Numéro de plaque d'immatriculation (bande de la planche) propre à chaque véhicule. */
+  plates?: Uint8Array;
 }
 
 /** Source de modèles : la bibliothèque d'assets du jeu (src/render/assets.ts) convient. */
@@ -39,12 +41,17 @@ interface Lot {
   state: 0 | 1 | 2 | 3; // non demandé, en cours, prêt, échec
   meshes: THREE.InstancedMesh[];
   paint: THREE.InstancedMesh | null;
+  /** Sous-maillage des plaques d'immatriculation (bande de la planche choisie par instance). */
+  plate: THREE.InstancedMesh | null;
   matrices: Float32Array;
   colors: Float32Array;
+  /** Numéro de bande de plaque par instance. */
+  plates: Float32Array;
   capacity: number;
   count: number;
   matAttr: THREE.InstancedBufferAttribute | null;
   colAttr: THREE.InstancedBufferAttribute | null;
+  plateAttr: THREE.InstancedBufferAttribute | null;
 }
 interface Model {
   asset: CatalogAsset;
@@ -92,6 +99,9 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
   private paintMat!: THREE.MeshPhysicalMaterial;
   private detailMat!: THREE.MeshStandardMaterial;
   private glassMat!: THREE.MeshPhysicalMaterial;
+  private plateMat!: THREE.MeshStandardMaterial;
+  /** Nombre de bandes (numéros différents) de la planche de plaques. */
+  private plateRows = 1;
   private camera: THREE.Camera | null = null;
   private night = 0;
   private texturesReady: Promise<void>;
@@ -103,6 +113,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
   private curIds = new Uint32Array(0);
   private curVar = new Uint8Array(0);
   private curFlags = new Uint8Array(0);
+  private curPlates: Uint8Array | null = null;
   private curCount = 0;
   private curTime = 0;
   private interval = 100;
@@ -147,7 +158,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
   private readonly shadows: boolean;
 
   private emptyLot(): Lot {
-    return { state: 0, meshes: [], paint: null, matrices: new Float32Array(0), colors: new Float32Array(0), capacity: 0, count: 0, matAttr: null, colAttr: null };
+    return { state: 0, meshes: [], paint: null, plate: null, matrices: new Float32Array(0), colors: new Float32Array(0), plates: new Float32Array(0), capacity: 0, count: 0, matAttr: null, colAttr: null, plateAttr: null };
   }
 
   /* ----------------------------- matériaux ----------------------------- */
@@ -171,6 +182,27 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     this.glassMat = new THREE.MeshPhysicalMaterial({ name: 'vehicule_verre', color: 0x18222b, roughness: 0.04, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.6 });
     const atlas = sets.get('vehicules_atlas');
     const paint = sets.get('vehicules_peinture');
+    const plaques = sets.get('vehicules_plaques');
+    // planche de plaques : hauteur = nombre de bandes × 64 px (déduit du nom de fichier si besoin)
+    this.plateMat = new THREE.MeshStandardMaterial({ name: 'vehicule_plaque', color: 0xffffff, roughness: 1, metalness: 1 });
+    if (plaques) {
+      const [pla, pln, plarm] = await Promise.all([load(plaques.albedo, true), load(plaques.normal, false), load(plaques.arm, false)]);
+      if (pla?.image) {
+        const img = pla.image as { width?: number; height?: number };
+        this.plateRows = Math.max(1, Math.round((img.height ?? 64) / Math.max(1, img.width ?? 256) * 4));
+      }
+      Object.assign(this.plateMat, { map: pla, normalMap: pln, roughnessMap: plarm, metalnessMap: plarm, aoMap: plarm });
+      this.plateMat.normalScale.set(0.6, 0.6);
+      const rows = this.plateRows;
+      this.plateMat.onBeforeCompile = (sh) => {
+        sh.vertexShader = `attribute float aPlaque;\n${sh.vertexShader}`.replace(
+          '#include <uv_vertex>',
+          `#include <uv_vertex>\n#ifdef USE_MAP\n\tvMapUv.y += aPlaque * ${(1 / rows).toFixed(8)};\n#endif`,
+        );
+      };
+      this.plateMat.customProgramCacheKey = () => `plaque${rows}`;
+      this.plateMat.needsUpdate = true;
+    }
     if (!atlas || !paint) { this.loadErrors.push('jeux de textures véhicules absents du catalogue'); return; }
     const emissiveFile = atlas.albedo.replace('_albedo.', '_emissive.');
     const [pa, pn, parm, aa, an, aarm, ae] = await Promise.all([
@@ -254,15 +286,19 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     lot.capacity = 32;
     lot.matrices = new Float32Array(lot.capacity * 16);
     lot.colors = new Float32Array(lot.capacity * 3);
+    lot.plates = new Float32Array(lot.capacity);
     lot.matAttr = new THREE.InstancedBufferAttribute(lot.matrices, 16);
     lot.matAttr.setUsage(THREE.DynamicDrawUsage);
     lot.colAttr = new THREE.InstancedBufferAttribute(lot.colors, 3);
     lot.colAttr.setUsage(THREE.DynamicDrawUsage);
+    lot.plateAttr = new THREE.InstancedBufferAttribute(lot.plates, 1);
+    lot.plateAttr.setUsage(THREE.DynamicDrawUsage);
     for (const { geo, role } of parts) {
-      const mat = role === 'peinture' ? this.paintMat : role === 'verre' ? this.glassMat : this.detailMat;
+      const mat = role === 'peinture' ? this.paintMat : role === 'verre' ? this.glassMat : role === 'plaque' ? this.plateMat : this.detailMat;
       const im = new THREE.InstancedMesh(geo, mat, lot.capacity);
       im.instanceMatrix = lot.matAttr;
       if (role === 'peinture') { im.instanceColor = lot.colAttr; lot.paint = im; }
+      if (role === 'plaque') { geo.setAttribute('aPlaque', lot.plateAttr); lot.plate = im; }
       im.count = 0;
       im.frustumCulled = false;
       im.castShadow = this.shadows && lot === model.lods[0];
@@ -278,16 +314,20 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     while (cap < need) cap *= 2;
     const m = new Float32Array(cap * 16); m.set(lot.matrices);
     const c = new Float32Array(cap * 3); c.set(lot.colors);
-    lot.matrices = m; lot.colors = c; lot.capacity = cap;
+    const pl = new Float32Array(cap); pl.set(lot.plates);
+    lot.matrices = m; lot.colors = c; lot.plates = pl; lot.capacity = cap;
     lot.matAttr = new THREE.InstancedBufferAttribute(m, 16);
     lot.matAttr.setUsage(THREE.DynamicDrawUsage);
     lot.colAttr = new THREE.InstancedBufferAttribute(c, 3);
     lot.colAttr.setUsage(THREE.DynamicDrawUsage);
+    lot.plateAttr = new THREE.InstancedBufferAttribute(pl, 1);
+    lot.plateAttr.setUsage(THREE.DynamicDrawUsage);
     for (const im of lot.meshes) {
       // libère les anciens tampons GPU (les nouveaux sont créés au prochain rendu), puis remplace les attributs
       if (im === lot.meshes[0]) im.dispose();
       im.instanceMatrix = lot.matAttr;
       if (im === lot.paint) im.instanceColor = lot.colAttr;
+      if (im === lot.plate) im.geometry.setAttribute('aPlaque', lot.plateAttr);
       im.count = 0;
     }
   }
@@ -334,6 +374,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     }
     this.curPos = f.positions;
     this.curAsset = f.assetIndices;
+    this.curPlates = f.plates ?? null;
     for (let i = 0; i < n; i++) {
       const id = f.ids ? f.ids[i]! : i;
       this.curIds[i] = id;
@@ -437,6 +478,8 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
       const co = lot.count * 3;
       const bright = 0.92 + (hash32(this.curIds[i]! * 7 + 3) & 255) / 255 * 0.14;
       lot.colors[co] = pal[v]! * bright; lot.colors[co + 1] = pal[v + 1]! * bright; lot.colors[co + 2] = pal[v + 2]! * bright;
+      // plaque d'immatriculation : bande de la planche propre au véhicule (identifiant stable)
+      lot.plates[lot.count] = this.curPlates ? this.curPlates[i]! % this.plateRows : hash32(this.curIds[i]! * 2654435761 + 11) % this.plateRows;
       lot.count++;
       this.drawn[use]!++;
       if (night && d < 260) {
@@ -459,6 +502,11 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
         lot.colAttr!.clearUpdateRanges();
         lot.colAttr!.addUpdateRange(0, lot.count * 3);
         lot.colAttr!.needsUpdate = true;
+        if (lot.plate) {
+          lot.plateAttr!.clearUpdateRanges();
+          lot.plateAttr!.addUpdateRange(0, lot.count);
+          lot.plateAttr!.needsUpdate = true;
+        }
       }
     }
     this.beams.count = beams;

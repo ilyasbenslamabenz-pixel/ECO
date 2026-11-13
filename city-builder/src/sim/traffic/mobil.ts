@@ -22,7 +22,7 @@ export interface MobilParams {
   biasRight: number;
 }
 
-export const MOBIL_DEFAULT: MobilParams = { politeness: 0.3, threshold: 0.2, bSafe: 2.5, biasRight: 0.15 };
+export const MOBIL_DEFAULT: MobilParams = { politeness: 0.3, threshold: 0.1, bSafe: 2.5, biasRight: 0.3 };
 
 /** Décélération admise (m/s², positive) pour un changement obligatoire à `remain` mètres de la fin de voie. */
 export function mandatoryBSafe(remain: number): number {
@@ -39,7 +39,11 @@ export function mobilSafe(aFollowerAfter: number, aSelfAfter: number, bSafe: num
 }
 
 /**
- * Gain MOBIL (m/s²) d'un changement de voie.
+ * Gain MOBIL (m/s²) d'un changement de voie, en RÈGLE ASYMÉTRIQUE européenne (Kesting et al. §3.2) :
+ * on ne tient compte que d'un seul suiveur selon le sens du changement — le suiveur de la voie visée quand
+ * on déboîte vers la gauche (dépassement), le suiveur de la voie quittée quand on se rabat à droite.
+ * L'appelant passe 0 (après = avant) pour le terme qui ne s'applique pas ; interdire au terme de courtoisie
+ * de pousser un véhicule vers la gauche évite qu'un conducteur lent « s'écarte » sur la voie de dépassement.
  * @param aSelfAfter / aSelfBefore accélération du véhicule dans la voie cible / actuelle
  * @param aNewFolAfter / aNewFolBefore accélération du suiveur de la voie cible avec / sans le véhicule devant lui
  * @param aOldFolAfter / aOldFolBefore accélération du suiveur de la voie actuelle sans / avec le véhicule devant lui

@@ -513,7 +513,7 @@ export class TrafficSystem {
     this.destS[v] = destS;
     this.latOff[v] = lateral; // sortie du bas-côté (amortie)
     this.lcCool[v] = 2;
-    this.rrNext[v] = this.time + 8 + this.rand() * 10;
+    this.rrNext[v] = this.time + 3 + this.rand() * 6;
     this.waitT[v] = 0;
     this.holdConn[v] = -1;
     this.granted[v] = 0; this.wasGranted[v] = 0;
@@ -904,11 +904,14 @@ export class TrafficSystem {
         const curLead = pos > this.bucketStart[l]! ? this.bucketVeh[pos - 1]! : -1;
         const curFol = pos + 1 < this.bucketStart[l + 1]! ? this.bucketVeh[pos + 1]! : -1;
         const aSelfBefore = this.accelBehind(v, curLead, s);
-        const aNewFolBefore = fol >= 0 ? this.accelBehind(fol, lead, this.s[fol]!) : 0;
-        const aOldFolBefore = curFol >= 0 ? this.accelBehind(curFol, v, this.s[curFol]!) : 0;
-        const aOldFolAfter = curFol >= 0 ? this.accelBehind(curFol, curLead, this.s[curFol]!) : 0;
+        // règle asymétrique : vers la GAUCHE on ménage le suiveur de la voie visée, vers la DROITE celui
+        // de la voie quittée (sinon un conducteur lent se déporterait à gauche « par courtoisie »)
+        const right = dirWanted > 0;
+        const aNewFolBefore = !right && fol >= 0 ? this.accelBehind(fol, lead, this.s[fol]!) : aFolAfter;
+        const aOldFolBefore = right && curFol >= 0 ? this.accelBehind(curFol, v, this.s[curFol]!) : 0;
+        const aOldFolAfter = right && curFol >= 0 ? this.accelBehind(curFol, curLead, this.s[curFol]!) : 0;
         // la voie de droite a le rang le plus élevé (rang 0 = près de l'axe)
-        const gain = mobilGain(aSelfAfter, aSelfBefore, aFolAfter, aNewFolBefore, aOldFolAfter, aOldFolBefore, dirWanted > 0 ? 1 : -1, P);
+        const gain = mobilGain(aSelfAfter, aSelfBefore, aFolAfter, aNewFolBefore, aOldFolAfter, aOldFolBefore, right ? 1 : -1, P);
         if (gain > bestGain) { bestGain = gain; bestDir = dirWanted; }
       }
       if (bestDir === 0) continue;
