@@ -24,7 +24,7 @@ try {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = collectErrors(page);
-  await page.goto(`${base}/index.html`, { timeout: 300000, waitUntil: 'domcontentloaded' });
+  await page.goto(`${base}/index.html?norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__aube?.ready === true, null, { timeout: 300000 });
   await page.waitForSelector('#main-menu:not(.hidden)', { timeout: 120000 });
   R.notes.menu = await page.evaluate(() => [...document.querySelectorAll('#main-menu button')].filter((b) => b.offsetParent).map((b) => ({ t: b.textContent.trim(), dis: b.disabled })));
@@ -37,7 +37,7 @@ try {
   await page.fill('#new-seed', '7');
   await page.click('#form-new button[type=submit], #form-new .primary');
   await page.waitForFunction(() => window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 300000 });
-  await page.waitForSelector('#toolbar:not(.hidden)', { timeout: 120000 });
+  await page.waitForFunction(() => !document.querySelector('#toolbar').classList.contains('hidden'), null, { timeout: 120000, polling: 500 });
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
   R.notes.toolbar = await page.evaluate(() => [...document.querySelectorAll('#toolbar button')].map((b) => ({ t: b.textContent.trim(), dis: b.disabled })));
   R.notes.hudButtons = await page.evaluate(() => [...document.querySelectorAll('#hud button')].filter((b) => b.offsetParent).map((b) => ({ t: b.textContent.trim(), dis: b.disabled })));
@@ -179,7 +179,7 @@ try {
   await shot(page, 'sauvegardes');
   check(R.notes.slots.length >= 2, `plusieurs emplacements (${R.notes.slots.length})`);
   await page.click('#save-close').catch(() => {});
-  await page.goto(`${base}/index.html`, { timeout: 300000, waitUntil: 'domcontentloaded' });
+  await page.goto(`${base}/index.html?norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__aube?.ready === true, null, { timeout: 300000 });
   await page.click('#btn-load');
   await page.waitForSelector('#load-list .slot');
