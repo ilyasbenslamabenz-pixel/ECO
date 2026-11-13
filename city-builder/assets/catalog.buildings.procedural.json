@@ -1280,7 +1280,7 @@
       "dimensions": {
         "width": 13.29,
         "depth": 15.35,
-        "height": 21.9
+        "height": 12.16
       },
       "footprint": {
         "tilesX": 2,
@@ -8804,7 +8804,7 @@
       "dimensions": {
         "width": 23.29,
         "depth": 19.15,
-        "height": 34.81
+        "height": 18.66
       },
       "footprint": {
         "tilesX": 3,

@@ -327,7 +327,8 @@ export function roof(ctx: Ctx, s: StyleSpec, o: RoofSpec): number {
     return m.top;
   }
   if (kind === 'quatre_pans') {
-    const r = hipRoof(ctx, { x0: o.x0, x1: o.x1, z0: o.z0, z1: o.z1, y: o.y, pitch: s.pitch, overhang: s.id === 'enduit_volets' ? 0.65 : 0.5 });
+    // pente plafonnée : la pente des styles à mansarde (72°) ou à pignons (55°) donne sur une croupe une pyramide démesurée
+    const r = hipRoof(ctx, { x0: o.x0, x1: o.x1, z0: o.z0, z1: o.z1, y: o.y, pitch: Math.min(s.pitch, 42), overhang: s.id === 'enduit_volets' ? 0.65 : 0.5 });
     if (o.chimneys !== false && s.chimneys) chimney(ctx, o.x0 + lx * 0.3, o.z0 + lz * 0.45, 0.7, 0.9, o.y, r.ridgeY + 0.6, { pots: 2 });
     return r.ridgeY;
   }
@@ -427,8 +428,9 @@ export function ringFrames(pts: [number, number][], y0: number, h: number): Fram
     let n: [number, number] = [-u[1], u[0]];
     const mx = (a[0] + b[0]) / 2 - cx, mz = (a[1] + b[1]) / 2 - cz;
     if (n[0] * mx + n[1] * mz < 0) n = [-n[0], -n[1]];
-    // repère direct (u, +Y, n) : l'origine est l'extrémité pour laquelle u pointe « vers la droite vu de l'extérieur »
-    const start = n[0] * u[1] - n[1] * u[0] > 0 ? a : b;
+    // Repère du kit (cf. sideFrame : façade sud u = +X, n = +Z) : u pointe « vers la droite vu de l'extérieur », ce qui
+    // donne n.x·u.z − n.z·u.x < 0. (Le signe inverse produisait des repères en miroir : faces enroulées vers l'intérieur.)
+    const start = n[0] * u[1] - n[1] * u[0] < 0 ? a : b;
     const uu: [number, number] = start === a ? u : [-u[0], -u[1]];
     out.push({ o: [start[0], y0, start[1]], u: [uu[0], 0, uu[1]], n: [n[0], 0, n[1]], w: L, h });
   }
