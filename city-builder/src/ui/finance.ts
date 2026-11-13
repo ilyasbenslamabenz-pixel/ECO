@@ -7,7 +7,7 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import type { SimStats } from '../shared/contracts';
-import { MONTHS, fmt } from './dom';
+import { MONTHS, money } from './dom';
 
 export interface FinancePoint { minutes: number; money: number; balance: number; year: number; month: number; day: number }
 
@@ -84,9 +84,9 @@ export class FinanceChart {
     g.clearRect(0, 0, w, h);
     const pts = this.history.points;
     const css = getComputedStyle(document.documentElement);
-    const accent = css.getPropertyValue('--accent').trim() || '#e8b65a';
+    const accent = css.getPropertyValue('--accent').trim() || '#3ddc84';
     const muted = css.getPropertyValue('--muted').trim() || '#8f9baa';
-    g.font = '11px system-ui, sans-serif';
+    g.font = '11px Inter, system-ui, sans-serif';
     if (pts.length < 2) {
       g.fillStyle = muted;
       g.textAlign = 'center';
@@ -114,7 +114,7 @@ export class FinanceChart {
     g.fillText(dateLabel(pts[pts.length - 1]!), R, h - 5);
     // Aire puis ligne.
     const grad = g.createLinearGradient(0, T, 0, B);
-    grad.addColorStop(0, 'rgba(232,182,90,0.28)'); grad.addColorStop(1, 'rgba(232,182,90,0)');
+    grad.addColorStop(0, 'rgba(61,220,132,0.26)'); grad.addColorStop(1, 'rgba(61,220,132,0)');
     g.beginPath(); g.moveTo(X(0), B);
     pts.forEach((p, i) => g.lineTo(X(i), Y(p.money)));
     g.lineTo(X(pts.length - 1), B); g.closePath(); g.fillStyle = grad; g.fill();
@@ -129,7 +129,7 @@ export class FinanceChart {
       g.strokeStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.moveTo(x, T); g.lineTo(x, B); g.stroke();
       g.fillStyle = accent; g.strokeStyle = '#141920'; g.lineWidth = 2;
       g.beginPath(); g.arc(x, y, 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
-      this.tip.textContent = `${dateLabel(p)} · ${fmt(p.money)} ¢`;
+      this.tip.textContent = `${dateLabel(p)} · ${money(p.money)}`;
       this.tip.style.left = `${10 + x}px`;
       this.tip.style.top = `${30 + y}px`;
       this.tip.classList.remove('hidden');
