@@ -25,13 +25,18 @@ try {
     R.b.push(await send(page, 'placeBuilding', { assetId: a, x, z, rot }));
   }
   await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 160), [cx, cz]);
-  await page.waitForFunction(() => window.__aube.sceneCheck().buildingsLoading === 0, null, { timeout: 120000 }).catch(() => undefined);
+  await page.evaluate(() => window.__aube.renderNow(4, 0.3));
+  await page.screenshot({ path: join(out, 'qa2r-avant-immediat.png'), timeout: 240000 });
+  for (let i = 0; i < 20; i++) { const l = await page.evaluate(() => { window.__aube.renderNow(2, 0.3); return window.__aube.sceneCheck().buildingsLoading; }); if (l === 0) break; await page.waitForTimeout(3000); }
+  await page.waitForTimeout(20000);
   await page.evaluate(() => window.__aube.renderNow(12, 0.3));
   R.before = await page.evaluate(() => ({ sc: window.__aube.sceneCheck(), pose: window.__aube.cameraPose() }));
   await page.screenshot({ path: join(out, 'qa2r-avant.png'), timeout: 240000 });
   // Sauvegarde via l'interface
   await page.click('#btn-save');
-  await page.fill('#save-panel input[type=text], form input[type=text]:visible', 'qa-recharge');
+  await page.waitForTimeout(800);
+  const inp = await page.$('input[name=slot]:visible, #save-name:visible, form input[type=text]:visible');
+  await inp.fill('qa-recharge');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(2000);
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -43,7 +48,7 @@ try {
   await page.click('li:has-text("qa-recharge") button:has-text("Charger")');
   await page.waitForFunction(() => window.__aube.snapshotReceived && window.__aube.snapshotStats, null, { timeout: 300000, polling: 500 });
   await page.waitForTimeout(1500);
-  await page.waitForFunction(() => window.__aube.sceneCheck().buildingsLoading === 0, null, { timeout: 120000 }).catch(() => undefined);
+  for (let i = 0; i < 20; i++) { const l = await page.evaluate(() => { window.__aube.renderNow(2, 0.3); return window.__aube.sceneCheck().buildingsLoading; }); if (l === 0) break; await page.waitForTimeout(3000); }
   await page.evaluate(() => window.__aube.renderNow(12, 0.3));
   R.afterLoad = await page.evaluate(() => ({ sc: window.__aube.sceneCheck(), pose: window.__aube.cameraPose() }));
   await page.screenshot({ path: join(out, 'qa2r-apres-chargement.png'), timeout: 240000 });

@@ -270,25 +270,25 @@ try {
     await render(page, 2);
     await shot(page, 'iphone-partie');
     const cdp = await ctx.newCDPSession(page);
-    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], i) => ({ x, y, id: i })) });
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], i) => ({ x, y, id: i + 1, radiusX: 4, radiusY: 4, force: 1 })) });
     const pose = async () => { await page.evaluate(() => window.__aube.renderNow(6, 0.3)); return page.evaluate(() => window.__aube.cameraPose()); };
     const P = {}; R.notes.iphonePoses = P;
     const save = () => writeFileSync(join(out, 'qa2-iphone.json'), JSON.stringify(R, null, 2));
     P.p0 = await pose(); save();
     await touch('touchStart', [[150, 420], [240, 420]]);
-    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150 - i * 8, 420], [240 + i * 8, 420]]); await page.evaluate(() => window.__aube.renderNow(1, 0.05)); }
+    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150 - i * 8, 420], [240 + i * 8, 420]]); await page.waitForTimeout(30); }
     await touch('touchEnd', []);
     P.pinch = await pose(); save();
     await touch('touchStart', [[195, 330], [195, 510]]);
-    for (let i = 1; i <= 10; i++) { const a = i * 0.08; await touch('touchMove', [[195 + Math.sin(a) * 90, 420 - Math.cos(a) * 90], [195 - Math.sin(a) * 90, 420 + Math.cos(a) * 90]]); await page.evaluate(() => window.__aube.renderNow(1, 0.05)); }
+    for (let i = 1; i <= 10; i++) { const a = i * 0.08; await touch('touchMove', [[195 + Math.sin(a) * 90, 420 - Math.cos(a) * 90], [195 - Math.sin(a) * 90, 420 + Math.cos(a) * 90]]); await page.waitForTimeout(30); }
     await touch('touchEnd', []);
     P.rotate = await pose(); save();
     await touch('touchStart', [[150, 500], [240, 500]]);
-    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150, 500 - i * 12], [240, 500 - i * 12]]); await page.evaluate(() => window.__aube.renderNow(1, 0.05)); }
+    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[150, 500 - i * 12], [240, 500 - i * 12]]); await page.waitForTimeout(30); }
     await touch('touchEnd', []);
     P.twoDrag = await pose(); save();
     await touch('touchStart', [[195, 400]]);
-    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[195 + i * 10, 400 + i * 6]]); await page.evaluate(() => window.__aube.renderNow(1, 0.05)); }
+    for (let i = 1; i <= 10; i++) { await touch('touchMove', [[195 + i * 10, 400 + i * 6]]); await page.waitForTimeout(30); }
     await touch('touchEnd', []);
     P.oneDrag = await pose(); save();
     const d = (a, b) => JSON.stringify(a) !== JSON.stringify(b);
