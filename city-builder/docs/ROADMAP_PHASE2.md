@@ -56,33 +56,6 @@ demande dans `docs/requests/<module>.md`. Chaque branche doit passer `npm run ch
 bâtiments → circulation → piétons → chantiers, `npm run check` + captures après chaque fusion,
 puis tests croisés (piétons × feux, quartiers × chantiers), QA indépendante, publication.
 
-## 1bis. Tranche verticale jouable (validée par le propriétaire, juste après 2A)
-
-Objectif : une petite ville (2 000 à 5 000 habitants) **équilibrée et réellement amusante à jouer
-30 minutes**, avant d'élargir. Ce n'est pas une réduction d'ambition : 2B et 2C restent intégralement
-prévues, la tranche verticale en construit le noyau en premier et sert de référence d'équilibrage.
-
-Contenu (sous-ensemble profond de 2B/2C, développé de façon progressive, une brique à la fois) :
-1. Contrat municipal (indicateurs, registre d'effets traçable).
-2. Économie et société : ménages, emplois par qualification, entreprises qui ouvrent/ferment,
-   chômage, loyers, pouvoir d'achat, demande de logements, déménagements, évolution des quartiers.
-3. Fiscalité et budget : taux par secteur, financement des services, dette, prévisions.
-4. Électricité : production/consommation, lignes, coupures.
-5. Politique minimale : satisfaction, popularité, une élection, 3 à 5 politiques publiques.
-6. Boucle de jeu : objectifs/missions de départ, notifications de problèmes avec causes expliquées,
-   tableaux de bord interactifs.
-
-Critères de sortie (mesurés, pas déclarés) :
-- partie scriptée de 30 min de jeu simulé : ni faillite inévitable, ni victoire triviale ;
-- chaque décision du joueur a un effet visible et expliqué en moins de 2 mois de jeu ;
-- tests d'effet du §4 verts pour les systèmes présents ;
-- playtest par un agent QA « joueur » qui note l'intérêt (objectifs clairs, décisions
-  intéressantes, rythme) et rapporte les moments d'ennui ou de frustration ;
-- mesures de performance réelles sur le Mac (M1, 8 Go) et captures.
-
-Les sous-étapes de 2B et 2C reprennent ensuite sur cette base (eau, déchets, services publics
-complets, événements, scénarios, atmosphère, assets externes, performance).
-
 ## 2. Phase 2B — intégration progressive, une sous-étape à la fois
 
 Systèmes interdépendants : pas de parallélisme risqué. Chaque sous-étape = 1 agent + vérification
