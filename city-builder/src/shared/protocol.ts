@@ -114,6 +114,34 @@ export interface TerrainPatchMsg {
   waterSurface: Float32Array;
 }
 
+/**
+ * Feux tricolores : nombre de flottants par tête de feu (un « bras » = une voie d'arrivée régulée).
+ * Disposition d'un bras : x, y, z du pied du poteau (trottoir de droite, à la ligne d'arrêt), cap des véhicules
+ * qui arrivent (rad, même convention que les véhicules : atan2(dx, dz)), portée (distance latérale du poteau au
+ * centre des voies d'arrivée, m), nombre de voies d'arrivée, rayon du carrefour (rognage, m), index du carrefour
+ * dans la disposition (0..n-1, pour regrouper les bras).
+ */
+export const SIGNAL_HEAD_STRIDE = 8;
+
+/** Disposition des feux (envoyée quand le réseau change ; `version` change alors). */
+export interface SignalLayoutMsg {
+  version: number;
+  /** count * SIGNAL_HEAD_STRIDE flottants (transférés). */
+  heads: Float32Array;
+  /** Identifiant (monde) du nœud de chaque bras (transféré). */
+  nodeIds: Int32Array;
+}
+
+/**
+ * État des feux : envoyé seulement quand il change (ou avec une nouvelle disposition). Un octet par bras,
+ * dans l'ordre de la disposition de même `version` : 0 vert, 1 orange, 2 rouge.
+ */
+export interface SignalFrame {
+  version: number;
+  states: Uint8Array;
+  layout?: SignalLayoutMsg;
+}
+
 /** Delta par tick (ou groupe de ticks) : uniquement ce qui a changé. */
 export interface DeltaMessage {
   kind: 'delta';
@@ -129,6 +157,8 @@ export interface DeltaMessage {
   terrainPatch?: TerrainPatchMsg;
   /** Rapport économie / démographie / trafic (≈ 1 fois/s) : type SimReport de src/sim/sim-protocol.ts. */
   report?: SimReport;
+  /** Feux tricolores (facultatif, rétrocompatible) : présent seulement quand un état ou la disposition change. */
+  signals?: SignalFrame;
 }
 
 export interface LogMessage {
@@ -152,6 +182,7 @@ export function collectTransferables(msg: WorkerToMain): Transferable[] {
     const v = msg.vehicles;
     if (v) { add(v.positions); add(v.assetIndices); add(v.ids); add(v.variants); add(v.flags); }
     if (msg.terrainPatch) { add(msg.terrainPatch.heights); add(msg.terrainPatch.waterSurface); }
+    if (msg.signals) { add(msg.signals.states); if (msg.signals.layout) { add(msg.signals.layout.heads); add(msg.signals.layout.nodeIds); } }
   }
   return [...out];
 }

@@ -18,7 +18,7 @@
  */
 import type { AssetCatalog } from '../../shared/catalog';
 import { VEHICLE_STRIDE } from '../../shared/constants';
-import type { VehicleFrame } from '../../shared/protocol';
+import { SIGNAL_HEAD_STRIDE, type VehicleFrame } from '../../shared/protocol';
 import { FREE_GAP, IDM_BY_KIND, idmAccel } from './idm';
 import { Control, EdgeGrid, TrafficGraph, Turn, type TrafficNetworkInput } from './network';
 import { ArcRouter } from './router';
@@ -341,6 +341,7 @@ export class TrafficSystem {
       this.chooseNext(k.v);
     }
     this.networkDirty = false;
+    this.signalLayoutVersion++;
     this.buildingsDirty = true;
   }
 
@@ -1053,6 +1054,76 @@ export class TrafficSystem {
     for (let n = 0; n < g.nodeCount; n++) {
       if (g.nodeControl[n] !== Control.Signal) continue;
       for (let a = g.nodeArmStart[n]!; a < g.nodeArmStart[n + 1]!; a++) out.push({ nodeId: g.nodeId[n]!, arc: g.armArc[a]!, state: this.signalState(n, a) });
+    }
+    return out;
+  }
+
+  /** Version de la disposition des feux : incrémentée à chaque reconstruction du graphe. */
+  signalLayoutVersion = 0;
+
+  /** Reconstruit le graphe tout de suite s'il a changé (sinon c'est fait au prochain pas). */
+  ensureNetwork(): void {
+    if (this.networkDirty && this.networkInput) this.rebuildNetwork();
+  }
+
+  /** Nombre de bras régulés par des feux (une tête de feu par bras). */
+  signalArmCount(): number {
+    const g = this.graph;
+    if (!g) return 0;
+    let n = 0;
+    for (let k = 0; k < g.nodeCount; k++) if (g.nodeControl[k] === Control.Signal) n += g.nodeArmStart[k + 1]! - g.nodeArmStart[k]!;
+    return n;
+  }
+
+  /**
+   * Disposition des feux pour le rendu (tampons neufs, transférables) : un bras par voie d'arrivée régulée,
+   * dans le même ordre que `signalStateArray()` et `signalStates()`. Voir SIGNAL_HEAD_STRIDE (src/shared/protocol.ts).
+   */
+  signalLayout(): { heads: Float32Array; nodeIds: Int32Array } {
+    const g = this.graph;
+    const n = this.signalArmCount();
+    const heads = new Float32Array(n * SIGNAL_HEAD_STRIDE);
+    const nodeIds = new Int32Array(n);
+    if (!g) return { heads, nodeIds };
+    const out = this.tmp4;
+    let i = 0, junction = 0;
+    for (let node = 0; node < g.nodeCount; node++) {
+      if (g.nodeControl[node] !== Control.Signal) continue;
+      for (let a = g.nodeArmStart[node]!; a < g.nodeArmStart[node + 1]!; a++) {
+        const arc = g.armArc[a]!;
+        const e = arc >> 1;
+        const lanes = Math.max(1, g.arcLaneCount[arc]!);
+        const first = g.arcFirstLane[arc]!;
+        const outer = first + lanes - 1; // voie la plus à droite
+        const lw = g.edgeLaneWidth[e]!;
+        // Pied du poteau : bord droit de la chaussée + bande (0,5 m) + 1,1 m sur le trottoir, à la ligne d'arrêt.
+        const side = lw / 2 + 0.5 + 1.1;
+        if (first >= 0) g.linkPoint(outer, g.linkLen[outer]!, side, out, 0);
+        else { out[0] = g.nodeX[node]!; out[1] = g.nodeY[node]!; out[2] = g.nodeZ[node]!; out[3] = g.armAngle[a]!; }
+        const o = i * SIGNAL_HEAD_STRIDE;
+        heads[o] = out[0]!; heads[o + 1] = out[1]!; heads[o + 2] = out[2]!; heads[o + 3] = out[3]!;
+        // Portée : du poteau au centre du faisceau de voies d'arrivée.
+        heads[o + 4] = side + ((lanes - 1) * lw) / 2;
+        heads[o + 5] = lanes;
+        heads[o + 6] = g.nodeTrim[node]!;
+        heads[o + 7] = junction;
+        nodeIds[i] = g.nodeId[node]!;
+        i++;
+      }
+      junction++;
+    }
+    return { heads, nodeIds };
+  }
+
+  /** État de chaque bras régulé (0 vert, 1 orange, 2 rouge), même ordre que `signalLayout()` ; tampon neuf. */
+  signalStateArray(): Uint8Array {
+    const g = this.graph;
+    const out = new Uint8Array(this.signalArmCount());
+    if (!g) return out;
+    let i = 0;
+    for (let node = 0; node < g.nodeCount; node++) {
+      if (g.nodeControl[node] !== Control.Signal) continue;
+      for (let a = g.nodeArmStart[node]!; a < g.nodeArmStart[node + 1]!; a++) out[i++] = this.signalState(node, a);
     }
     return out;
   }

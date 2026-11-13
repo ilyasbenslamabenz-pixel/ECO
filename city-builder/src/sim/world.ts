@@ -30,7 +30,7 @@ import {
   type SimStats,
   type TerrainData,
 } from '../shared/contracts';
-import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage } from '../shared/protocol';
+import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SignalFrame, SnapshotMessage } from '../shared/protocol';
 import { dist2 } from '../shared/math';
 import { distSegmentObb, footprintObb, makeObb, normRot, obbAabb, obbOverlap, obbToWorld, pointInObb, type Obb } from '../shared/footprint';
 import { terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
@@ -754,13 +754,43 @@ export class Simulation {
       msg.terrainPatch = extractPatch(this.terrain, this.pendingPatch);
       this.pendingPatch = null;
     }
+    const signals = this.takeSignalFrame();
+    if (signals) msg.signals = signals;
     return msg;
+  }
+
+  /** Dernière version de disposition des feux et derniers états envoyés au rendu (-1 : rien d'envoyé). */
+  private signalVersionSent = -1;
+  private signalStatesSent = new Uint8Array(0);
+
+  /**
+   * Feux tricolores pour le delta : disposition si le réseau a changé depuis le dernier envoi (ou après un
+   * instantané), états seulement s'ils ont changé ; null sinon (aucun octet envoyé en régime établi).
+   */
+  takeSignalFrame(): SignalFrame | null {
+    this.traffic.ensureNetwork();
+    const version = this.traffic.signalLayoutVersion;
+    const states = this.traffic.signalStateArray();
+    const layoutChanged = version !== this.signalVersionSent;
+    if (!layoutChanged) {
+      const prev = this.signalStatesSent;
+      let same = prev.length === states.length;
+      for (let i = 0; same && i < states.length; i++) same = prev[i] === states[i];
+      if (same) return null;
+    }
+    this.signalVersionSent = version;
+    this.signalStatesSent = states.slice();
+    const frame: SignalFrame = { version, states };
+    if (layoutChanged) frame.layout = { version, ...this.traffic.signalLayout() };
+    return frame;
   }
 
   /** Instantané complet ; la carte de hauteurs est COPIÉE (la copie sera transférée). */
   snapshot(): SnapshotMessage {
     const t = this.terrain!;
     this.clearPending();
+    // Le rendu repart de zéro après un instantané : la disposition des feux sera renvoyée au prochain delta.
+    this.signalVersionSent = -1;
     return {
       kind: 'snapshot',
       params: { ...this.params! },
