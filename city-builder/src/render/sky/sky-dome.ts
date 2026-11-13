@@ -142,6 +142,13 @@ uniform float uMoonPhase;
 uniform vec3 uFogColor;
 uniform float uHorizonFog;
 uniform vec3 uNightTint;
+// Météo (phase 2C) : couverture nuageuse, assombrissement pluvieux, dérive des nuages, éclairage des nuages, éclair.
+uniform float uCloud;
+uniform float uCloudDark;
+uniform vec2 uCloudOffset;
+uniform vec3 uCloudLight;
+uniform float uFlash;
+uniform float uGlow;
 varying vec3 vDir;
 
 vec2 equirect(vec3 d, float rot) {
@@ -150,6 +157,17 @@ vec2 equirect(vec3 d, float rot) {
   return vec2(az / (2.0 * PI) + 0.5, 0.5 - asin(clamp(d.y, -1.0, 1.0)) / PI);
 }
 float h31(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float h21(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), u.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) {
+  float s = 0.0, a = 0.5;
+  for (int k = 0; k < 5; k++) { s += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.3); a *= 0.5; }
+  return s;
+}
 
 void main() {
   vec3 d = normalize(vDir);
@@ -196,9 +214,36 @@ void main() {
     }
     col += night * uNight;
   }
-  // Disque solaire et halo (absents de la carte d'environnement : uSunDisc = 0).
+  // Disque solaire et halo (absents de la carte d'environnement : uSunDisc = 0), voilés par les nuages.
   float sc = dot(d, uSunDir);
-  col += uSunColor * uSunDisc * (smoothstep(0.99996, 0.99999, sc) * 40.0 + pow(max(sc, 0.0), 900.0) * 1.6 + pow(max(sc, 0.0), 12.0) * 0.06);
+  float veil = 1.0 - smoothstep(0.45, 0.95, uCloud) * 0.97;
+  col += uSunColor * uSunDisc * veil * (smoothstep(0.99996, 0.99999, sc) * 40.0 + pow(max(sc, 0.0), 900.0) * 1.6 + pow(max(sc, 0.0), 12.0) * 0.06);
+  // Lueur de lever / coucher : bande chaude le long de l'horizon, plus intense du côté du soleil.
+  if (uGlow > 0.001) {
+    float az = max(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-5), normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + 1e-5)), 0.0);
+    float band = exp(-max(d.y + 0.02, 0.0) * 9.0) * smoothstep(-0.08, 0.02, d.y);
+    vec3 warm = mix(vec3(1.0, 0.42, 0.16), vec3(1.0, 0.7, 0.4), az * az);
+    col += warm * band * (0.12 + 0.9 * pow(az, 6.0)) * uGlow * veil;
+  }
+  // Nuages procéduraux (couche plane projetée sur le dôme) + voile gris des ciels couverts.
+  if (uCloud > 0.005) {
+    float overcast = smoothstep(0.5, 0.97, uCloud);
+    vec3 grey = uCloudLight * (0.82 - 0.38 * uCloudDark);
+    col = mix(col, grey, overcast * 0.88);
+    float hy = max(d.y, 0.0) + 0.07;
+    vec2 cp = d.xz / hy * 0.55 + uCloudOffset;
+    float n = fbm(cp) * 0.85 + fbm(cp * 2.7 + 3.1) * 0.15;
+    float thr = mix(0.78, 0.3, uCloud);
+    float dens = smoothstep(thr, thr + 0.22, n);
+    float thick = smoothstep(thr + 0.05, thr + 0.45, n);
+    float fade = smoothstep(-0.03, 0.12, d.y);
+    vec3 lit = uCloudLight * (1.08 - 0.5 * thick - 0.4 * uCloudDark);
+    // Bords dorés côté soleil (transmission) et pleine lumière au-dessus.
+    lit += uSunColor * uSunDisc * veil * pow(max(sc, 0.0), 6.0) * (1.0 - thick) * 1.4;
+    lit += vec3(0.75, 0.82, 1.0) * uFlash * (0.6 + thick);
+    col = mix(col, lit, dens * fade * 0.96);
+  }
+  col += vec3(0.6, 0.66, 0.85) * uFlash * 0.35;
   // Brume d'horizon raccordée au brouillard de la scène.
   float hf = (1.0 - smoothstep(-0.05, 0.22, d.y)) * uHorizonFog;
   col = mix(col, uFogColor, hf);
@@ -226,6 +271,12 @@ export function createSkyDome(day: HdriSource, dusk: HdriSource): { mesh: THREE.
     uFogColor: { value: new THREE.Color(0.7, 0.75, 0.8) },
     uHorizonFog: { value: 0.65 },
     uNightTint: { value: new THREE.Color(0.012, 0.018, 0.04) },
+    uCloud: { value: 0 },
+    uCloudDark: { value: 0 },
+    uCloudOffset: { value: new THREE.Vector2(0, 0) },
+    uCloudLight: { value: new THREE.Color(1, 1, 1) },
+    uFlash: { value: 0 },
+    uGlow: { value: 0 },
   };
   const mat = new THREE.ShaderMaterial({
     name: 'ciel_dome',

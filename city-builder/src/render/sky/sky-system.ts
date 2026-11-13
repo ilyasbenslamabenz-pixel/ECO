@@ -66,6 +66,35 @@ export function sunPosition(hour: number, latitudeDeg: number, dayOfYear: number
   return out;
 }
 
+/** Météo vue par le ciel (valeurs 0..1 sauf vent en m/s et direction en rad). */
+export interface SkyWeather {
+  cloud: number;
+  rain: number;
+  snow: number;
+  fog: number;
+  storm: number;
+  wind: number;
+  windDir: number;
+}
+
+const CLEAR: SkyWeather = { cloud: 0, rain: 0, snow: 0, fog: 0, storm: 0, wind: 2, windDir: 1.5 * Math.PI };
+
+let activeSky: SkySystem | null = null;
+/** Système de ciel courant (un seul rendu par page) : point d'accès des modules d'atmosphère. */
+export function getActiveSky(): SkySystem | null { return activeSky; }
+
+/** PRNG visuel minimal (éclairs) : reproductible d'une capture à l'autre, sans effet sur la simulation. */
+function mulberry(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export class SkySystem {
   readonly dome: THREE.Mesh;
   private readonly uniforms: Record<string, THREE.IUniform>;
@@ -82,7 +111,17 @@ export class SkySystem {
   readonly ambientSky = new THREE.Color();
   readonly ambientGround = new THREE.Color();
   private readonly lat: number;
-  private readonly doy: number;
+  private doy: number;
+  private readonly weather: SkyWeather = { ...CLEAR };
+  private envWeatherKey = '';
+  private flash = 0;
+  private nextStrike = 4;
+  private strikeRnd = mulberry(0xa7305);
+  private hemiBase = 0.45;
+  private sunBase = 0;
+  private readonly cloudOffset = new THREE.Vector2();
+  /** Facteur de lumière directe restante sous les nuages 0..1 (lu par les modules : ombres, reflets). */
+  sunVisibility = 1;
   private day: HdriSource;
   private dusk: HdriSource;
   private elapsed = 0;
@@ -119,7 +158,25 @@ export class SkySystem {
     sun.shadow.radius = 2;
     if (!sun.target.parent) o.scene.add(sun.target);
     this.setTimeOfDay(this.hour);
+    activeSky = this;
   }
+
+  /** Jour de l'année astronomique 0..364 (course du soleil selon la saison). */
+  setDayOfYear(doy: number): void {
+    const d = Math.round(((doy % 365) + 365) % 365);
+    if (d === this.doy) return;
+    this.doy = d;
+    this.setTimeOfDay(this.hour);
+  }
+  get dayOfYear(): number { return this.doy; }
+
+  /** Météo courante (nuages, pluie, neige, brouillard, orage, vent) ; `null` = ciel clair de base. */
+  setWeather(w: Partial<SkyWeather> | null): void {
+    Object.assign(this.weather, w ?? CLEAR);
+    if (!w) Object.assign(this.weather, CLEAR);
+    this.setTimeOfDay(this.hour);
+  }
+  get currentWeather(): Readonly<SkyWeather> { return this.weather; }
 
   /** Charge les HDRI du catalogue (ciel_jour, ciel_crepuscule) et crée le système. */
   static async create(o: SkyOptions): Promise<SkySystem> {
@@ -185,18 +242,37 @@ export class SkySystem {
       sun.intensity = 0.28 * night;
       this.lightDir.copy(this.moonDir);
     }
+    // Météo : les nuages voilent le soleil (lumière directe et ombres), la lumière diffuse augmente un peu.
+    const w = this.weather;
+    const overcast = THREE.MathUtils.smoothstep(w.cloud, 0.35, 0.98);
+    const precip = Math.min(1, w.rain + w.snow);
+    this.sunVisibility = (1 - 0.9 * overcast) * (1 - 0.35 * w.fog);
+    sun.intensity *= this.sunVisibility;
+    this.sunBase = sun.intensity;
     // Hémisphère : ciel / sol selon l'heure.
     const hemi = this.o.hemi;
     hemi.color.setRGB(0.62 * dayW + 0.75 * duskW + 0.12 * night, 0.72 * dayW + 0.55 * duskW + 0.16 * night, 0.9 * dayW + 0.5 * duskW + 0.3 * night);
+    if (overcast > 0) {
+      const l = (hemi.color.r + hemi.color.g + hemi.color.b) / 3;
+      hemi.color.lerp(tmpColor.setRGB(l * 0.95, l * 1.0, l * 1.08), overcast * 0.8);
+    }
     hemi.groundColor.setRGB(0.32, 0.28, 0.22).multiplyScalar(0.2 + 0.8 * dayW + 0.3 * duskW);
-    hemi.intensity = 0.25 + 0.2 * dayW;
+    hemi.intensity = (0.25 + 0.2 * dayW) * (1 + 0.9 * overcast * (dayW + duskW * 0.5)) * (1 - 0.15 * precip);
+    this.hemiBase = hemi.intensity;
     // Brouillard : couleur de l'horizon du ciel affiché.
     const fc = this.fogColor.set(0, 0, 0)
       .add(tmpColor.copy(this.day.horizon).multiplyScalar(dayW))
       .add(tmpColor.copy(this.dusk.horizon).multiplyScalar(duskW * (1 - night * 0.85)))
       .add(tmpColor.setRGB(0.02, 0.03, 0.06).multiplyScalar(night));
     // Luminance bornée : un brouillard trop clair délave le paysage.
-    const lum = fc.r * 0.2126 + fc.g * 0.7152 + fc.b * 0.0722;
+    let lum = fc.r * 0.2126 + fc.g * 0.7152 + fc.b * 0.0722;
+    // Temps gris : brouillard désaturé, plus sombre sous la pluie, laiteux dans le brouillard.
+    const grey = Math.max(overcast * 0.85, w.fog);
+    if (grey > 0) {
+      const g = lum * (1 - 0.3 * precip * overcast) * (1 + 0.25 * w.fog * (dayW + duskW));
+      fc.lerp(tmpColor.setRGB(g * 0.97, g * 1.0, g * 1.04), grey);
+      lum = fc.r * 0.2126 + fc.g * 0.7152 + fc.b * 0.0722;
+    }
     if (lum > 0.9) fc.multiplyScalar(0.9 / lum);
     this.fog.color.copy(fc);
     (u['uFogColor']!.value as THREE.Color).copy(fc);
@@ -205,11 +281,25 @@ export class SkySystem {
       .add(tmpColor.copy(this.dusk.zenith).lerp(this.dusk.horizon, 0.5).multiplyScalar(duskW * (1 - night * 0.85)))
       .add(tmpColor.setRGB(0.01, 0.015, 0.03).multiplyScalar(night));
     this.ambientGround.copy(this.ambientSky).multiplyScalar(0.35);
-    this.fog.density = this.fogDensity * (1 + duskW * 0.6 + night * 0.3);
+    // Densité : brouillard météo (visibilité réduite mais ville lisible), pluie et neige épaississent l'air.
+    this.fog.density = this.fogDensity * (1 + duskW * 0.6 + night * 0.3) * (1 + overcast * 0.5)
+      + 0.0042 * Math.pow(w.fog, 1.4) + 0.0009 * w.rain + 0.0016 * w.snow;
+    // Nuages : couverture, assombrissement, éclairage (ambiance du ciel + soleil, grisé par la pluie).
+    u['uCloud']!.value = w.cloud;
+    u['uCloudDark']!.value = Math.min(1, precip * 1.1 + w.storm * 0.4);
+    const cl = u['uCloudLight']!.value as THREE.Color;
+    const amb = this.ambientSky;
+    const al = (amb.r + amb.g + amb.b) / 3;
+    cl.setRGB(al, al, al * 1.04).multiplyScalar(1.5).add(tmpColor.copy(sunCol).multiplyScalar(0.55 * sunUp * (1 - 0.7 * overcast) + 0.25 * duskW));
+    u['uGlow']!.value = duskW * (1 - 0.8 * overcast) * (1 - night);
     // Exposition : plus forte la nuit pour garder une lecture de la ville.
     this.o.renderer.toneMappingExposure = this.baseExposure * (1 + night * 1.2 + duskW * 0.25);
     // Environnement (PMREM) recalculé si l'heure a sensiblement changé.
-    if (Math.abs(this.envHour - h) > 0.2 || this.envRT === null) this.refreshEnvironment();
+    const wk = `${Math.round(w.cloud * 12)}|${Math.round(precip * 6)}|${Math.round(w.fog * 6)}`;
+    if (Math.abs(this.envHour - h) > 0.2 || this.envRT === null || wk !== this.envWeatherKey) {
+      this.envWeatherKey = wk;
+      this.refreshEnvironment();
+    }
     this.placeSun();
   }
 
@@ -269,11 +359,41 @@ export class SkySystem {
   update(dt: number, camera: THREE.Camera): void {
     this.elapsed += dt;
     this.uniforms['uTime']!.value = this.elapsed;
+    // Dérive des nuages avec le vent (vers où il souffle), éclairs d'orage.
+    const w = this.weather;
+    const drift = (0.004 + w.wind * 0.0016) * dt;
+    this.cloudOffset.x -= Math.sin(w.windDir) * drift;
+    this.cloudOffset.y += Math.cos(w.windDir) * drift;
+    (this.uniforms['uCloudOffset']!.value as THREE.Vector2).copy(this.cloudOffset);
+    this.updateLightning(dt);
     this.dome.position.copy(camera.position);
     this.dome.updateMatrixWorld();
   }
 
+  /** Éclairs : intervalles aléatoires selon l'activité orageuse, double flash bref, lumière d'ambiance accrue. */
+  private updateLightning(dt: number): void {
+    const storm = this.weather.storm;
+    if (storm > 0.15) {
+      this.nextStrike -= dt;
+      if (this.nextStrike <= 0) {
+        this.flash = 0.7 + 0.3 * this.strikeRnd();
+        this.nextStrike = (2 + this.strikeRnd() * 9) / (0.4 + storm);
+      }
+    }
+    if (this.flash <= 0.001 && this.uniforms['uFlash']!.value === 0) return;
+    // Décroissance rapide avec un rebond (scintillement typique d'un éclair).
+    this.flash = Math.max(0, this.flash - dt * 4.5);
+    const f = this.flash > 0.3 && this.flash < 0.45 ? this.flash * 0.3 : this.flash;
+    this.uniforms['uFlash']!.value = f;
+    this.o.hemi.intensity = this.hemiBase + f * 2.2;
+    this.o.sun.intensity = this.sunBase;
+  }
+
+  /** Déclenche un éclair immédiat (captures, démonstration). */
+  strike(power = 1): void { this.flash = power; }
+
   dispose(): void {
+    if (activeSky === this) activeSky = null;
     this.envRT?.dispose();
     this.pmrem.dispose();
     this.day.texture.dispose();
