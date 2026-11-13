@@ -39,19 +39,23 @@ export type RoundaboutResult = { ok: true; plan: RoundaboutPlan } | { ok: false;
 
 const fail = (message: string, code: PlanError['code'] = 'COLLISION'): RoundaboutResult => ({ ok: false, error: { code, message } });
 
-/** Paramètre t où la courbe s'éloigne à la distance r de (cx, cz), en partant de l'extrémité a (fromA) ou b. */
-function cutOnCircle(c: Cubic, arc: ArcTable, fromA: boolean, cx: number, cz: number, r: number): number | null {
+/**
+ * Paramètre t où la courbe s'éloigne à la distance r de (cx, cz), en partant de l'abscisse s0 dans le sens dir
+ * (+1 vers b, −1 vers a). Null si l'extrémité est atteinte avant.
+ */
+function cutOnCircle(c: Cubic, arc: ArcTable, s0: number, dir: 1 | -1, cx: number, cz: number, r: number): number | null {
   const p = new Float64Array(2);
   const dist = (s: number): number => { evalCubic(c, arc.tAt(s), p); return Math.hypot(p[0]! - cx, p[1]! - cz); };
   const L = arc.length;
-  let prev = fromA ? 0 : L;
-  for (let k = 1; k <= Math.ceil(L); k++) {
-    const s = fromA ? Math.min(L, k) : Math.max(0, L - k);
+  let prev = s0;
+  for (let k = 1; k <= Math.ceil(L) + 1; k++) {
+    const s = Math.min(L, Math.max(0, s0 + dir * k));
     if (dist(s) >= r) {
       let lo = prev, hi = s;
       for (let it = 0; it < 30; it++) { const m = (lo + hi) / 2; if (dist(m) >= r) hi = m; else lo = m; }
       return arc.tAt(hi);
     }
+    if (s === 0 || s === L) return null;
     prev = s;
   }
   return null;
@@ -101,15 +105,16 @@ export function planRoundabout(net: RoadNetwork, req: RoundaboutRequest, opts: P
     center = { type: 'segment', segId: s.segId, t: s.t }; cx = s.x; cz = s.z;
   }
   // Branches : (tronçon, extrémité côté centre).
-  const armSegs: { segId: number; fromA: boolean; tMin: number; tMax: number }[] = [];
+  const armSegs: { segId: number; dir: 1 | -1; s0: number }[] = [];
   if (center.type === 'node') {
     for (const sid of net.incident(center.nodeId)) {
       const [a] = net.endpoints(sid);
-      armSegs.push({ segId: sid, fromA: a === center.nodeId, tMin: 0, tMax: 1 });
+      armSegs.push(a === center.nodeId ? { segId: sid, dir: 1, s0: 0 } : { segId: sid, dir: -1, s0: net.arc(sid).length });
     }
   } else {
-    armSegs.push({ segId: center.segId, fromA: true, tMin: center.t, tMax: 1 });
-    armSegs.push({ segId: center.segId, fromA: false, tMin: 0, tMax: center.t });
+    const sc = net.arc(center.segId).sAt(center.t);
+    armSegs.push({ segId: center.segId, dir: 1, s0: sc });
+    armSegs.push({ segId: center.segId, dir: -1, s0: sc });
   }
   const arms: ArmCut[] = [];
   for (const a of armSegs) {
@@ -119,20 +124,19 @@ export function planRoundabout(net: RoadNetwork, req: RoundaboutRequest, opts: P
     if (net.elevationOf(a.segId) !== 0) return fail('Pas de giratoire sur une route surélevée ou en tunnel');
     const c = net.curve(a.segId), arc = net.arc(a.segId);
     // Sous-courbe utile (moitié d'un tronçon coupé au centre).
-    const t = cutOnCircle(c, arc, a.fromA, cx, cz, r);
-    const ok = t !== null && (a.fromA ? t > a.tMin : t < a.tMax);
-    if (!ok) return fail(`Branche trop courte pour un giratoire de ${Math.round(r * 2)} m`);
+    const t = cutOnCircle(c, arc, a.s0, a.dir, cx, cz, r);
+    if (t === null) return fail(`Branche trop courte pour un giratoire de ${Math.round(r * 2)} m`);
     const sCut = arc.sAt(t);
-    const rest = a.fromA ? arc.length - sCut : sCut;
+    const rest = a.dir > 0 ? arc.length - sCut : sCut;
     if (rest < MIN_ARM_REST) return fail(`Branche trop courte pour un giratoire de ${Math.round(r * 2)} m`);
     const prof = net.profile(a.segId);
-    const sC = a.fromA ? arc.sAt(a.tMin) : arc.sAt(a.tMax);
+    const sC = a.s0;
     for (let s = Math.min(sC, sCut); s <= Math.max(sC, sCut); s += 2) {
       if (profileIsBridge(prof, s) || profileIsTunnel(prof, s)) return fail('Pas de giratoire sur un pont ou dans un tunnel');
     }
     const p = new Float64Array(2);
     evalCubic(c, t, p);
-    arms.push({ segId: a.segId, fromA: a.fromA, t, x: p[0]!, z: p[1]!, angle: Math.atan2(p[1]! - cz, p[0]! - cx) });
+    arms.push({ segId: a.segId, fromA: a.dir > 0, t, x: p[0]!, z: p[1]!, angle: Math.atan2(p[1]! - cz, p[0]! - cx) });
   }
   if (arms.length > 6) return fail('Trop de branches pour un giratoire (6 maximum)');
   const sortedAng = arms.map((a) => a.angle).sort((p, q) => p - q);
@@ -184,7 +188,7 @@ export function commitRoundabout(net: RoadNetwork, plan: RoundaboutPlan): { segm
   for (const sid of [...net.incident(centerNode)]) {
     const [a] = net.endpoints(sid);
     const fromA = a === centerNode;
-    const t = cutOnCircle(net.curve(sid), net.arc(sid), fromA, cx, cz, r);
+    const t = cutOnCircle(net.curve(sid), net.arc(sid), fromA ? 0 : net.arc(sid).length, fromA ? 1 : -1, cx, cz, r);
     if (t === null) continue;
     const sp = net.splitSegment(sid, Math.min(0.999, Math.max(0.001, t)));
     const inner = fromA ? sp.first : sp.second;

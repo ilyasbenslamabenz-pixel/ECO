@@ -218,7 +218,7 @@ export class RoadPreview {
 
   hide(): void { this.group.visible = false; }
 
-  show(o: { points: number[] | null; width: number; validity: Validity; start: { x: number; z: number } | null; control: { x: number; z: number } | null; hover: { x: number; z: number; snap: string; guide?: { x0: number; z0: number; x1: number; z1: number } } | null }): void {
+  show(o: { points: number[] | null; width: number; validity: Validity; start: { x: number; z: number } | null; control: { x: number; z: number } | null; hover: { x: number; z: number; snap: string; guide?: { x0: number; z0: number; x1: number; z1: number } } | null; path?: number[] }): void {
     this.group.visible = true;
     const g = o.hover?.guide;
     this.guide.visible = !!g;
@@ -245,8 +245,18 @@ export class RoadPreview {
     const hasPath = !!o.points && o.points.length >= 4;
     this.ribbon.visible = hasPath; this.center.visible = hasPath;
     if (o.points && hasPath) {
-      buildGroundRibbon(this.ribbon.geometry, o.points, o.width, this.heightAt, 0.25, 2);
-      buildGroundRibbon(this.center.geometry, o.points, 0.35, this.heightAt, 0.3, 2);
+      // Hauteur imposée (▲ / ▼) : l'aperçu suit le profil 3D calculé par la simulation (rampes, viaduc, tunnel).
+      const path = o.path && o.path.length >= 8 ? o.path : null;
+      const h: HeightFn = path ? (x, z) => {
+        let best = Infinity, y = this.heightAt(x, z);
+        for (let i = 0; i + 3 < path.length; i += 4) {
+          const d = (path[i]! - x) ** 2 + (path[i + 2]! - z) ** 2;
+          if (d < best) { best = d; y = Math.max(path[i + 1]!, path[i + 3] === 2 ? -Infinity : this.heightAt(x, z) - 0.2); }
+        }
+        return y;
+      } : this.heightAt;
+      buildGroundRibbon(this.ribbon.geometry, o.points, o.width, h, 0.25, 2);
+      buildGroundRibbon(this.center.geometry, o.points, 0.35, h, 0.3, 2);
     }
     (this.ribbon.material as THREE.MeshBasicMaterial).color.copy(tint);
     (this.center.material as THREE.MeshBasicMaterial).color.set(0xffffff);

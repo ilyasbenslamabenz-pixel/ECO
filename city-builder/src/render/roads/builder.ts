@@ -12,13 +12,13 @@
  * passages piétons, lignes d'arrêt).
  */
 import {
-  ArcTable, CORNER_RADIUS, ROAD_KINDS, carriagewayWidth, computeJunction, derivCubic, evalCubic,
-  lineIntersectT, profileGroundAt, profileHeightAt, profileIsBridge, totalWidth,
+  ArcTable, CORNER_RADIUS, CUT_RATIO, FILL_RATIO, MAX_TALUS_WIDTH, ROAD_KINDS, carriagewayWidth, computeJunction, derivCubic, evalCubic,
+  lineIntersectT, profileGroundAt, profileHeightAt, profileIsBridge, profileIsTunnel, totalWidth,
   type Cubic, type JunctionArm, type JunctionInfo, type RoadKindDef, type RoadNetwork, type RoadProfile,
 } from '../../sim/roads';
 
-export type LayerId = 'asphalt' | 'asphaltWorn' | 'sidewalk' | 'curb' | 'pavers' | 'grass' | 'concrete' | 'metal' | 'paint' | 'skirt';
-export const LAYERS: readonly LayerId[] = ['asphalt', 'asphaltWorn', 'sidewalk', 'curb', 'pavers', 'grass', 'concrete', 'metal', 'paint', 'skirt'];
+export type LayerId = 'asphalt' | 'asphaltWorn' | 'sidewalk' | 'curb' | 'pavers' | 'grass' | 'concrete' | 'metal' | 'paint' | 'skirt' | 'talus' | 'sand' | 'tunnel';
+export const LAYERS: readonly LayerId[] = ['asphalt', 'asphaltWorn', 'sidewalk', 'curb', 'pavers', 'grass', 'concrete', 'metal', 'paint', 'skirt', 'talus', 'sand', 'tunnel'];
 
 export class LayerBuffer {
   pos: number[] = [];
@@ -62,7 +62,7 @@ class SegSampler {
   readonly length: number;
   private p = new Float64Array(2);
   private d = new Float64Array(2);
-  x = 0; z = 0; y = 0; tx = 1; tz = 0; nx = 0; nz = -1; bridge = false; ground = 0;
+  x = 0; z = 0; y = 0; tx = 1; tz = 0; nx = 0; nz = -1; bridge = false; ground = 0; tunnel = false; wallL = false; wallR = false;
   constructor(net: RoadNetwork, segId: number) {
     this.curve = net.curve(segId);
     this.arc = net.arc(segId);
@@ -80,18 +80,25 @@ class SegSampler {
     this.nx = this.tz; this.nz = -this.tx;
     this.y = profileHeightAt(this.profile, s);
     this.bridge = profileIsBridge(this.profile, s);
+    this.tunnel = !this.bridge && profileIsTunnel(this.profile, s);
     this.ground = profileGroundAt(this.profile, s);
+    const i = Math.min(this.profile.count - 1, Math.max(0, Math.round(s / this.profile.step)));
+    this.wallL = this.profile.wallL?.[i] === 1;
+    this.wallR = this.profile.wallR?.[i] === 1;
     return this;
   }
 }
 
 /** Station d'un profil en travers : repère local figé (avec onglet éventuel). */
-interface Station { x: number; z: number; y: number; nx: number; nz: number; tx: number; tz: number; miter: number; bridge: boolean; ground: number; s: number }
+interface Station { x: number; z: number; y: number; nx: number; nz: number; tx: number; tz: number; miter: number; bridge: boolean; ground: number; s: number; tunnel: boolean; wallL: boolean; wallR: boolean }
 
 function stationFrom(sm: SegSampler, s: number): Station {
   sm.at(s);
-  return { x: sm.x, z: sm.z, y: sm.y, nx: sm.nx, nz: sm.nz, tx: sm.tx, tz: sm.tz, miter: 1, bridge: sm.bridge, ground: sm.ground, s };
+  return { x: sm.x, z: sm.z, y: sm.y, nx: sm.nx, nz: sm.nz, tx: sm.tx, tz: sm.tz, miter: 1, bridge: sm.bridge, ground: sm.ground, s, tunnel: sm.tunnel, wallL: sm.wallL, wallR: sm.wallR };
 }
+
+/** État d'une station : 0 terre, 1 pont, 2 tunnel. */
+const stateOf = (s: Station): number => (s.bridge ? 1 : s.tunnel ? 2 : 0);
 
 /**
  * Bande continue le long des stations entre deux points du profil en travers
@@ -234,24 +241,42 @@ function miterAt(ctx: BuildContext, j: JunctionInfo, segId: number, st: Station)
 }
 
 /** Profil en travers d'un tronçon (couches) le long de stations déjà calculées. */
-function crossSection(out: BuildOutput, k: RoadKindDef, st: Station[]): void {
+function crossSection(out: BuildOutput, ctx: BuildContext, k: RoadKindDef, st: Station[]): void {
   const L = out.layers;
   const hc = carriagewayWidth(k) / 2;
   const ht = totalWidth(k) / 2;
   const mh = k.medianWidth / 2;
   const curb = k.curbHeight;
   const asphalt = L.get(k.surface === 'asphalt_worn' ? 'asphaltWorn' : 'asphalt')!;
-  // Découpe en plages pont / terre.
-  const ranges: { from: number; to: number; bridge: boolean }[] = [];
+  // Découpe en plages terre / pont / tunnel.
+  const ranges: { from: number; to: number; bridge: boolean; tunnel: boolean }[] = [];
   let r0 = 0;
   for (let i = 1; i <= st.length; i++) {
-    if (i === st.length || st[i]!.bridge !== st[r0]!.bridge) {
+    if (i === st.length || stateOf(st[i]!) !== stateOf(st[r0]!)) {
       // Les plages se chevauchent d'une station pour rester continues.
-      ranges.push({ from: r0, to: Math.min(st.length - 1, i), bridge: st[r0]!.bridge });
+      ranges.push({ from: r0, to: Math.min(st.length - 1, i), bridge: st[r0]!.bridge, tunnel: st[r0]!.tunnel });
       r0 = i;
     }
   }
+  const sections: { from: number; to: number; bridge: boolean }[] = [];
   for (const rg of ranges) {
+    if (!rg.tunnel) { sections.push(rg); continue; }
+    // Tunnel : seuls les premiers mètres derrière chaque portail sont visibles (chaussée + revêtement sombre).
+    const near = 16;
+    const sA = st[rg.from]!.s, sB = st[rg.to]!.s;
+    const openA = rg.from > 0, openB = rg.to < st.length - 1;
+    let a = -1;
+    for (let i = rg.from; i <= rg.to; i++) {
+      const vis = (openA && st[i]!.s - sA <= near) || (openB && sB - st[i]!.s <= near);
+      if (vis && a < 0) a = i;
+      if ((!vis || i === rg.to) && a >= 0) {
+        const b = vis ? i : i - 1;
+        if (b > a) { sections.push({ from: a, to: b, bridge: false }); tunnelLiner(out, st, a, b, ht); }
+        a = -1;
+      }
+    }
+  }
+  for (const rg of sections) {
     const { from, to, bridge } = rg;
     if (to - from < 1) continue;
     // Chaussée
@@ -285,10 +310,8 @@ function crossSection(out: BuildOutput, k: RoadKindDef, st: Station[]): void {
     }
     const topY = k.sidewalk > 0 ? curb : k.surface === 'pavers' ? 0.04 : 0;
     if (!bridge) {
-      // Jupe de rive : masque le raccord au terrain non nivelé.
-      for (const side of [1, -1] as const) {
-        strip(L.get('skirt')!, st, side * ht, topY, side * (ht + 0.6), -SKIRT_DEPTH, side > 0 ? 'left' : 'right', from, to);
-      }
+      // Bords : talus naturel raccordé au terrain, ou mur de soutènement (remblai haut, bord de l'eau, déblai profond).
+      if (!st[from]!.tunnel) for (const side of [1, -1] as const) roadSide(out, ctx, st, from, to, side, ht, topY);
       if (k.id === 'highway') {
         // Glissières de sécurité (poteaux + lisse) sur les accotements.
         for (const side of [1, -1] as const) {
@@ -301,6 +324,201 @@ function crossSection(out: BuildOutput, k: RoadKindDef, st: Station[]): void {
     } else {
       bridgeSection(out, k, st, from, to, ht, topY);
     }
+  }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Bords : talus, murs de soutènement, tunnels, culées                          */
+/* -------------------------------------------------------------------------- */
+
+/** Hauteur d'un parapet de mur de soutènement côté remblai (m). */
+const WALL_PARAPET = 0.85;
+/** Gabarit (hauteur libre) des tunnels (m). */
+const TUNNEL_HEIGHT = 6;
+
+interface Foot { x: number; y: number; z: number; kind: 'flat' | 'fill' | 'cut' | 'air' }
+
+/**
+ * Pied du talus partant du bord (x, y, z) vers l'extérieur (nx, nz) : remblai à 1/FILL_RATIO, déblai à 1/CUT_RATIO,
+ * jusqu'à la rencontre du terrain RENDU (déjà nivelé par la simulation). Le talus est prolongé de 0,5 m sous le
+ * terrain pour qu'aucun jour n'apparaisse au raccord.
+ */
+export function talusFoot(G: (x: number, z: number) => number, x: number, y: number, z: number, nx: number, nz: number): Foot {
+  const g0 = G(x + nx * 0.3, z + nz * 0.3);
+  if (Math.abs(g0 - y) < 0.1) return { x: x + nx * 0.8, y: Math.min(y, g0) - 0.3, z: z + nz * 0.8, kind: 'flat' };
+  const fill = g0 < y;
+  const slope = fill ? -1 / FILL_RATIO : 1 / CUT_RATIO;
+  const over = (d: number): boolean => { const yt = y + d * slope, g = G(x + nx * d, z + nz * d); return fill ? yt <= g : yt >= g; };
+  let prev = 0, hit = -1;
+  for (let d = 0.5; d <= MAX_TALUS_WIDTH + 2; d += 0.5) {
+    if (over(d)) { hit = d; break; }
+    prev = d;
+  }
+  if (hit < 0) {
+    const d = MAX_TALUS_WIDTH + 2;
+    return { x: x + nx * d, y: y + d * slope, z: z + nz * d, kind: 'air' };
+  }
+  let lo = prev, hi = hit;
+  for (let it = 0; it < 5; it++) { const m = (lo + hi) / 2; if (over(m)) hi = m; else lo = m; }
+  const d = hi + 0.5;
+  return { x: x + nx * d, y: y + d * slope - (fill ? 0.1 : -0.1), z: z + nz * d, kind: fill ? 'fill' : 'cut' };
+}
+
+/** Bord d'une plage terre [from, to] d'un côté : talus (herbe, sable au bord de l'eau, terre en déblai) ou mur. */
+function roadSide(out: BuildOutput, ctx: BuildContext, st: Station[], from: number, to: number, side: 1 | -1, ht: number, topY: number): void {
+  const L = out.layers;
+  const G = ctx.net.env.heightAt;
+  const wl = ctx.net.env.waterLevel;
+  const isWall = (s: Station): boolean => (side > 0 ? s.wallL : s.wallR);
+  const edge = (s: Station): [number, number, number] => {
+    const o = side * ht * s.miter;
+    return [s.x + s.nx * o, s.y + topY, s.z + s.nz * o];
+  };
+  const feet: (Foot | null)[] = [];
+  for (let i = from; i <= to; i++) {
+    const s = st[i]!;
+    if (isWall(s)) { feet.push(null); continue; }
+    const [ex, ey, ez] = edge(s);
+    feet.push(talusFoot(G, ex, ey, ez, s.nx * side, s.nz * side));
+  }
+  for (let i = from; i < to; i++) {
+    const a = st[i]!, b = st[i + 1]!;
+    const fa = feet[i - from], fb = feet[i + 1 - from];
+    if (!fa || !fb || fa.kind === 'air' || fb.kind === 'air') { wallPanel(out, ctx, a, b, side, ht, topY); continue; }
+    const cut = fa.kind === 'cut' || fb.kind === 'cut';
+    const beach = !cut && Math.min(fa.y, fb.y) < wl + 1.4;
+    const buf = L.get(cut ? 'skirt' : beach ? 'sand' : 'talus')!;
+    const [ax, ay, az] = edge(a), [bx, by, bz] = edge(b);
+    const i0 = buf.v(ax, ay, az), i1 = buf.v(bx, by, bz), i2 = buf.v(fb.x, fb.y, fb.z), i3 = buf.v(fa.x, fa.y, fa.z);
+    // Normale vers le haut (talus vu du ciel) ; le centre de la route sert de repère.
+    const P = buf.pos;
+    const e1x = P[i1 * 3]! - ax, e1y = P[i1 * 3 + 1]! - ay, e1z = P[i1 * 3 + 2]! - az;
+    const e2x = P[i3 * 3]! - ax, e2y = P[i3 * 3 + 1]! - ay, e2z = P[i3 * 3 + 2]! - az;
+    const ny = e1z * e2x - e1x * e2z;
+    void e1y; void e2y;
+    if (ny > 0) { buf.tri(i0, i1, i2); buf.tri(i0, i2, i3); } else { buf.tri(i0, i2, i1); buf.tri(i0, i3, i2); }
+  }
+}
+
+/** Talus sous un contour (coins de carrefour, impasses), orienté vers l'extérieur du centre (cx, cz). */
+function talusRing(out: BuildOutput, ctx: BuildContext, pts: readonly (readonly [number, number, number])[], cx: number, cz: number): void {
+  const G = ctx.net.env.heightAt, wl = ctx.net.env.waterLevel;
+  const feet = pts.map((o) => {
+    const ex = o[0] - cx, ez = o[2] - cz, l = Math.hypot(ex, ez) || 1;
+    const f = talusFoot(G, o[0], o[1], o[2], ex / l, ez / l);
+    // Contour sans pied trouvé (talus très haut) : on descend franchement jusqu'au terrain.
+    return f.kind === 'air' ? { x: o[0] + (ex / l) * 0.6, y: G(o[0], o[2]) - 0.6, z: o[2] + (ez / l) * 0.6, kind: 'fill' as const } : f;
+  });
+  for (let q = 0; q + 1 < pts.length; q++) {
+    const o0 = pts[q]!, o1 = pts[q + 1]!, f0 = feet[q]!, f1 = feet[q + 1]!;
+    const cut = f0.kind === 'cut' || f1.kind === 'cut';
+    const b = out.layers.get(cut ? 'skirt' : Math.min(f0.y, f1.y) < wl + 1.4 ? 'sand' : 'talus')!;
+    const a = b.v(o0[0], o0[1], o0[2]), c1 = b.v(o1[0], o1[1], o1[2]), c2 = b.v(f1.x, f1.y, f1.z), d = b.v(f0.x, f0.y, f0.z);
+    orientedTri(b, a, c1, c2, 1); orientedTri(b, a, c2, d, 1);
+  }
+}
+
+/** Panneau de mur de soutènement entre deux stations (remblai : parapet + parement ; déblai : parement + chaperon). */
+function wallPanel(out: BuildOutput, ctx: BuildContext, a: Station, b: Station, side: 1 | -1, ht: number, topY: number): void {
+  const c = out.layers.get('concrete')!;
+  const G = ctx.net.env.heightAt;
+  const wl = ctx.net.env.waterLevel;
+  const pts = [a, b].map((s) => {
+    const o = side * ht * s.miter;
+    const ex = s.x + s.nx * o, ez = s.z + s.nz * o;
+    const ox = s.nx * side, oz = s.nz * side;
+    const yE = s.y + topY;
+    const gOut = G(ex + ox * 1.2, ez + oz * 1.2);
+    return { ex, ez, ox, oz, yE, gOut };
+  });
+  const fill = pts[0]!.gOut + pts[1]!.gOut < pts[0]!.yE + pts[1]!.yE;
+  const T = 0.45;
+  const P = (p: typeof pts[number], d: number, y: number): number => c.v(p.ex + p.ox * d, y, p.ez + p.oz * d);
+  const quad = (q0: number, q1: number, q2: number, q3: number, want: 'out' | 'in' | 'up'): void => {
+    const pos = c.pos;
+    const ax = pos[q0 * 3]!, ay = pos[q0 * 3 + 1]!, az = pos[q0 * 3 + 2]!;
+    const e1x = pos[q1 * 3]! - ax, e1y = pos[q1 * 3 + 1]! - ay, e1z = pos[q1 * 3 + 2]! - az;
+    const e2x = pos[q3 * 3]! - ax, e2y = pos[q3 * 3 + 1]! - ay, e2z = pos[q3 * 3 + 2]! - az;
+    const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+    const p0 = pts[0]!;
+    const dot = want === 'up' ? ny : (nx * p0.ox + nz * p0.oz) * (want === 'out' ? 1 : -1);
+    if (dot >= 0) { c.tri(q0, q1, q2); c.tri(q0, q2, q3); } else { c.tri(q0, q2, q1); c.tri(q0, q3, q2); }
+  };
+  const [p0, p1] = pts as [typeof pts[number], typeof pts[number]];
+  if (fill) {
+    // Remblai / quai : parement extérieur jusqu'au terrain (ou au fond de l'eau), parapet au-dessus du bord.
+    const bot = (p: typeof p0): number => Math.min(p.gOut, wl) - 0.8;
+    const top0 = p0.yE + WALL_PARAPET, top1 = p1.yE + WALL_PARAPET;
+    quad(P(p0, T, bot(p0)), P(p1, T, bot(p1)), P(p1, T, top1), P(p0, T, top0), 'out');
+    quad(P(p0, 0, p0.yE - 0.05), P(p1, 0, p1.yE - 0.05), P(p1, 0, top1), P(p0, 0, top0), 'in');
+    quad(P(p0, 0, top0), P(p1, 0, top1), P(p1, T, top1), P(p0, T, top0), 'up');
+    // Lisse de couronnement (bande plus claire en saillie) : petite corniche.
+    quad(P(p0, T, top0 - 0.12), P(p1, T, top1 - 0.12), P(p1, T + 0.08, top1 - 0.12), P(p0, T + 0.08, top0 - 0.12), 'up');
+  } else {
+    // Déblai : parement côté route du bord jusqu'au-dessus du terrain, chaperon.
+    const top = (p: typeof p0): number => Math.max(p.gOut + 0.25, p.yE + 0.6);
+    quad(P(p0, 0, p0.yE - 0.3), P(p1, 0, p1.yE - 0.3), P(p1, 0, top(p1)), P(p0, 0, top(p0)), 'in');
+    quad(P(p0, 0, top(p0)), P(p1, 0, top(p1)), P(p1, T, top(p1)), P(p0, T, top(p0)), 'up');
+    quad(P(p0, T, top(p0) - 1.2), P(p1, T, top(p1) - 1.2), P(p1, T, top(p1)), P(p0, T, top(p0)), 'out');
+  }
+}
+
+/** Revêtement sombre des premiers mètres d'un tunnel (piédroits + voûte plate). */
+function tunnelLiner(out: BuildOutput, st: Station[], from: number, to: number, ht: number): void {
+  const t = out.layers.get('tunnel')!;
+  const w = ht + 0.3;
+  strip(t, st, w, -0.2, w, TUNNEL_HEIGHT, 'right', from, to);
+  strip(t, st, -w, -0.2, -w, TUNNEL_HEIGHT, 'left', from, to);
+  strip(t, st, -w, TUNNEL_HEIGHT, w, TUNNEL_HEIGHT, 'down', from, to);
+}
+
+/** Portail de tunnel à la station s (dir = sens vers l'intérieur du tunnel le long du tronçon). */
+function tunnelPortal(out: BuildOutput, ctx: BuildContext, s: Station, dir: number, ht: number): void {
+  const c = out.layers.get('concrete')!;
+  const G = ctx.net.env.heightAt;
+  const fx = s.tx * dir, fz = s.tz * dir;
+  const ow = ht + 0.3, W = ht + 2.6;
+  let top = s.y + TUNNEL_HEIGHT + 1.4;
+  for (const d of [2, 6, 10]) for (const o of [-ow, 0, ow]) top = Math.max(top, G(s.x + fx * d + s.nx * o, s.z + fz * d + s.nz * o) + 0.4);
+  top = Math.min(top, s.y + TUNNEL_HEIGHT + 5); // façade sobre : le relief recouvre le reste
+  const cx = s.x - fx * 0.5, cz = s.z - fz * 0.5; // façade légèrement en avant du portail
+  const jamb = (W - ow) / 2;
+  for (const sideO of [-(ow + jamb), ow + jamb]) {
+    box(c, cx + s.nx * sideO, cz + s.nz * sideO, fx, fz, 0.6, jamb, s.y - 1, top, 0);
+  }
+  box(c, cx, cz, fx, fz, 0.6, ow, s.y + TUNNEL_HEIGHT, top, 0);
+  // Bandeau (corniche) au sommet de la façade.
+  box(c, cx - fx * 0.15, cz - fz * 0.15, fx, fz, 0.8, W + 0.2, top - 0.35, top + 0.15, 0);
+  // Ailes : murets en biais qui retiennent le terrain de part et d'autre de la façade.
+  for (const side of [1, -1] as const) {
+    const bx = cx + s.nx * side * (W + 1.6) - fx * 2.2, bz = cz + s.nz * side * (W + 1.6) - fz * 2.2;
+    const wingTop = Math.max(s.y + 1.2, G(bx, bz) + 0.3);
+    const ax = s.nx * side * 0.35 - fx, az = s.nz * side * 0.35 - fz;
+    const l = Math.hypot(ax, az) || 1;
+    box(c, bx, bz, ax / l, az / l, 2.6, 0.3, s.y - 1, Math.min(top, wingTop + 1.5), 0);
+  }
+}
+
+/** Culée de pont à la station s (dir = sens vers le pont) : mur de front sous le tablier et murs en aile. */
+function abutment(out: BuildOutput, ctx: BuildContext, s: Station, dir: number, ht: number, topY: number): void {
+  const c = out.layers.get('concrete')!;
+  const G = ctx.net.env.heightAt;
+  const fx = s.tx * dir, fz = s.tz * dir;
+  const edge = ht + 0.25;
+  let bot = s.y;
+  for (const o of [-edge, 0, edge]) for (const d of [0, 1.5]) bot = Math.min(bot, G(s.x + s.nx * o + fx * d, s.z + s.nz * o + fz * d));
+  bot -= 1;
+  // Mur de front (sous le tablier, en retrait de 0,6 m côté terre).
+  box(c, s.x - fx * 0.6, s.z - fz * 0.6, fx, fz, 0.7, edge + 0.2, bot, s.y - DECK_THICK + 0.05, 0);
+  // Sommier saillant sous l'about du tablier.
+  box(c, s.x + fx * 0.2, s.z + fz * 0.2, fx, fz, 0.5, edge, s.y - DECK_THICK - 0.5, s.y - DECK_THICK, 0);
+  // Murs en aile, côté terre, du bord du tablier jusqu'au terrain.
+  for (const side of [1, -1] as const) {
+    const o = side * (ht + 0.2);
+    const wx = s.x + s.nx * o - fx * 3, wz = s.z + s.nz * o - fz * 3;
+    const g = Math.min(G(wx, wz), G(s.x + s.nx * o, s.z + s.nz * o));
+    box(c, wx, wz, fx, fz, 3.2, 0.25, Math.min(bot, g - 0.6), s.y + topY + 0.25, 0);
   }
 }
 
@@ -400,11 +618,26 @@ function bridgeSection(out: BuildOutput, k: RoadKindDef, st: Station[], from: nu
 }
 
 /** Piles de pont aux abscisses du profil. */
-function piers(out: BuildOutput, k: RoadKindDef, sm: SegSampler, waterLevel: number, sMin: number, sMax: number): void {
+/** Abscisse d'une pile décalée hors de l'emprise des routes croisées (viaduc au-dessus d'une route), ou null. */
+function clearPier(sm: SegSampler, s0: number, sMin: number, sMax: number, ht: number, roads?: (x: number, z: number, r: number) => boolean): number | null {
+  if (!roads) return s0;
+  for (const off of [0, 3, -3, 6, -6, 9, -9, 12, -12, 15, -15]) {
+    const s = s0 + off;
+    if (s < sMin || s > sMax) continue;
+    sm.at(s);
+    if (!sm.bridge) continue;
+    if (!roads(sm.x, sm.z, ht * 0.62 + 1.5)) return s;
+  }
+  return null;
+}
+
+function piers(out: BuildOutput, k: RoadKindDef, sm: SegSampler, waterLevel: number, sMin: number, sMax: number, avoidRoads?: (x: number, z: number, r: number) => boolean): void {
   const c = out.layers.get('concrete')!;
   const ht = totalWidth(k) / 2;
-  for (const s of sm.profile.piers) {
-    if (s < sMin || s > sMax) continue;
+  for (const s0 of sm.profile.piers) {
+    if (s0 < sMin || s0 > sMax) continue;
+    const s = clearPier(sm, s0, sMin, sMax, ht, avoidRoads);
+    if (s === null) continue;
     sm.at(s);
     const top = sm.y - DECK_THICK - 1.3;
     const bottom = Math.min(sm.ground, waterLevel - 1.5) - 1;
@@ -567,6 +800,7 @@ function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1:
     for (let i = 0; i <= n; i++) {
       const s = a + (len * i) / Math.max(1, n);
       sm.at(s);
+      if (sm.tunnel) continue;
       const onBridge = sm.bridge;
       const sideOff = onBridge ? ht - 0.1 : k.sidewalk > 0 ? hc + 0.75 : ht - 0.9;
       const both = big || k.id === 'pedestrian' || onBridge;
@@ -584,7 +818,7 @@ function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1:
     for (let i = 0; i <= n; i++) {
       const s = a + (len * (i + 0.5)) / (n + 1);
       sm.at(s);
-      if (sm.bridge) continue;
+      if (sm.bridge || sm.tunnel) continue;
       if (k.median === 'planted') put('tree', s, 0.001, curb, (segId * 1.7 + i * 2.3) % 6.28, 0.95 + ((segId + i * 7) % 5) * 0.06);
       if (k.id === 'boulevard') {
         for (const side of [1, -1]) put('tree', s, side * (ht - 1.4), curb, (segId + i * 1.3) % 6.28, 1 + ((i * 3 + segId) % 4) * 0.07);
@@ -626,29 +860,50 @@ export function buildSegment(out: BuildOutput, ctx: BuildContext, segId: number)
   const n = Math.max(1, Math.ceil((s1 - s0) / step));
   for (let i = 0; i <= n; i++) st.push(stationFrom(sm, s0 + ((s1 - s0) * i) / n));
   // Raccords : bascule nette terre/pont (on duplique la station frontière avec le drapeau de l'autre côté).
+  const transitions: { i: number; from: number; to: number }[] = [];
   for (let i = 1; i < st.length; i++) {
-    if (st[i]!.bridge !== st[i - 1]!.bridge) {
+    const sa = stateOf(st[i - 1]!), sbS = stateOf(st[i]!);
+    if (sa !== sbS) {
       const sb = (st[i]!.s + st[i - 1]!.s) / 2;
-      const m1 = stationFrom(sm, sb); m1.bridge = st[i - 1]!.bridge;
-      const m2 = stationFrom(sm, sb); m2.bridge = st[i]!.bridge;
+      const m1 = stationFrom(sm, sb); m1.bridge = st[i - 1]!.bridge; m1.tunnel = st[i - 1]!.tunnel;
+      const m2 = stationFrom(sm, sb); m2.bridge = st[i]!.bridge; m2.tunnel = st[i]!.tunnel;
       st.splice(i, 0, m1, m2);
+      transitions.push({ i: i + 1, from: sa, to: sbS });
       i += 2;
     }
   }
   if (ja.type === 'continuous') miterAt(ctx, ja, segId, st[0]!);
   if (jb.type === 'continuous') miterAt(ctx, jb, segId, st[st.length - 1]!);
-  crossSection(out, k, st);
+  crossSection(out, ctx, k, st);
+  const ht = totalWidth(k) / 2;
+  const topY = k.sidewalk > 0 ? k.curbHeight : k.surface === 'pavers' ? 0.04 : 0;
+  for (const tr of transitions) {
+    const s = st[tr.i]!;
+    // Portails de tunnel et culées de pont aux bascules terre / ouvrage.
+    if (tr.to === 2 && tr.from === 0) tunnelPortal(out, ctx, s, 1, ht);
+    else if (tr.from === 2 && tr.to === 0) tunnelPortal(out, ctx, s, -1, ht);
+    else if (tr.to === 1 && tr.from === 0) abutment(out, ctx, s, 1, ht, topY);
+    else if (tr.from === 1 && tr.to === 0) abutment(out, ctx, s, -1, ht, topY);
+  }
   if (k.median === 'planted') plantedMedian(out, k, sm, s0, s1, ja.type !== 'continuous', jb.type !== 'continuous');
-  piers(out, k, sm, net.env.waterLevel, s0, s1);
+  const avoidRoads = (x: number, z: number, r: number): boolean => {
+    for (const id of net.segmentsIn(x - r - 20, z - r - 20, x + r + 20, z + r + 20, [])) {
+      if (id === segId) continue;
+      const hit = net.segmentNear(x, z, r + totalWidth(ROAD_KINDS[net.kindOf(id)]) / 2, (o) => o !== id);
+      if (hit) return true;
+    }
+    return false;
+  };
+  piers(out, k, sm, net.env.waterLevel, s0, s1, avoidRoads);
   markings(out, ctx, k, sm, s0, s1, ja, jb);
   decor(out, k, sm, s0, s1, segId, ctx.avoid);
-  if (ja.type === 'end') deadEnd(out, k, st[0]!, -1);
-  if (jb.type === 'end') deadEnd(out, k, st[st.length - 1]!, 1);
+  if (ja.type === 'end') deadEnd(out, ctx, k, st[0]!, -1);
+  if (jb.type === 'end') deadEnd(out, ctx, k, st[st.length - 1]!, 1);
   return { s0, s1 };
 }
 
 /** Impasse : demi-disque de chaussée + trottoir en anneau + bordure + jupe. */
-function deadEnd(out: BuildOutput, k: RoadKindDef, s: Station, dir: number): void {
+function deadEnd(out: BuildOutput, ctx: BuildContext, k: RoadKindDef, s: Station, dir: number): void {
   const L = out.layers;
   const hc = carriagewayWidth(k) / 2, ht = totalWidth(k) / 2;
   const curb = k.curbHeight;
@@ -674,7 +929,16 @@ function deadEnd(out: BuildOutput, k: RoadKindDef, s: Station, dir: number): voi
       orientedQuad(b, A[i]!, A[i + 1]!, B[i + 1]!, B[i]!, want, s.x, s.y, s.z);
     }
   };
-  if (k.surface === 'pavers') { fan(L.get('pavers')!, 0.04, ht); band(L.get('skirt')!, ht, 0.04, ht + 0.6, -SKIRT_DEPTH, 2); return; }
+  const rim = (dy: number): void => {
+    const pts: [number, number, number][] = [];
+    for (let i = 0; i <= N; i++) {
+      const a = -Math.PI / 2 + (Math.PI * i) / N;
+      const u = Math.cos(a) * ht, v = Math.sin(a) * ht;
+      pts.push([s.x + fx * u + s.nx * v, s.y + dy, s.z + fz * u + s.nz * v]);
+    }
+    talusRing(out, ctx, pts, s.x, s.z);
+  };
+  if (k.surface === 'pavers') { fan(L.get('pavers')!, 0.04, ht); rim(0.04); return; }
   const asphalt = L.get(k.surface === 'asphalt_worn' ? 'asphaltWorn' : 'asphalt')!;
   fan(asphalt, 0, hc);
   if (k.sidewalk > 0) {
@@ -682,7 +946,7 @@ function deadEnd(out: BuildOutput, k: RoadKindDef, s: Station, dir: number): voi
     band(L.get('curb')!, hc, curb, hc + 0.2, curb, 1);
     band(L.get('sidewalk')!, hc + 0.2, curb, ht, curb, 1);
   }
-  band(L.get('skirt')!, ht, k.sidewalk > 0 ? curb : 0, ht + 0.6, -SKIRT_DEPTH, 2);
+  rim(k.sidewalk > 0 ? curb : 0);
 }
 
 /** Triangle orienté vers le haut (want=1) ou le bas (-1). */
@@ -726,8 +990,10 @@ export function buildJunction(out: BuildOutput, ctx: BuildContext, nodeId: numbe
     const sm = new SegSampler(net, arm.segId);
     const s = arm.atStart ? arm.setback : sm.length - arm.setback;
     sm.at(s);
-    // Normale « p » orientée vers le voisin suivant (angle croissant) : rotation +90° de la direction sortante.
-    return { x: sm.x, z: sm.z, y: sm.y, nx: -arm.dirZ, nz: arm.dirX, dx: arm.dirX, dz: arm.dirZ, arm, k: ROAD_KINDS[arm.kind] };
+    // Direction sortante RÉELLE au recul (tronçon courbe : anneau de giratoire, virage) : les bords de la dalle
+    // tombent exactement sur ceux du tronçon. Normale « p » orientée vers le voisin suivant (angle croissant).
+    const dx = arm.atStart ? sm.tx : -sm.tx, dz = arm.atStart ? sm.tz : -sm.tz;
+    return { x: sm.x, z: sm.z, y: sm.y, nx: -dz, nz: dx, dx, dz, arm, k: ROAD_KINDS[arm.kind] };
   });
   const allPavers = ends.every((e) => e.k.surface === 'pavers');
   const surf = allPavers ? L.get('pavers')! : ends.some((e) => e.k.surface === 'asphalt_worn') && ends.every((e) => e.k.surface !== 'asphalt') ? L.get('asphaltWorn')! : L.get('asphalt')!;
@@ -820,17 +1086,69 @@ export function buildJunction(out: BuildOutput, ctx: BuildContext, nodeId: numbe
         orientedQuad(walk, wa, wb, wc, wd, 1, 0, 0, 0);
       }
     }
-    // jupe extérieure
-    const sk = L.get('skirt')!;
-    for (let q = 0; q < Q; q++) {
-      const o0 = outer[q]!, o1 = outer[q + 1]!;
-      const ex0 = o0[0] - node.x, ez0 = o0[2] - node.z, l0 = Math.hypot(ex0, ez0) || 1;
-      const ex1 = o1[0] - node.x, ez1 = o1[2] - node.z, l1 = Math.hypot(ex1, ez1) || 1;
-      const a = sk.v(o0[0], o0[1], o0[2]), b = sk.v(o1[0], o1[1], o1[2]);
-      const cc = sk.v(o1[0] + (ex1 / l1) * 0.6, o1[1] - SKIRT_DEPTH - curbH, o1[2] + (ez1 / l1) * 0.6);
-      const d = sk.v(o0[0] + (ex0 / l0) * 0.6, o0[1] - SKIRT_DEPTH - curbH, o0[2] + (ez0 / l0) * 0.6);
-      orientedQuad(sk, a, b, cc, d, 2, node.x, node.y, node.z);
+    // talus extérieur (raccord au terrain)
+    talusRing(out, ctx, outer, node.x, node.z);
+  }
+  void CORNER_RADIUS; void SKIRT_DEPTH;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Giratoires                                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Îlot central d'un giratoire (centre, rayon de l'axe de l'anneau) : pelouse bombée qui rejoint le trottoir
+ * intérieur de l'anneau, couronne de pavés, arbres (un sur le petit modèle, trois sur le grand).
+ */
+export function buildRoundaboutIsland(out: BuildOutput, ctx: BuildContext, cx: number, cz: number, r: number): void {
+  const k = ROAD_KINDS.oneway;
+  const ri = r - totalWidth(k) / 2 + 0.02;
+  if (ri < 2) return;
+  const G = ctx.net.env.heightAt;
+  const N = 40;
+  const grass = out.layers.get('grass')!, pav = out.layers.get('pavers')!;
+  const edge: [number, number, number][] = [];
+  let sum = 0;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const x = cx + Math.cos(a) * ri, z = cz + Math.sin(a) * ri;
+    // Le terrain sous l'anneau est nivelé 0,2 m sous la chaussée : bord de l'îlot au niveau du trottoir.
+    const y = G(x, z) + 0.2 + k.curbHeight;
+    edge.push([x, y, z]);
+    sum += y;
+  }
+  const yMean = sum / N;
+  const yc = Math.max(yMean, G(cx, cz) + 0.2) + Math.min(1.2, ri * 0.06);
+  const band = 1.4;
+  // Couronne de pavés (franchissable) puis pelouse en légère bosse.
+  const inner = edge.map(([x, y, z]): [number, number, number] => {
+    const dx = x - cx, dz = z - cz, l = Math.hypot(dx, dz) || 1;
+    return [x - (dx / l) * band, y + 0.06, z - (dz / l) * band];
+  });
+  for (let i = 0; i < N; i++) {
+    const j = (i + 1) % N;
+    const a = pav.v(...edge[i]!), b = pav.v(...edge[j]!), c = pav.v(...inner[j]!), d = pav.v(...inner[i]!);
+    orientedTri(pav, a, b, c, 1); orientedTri(pav, a, c, d, 1);
+  }
+  const mid = inner.map(([x, y, z]): [number, number, number] => [cx + (x - cx) * 0.55, y * 0.4 + yc * 0.6, cz + (z - cz) * 0.55]);
+  const center = grass.v(cx, yc, cz);
+  for (let i = 0; i < N; i++) {
+    const j = (i + 1) % N;
+    const a = grass.v(...inner[i]!), b = grass.v(...inner[j]!), c = grass.v(...mid[j]!), d = grass.v(...mid[i]!);
+    orientedTri(grass, a, b, c, 1); orientedTri(grass, a, c, d, 1);
+    orientedTri(grass, center, grass.v(...mid[i]!), grass.v(...mid[j]!), 1);
+  }
+  // Plantations.
+  const trees = ri > 12 ? [[0, 0], [ri * 0.38, 0.6], [ri * 0.38, 2.7], [ri * 0.38, 4.8]] : [[0, 0]];
+  trees.forEach(([d, a], n) => {
+    const x = cx + Math.cos(a!) * d!, z = cz + Math.sin(a!) * d!;
+    out.decor.push({ kind: 'tree', x, y: (G(x, z) + yc) / 2 + 0.1, z, rot: (n * 1.9) % 6.28, scale: n === 0 ? 1.15 : 0.9 });
+  });
+  if (ri > 8) {
+    for (let n = 0; n < 6; n++) {
+      const a = (n / 6) * Math.PI * 2 + 0.3, d = ri - band - 1.6;
+      const x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+      out.decor.push({ kind: 'planter', x, y: yMean + 0.05, z, rot: -a, scale: 1.1 });
     }
   }
-  void CORNER_RADIUS;
 }

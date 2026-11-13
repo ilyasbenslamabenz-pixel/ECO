@@ -512,6 +512,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .road-card { width: 140px; }
   .tile { width: 92px; min-height: 88px; }
   #tool-options { border-radius: 14px; flex-wrap: wrap; justify-content: center; padding: 6px; }
+  .tool-actions { flex-wrap: wrap; justify-content: center; max-width: 100%; }
   .tool-hint { flex-basis: 100%; text-align: center; white-space: normal; }
   #objectives { display: none !important; }
 

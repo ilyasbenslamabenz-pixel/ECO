@@ -1,0 +1,124 @@
+{
+  "seed": 7,
+  "views": [
+    {
+      "name": "riviere",
+      "file": "apres-riviere.jpg",
+      "x": 286,
+      "z": -256,
+      "dist": 130,
+      "pitch": 0.5,
+      "yaw": 0.6
+    },
+    {
+      "name": "riviere-pont",
+      "file": "apres-riviere-pont.jpg",
+      "x": 316,
+      "z": -256,
+      "dist": 70,
+      "pitch": 0.3,
+      "yaw": 2.0707963267948966
+    },
+    {
+      "name": "tunnel",
+      "file": "apres-tunnel.jpg",
+      "x": -752,
+      "z": -821,
+      "dist": 75,
+      "pitch": 0.35,
+      "yaw": 3.641592653589793
+    },
+    {
+      "name": "tunnel-sortie",
+      "file": "apres-tunnel-sortie.jpg",
+      "x": -752,
+      "z": -651,
+      "dist": 75,
+      "pitch": 0.35,
+      "yaw": 0.5
+    }
+  ],
+  "builds": [
+    {
+      "label": "rivière : rue sur la berge",
+      "points": [
+        186,
+        -242,
+        326,
+        -242
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          1
+        ],
+        "cost": 8400
+      }
+    },
+    {
+      "label": "rivière : rue qui traverse (pont)",
+      "points": [
+        316,
+        -195,
+        316,
+        -307
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          4,
+          5
+        ],
+        "cost": 6720
+      }
+    },
+    {
+      "label": "tunnel : rue −16 m sous la colline",
+      "points": [
+        -752,
+        -846,
+        -752,
+        -626
+      ],
+      "extra": {
+        "elevation": -16
+      },
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          6
+        ],
+        "cost": 60000
+      }
+    }
+  ],
+  "riviere": {
+    "cx": 256,
+    "cz": -256,
+    "ux": 1,
+    "uz": 0,
+    "off": 6,
+    "off2": 6
+  },
+  "tunnel": {
+    "x": -752,
+    "z": -736,
+    "dx": 0,
+    "dz": 1,
+    "prom": 32.146873474121094,
+    "score": 32.10981750488281
+  },
+  "tunnelEdges": [
+    {
+      "id": 6,
+      "runs": [
+        5,
+        44
+      ],
+      "n": 56
+    }
+  ],
+  "errors": []
+}

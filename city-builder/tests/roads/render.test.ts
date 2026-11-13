@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { RoadNetwork, commitRoadPlan, planRoad, networkRecords, type ProfileEnv, type RoadRequest } from '../../src/sim/roads';
-import { LAYERS, buildJunction, buildSegment, newOutput } from '../../src/render/roads/builder';
+import { LAYERS, buildJunction, buildRoundaboutIsland, buildSegment, newOutput, talusFoot } from '../../src/render/roads/builder';
+import { commitRoundabout, planRoundabout } from '../../src/sim/roads';
 import { RoadNetworkRenderer } from '../../src/render/roads/renderer';
 
 const flat: ProfileEnv = { heightAt: () => 10, waterLevel: 2 };
@@ -40,7 +41,8 @@ test('Maillage : couches attendues, aucune valeur invalide, surfaces de roulemen
   build(net, R('pedestrian', 100, 0, 100, 120));
   build(net, R('oneway', -100, -150, -100, 0));
   const out = meshAll(net);
-  for (const l of ['asphalt', 'sidewalk', 'curb', 'grass', 'paint', 'pavers', 'skirt'] as const) {
+  // Bords : talus raccordé au terrain (la jupe sombre d'origine est remplacée par le talus du module routes).
+  for (const l of ['asphalt', 'sidewalk', 'curb', 'grass', 'paint', 'pavers', 'talus'] as const) {
     assert.ok(out.layers.get(l)!.idx.length > 0, `couche ${l} non vide`);
   }
   for (const l of LAYERS) {
@@ -48,7 +50,7 @@ test('Maillage : couches attendues, aucune valeur invalide, surfaces de roulemen
     assert.ok(b.pos.every(Number.isFinite), `${l} : coordonnées finies`);
     assert.ok(b.idx.every((i) => i >= 0 && i < b.vertexCount), `${l} : indices valides`);
   }
-  for (const l of ['asphalt', 'paint', 'pavers', 'sidewalk', 'grass'] as const) {
+  for (const l of ['asphalt', 'paint', 'pavers', 'sidewalk', 'grass', 'talus'] as const) {
     const b = out.layers.get(l)!;
     let down = 0, flatTris = 0;
     for (let i = 0; i < b.idx.length; i += 3) {
@@ -178,4 +180,63 @@ test('Enregistrements étendus : le rendu reprend le profil validé par la simul
     assert.deepEqual(p.piers.map((v) => Math.round(v)), q.piers.map((v) => Math.round(v)));
   }
   rr.dispose();
+});
+
+test('Relief : talus raccordé au terrain, mur au bord de l\'eau, portails de tunnel, culées, îlot de giratoire', () => {
+  // Pied du talus : remblai de 2 m sur sol plat → pied ~4 m plus loin, sous le terrain.
+  const f = talusFoot(() => 10, 0, 12, 0, 1, 0);
+  assert.equal(f.kind, 'fill');
+  assert.ok(f.x > 3.5 && f.x < 5.5 && f.y <= 10, JSON.stringify(f));
+  const c = talusFoot(() => 13, 0, 10, 0, 1, 0);
+  assert.equal(c.kind, 'cut');
+  // Viaduc : piles et culées en béton, talus aux rampes ; pile jamais sur la route du dessous.
+  const net = new RoadNetwork(flat);
+  build(net, R('street', -150, 0, 150, 0));
+  const r = planRoad(net, { ...R('street', 0, -150, 0, 150), elevation: 8 });
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  const [via] = commitRoadPlan(net, r.plan).segmentIds;
+  const out = newOutput();
+  buildSegment(out, { net, junctions: new Map() }, via!);
+  assert.ok(out.layers.get('concrete')!.idx.length > 0, 'tablier, piles, culées');
+  const con = out.layers.get('concrete')!;
+  // Aucun sommet de pile (sous le tablier) dans l'emprise de la rue croisée (|z| < 6,2 m, |x| < 2 m).
+  let onRoad = 0;
+  for (let i = 0; i < con.pos.length; i += 3) if (Math.abs(con.pos[i + 2]!) < 6 && Math.abs(con.pos[i]!) < 2 && con.pos[i + 1]! < 12) onRoad++;
+  assert.equal(onRoad, 0, 'pile sur la route croisée');
+  // Tunnel : revêtement sombre et portails.
+  const hill: ProfileEnv = { heightAt: (x, z) => 10 + 40 * Math.exp(-(x * x + z * z) / (2 * 70 * 70)), waterLevel: 2 };
+  const tn = new RoadNetwork(hill);
+  const t = planRoad(tn, { ...R('street', -200, 0, 200, 0), elevation: -12 });
+  assert.ok(t.ok);
+  if (!t.ok) return;
+  const [tid] = commitRoadPlan(tn, t.plan).segmentIds;
+  const to = newOutput();
+  buildSegment(to, { net: tn, junctions: new Map() }, tid!);
+  assert.ok(to.layers.get('tunnel')!.idx.length > 0, 'revêtement de tunnel');
+  assert.ok(to.layers.get('concrete')!.idx.length > 0, 'portails');
+  // Au milieu du tunnel, aucune chaussée dessinée (sous le terrain).
+  const asp = to.layers.get('asphalt')!;
+  let inside = 0;
+  for (let i = 0; i < asp.pos.length; i += 3) if (Math.abs(asp.pos[i]!) < 25) inside++;
+  assert.equal(inside, 0);
+  // Quai : remblai au bord de l'eau → mur de soutènement (béton) au lieu d'un talus.
+  const sea: ProfileEnv = { heightAt: (_x, z) => (z > 7 ? 0 : 2.45), waterLevel: 2 };
+  const qn = new RoadNetwork(sea);
+  const [q] = build(qn, R('street', -80, 0, 80, 0));
+  const qp = qn.profile(q!);
+  assert.ok(qp.wallL!.some((v) => v === 1) || qp.wallR!.some((v) => v === 1), 'mur côté mer');
+  // Giratoire : îlot engazonné + arbres.
+  const rn = new RoadNetwork(flat);
+  build(rn, R('street', -150, 0, 150, 0));
+  build(rn, R('street', 0, -150, 0, 150));
+  const rb = planRoundabout(rn, { x: 0, z: 0, size: 'large' });
+  assert.ok(rb.ok);
+  if (!rb.ok) return;
+  commitRoundabout(rn, rb.plan);
+  const io = newOutput();
+  buildRoundaboutIsland(io, { net: rn, junctions: new Map() }, 0, 0, 28);
+  assert.ok(io.layers.get('grass')!.idx.length > 0 && io.decor.some((d) => d.kind === 'tree'));
+  const whole = meshAll(rn);
+  for (const l of LAYERS) assert.ok(whole.layers.get(l)!.pos.every(Number.isFinite), l);
 });

@@ -378,7 +378,8 @@ export class BuildBar {
       const v = m.variant >= 0 ? m.asset.variants[m.variant] : undefined;
       return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m`;
     }
-    if (m.tool === 'road') return `${ROAD_KINDS[m.roadType].nameFr} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'clic départ, clic arrivée'} — clic droit : étape précédente`;
+    if (m.tool === 'road' && m.draft.mode === 'roundabout') return `${m.draft.roundaboutSize === 'large' ? 'Grand giratoire' : 'Giratoire'} — cliquez sur un carrefour ou sur une route`;
+    if (m.tool === 'road') return `${ROAD_KINDS[m.roadType].nameFr}${m.draft.elevation ? ` · ${m.draft.elevation > 0 ? '+' : ''}${m.draft.elevation} m` : ''} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'clic départ, clic arrivée'} — clic droit : étape précédente`;
     if (m.tool === 'bulldoze') return 'Démolir : cliquez un bâtiment ou un tronçon de route (remboursement 25 %)';
     return '';
   }
@@ -423,6 +424,15 @@ export class BuildBar {
     } else if (t === 'road') {
       act('Droite', 'Tracé droit', () => m.setRoadMode('straight'), m.draft.mode === 'straight');
       act('Courbe', 'Tracé courbe', () => m.setRoadMode('curve'), m.draft.mode === 'curve');
+      // Hauteur du tracé (pas de 4 m) : viaduc / passage supérieur au-dessus, tranchée / tunnel en dessous.
+      const h = m.draft.elevation;
+      act('▼', 'Descendre le tracé de 4 m (tranchée, tunnel)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(-1); });
+      act(h === 0 ? '0 m' : `${h > 0 ? '+' : ''}${h} m`, 'Hauteur du tracé par rapport au terrain', () => { while (m.draft.elevation !== 0) m.setRoadElevation(m.draft.elevation > 0 ? -1 : 1); }, h !== 0);
+      act('▲', 'Monter le tracé de 4 m (viaduc, passage supérieur)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(1); });
+      // Giratoire : un bouton à trois états (petit Ø 36 m → grand Ø 56 m → retour au tracé droit).
+      const rb = m.draft.mode === 'roundabout' ? m.draft.roundaboutSize : null;
+      act(rb === 'large' ? 'Grand giratoire' : 'Giratoire', 'Giratoire posé d\'un clic sur un carrefour ou une route (cliquer à nouveau : grand modèle, puis tracé droit)',
+        () => { if (rb === null) m.setRoundaboutSize('small'); else if (rb === 'small') m.setRoundaboutSize('large'); else m.setRoadMode('straight'); }, rb !== null);
     }
     this.hint.textContent = this.hintText();
     act('Terminer', 'Revenir à la sélection (Échap)', () => { this.d.tools.setTool('select'); this.closeDrawer(); });

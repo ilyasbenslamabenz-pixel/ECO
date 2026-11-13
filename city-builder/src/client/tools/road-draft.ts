@@ -11,7 +11,12 @@ import { TILE_SIZE } from '../../shared/constants';
 import { polylineLength, sampleBezier2, snapAngle } from './geometry';
 import type { WorldMirror } from './mirror';
 
-export type RoadMode = 'straight' | 'curve';
+/** Tracé droit, courbe, ou giratoire posé d'un clic sur un carrefour / une route (module routes). */
+export type RoadMode = 'straight' | 'curve' | 'roundabout';
+
+/** Pas et borne des hauteurs imposées (boutons ▲ / ▼ ; validé par la simulation : ±40 m). */
+export const ELEVATION_STEP = 4;
+export const MAX_ELEVATION = 40;
 
 export interface SnapPoint {
   x: number;
@@ -136,12 +141,23 @@ export class RoadDraft {
   control: SnapPoint | null = null;
   /** Point courant sous le curseur (déjà accroché). */
   hover: SnapPoint | null = null;
+  /** Hauteur imposée (m) : > 0 viaduc / passage supérieur, < 0 tranchée / tunnel. Conservée d'un tracé à l'autre. */
+  elevation = 0;
+  /** Taille du giratoire en mode 'roundabout'. */
+  roundaboutSize: 'small' | 'large' = 'small';
+
+  /** ▲ (+1) / ▼ (−1) : hauteur imposée par pas de 4 m. */
+  raise(dir: 1 | -1): number {
+    this.elevation = Math.max(-MAX_ELEVATION, Math.min(MAX_ELEVATION, this.elevation + dir * ELEVATION_STEP));
+    return this.elevation;
+  }
 
   reset(): void { this.phase = 'idle'; this.start = null; this.control = null; }
 
   /** Clic principal. Renvoie 'build' quand le tracé est complet et doit être envoyé. */
   click(p: SnapPoint): 'build' | 'continue' {
     this.hover = p;
+    if (this.mode === 'roundabout') return 'build';
     if (this.phase === 'idle') { this.start = p; this.phase = 'start'; return 'continue'; }
     if (this.phase === 'start' && this.mode === 'curve') {
       if (this.start && Math.hypot(p.x - this.start.x, p.z - this.start.z) < 4) return 'continue';
@@ -164,7 +180,7 @@ export class RoadDraft {
   points(): number[] | null {
     const a = this.start;
     const b = this.hover;
-    if (!a || !b || this.phase === 'idle') return null;
+    if (!a || !b || this.phase === 'idle' || this.mode === 'roundabout') return null;
     if (Math.hypot(b.x - a.x, b.z - a.z) < 4) return null;
     if (this.mode === 'curve') {
       const c = this.control;
@@ -180,11 +196,12 @@ export class RoadDraft {
    * Arguments de la commande buildRoad : en mode courbe, UNE vraie courbe (2 extrémités + point de
    * contrôle quadratique, convertie en Bézier cubique par la simulation) ; sinon un tronçon droit.
    */
-  command(): { points: number[]; control?: [number, number] } | null {
+  command(): { points: number[]; control?: [number, number]; elevation?: number } | null {
     const a = this.start;
     const b = this.hover;
-    if (!a || !b || this.phase === 'idle' || Math.hypot(b.x - a.x, b.z - a.z) < 4) return null;
-    if (this.mode === 'curve' && this.control) return { points: [a.x, a.z, b.x, b.z], control: [this.control.x, this.control.z] };
-    return { points: [a.x, a.z, b.x, b.z] };
+    if (!a || !b || this.phase === 'idle' || this.mode === 'roundabout' || Math.hypot(b.x - a.x, b.z - a.z) < 4) return null;
+    const elev = this.elevation ? { elevation: this.elevation } : {};
+    if (this.mode === 'curve' && this.control) return { points: [a.x, a.z, b.x, b.z], control: [this.control.x, this.control.z], ...elev };
+    return { points: [a.x, a.z, b.x, b.z], ...elev };
   }
 }

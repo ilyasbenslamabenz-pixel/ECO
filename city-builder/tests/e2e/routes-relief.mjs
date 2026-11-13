@@ -39,7 +39,8 @@ try {
     await page.waitForTimeout(600);
     return r;
   };
-  const shoot = async (name, x, z, dist, pitch, yaw) => {
+  const shoot = async (name, x, z, dist, pitch, yaw, noVeg = false) => {
+    await page.evaluate((v) => window.__aube.setLayerVisible('vegetation', v), !noVeg);
     await page.evaluate(([a, b, d, p, y]) => window.__aube.lookAt(a, b, d, p, y), [x, z, dist, pitch, yaw]);
     await page.evaluate(() => window.__aube.renderNow(2, 0.5));
     await page.waitForTimeout(3500);
@@ -78,7 +79,23 @@ try {
     if (best) {
       const { x, z, dx, dz } = best;
       await build('plage : rue le long du rivage', [x + dz * 64, z - dx * 64, x - dz * 64, z + dx * 64]);
+      // Quai : rue au ras de l'eau (le pied du talus tomberait dans la mer : mur).
+      // Rue de quai : le long du rivage, à quelques mètres de l'eau (extrémités au sec), plus loin sur la côte.
+      let quai = null;
+      for (const along of [170, -170, 260, -260, 120, -120]) {
+        const ox = x - dz * along, oz = z + dx * along;
+        let q = 0;
+        for (let d = -30; d < 70; d += 2) { if ((await H(ox + dx * d, oz + dz * d)) < 2.1) { q = d; break; } }
+        if (!q) continue;
+        const qx = ox + dx * (q - 10), qz = oz + dz * (q - 10);
+        const ends = [[qx + dz * 40, qz - dx * 40], [qx - dz * 40, qz + dx * 40]];
+        if ((await H(ends[0][0], ends[0][1])) < 2.6 || (await H(ends[1][0], ends[1][1])) < 2.6) continue;
+        const r = await build('plage : rue de quai au ras de l\'eau', [...ends[0], ...ends[1]]);
+        if (r.ok) { quai = { qx, qz }; break; }
+      }
+      const qx = quai?.qx ?? x, qz = quai?.qz ?? z;
       await shoot('plage', x, z, 95, 0.42, Math.atan2(-dx, -dz) + 0.5);
+      await shoot('plage-quai', qx, qz, 60, 0.32, Math.atan2(-dx, -dz) + 0.7);
     }
   }
   // Bord de rivière : rue parallèle à un bloc de rivière, puis rue qui la traverse (pont).
@@ -100,13 +117,23 @@ try {
       const nx = -uz, nz = ux;
       // berge : premier point sec à partir du centre, côté +n
       let off = 0;
-      for (let d = 6; d < 80; d += 2) { if ((await H(cx + nx * d, cz + nz * d)) > 3.2) { off = d; break; } }
+      for (let d = 6; d < 80; d += 2) { if ((await H(cx + nx * d, cz + nz * d)) > 3.6) { off = d; break; } }
       if (!off) continue;
+      let off2 = 0;
+      for (let d = 6; d < 80; d += 2) { if ((await H(cx - nx * d, cz - nz * d)) > 3.6) { off2 = d; break; } }
+      if (!off2) continue;
       const bx = cx + nx * (off + 8), bz = cz + nz * (off + 8);
       const r1 = await build('rivière : rue sur la berge', [bx - ux * 70, bz - uz * 70, bx + ux * 70, bz + uz * 70]);
-      const r2 = await build('rivière : rue qui traverse (pont)', [cx + nx * (off + 60) + ux * 40, cz + nz * (off + 60) + uz * 40, cx - nx * (off + 60) + ux * 40, cz - nz * (off + 60) + uz * 40]);
-      report.riviere = { cx, cz, ux, uz, off };
-      if (r1.ok || r2.ok) { await shoot('riviere', cx + ux * 20, cz + uz * 20, 120, 0.5, Math.atan2(nx, nz) + 0.6); done = true; break; }
+      const r2 = await build('rivière : rue qui traverse (pont)', [cx + nx * (off + 55) + ux * 60, cz + nz * (off + 55) + uz * 60, cx - nx * (off2 + 45) + ux * 60, cz - nz * (off2 + 45) + uz * 60]);
+      report.riviere = { cx, cz, ux, uz, off, off2 };
+      if (r1.ok || r2.ok) {
+        await shoot('riviere', cx + ux * 30, cz + uz * 30, 130, 0.5, Math.atan2(nx, nz) + 0.6);
+        if (r2.ok) {
+          const mx = cx + ux * 60 + nx * (off - off2) / 2, mz = cz + uz * 60 + nz * (off - off2) / 2;
+          await shoot('riviere-pont', mx, mz, 70, 0.3, Math.atan2(ux, uz) + 0.5, true);
+        }
+        done = true; break;
+      }
     }
     if (!done) console.log('rivière : aucun site trouvé');
   }
@@ -126,7 +153,7 @@ try {
     if (best) {
       const l = Math.hypot(best.gx, best.gz), tx = -best.gz / l, tz = best.gx / l;
       await build('colline : rue à flanc de coteau', [best.x - tx * 70, best.z - tz * 70, best.x + tx * 70, best.z + tz * 70]);
-      await shoot('colline', best.x, best.z, 100, 0.38, Math.atan2(best.gx, best.gz) + Math.PI + 0.5);
+      await shoot('colline', best.x, best.z, 100, 0.38, Math.atan2(best.gx, best.gz) + Math.PI + 0.5, true);
     }
   }
   // Terrain plat pour viaduc et rond-point.
@@ -158,21 +185,27 @@ try {
     // Colline marquée : point haut entouré de terrain plus bas à ±100 m.
     let best = null;
     for (const [x, z, h] of grid) {
-      if (Math.abs(x) > 700 || Math.abs(z) > 700) continue;
-      if (used.some((p) => Math.hypot(p.x - x, p.z - z) < 220)) continue;
+      if (Math.abs(x) > 760 || Math.abs(z) > 760 || h < 12) continue;
+      if (used.some((p) => Math.hypot(p.x - x, p.z - z) < 200)) continue;
       for (const [dx, dz] of [[1, 0], [0, 1]]) {
-        const a = g(x - dx * 96, z - dz * 96), b = g(x + dx * 96, z + dz * 96);
-        if (a === undefined || b === undefined || a < 3 || b < 3) continue;
+        const a = g(x - dx * 112, z - dz * 112), b = g(x + dx * 112, z + dz * 112);
+        if (a === undefined || b === undefined || a < 3.5 || b < 3.5) continue;
         const prom = h - Math.max(a, b);
-        if (prom < 12 || Math.abs(a - b) > 8) continue;
-        if (!best || prom > best.prom) best = { x, z, dx, dz, prom };
+        if (prom < 8) continue;
+        const score = prom - Math.abs(a - b) * 0.5;
+        if (!best || score > best.score) best = { x, z, dx, dz, prom, score };
       }
     }
     report.tunnel = best;
     if (best) {
       const { x, z, dx, dz } = best;
-      await build('tunnel : rue −16 m sous la colline', [x - dx * 110, z - dz * 110, x + dx * 110, z + dz * 110], { elevation: -16 });
-      await shoot('tunnel', x - dx * 100, z - dz * 100, 120, 0.45, Math.atan2(dx, dz) + Math.PI + 0.5);
+      let r = await build('tunnel : rue −16 m sous la colline', [x - dx * 110, z - dz * 110, x + dx * 110, z + dz * 110], { elevation: -16 });
+      if (!r.ok) r = await build('tunnel : rue −8 m sous la colline', [x - dx * 110, z - dz * 110, x + dx * 110, z + dz * 110], { elevation: -8 });
+      const rep = await page.evaluate(async () => (await window.__aube.send('save', { slot: 'rr' })).data.roads.edges.filter((e) => e.tunnelRuns).map((e) => ({ id: e.id, runs: e.tunnelRuns, n: e.profile.length })));
+      report.tunnelEdges = rep;
+      console.log('tunnels', JSON.stringify(rep));
+      await shoot('tunnel', x - dx * 85, z - dz * 85, 75, 0.35, Math.atan2(dx, dz) + Math.PI + 0.5, true);
+      await shoot('tunnel-sortie', x + dx * 85, z + dz * 85, 75, 0.35, Math.atan2(dx, dz) + 0.5, true);
     }
   }
   if (want('rondpoint')) {
