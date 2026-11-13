@@ -51,15 +51,16 @@ export interface SeasonVisuals {
 
 /**
  * Paramètres visuels d'un jour de l'année (lissés, sans saut au changement de mois). Climat tempéré d'Europe
- * de l'Ouest (plateau suisse / moyen Atlas) : débourrement fin mars, pleine frondaison mai-septembre,
- * coloration de fin septembre à mi-novembre, chute des feuilles en novembre, arbres nus de décembre à mars.
+ * de l'Ouest (plateau suisse / moyen Atlas) : débourrement début mars, feuillage complet fin mars (une partie
+ * commencée le 1er avril s'ouvre donc sur des arbres verts), pleine frondaison mai-septembre, coloration de fin
+ * septembre à mi-novembre, chute des feuilles en novembre, arbres nus de décembre à février.
  */
 export function seasonVisuals(doyIn: number): SeasonVisuals {
   const d = (((doyIn % 360) + 360) % 360);
   // Années « dépliées » pour les bosses qui chevauchent le 1er janvier.
   const dw = d < 180 ? d + 360 : d;
   const autumn = bump(d, 245, 285, 318, 338);
-  const bare = Math.max(bump(dw, 300, 335, 440, 465), 0);
+  const bare = Math.max(bump(dw, 300, 335, 405, 440), 0);
   const spring = bump(d, 75, 100, 135, 165);
   const dryGrass = Math.max(bump(d, 180, 215, 240, 262) * 0.3, bump(d, 285, 310, 330, 345) * 0.5);
   const dormant = bump(dw, 320, 345, 420, 445);
