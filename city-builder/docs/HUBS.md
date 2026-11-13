@@ -10,7 +10,7 @@ Propriété de la branche `claude/p2c-port-aeroport`. Demandes hors périmètre 
 | Rendu | `src/render/hubs/scene.ts` (`HubsRenderer`), plugin `src/render/plugins/hubs.ts` |
 | Interface | `src/ui/panels/transports.ts` (panneau « Transports », id `hubs`) ; onglet « Transports » du tiroir Services |
 | Outils / assets | `tools/transport/**` (générateur 35 modèles, `catalog.ts` : fusion + entrées de construction), `assets/models/transport/**` |
-| Tests | `tests/hubs/hubs.test.ts` (15 tests), `tests/hubs/captures.mjs` (`npm run hubs:captures`) |
+| Tests | `tests/hubs/hubs.test.ts` (16 tests, dont port fluvial), `tests/hubs/captures.mjs` (`npm run hubs:captures`) |
 
 ## 1. Pôles constructibles (catalogue, catégorie `transport`, tag `hub`)
 

@@ -384,3 +384,19 @@ test('OUTIL DE POSE : Aéroport posé via le catalogue (aperçu rouge/vert par l
   assert.equal(t.sim.buildings.count, before, 'aucun bâtiment posé');
   assert.ok(notes.some((n) => /Construction refusée : Servitude aéronautique/.test(n)));
 });
+
+test('port fluvial : accepté au bord d\'une rivière navigable (carte sans mer), navire à quai', () => {
+  const t = hubsSim({ seed: 1, terrain: { hydrology: 'aucune', rivers: 0.6, relief: 0.15 } });
+  const site = findSite(t.sim, 'port_commerce', 32);
+  assert.ok(site, 'emplacement fluvial trouvé');
+  assert.ok(place(t.sim, 'port_commerce', site.x, site.z, site.rot).ok);
+  const rec = t.hubs.system.hubs[0]!.rec;
+  assert.ok(Number.isFinite(rec.waterY) && rec.y >= rec.waterY + 2, 'quai au-dessus de la ligne de flottaison estimée');
+  const sys = t.hubs.system;
+  let docked = false;
+  for (let i = 0; i < 4000 && !docked; i++) {
+    t.sim.tick(1);
+    docked = sys.movements.some((mv) => movementPose('port_commerce', mv, sys.phys)?.phase === 'a_quai');
+  }
+  assert.ok(docked, 'un navire accoste au port fluvial');
+});
