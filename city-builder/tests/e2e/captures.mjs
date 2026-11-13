@@ -87,11 +87,15 @@ async function districtCenters(page) {
     }
     const res = {};
     for (const [d, list] of Object.entries(acc)) {
-      // médiane (robuste aux bâtiments isolés) puis bâtiment le plus proche : la vue tombe sur le quartier
-      const xs = list.map((b) => b.x).sort((a, b) => a - b), zs = list.map((b) => b.z).sort((a, b) => a - b);
-      const mx = xs[xs.length >> 1], mz = zs[zs.length >> 1];
-      const c = list.reduce((best, b) => (Math.hypot(b.x - mx, b.z - mz) < Math.hypot(best.x - mx, best.z - mz) ? b : best), list[0]);
-      res[d] = { x: c.x, z: c.z, n: list.length };
+      // cœur du quartier : bâtiment ayant le plus de voisins du même quartier à moins de 70 m (un quartier
+      // éclaté en plusieurs îlots ne donne pas un barycentre tombé ailleurs), puis moyenne de ces voisins
+      let best = list[0], bestN = -1;
+      for (const b of list) {
+        const n = list.filter((o) => Math.hypot(o.x - b.x, o.z - b.z) < 70).length;
+        if (n > bestN) { best = b; bestN = n; }
+      }
+      const near = list.filter((o) => Math.hypot(o.x - best.x, o.z - best.z) < 70);
+      res[d] = { x: near.reduce((s, o) => s + o.x, 0) / near.length, z: near.reduce((s, o) => s + o.z, 0) / near.length, n: list.length, core: near.length };
     }
     return res;
   });
