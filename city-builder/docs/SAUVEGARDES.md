@@ -7,6 +7,23 @@
 (`meta:<slot>`) pour lister sans décompresser. `autosave.ts` — `Autosaver` : rotation
 `auto-1..3` toutes les 3 min. Sauvegarde rapide : emplacement `rapide`.
 
+## Entièrement automatique (aucune action du joueur)
+
+`src/save/auto-triggers.ts` — `AutoSaveTriggers`, branché dans `src/main.ts` :
+
+| Moment | Effet |
+|---|---|
+| toutes les 3 min | `Autosaver` (rotation `auto-1..3`) ; envoyé en ligne au plus 1 fois / 2 min |
+| construction / démolition (`placeBuilding`, `demolish`, `buildRoad`, `removeRoad` réussies) | sauvegarde au plus 1 fois / min, avec une sauvegarde de rattrapage en fin de minute |
+| onglet en arrière-plan (`visibilitychange` caché) ou fermeture (`pagehide`) | sauvegarde locale puis envoi en ligne immédiat (`flush`, seuls les emplacements modifiés partent) |
+| retour au menu, « Quitter » | idem |
+| lancement | « Continuer » propose la partie **la plus récente**, locale ou en ligne (`latestSlot(store.list())`) ; sur un autre appareil, la liste inclut les sauvegardes en ligne et le chargement les rapatrie |
+
+Rien ne se déclenche hors partie (menu principal, démonstration, test de charge). Les commandes
+importantes sont détectées en enveloppant `SimBridge.send` dans `main.ts` (liste `IMPORTANT_COMMANDS`).
+En navigation `pagehide`, la sauvegarde (aller-retour avec le worker) est « au mieux » :
+`visibilitychange` survient normalement avant et laisse le temps de finir.
+
 ## En ligne (artifact claude.ai)
 
 `src/save/cloud.ts` — sauvegardes privées par joueur, synchronisées entre appareils, quand le jeu
@@ -77,4 +94,7 @@ remplacer en écoutant le même évènement.
   concurrentes) : découpage/réassemblage, empreinte, morceau manquant / altéré, la plus récente
   gagne, hors ligne (db null, utilisateur absent, exception, réseau coupé puis rétabli),
   migration, limitation de fréquence + flush, suppression.
+- `tests/save/auto-triggers.test.ts` : actions ≤ 1/min avec rattrapage, arrière-plan/fermeture/menu
+  (sauvegarde puis envoi), « Continuer » = la plus récente (retrouvée en ligne sur un 2ᵉ appareil),
+  autosauvegarde envoyée en ligne.
 - Hors artifact, `npm run e2e` vérifie que rien ne change (pas de `window.claude`).
