@@ -16,7 +16,7 @@
  * Propriétaire : agent pipeline d'assets. Aucun état global : une instance par rendu.
  */
 import * as THREE from 'three';
-import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { loadHdrTexture } from './gzip-assets';
 import type { AssetCatalog, TextureSet } from '../shared/catalog';
 
 export type UvMode = 'mesh' | 'worldXZ' | 'box';
@@ -181,7 +181,7 @@ export class MaterialLibrary {
   async loadHdri(hdriId: string): Promise<THREE.DataTexture> {
     const h = this.catalog.hdris.find((x) => x.id === hdriId);
     if (!h) throw new Error(`HDRI inconnu : ${hdriId}`);
-    const tex = await new HDRLoader().loadAsync(new URL(h.file, this.base).href);
+    const tex = await loadHdrTexture(new URL(h.file, this.base).href);
     tex.mapping = THREE.EquirectangularReflectionMapping;
     return tex;
   }
