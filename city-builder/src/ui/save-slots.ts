@@ -107,3 +107,94 @@ export function installCloudSaveBadge(): void {
   window.addEventListener(CLOUD_SAVE_EVENT, (e) => show((e as CustomEvent<CloudSaveStatus>).detail));
   show((window as unknown as { __aube?: { cloudSave?: CloudSaveStatus } }).__aube?.cloudSave);
 }
+
+/** Branchements des copies de secours en fichier (src/save/file-transfer.ts), fournis par main.ts. */
+export interface SaveFileHooks {
+  /** Bouton d'export visible (dans l'artifact : seulement si `downloads` est disponible). */
+  exportAvailable: boolean;
+  /** Prépare le fichier de la partie en cours (null hors partie). Appelé à l'ouverture du panneau. */
+  prepareExport: () => Promise<unknown>;
+  /** Livre le fichier préparé (appelé directement dans le clic : exigence de Safari pour le partage). */
+  deliverExport: (prepared: unknown) => Promise<void>;
+  importFile: (file: File) => Promise<void>;
+}
+
+/**
+ * Ajoute « Exporter (.meknes) » au panneau Sauvegarder et « Importer un fichier… » à l'écran
+ * Charger (éléments injectés : markup.html et hud.ts restent inchangés). Rend `remind()` pour le
+ * rappel discret « Faire une copie de secours ? ».
+ */
+export function installSaveFileUi(h: SaveFileHooks): { remind: (onDisable: () => void) => void } {
+  if (typeof document === 'undefined') return { remind: () => undefined };
+  let prepared: Promise<unknown> | null = null;
+  const prepare = (): void => { prepared = h.prepareExport().catch(() => null); };
+  const exportNow = async (btn?: HTMLButtonElement): Promise<void> => {
+    if (btn) btn.disabled = true;
+    try {
+      const f = await (prepared ?? h.prepareExport());
+      prepared = null;
+      if (f) await h.deliverExport(f);
+    } finally { if (btn) btn.disabled = false; }
+  };
+
+  const saveActions = document.querySelector('#save-panel .form-actions');
+  if (saveActions && h.exportAvailable) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'btn-export-file';
+    b.textContent = 'Exporter (.meknes)';
+    b.title = 'Copie de secours de la partie en cours dans un fichier (Fichiers / iCloud Drive sur iPhone)';
+    b.addEventListener('click', () => { void exportNow(b); });
+    saveActions.prepend(b);
+    document.getElementById('btn-save')?.addEventListener('click', prepare);
+  }
+
+  const loadActions = document.querySelector('[data-screen="load"] .form-actions');
+  if (loadActions) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.meknes,.json,.gz,application/json,application/gzip';
+    input.hidden = true;
+    input.id = 'import-file';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'btn-import-file';
+    b.textContent = 'Importer un fichier…';
+    b.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+      const f = input.files?.[0];
+      input.value = '';
+      if (f) void h.importFile(f);
+    });
+    loadActions.prepend(b, input);
+  }
+
+  let card: HTMLElement | null = null;
+  const remind = (onDisable: () => void): void => {
+    if (card || !h.exportAvailable) return;
+    prepare(); // fichier prêt avant le clic
+    card = document.createElement('div');
+    card.id = 'backup-reminder';
+    card.setAttribute('role', 'status');
+    card.style.cssText = 'position:fixed;left:8px;bottom:34px;z-index:40;max-width:min(320px,calc(100vw - 16px));display:flex;flex-wrap:wrap;'
+      + 'align-items:center;gap:6px;font:13px/1.4 system-ui,sans-serif;padding:8px 10px;border-radius:10px;background:rgba(20,20,20,.82);color:#f4efe6';
+    const text = document.createElement('span');
+    text.textContent = 'Faire une copie de secours ?';
+    text.style.flexBasis = '100%';
+    const mk = (label: string, fn: () => void, primary = false): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      if (primary) b.className = 'primary';
+      b.addEventListener('click', fn);
+      return b;
+    };
+    const close = (): void => { card?.remove(); card = null; };
+    card.append(text,
+      mk('Exporter', () => { void exportNow().finally(close); }, true),
+      mk('Plus tard', () => { prepared = null; close(); }),
+      mk('Ne plus demander', () => { prepared = null; onDisable(); close(); }));
+    document.body.appendChild(card);
+  };
+  return { remind };
+}

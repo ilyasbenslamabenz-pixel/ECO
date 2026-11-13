@@ -24,6 +24,32 @@ importantes sont détectées en enveloppant `SimBridge.send` dans `main.ts` (lis
 En navigation `pagehide`, la sauvegarde (aller-retour avec le worker) est « au mieux » :
 `visibilitychange` survient normalement avant et laisse le temps de finir.
 
+## Copie de secours en fichier `.meknes` (GitHub Pages et partout)
+
+`src/save/file-transfer.ts`, interface injectée par `installSaveFileUi()` (src/ui/save-slots.ts ;
+markup.html et hud.ts inchangés), branchement dans `src/main.ts`.
+
+- **Export** : bouton « Exporter (.meknes) » dans le panneau Sauvegarder (partie en cours).
+  Fichier `Meknes-City_<ville>_<AAAA-MM-JJ_HH-MM>.meknes` = JSON gzip (JSON brut si le navigateur
+  ne compresse pas ; l'import détecte les deux). Le fichier est **préparé à l'ouverture du panneau**
+  pour que le clic appelle le partage immédiatement (Safari exige un geste récent). Livraison :
+  1. artifact claude.ai : `claude.use("downloads").save({filename, data})`. `.meknes` n'est pas dans
+     la liste d'extensions autorisées du runtime (refus `rejected_extension`) : l'artifact exporte
+     donc du **JSON lisible `….meknes.json`**. Si `downloads` est null, le bouton est caché.
+     **L'artifact doit déclarer `downloads: true`** en plus de `db` et `user`.
+  2. appareil tactile (iPhone/iPad/Android) avec `navigator.canShare({files})` : feuille de partage
+     (« Enregistrer dans Fichiers / iCloud Drive ») ; annulation respectée ;
+  3. sinon : lien de téléchargement.
+- **Import** : « Importer un fichier… » dans l'écran Charger (`.meknes`, `.json`, `.gz`) ; validation
+  complète et migration de version (`decodeSave` → `validateSave`), fichier corrompu refusé avec un
+  message ; enregistré dans un **nouvel emplacement** `import-<ville>[-n]` puis chargé.
+- **Rappel** « Faire une copie de secours ? » (petite carte en bas à gauche : Exporter / Plus tard /
+  Ne plus demander) toutes les ~30 min de jeu effectif (partie en cours, horloge non en pause),
+  seulement sans sauvegarde en ligne active. « Ne plus demander » est mémorisé
+  (`localStorage['meknes:rappel-copie:off']`). Un export remet le compteur à zéro.
+- **Stockage persistant** : `navigator.storage.persist()` au lancement (sauf si déjà accordé) ;
+  résultat dans `window.__aube.storagePersisted`.
+
 ## En ligne (artifact claude.ai)
 
 `src/save/cloud.ts` — sauvegardes privées par joueur, synchronisées entre appareils, quand le jeu
@@ -97,4 +123,7 @@ remplacer en écoutant le même évènement.
 - `tests/save/auto-triggers.test.ts` : actions ≤ 1/min avec rattrapage, arrière-plan/fermeture/menu
   (sauvegarde puis envoi), « Continuer » = la plus récente (retrouvée en ligne sur un 2ᵉ appareil),
   autosauvegarde envoyée en ligne.
+- `tests/save/file-transfer.test.ts` : aller-retour identique (gzip et JSON), fichiers corrompus /
+  tronqués / étrangers refusés, migration v1, noms, livraison (downloads / partage / téléchargement,
+  annulation), rappel 30 min, persist().
 - Hors artifact, `npm run e2e` vérifie que rien ne change (pas de `window.claude`).

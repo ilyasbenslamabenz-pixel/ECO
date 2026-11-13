@@ -22,10 +22,11 @@ import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
 import { applyGraphicsOptions } from './ui/options';
-import { gameDateLabel, installCloudSaveBadge, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
+import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
 import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
 import { AutoSaveTriggers, IMPORTANT_COMMANDS, latestSlot } from './save/auto-triggers';
 import { CloudSlotProvider } from './save/cloud';
+import { BackupReminder, deliverFile, exportMeknes, importMeknes, importSlotName, requestPersistentStorage, resolveDownloads, type ExportFile } from './save/file-transfer';
 
 const QUICK_SLOT = 'rapide';
 const DEMO_SEED = 7;
@@ -52,6 +53,8 @@ interface DebugInfo {
   saveStoreKind?: string;
   /** Sauvegardes en ligne (artifact claude.ai) : état publié par src/save/cloud.ts. */
   cloudSave?: CloudSaveStatus;
+  /** navigator.storage.persist() accordé (null : non pris en charge). */
+  storagePersisted?: boolean | null;
   constructionApplied?: () => number;
   validate?: () => Promise<unknown>;
   lastReport?: unknown;
@@ -340,6 +343,37 @@ async function boot(): Promise<void> {
     flushCloud: () => (st instanceof CloudSlotProvider ? st.flush() : Promise.resolve()),
   });
   autoTriggers.install();
+
+  // Copies de secours en fichier .meknes (export/import), rappel ~30 min sans sauvegarde en ligne,
+  // stockage persistant (Safari) : src/save/file-transfer.ts, docs/SAUVEGARDES.md.
+  void requestPersistentStorage().then((p) => { debug.storagePersisted = p; });
+  const claudeApi = (globalThis as { claude?: { use?: (n: string) => Promise<unknown> } }).claude;
+  void resolveDownloads(claudeApi).then((downloads) => {
+    const fileUi = installSaveFileUi({
+      exportAvailable: typeof claudeApi?.use !== 'function' || downloads !== null,
+      prepareExport: async () => (state.inGame ? exportMeknes((await b.send('save', { slot: 'export' })).data as SaveFile, { artifact: downloads !== null }) : null),
+      deliverExport: async (f) => {
+        try {
+          if ((await deliverFile(f as ExportFile, { downloads })) !== 'cancelled') { reminder.reset(); ui.toast(`Copie de secours : ${(f as ExportFile).filename}`, 'ok'); }
+        } catch (e) { ui.toast(errText(e), 'error'); }
+      },
+      importFile: async (file) => {
+        const r = await importMeknes(file);
+        if (!r.ok) { ui.toast(`Import impossible : ${r.message}`, 'error'); return; }
+        const slot = importSlotName(r.value.params.cityName, (await st.list()).map((s) => s.slot));
+        const w = await st.save(slot, r.value);
+        if (!w.ok) { ui.toast(w.message, 'error'); return; }
+        ui.toast(`Fichier importé dans « ${slot} »`, 'ok');
+        await loadSlot(slot);
+      },
+    });
+    const reminder = new BackupReminder({
+      isPlaying: () => auto.running && !demoRunning && (state.stats?.speed ?? 0) > 0,
+      hasCloud: () => st instanceof CloudSlotProvider && (st.status.state === 'online' || st.status.state === 'syncing'),
+      remind: () => fileUi.remind(() => reminder.disable()),
+    });
+    reminder.start();
+  });
 
   const waitSnapshot = (): Promise<void> => new Promise((res) => { firstSnapshot = res; });
 
