@@ -28,8 +28,15 @@ const IMPLEMENTED = new Set(['chantiers', 'circulation', 'pietons']);
 const isAtmosphere = (id: string): boolean => (ATMOSPHERE_MODULES as readonly string[]).includes(id);
 /** Modules de simulation sans rendu ni panneau (phase 2B, docs/requests/municipal.md §2). */
 const SIM_ONLY: readonly string[] = ['municipal'];
+/**
+ * Modules de phase 2B/2C intégrés après l'électricité, dans l'ordre d'enregistrement (rendu, panneau, section de
+ * sauvegarde ; testés dans leur dossier). Ils figurent aussi dans PHASE2_MODULES.
+ */
+const LATE_MODULES: readonly string[] = ['dechets'];
+/** Modules de phase 2A (PHASE2_MODULES sans les modules intégrés plus tard). */
+const BASE_MODULES: readonly string[] = PHASE2_MODULES.filter((id) => !LATE_MODULES.includes(id));
 /** Modules d'atmosphère (phase 2C) exclus aussi : leur absence d'effet sur la base est testée dans tests/weather. */
-const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id));
+const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id) && !LATE_MODULES.includes(p.id));
 
 function town(plugins?: readonly SimPlugin[]): Simulation {
   const s = plugins ? new Simulation(plugins) : new Simulation();
@@ -81,15 +88,16 @@ function recorder(id = 'essai', opts: { failTick?: boolean } = {}): SimPlugin & 
 }
 
 test('registres : les quatre modules sont enregistrés partout, vides, avec leur section de sauvegarde', () => {
-  const ids = [...PHASE2_MODULES];
   // Modules d'atmosphère (phase 2C, tests/weather) : enregistrés en simulation et rendu, testés à part.
-  // Électricité (phase 2B, tests/electricite) : enregistrée partout, testée à part.
-  const all = [...PHASE2_MODULES, ...ATMOSPHERE_MODULES];
-  const elec = [...ELECTRICITE_MODULES];
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...elec]);
-  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...elec]);
-  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...elec]);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...elec]);
+  // Électricité (phase 2B, tests/electricite) et modules intégrés ensuite (LATE_MODULES) : enregistrés partout, testés à part.
+  const ids = [...BASE_MODULES];
+  const all = [...ids, ...ATMOSPHERE_MODULES];
+  const late = [...ELECTRICITE_MODULES, ...LATE_MODULES];
+  assert.deepEqual([...PHASE2_MODULES].sort(), [...ids, ...LATE_MODULES].sort());
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late]);
+  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late]);
+  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late]);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
   const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];
   for (const p of SIM_PLUGINS) {
@@ -104,7 +112,7 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...elec]);
+  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late]);
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 
