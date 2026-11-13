@@ -10,8 +10,8 @@ import assert from 'node:assert/strict';
 import { Municipal } from '../../src/sim/municipal';
 import { Simulation } from '../../src/sim/world';
 import { SIM_PLUGINS, type SimPlugin } from '../../src/sim/plugins';
-/** Registre de base SANS le municipal (enregistré depuis l'intégration) : le test injecte sa propre instance. */
-const BASE_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => p.id !== 'municipal');
+/** Registre de base SANS les modules municipaux (municipal, dechets — enregistrés depuis l'intégration) : le test injecte sa propre instance. */
+const BASE_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => p.id !== 'municipal' && p.id !== 'dechets');
 import { createMunicipalPlugin, MUNICIPAL_SERVICE } from '../../src/sim/municipal';
 import { buildTown, runDays, townCatalog } from '../sim/fixtures';
 

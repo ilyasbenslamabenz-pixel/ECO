@@ -10,6 +10,7 @@ import { generateResidential } from '../buildings/residential/index';
 import { generateNonResidential } from '../buildings/nonresidential/index';
 import { generateVehicles } from '../vehicles/build';
 import { environmentGenerator } from './environment';
+import { generateTransport } from '../transport/build';
 
 export interface GeneratorOutput {
   assets: CatalogAsset[];
@@ -24,4 +25,6 @@ export const GENERATORS: { name: string; run: Generator }[] = [
   { name: 'Bâtiments non résidentiels (kit, 23 modèles)', run: (ctx) => generateNonResidential(ctx) },
   { name: 'Véhicules (15 modèles, LOD0/1/2)', run: (ctx) => generateVehicles(ctx) },
   { name: 'Environnement (arbres procéduraux, rochers, fleurs, fontaine)', run: environmentGenerator },
+  // Port et aéroport (35 modèles) ; entrées de construction des pôles : tools/transport/catalog.ts (module hubs).
+  { name: 'Transport : port et aéroport (35 modèles, LOD0/1/2)', run: (ctx) => generateTransport(ctx) },
 ];

@@ -8,6 +8,9 @@ import { pietonsRenderPlugin } from './pietons';
 import { chantiersRenderPlugin } from './chantiers';
 import { weatherRenderPlugin } from './weather';
 import { electriciteRenderPlugin } from './electricite';
+import { dechetsRenderPlugin } from './dechets';
+import { hubsRenderPlugin } from './hubs';
+import { eauRenderPlugin } from './eau';
 import type { RenderPlugin, RenderPluginContext } from './types';
 
 export type { RenderPlugin, RenderPluginContext } from './types';
@@ -19,6 +22,9 @@ export const RENDER_PLUGINS: readonly RenderPlugin[] = [
   chantiersRenderPlugin,
   weatherRenderPlugin,
   electriciteRenderPlugin,
+  dechetsRenderPlugin,
+  hubsRenderPlugin,
+  eauRenderPlugin,
 ];
 
 /** Distribution protégée des crochets de rendu (exceptions journalisées une fois par module et crochet). */
