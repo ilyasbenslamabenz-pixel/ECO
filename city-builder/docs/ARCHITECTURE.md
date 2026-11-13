@@ -56,7 +56,7 @@ réponse `{ kind:'result', reqId, ok:true, data }` ou `{ ok:false, error:{ code,
 |---|---|---|---|
 | `init` | protocolVersion, catalog | protocolVersion | version |
 | `newGame` | seed, mapChunks, startMoney, cityName | seed (+ instantané) | bornes |
-| `buildRoad` | type (hérité), kind (6 types), points[x,z,…], control? (courbe quadratique si 2 points), dryRun? | edgeIds, cost | limites, pente par type, eau (ponts automatiques), carrefours automatiques, collision bâtiments, fonds |
+| `buildRoad` | type (hérité), kind (6 types), points[x,z,…], control? (courbe quadratique si 2 points), elevation? (m, pas de 4, ±40 : viaduc / tunnel), dryRun? | edgeIds, cost, path? (aperçu 3D en dryRun) | limites, pente par type, eau (ponts automatiques), carrefours automatiques, collision bâtiments, fonds |
 | `removeRoad` | edgeId | refund (25 %) | existence |
 | `placeBuilding` | assetId, x, z (au cm, pas de grille), rot (quarts de tour, **décimal autorisé** : 0,5 = 45°), variant?, dryRun? | buildingId, cost | asset bâtiment, empreinte ORIENTÉE (`src/shared/footprint.ts`) : collision bâtiments (séparation par axes) et routes courbes (distance segment/rectangle orienté), relief, eau, fonds |
 | `demolish` | buildingId | refund (25 %) | existence |
@@ -199,3 +199,10 @@ attrapées (console.error une fois par module et crochet).
 **Banc de captures** : `npm run captures` (`tests/e2e/captures.mjs`) — 15 vues de la démo (aérien, horizon, rue,
 carrefour à feux, 4 quartiers, nuit, iPhone portrait) dans `tests/e2e/out/captures/` ; échec sur image quasi uniforme
 (écart-type < 10), erreur de page / console / requête ou modèle manquant.
+
+## 10. Routes et relief
+
+Hauteur imposée des tracés (▲ / ▼), passages dénivelés sans carrefour, tunnels avec portails, talus et murs de soutènement
+maillés par le rendu, culées de pont, giratoires (commande étendue `buildRoundabout`). Détails : `src/sim/roads/README.md`.
+Champs facultatifs des tronçons (`elev`, `tunnelRuns`, `walls`, `ring`) : format de sauvegarde inchangé (v2), anciennes
+sauvegardes chargées telles quelles. Captures : `docs/captures-routes-relief/` (`node tests/e2e/routes-relief.mjs`).

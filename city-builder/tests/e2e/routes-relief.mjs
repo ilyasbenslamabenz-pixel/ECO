@@ -181,6 +181,33 @@ try {
       await shoot('viaduc', f.x, f.z, 110, 0.42, 0.7);
     }
   }
+  // Interface : outil Routes, ▲ ▲ (+8 m), aperçu 3D du tracé renvoyé par la simulation.
+  if (want('apercu') && report.viaduc) {
+    const f = report.viaduc;
+    await page.click('#toolbar button[data-tool=road]');
+    await page.waitForTimeout(500);
+    const card = page.locator('[data-road=street]');
+    if (await card.count()) await card.first().click();
+    await page.waitForTimeout(300);
+    const up = page.locator('#tool-actions button', { hasText: '▲' });
+    await up.click(); await up.click();
+    const hint = await page.locator('.tool-hint').textContent().catch(() => '');
+    report.ui = { hint, label: await page.locator('#tool-actions').textContent() };
+    console.log('interface', JSON.stringify(report.ui));
+    await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 160, 0.6, 0.7), [f.x + 50, f.z]);
+    await page.evaluate(() => window.__aube.renderNow(1, 0.1));
+    const a = await page.evaluate(([x, z]) => window.__aube.worldToScreen(x, z), [f.x + 50, f.z - 70]);
+    const b = await page.evaluate(([x, z]) => window.__aube.worldToScreen(x, z), [f.x + 50, f.z + 70]);
+    await page.mouse.move(a.x, a.y); await page.mouse.click(a.x, a.y);
+    await page.mouse.move(b.x, b.y, { steps: 4 });
+    await page.waitForTimeout(2500);
+    report.ui.preview = await page.evaluate(() => window.__aube.toolPreview());
+    console.log('aperçu', JSON.stringify(report.ui.preview));
+    await page.evaluate(() => window.__aube.renderNow(2, 0.1));
+    const buf = await page.screenshot({ timeout: 900000 });
+    await sharp(buf).jpeg({ quality: 82 }).toFile(join(out, `${PREFIX}-apercu-hauteur.jpg`));
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  }
   if (want('tunnel')) {
     // Colline marquée : point haut entouré de terrain plus bas à ±100 m.
     let best = null;
