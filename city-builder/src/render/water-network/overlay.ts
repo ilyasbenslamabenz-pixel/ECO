@@ -162,7 +162,7 @@ export class WaterOverlay {
       const y = this.heightAt(x, z);
       this.v.set(x, (Number.isFinite(y) ? y : 0) + 2.5, z);
       this.q.identity();
-      this.s.set(r.cellSize * 0.96, 1, r.cellSize * 0.96);
+      this.s.set(r.cellSize, 1, r.cellSize);
       this.m.compose(this.v, this.q, this.s);
       cells.setMatrixAt(t, this.m);
     }
@@ -181,7 +181,7 @@ export class WaterOverlay {
   private servedColor(v: number): THREE.Color { return v >= 0.9 ? C.ok : v >= 0.5 ? C.partial : C.ko; }
   private pressureColor(bar: number): THREE.Color { return bar < 0.5 ? C.pLow : bar < 1.5 ? C.pMid : bar < 3 ? C.pGood : C.pHigh; }
   private pollutionColor(v: number): THREE.Color {
-    const t = Math.max(0, Math.min(1, v / 40));
+    const t = Math.max(0, Math.min(1, v / 20));
     return t < 0.5 ? this.col.copy(C.clean).lerp(C.mid, t * 2) : this.col.copy(C.mid).lerp(C.dirty, (t - 0.5) * 2);
   }
 
@@ -219,11 +219,12 @@ export class WaterOverlay {
       }
       if (this.disks.instanceColor) this.disks.instanceColor.needsUpdate = true;
     }
-    if (this.cells && this.river) {
+    if (this.cells) this.cells.visible = mode === 'pollution';
+    if (this.cells && this.river && mode === 'pollution') {
       const p = this.riverPollution;
       for (let t = 0; t < this.river.cells.length; t++) {
         const v = p?.[t] ?? 0;
-        this.cells.setColorAt(t, mode === 'pollution' ? this.pollutionColor(v) : this.col.copy(C.clean).multiplyScalar(0.55));
+        this.cells.setColorAt(t, this.pollutionColor(v));
       }
       if (this.cells.instanceColor) this.cells.instanceColor.needsUpdate = true;
     }

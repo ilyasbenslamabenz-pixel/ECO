@@ -173,9 +173,12 @@ export const eauRenderPlugin: RenderPlugin = {
   applyDeltaExt(payload) {
     const p = payload as EauDelta;
     const prev = last;
-    last = prev && 'river' in prev ? { ...p, pipes: p.pipes ?? prev.pipes, river: { ...prev.river, pollution: p.riverPollution } } : p;
+    const river = p.river ?? (prev && 'river' in prev ? prev.river : undefined);
+    const pipes = p.pipes ?? (prev && 'pipes' in prev ? prev.pipes : undefined);
+    last = river && pipes ? { ...p, pipes, river: { ...river, pollution: p.riverPollution } } as EauSnapshot : p;
     if (!overlay) return;
     if (p.pipes) overlay.setPipes(p.pipes);
+    if (p.river) overlay.setRiver(p.river);
     overlay.setLayer(p.layer);
     overlay.setRiverPollution(p.riverPollution);
     emit(last);

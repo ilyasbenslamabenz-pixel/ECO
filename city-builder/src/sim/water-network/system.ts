@@ -1030,13 +1030,15 @@ export class WaterSystem {
       budget: { current: cloneBudget(this.month), last: this.lastBudget ? cloneBudget(this.lastBudget) : null },
       alerts: [...this.alerts],
     };
-    if (withPipes) d.pipes = clonePipes(this.pipes);
+    if (withPipes) { d.pipes = clonePipes(this.pipes); d.river = this.riverLayer(); }
     return d;
   }
 
   snapshot(): EauSnapshot {
     const d = this.delta(false);
-    return { ...d, pipes: clonePipes(this.pipes), river: this.riverLayer() };
+    const { pipes: _p, river: _r, ...rest } = d;
+    void _p; void _r;
+    return { ...rest, pipes: clonePipes(this.pipes), river: this.riverLayer() };
   }
 
   /* ------------------------------------------------------------------ */

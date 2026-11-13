@@ -72,7 +72,8 @@ test('activation : la première installation met le service en route ; delta, in
   assert.ok(m.networks.get('eau')!.nodeCount > 0 && m.networks.get('egouts')!.nodeCount > 0);
   assert.equal(m.scheduler.stats().filter((t) => t.errors > 0).length, 0, 'aucune tâche en erreur');
   // Delta : présent après un pas horaire, absent ensuite tant que rien ne change.
-  s.takeDelta();
+  const first = s.takeDelta().ext?.eau as EauDelta | undefined;
+  assert.ok(first?.pipes && first.river, 'premier delta : canalisations et cellules en eau (service activé après l\'instantané)');
   runHours(s, 1);
   const d = s.takeDelta().ext?.eau as EauDelta | undefined;
   assert.ok(d && d.balance.buildings === b.buildings);

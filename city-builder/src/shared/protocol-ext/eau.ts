@@ -25,6 +25,8 @@ export interface EauDelta {
   riverPollution: Float32Array;
   /** Géométrie des canalisations : présente seulement quand la voirie a changé. */
   pipes?: PipeGeometry;
+  /** Cellules en eau (géométrie) : présentes avec `pipes` (premier envoi, voirie modifiée). */
+  river?: RiverLayer;
   /** Budget du mois en cours et du dernier mois clos. */
   budget: { current: WaterBudget; last: WaterBudget | null };
   /** Alertes lisibles (pénurie, pollution, sous-financement…). */
@@ -32,7 +34,7 @@ export interface EauDelta {
 }
 
 /** Charge utile de `snapshot.ext.eau` (état complet). */
-export interface EauSnapshot extends Omit<EauDelta, 'pipes'> {
+export interface EauSnapshot extends Omit<EauDelta, 'pipes' | 'river'> {
   pipes: PipeGeometry;
   river: RiverLayer;
 }

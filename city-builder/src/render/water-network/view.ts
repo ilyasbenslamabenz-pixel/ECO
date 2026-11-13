@@ -41,7 +41,7 @@ export const WATER_LEGEND: Record<Exclude<WaterViewMode, 'off'>, { color: string
     { color: '#ff6b6b', label: '< 0,5 bar' }, { color: '#ff9f43', label: '0,5–1,5 bar' }, { color: '#5fd39a', label: '1,5–3 bar' }, { color: '#4fb3ff', label: '> 3 bar' },
   ],
   pollution: [
-    { color: '#3d8fd6', label: 'Eau propre' }, { color: '#9a8f3a', label: 'Pollution modérée' }, { color: '#8b4a22', label: 'Forte pollution' },
+    { color: '#3d8fd6', label: 'Eau propre' }, { color: '#9a8f3a', label: 'Indice 10' }, { color: '#8b4a22', label: 'Indice ≥ 20' },
     { color: '#b07a45', label: 'Égout (épaisseur = charge)' },
   ],
 };
