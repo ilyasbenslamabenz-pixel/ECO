@@ -8123,17 +8123,17 @@
         {
           "file": "buildings/procedural/proc_bande_pignons_gradins_lod0.glb",
           "maxDistance": 150,
-          "triangles": 5395
+          "triangles": 4705
         },
         {
           "file": "buildings/procedural/proc_bande_pignons_gradins_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2475
+          "triangles": 1887
         },
         {
           "file": "buildings/procedural/proc_bande_pignons_gradins_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 839
+          "triangles": 695
         }
       ],
       "dimensions": {
@@ -8282,17 +8282,17 @@
         {
           "file": "buildings/procedural/proc_bande_pignons_cloche_lod0.glb",
           "maxDistance": 150,
-          "triangles": 6254
+          "triangles": 5378
         },
         {
           "file": "buildings/procedural/proc_bande_pignons_cloche_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2376
+          "triangles": 1428
         },
         {
           "file": "buildings/procedural/proc_bande_pignons_cloche_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 820
+          "triangles": 628
         }
       ],
       "dimensions": {
@@ -8441,17 +8441,17 @@
         {
           "file": "buildings/procedural/proc_bande_colombage_lod0.glb",
           "maxDistance": 150,
-          "triangles": 5086
+          "triangles": 4486
         },
         {
           "file": "buildings/procedural/proc_bande_colombage_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1492
+          "triangles": 968
         },
         {
           "file": "buildings/procedural/proc_bande_colombage_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 612
+          "triangles": 468
         }
       ],
       "dimensions": {
@@ -8598,17 +8598,17 @@
         {
           "file": "buildings/procedural/proc_bande_boutiques_lod0.glb",
           "maxDistance": 150,
-          "triangles": 6312
+          "triangles": 5602
         },
         {
           "file": "buildings/procedural/proc_bande_boutiques_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2102
+          "triangles": 1498
         },
         {
           "file": "buildings/procedural/proc_bande_boutiques_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 828
+          "triangles": 656
         }
       ],
       "dimensions": {
@@ -8757,17 +8757,17 @@
         {
           "file": "buildings/procedural/proc_bande_faubourg_lod0.glb",
           "maxDistance": 150,
-          "triangles": 8296
+          "triangles": 7728
         },
         {
           "file": "buildings/procedural/proc_bande_faubourg_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1796
+          "triangles": 1312
         },
         {
           "file": "buildings/procedural/proc_bande_faubourg_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 680
+          "triangles": 600
         }
       ],
       "dimensions": {
@@ -8915,17 +8915,17 @@
         {
           "file": "buildings/procedural/proc_bande_brique_jardinets_lod0.glb",
           "maxDistance": 150,
-          "triangles": 5120
+          "triangles": 4808
         },
         {
           "file": "buildings/procedural/proc_bande_brique_jardinets_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2208
+          "triangles": 1760
         },
         {
           "file": "buildings/procedural/proc_bande_brique_jardinets_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 808
+          "triangles": 776
         }
       ],
       "dimensions": {
@@ -9055,317 +9055,6 @@
       ]
     },
     {
-      "id": "proc_bande_pierre_balcons",
-      "nameFr": "Maisons de ville en pierre",
-      "category": "townhouse",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_bande_pierre_balcons_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 9473
-        },
-        {
-          "file": "buildings/procedural/proc_bande_pierre_balcons_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 3222
-        },
-        {
-          "file": "buildings/procedural/proc_bande_pierre_balcons_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 874
-        }
-      ],
-      "dimensions": {
-        "width": 22.2,
-        "depth": 13.8,
-        "height": 18.84
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 2
-      },
-      "cost": 495000,
-      "upkeepPerMonth": 790,
-      "capacity": {
-        "residents": 22,
-        "jobs": 0
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 6.9,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Pierre blonde"
-        },
-        {
-          "id": "grise",
-          "nameFr": "Pierre grise, ardoise bleue",
-          "materialOverrides": {
-            "facade": {
-              "color": "#d9d9d4"
-            },
-            "encadrement": {
-              "color": "#e8e8e2"
-            },
-            "toiture": {
-              "color": "#4e5a67"
-            }
-          }
-        },
-        {
-          "id": "ocre",
-          "nameFr": "Pierre dorée, toiture brune",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e3cfa4"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles_grises",
-              "color": "#9c8a7a"
-            },
-            "porte": {
-              "color": "#6d2f33"
-            }
-          }
-        },
-        {
-          "id": "enduit",
-          "nameFr": "Enduit clair sur pierre",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "enduit_creme",
-              "color": "#f1e8d6"
-            },
-            "volet": {
-              "color": "#8aa3a8"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Pierre grise, ardoise bleue, hauteur ×0,94",
-          "materialOverrides": {
-            "facade": {
-              "color": "#d9d9d4"
-            },
-            "encadrement": {
-              "color": "#e8e8e2"
-            },
-            "toiture": {
-              "color": "#4e5a67"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Pierre dorée, toiture brune, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e3cfa4"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles_grises",
-              "color": "#9c8a7a"
-            },
-            "porte": {
-              "color": "#6d2f33"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "beton_facade",
-        "brique_rouge",
-        "enduit_creme",
-        "metal_larme",
-        "pierre_rustique",
-        "pierre_taille",
-        "toit_ardoise",
-        "toit_tole_ondulee",
-        "toit_tuiles",
-        "toit_tuiles_grises"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/residences.ts#proc_bande_pierre_balcons",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:centre_historique",
-        "quartier:faubourg",
-        "mitoyen",
-        "maison",
-        "pierre",
-        "balcons",
-        "style:pierre_claire",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
-      "id": "proc_bande_contemporaine",
-      "nameFr": "Maisons de ville contemporaines",
-      "category": "townhouse",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_bande_contemporaine_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 4898
-        },
-        {
-          "file": "buildings/procedural/proc_bande_contemporaine_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 2070
-        },
-        {
-          "file": "buildings/procedural/proc_bande_contemporaine_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 722
-        }
-      ],
-      "dimensions": {
-        "width": 23.44,
-        "depth": 13.9,
-        "height": 11.27
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 2
-      },
-      "cost": 336000,
-      "upkeepPerMonth": 540,
-      "capacity": {
-        "residents": 16,
-        "jobs": 0
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 6.95,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Béton clair, allèges grises"
-        },
-        {
-          "id": "couleur",
-          "nameFr": "Panneaux colorés",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          }
-        },
-        {
-          "id": "sombre",
-          "nameFr": "Béton gris sombre",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          }
-        },
-        {
-          "id": "blanc",
-          "nameFr": "Béton blanc, bois",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e8e5dc"
-            },
-            "facade_b": {
-              "textureSet": "bardage_bois",
-              "color": "#d9b98c"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Panneaux colorés, hauteur ×0,94",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Béton gris sombre, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "bardage_bois",
-        "beton_facade",
-        "carreaux_facade",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "sol_beton_brut",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/residences.ts#proc_bande_contemporaine",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:faubourg",
-        "quartier:pavillonnaire",
-        "mitoyen",
-        "maison",
-        "contemporain",
-        "terrasse",
-        "style:beton_moderne",
-        "densite:moyenne",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_pavillon_volets",
       "nameFr": "Pavillon à volets et garage",
       "category": "house",
@@ -9373,17 +9062,17 @@
         {
           "file": "buildings/procedural/proc_pavillon_volets_lod0.glb",
           "maxDistance": 150,
-          "triangles": 4116
+          "triangles": 3716
         },
         {
           "file": "buildings/procedural/proc_pavillon_volets_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1124
+          "triangles": 786
         },
         {
           "file": "buildings/procedural/proc_pavillon_volets_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 454
+          "triangles": 348
         }
       ],
       "dimensions": {
@@ -9531,17 +9220,17 @@
         {
           "file": "buildings/procedural/proc_pavillon_comble_lod0.glb",
           "maxDistance": 150,
-          "triangles": 1854
+          "triangles": 1708
         },
         {
           "file": "buildings/procedural/proc_pavillon_comble_lod1.glb",
           "maxDistance": 600,
-          "triangles": 732
+          "triangles": 608
         },
         {
           "file": "buildings/procedural/proc_pavillon_comble_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 286
+          "triangles": 266
         }
       ],
       "dimensions": {
@@ -9690,17 +9379,17 @@
         {
           "file": "buildings/procedural/proc_maison_pierre_aile_lod0.glb",
           "maxDistance": 150,
-          "triangles": 3840
+          "triangles": 3196
         },
         {
           "file": "buildings/procedural/proc_maison_pierre_aile_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1416
+          "triangles": 1026
         },
         {
           "file": "buildings/procedural/proc_maison_pierre_aile_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 562
+          "triangles": 428
         }
       ],
       "dimensions": {
@@ -9848,17 +9537,17 @@
         {
           "file": "buildings/procedural/proc_maison_colombage_jardin_lod0.glb",
           "maxDistance": 150,
-          "triangles": 2035
+          "triangles": 1835
         },
         {
           "file": "buildings/procedural/proc_maison_colombage_jardin_lod1.glb",
           "maxDistance": 600,
-          "triangles": 594
+          "triangles": 446
         },
         {
           "file": "buildings/procedural/proc_maison_colombage_jardin_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 210
+          "triangles": 182
         }
       ],
       "dimensions": {
@@ -10004,17 +9693,17 @@
         {
           "file": "buildings/procedural/proc_villa_contemporaine_lod0.glb",
           "maxDistance": 150,
-          "triangles": 2436
+          "triangles": 2000
         },
         {
           "file": "buildings/procedural/proc_villa_contemporaine_lod1.glb",
           "maxDistance": 600,
-          "triangles": 942
+          "triangles": 598
         },
         {
           "file": "buildings/procedural/proc_villa_contemporaine_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 490
+          "triangles": 370
         }
       ],
       "dimensions": {
@@ -10156,17 +9845,17 @@
         {
           "file": "buildings/procedural/proc_villa_verre_lod0.glb",
           "maxDistance": 150,
-          "triangles": 2120
+          "triangles": 1882
         },
         {
           "file": "buildings/procedural/proc_villa_verre_lod1.glb",
           "maxDistance": 600,
-          "triangles": 884
+          "triangles": 630
         },
         {
           "file": "buildings/procedural/proc_villa_verre_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 502
+          "triangles": 426
         }
       ],
       "dimensions": {
@@ -10319,17 +10008,17 @@
         {
           "file": "buildings/procedural/proc_maison_reconstruction_lod0.glb",
           "maxDistance": 150,
-          "triangles": 2402
+          "triangles": 2040
         },
         {
           "file": "buildings/procedural/proc_maison_reconstruction_lod1.glb",
           "maxDistance": 600,
-          "triangles": 924
+          "triangles": 622
         },
         {
           "file": "buildings/procedural/proc_maison_reconstruction_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 386
+          "triangles": 288
         }
       ],
       "dimensions": {
@@ -10468,167 +10157,6 @@
       ]
     },
     {
-      "id": "proc_immeuble_pierre_r5",
-      "nameFr": "Immeuble de pierre R+5",
-      "category": "apartment_mid",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_immeuble_pierre_r5_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 11860
-        },
-        {
-          "file": "buildings/procedural/proc_immeuble_pierre_r5_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 3040
-        },
-        {
-          "file": "buildings/procedural/proc_immeuble_pierre_r5_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 918
-        }
-      ],
-      "dimensions": {
-        "width": 23.6,
-        "depth": 16.05,
-        "height": 25.45
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 2
-      },
-      "cost": 857000,
-      "upkeepPerMonth": 1370,
-      "capacity": {
-        "residents": 58,
-        "jobs": 10
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 8.03,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Pierre blonde"
-        },
-        {
-          "id": "grise",
-          "nameFr": "Pierre grise, ardoise bleue",
-          "materialOverrides": {
-            "facade": {
-              "color": "#d9d9d4"
-            },
-            "encadrement": {
-              "color": "#e8e8e2"
-            },
-            "toiture": {
-              "color": "#4e5a67"
-            }
-          }
-        },
-        {
-          "id": "ocre",
-          "nameFr": "Pierre dorée, toiture brune",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e3cfa4"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles_grises",
-              "color": "#9c8a7a"
-            },
-            "porte": {
-              "color": "#6d2f33"
-            }
-          }
-        },
-        {
-          "id": "enduit",
-          "nameFr": "Enduit clair sur pierre",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "enduit_creme",
-              "color": "#f1e8d6"
-            },
-            "volet": {
-              "color": "#8aa3a8"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Pierre grise, ardoise bleue, hauteur ×0,94",
-          "materialOverrides": {
-            "facade": {
-              "color": "#d9d9d4"
-            },
-            "encadrement": {
-              "color": "#e8e8e2"
-            },
-            "toiture": {
-              "color": "#4e5a67"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Pierre dorée, toiture brune, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e3cfa4"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles_grises",
-              "color": "#9c8a7a"
-            },
-            "porte": {
-              "color": "#6d2f33"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "beton_facade",
-        "brique_rouge",
-        "enduit_blanc",
-        "enduit_creme",
-        "metal_larme",
-        "pierre_rustique",
-        "pierre_taille",
-        "toit_ardoise",
-        "toit_tole_ondulee",
-        "toit_tuiles",
-        "toit_tuiles_grises"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/residences.ts#proc_immeuble_pierre_r5",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:centre_historique",
-        "quartier:affaires",
-        "mitoyen",
-        "immeuble",
-        "pierre",
-        "balcons",
-        "commerces",
-        "style:pierre_claire",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_immeuble_pierre_noble",
       "nameFr": "Immeuble bourgeois à frontons",
       "category": "apartment_mid",
@@ -10636,17 +10164,17 @@
         {
           "file": "buildings/procedural/proc_immeuble_pierre_noble_lod0.glb",
           "maxDistance": 150,
-          "triangles": 12200
+          "triangles": 8634
         },
         {
           "file": "buildings/procedural/proc_immeuble_pierre_noble_lod1.glb",
           "maxDistance": 600,
-          "triangles": 3620
+          "triangles": 2228
         },
         {
           "file": "buildings/procedural/proc_immeuble_pierre_noble_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 902
+          "triangles": 546
         }
       ],
       "dimensions": {
@@ -10787,167 +10315,6 @@
       ]
     },
     {
-      "id": "proc_immeuble_brique_r4",
-      "nameFr": "Immeuble de brique R+4",
-      "category": "apartment_mid",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_immeuble_brique_r4_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 12365
-        },
-        {
-          "file": "buildings/procedural/proc_immeuble_brique_r4_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 3994
-        },
-        {
-          "file": "buildings/procedural/proc_immeuble_brique_r4_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 1546
-        }
-      ],
-      "dimensions": {
-        "width": 23.14,
-        "depth": 15.35,
-        "height": 26.59
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 2
-      },
-      "cost": 619000,
-      "upkeepPerMonth": 990,
-      "capacity": {
-        "residents": 42,
-        "jobs": 6
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 7.67,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Brique rouge, pierre blanche"
-        },
-        {
-          "id": "sombre",
-          "nameFr": "Brique brune, menuiseries vertes",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_parement",
-              "color": "#9c7360"
-            },
-            "menuiserie": {
-              "color": "#2d3a33"
-            },
-            "porte": {
-              "color": "#2f4f45"
-            }
-          }
-        },
-        {
-          "id": "claire",
-          "nameFr": "Brique sable",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_orange",
-              "color": "#e3c5a3"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles",
-              "color": "#b46a4a"
-            }
-          }
-        },
-        {
-          "id": "peinte",
-          "nameFr": "Brique peinte en blanc",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_rouge",
-              "color": "#efeae1"
-            },
-            "encadrement": {
-              "color": "#cfc7b6"
-            },
-            "porte": {
-              "color": "#2a2c2e"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Brique brune, menuiseries vertes, hauteur ×0,94",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_parement",
-              "color": "#9c7360"
-            },
-            "menuiserie": {
-              "color": "#2d3a33"
-            },
-            "porte": {
-              "color": "#2f4f45"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Brique sable, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_orange",
-              "color": "#e3c5a3"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles",
-              "color": "#b46a4a"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "beton_facade",
-        "brique_orange",
-        "brique_parement",
-        "brique_rouge",
-        "enduit_blanc",
-        "metal_larme",
-        "pierre_rustique",
-        "pierre_taille",
-        "toit_ardoise",
-        "toit_tole_ondulee",
-        "toit_tuiles"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/residences.ts#proc_immeuble_brique_r4",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:faubourg",
-        "quartier:centre_historique",
-        "mitoyen",
-        "immeuble",
-        "brique",
-        "commerces",
-        "style:brique_pignon",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_immeuble_faubourg_r3",
       "nameFr": "Immeuble de faubourg R+3",
       "category": "apartment_low",
@@ -10955,17 +10322,17 @@
         {
           "file": "buildings/procedural/proc_immeuble_faubourg_r3_lod0.glb",
           "maxDistance": 150,
-          "triangles": 8274
+          "triangles": 6834
         },
         {
           "file": "buildings/procedural/proc_immeuble_faubourg_r3_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1740
+          "triangles": 1052
         },
         {
           "file": "buildings/procedural/proc_immeuble_faubourg_r3_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 596
+          "triangles": 396
         }
       ],
       "dimensions": {
@@ -11113,17 +10480,17 @@
         {
           "file": "buildings/procedural/proc_immeuble_reconstruction_lod0.glb",
           "maxDistance": 150,
-          "triangles": 6950
+          "triangles": 5160
         },
         {
           "file": "buildings/procedural/proc_immeuble_reconstruction_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2288
+          "triangles": 1292
         },
         {
           "file": "buildings/procedural/proc_immeuble_reconstruction_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 818
+          "triangles": 530
         }
       ],
       "dimensions": {
@@ -11263,158 +10630,6 @@
       ]
     },
     {
-      "id": "proc_immeuble_loggias",
-      "nameFr": "Immeuble à loggias",
-      "category": "apartment_mid",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_immeuble_loggias_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 11370
-        },
-        {
-          "file": "buildings/procedural/proc_immeuble_loggias_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 3832
-        },
-        {
-          "file": "buildings/procedural/proc_immeuble_loggias_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 1070
-        }
-      ],
-      "dimensions": {
-        "width": 23.74,
-        "depth": 14.44,
-        "height": 22.45
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 2
-      },
-      "cost": 714000,
-      "upkeepPerMonth": 1140,
-      "capacity": {
-        "residents": 54,
-        "jobs": 0
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 7.22,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Béton clair, allèges grises"
-        },
-        {
-          "id": "couleur",
-          "nameFr": "Panneaux colorés",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          }
-        },
-        {
-          "id": "sombre",
-          "nameFr": "Béton gris sombre",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          }
-        },
-        {
-          "id": "blanc",
-          "nameFr": "Béton blanc, bois",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e8e5dc"
-            },
-            "facade_b": {
-              "textureSet": "bardage_bois",
-              "color": "#d9b98c"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Panneaux colorés, hauteur ×0,94",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Béton gris sombre, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "bardage_bois",
-        "beton_facade",
-        "carreaux_facade",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "panneaux_facade_sombres",
-        "sol_beton_brut",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/residences.ts#proc_immeuble_loggias",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:grands_ensembles",
-        "quartier:faubourg",
-        "mitoyen",
-        "immeuble",
-        "loggias",
-        "style:beton_moderne",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_immeuble_atelier_brique",
       "nameFr": "Immeuble d’ateliers reconverti",
       "category": "apartment_low",
@@ -11422,17 +10637,17 @@
         {
           "file": "buildings/procedural/proc_immeuble_atelier_brique_lod0.glb",
           "maxDistance": 150,
-          "triangles": 5853
+          "triangles": 5083
         },
         {
           "file": "buildings/procedural/proc_immeuble_atelier_brique_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2201
+          "triangles": 1565
         },
         {
           "file": "buildings/procedural/proc_immeuble_atelier_brique_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 867
+          "triangles": 755
         }
       ],
       "dimensions": {
@@ -11571,17 +10786,17 @@
         {
           "file": "buildings/procedural/proc_immeuble_colombage_haut_lod0.glb",
           "maxDistance": 150,
-          "triangles": 4308
+          "triangles": 3556
         },
         {
           "file": "buildings/procedural/proc_immeuble_colombage_haut_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1250
+          "triangles": 718
         },
         {
           "file": "buildings/procedural/proc_immeuble_colombage_haut_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 482
+          "triangles": 338
         }
       ],
       "dimensions": {
@@ -11728,17 +10943,17 @@
         {
           "file": "buildings/procedural/proc_angle_pierre_dome_lod0.glb",
           "maxDistance": 150,
-          "triangles": 17185
+          "triangles": 12553
         },
         {
           "file": "buildings/procedural/proc_angle_pierre_dome_lod1.glb",
           "maxDistance": 600,
-          "triangles": 4467
+          "triangles": 2273
         },
         {
           "file": "buildings/procedural/proc_angle_pierre_dome_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 1799
+          "triangles": 1049
         }
       ],
       "dimensions": {
@@ -11887,17 +11102,17 @@
         {
           "file": "buildings/procedural/proc_angle_brique_lod0.glb",
           "maxDistance": 150,
-          "triangles": 12679
+          "triangles": 9383
         },
         {
           "file": "buildings/procedural/proc_angle_brique_lod1.glb",
           "maxDistance": 600,
-          "triangles": 4729
+          "triangles": 1809
         },
         {
           "file": "buildings/procedural/proc_angle_brique_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 1463
+          "triangles": 879
         }
       ],
       "dimensions": {
@@ -12042,467 +11257,6 @@
       ]
     },
     {
-      "id": "proc_angle_moderne",
-      "nameFr": "Immeuble d’angle moderne",
-      "category": "apartment_mid",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_angle_moderne_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 14043
-        },
-        {
-          "file": "buildings/procedural/proc_angle_moderne_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 4947
-        },
-        {
-          "file": "buildings/procedural/proc_angle_moderne_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 1989
-        }
-      ],
-      "dimensions": {
-        "width": 23.77,
-        "depth": 23.17,
-        "height": 18.94
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 3
-      },
-      "cost": 1114000,
-      "upkeepPerMonth": 1780,
-      "capacity": {
-        "residents": 60,
-        "jobs": 10
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 11.59,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Béton beige, allèges vertes"
-        },
-        {
-          "id": "brique",
-          "nameFr": "Parement de brique",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_parement",
-              "color": "#c5a083"
-            },
-            "allege": {
-              "textureSet": "beton_facade",
-              "color": "#ddd7c8"
-            }
-          }
-        },
-        {
-          "id": "gris",
-          "nameFr": "Béton gris, allèges bleues",
-          "materialOverrides": {
-            "facade": {
-              "color": "#cdcdc8"
-            },
-            "allege": {
-              "color": "#9fb4c4"
-            },
-            "menuiserie": {
-              "color": "#4a5158"
-            }
-          }
-        },
-        {
-          "id": "creme",
-          "nameFr": "Enduit crème",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "enduit_creme",
-              "color": "#f0e7d4"
-            },
-            "allege": {
-              "textureSet": "enduit_peint",
-              "color": "#d8c6a4"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Parement de brique, hauteur ×0,94",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_parement",
-              "color": "#c5a083"
-            },
-            "allege": {
-              "textureSet": "beton_facade",
-              "color": "#ddd7c8"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Béton gris, allèges bleues, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#cdcdc8"
-            },
-            "allege": {
-              "color": "#9fb4c4"
-            },
-            "menuiserie": {
-              "color": "#4a5158"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "beton_facade",
-        "brique_parement",
-        "carreaux_facade",
-        "enduit_blanc",
-        "enduit_creme",
-        "enduit_peint",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "sol_beton_brut",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/residences.ts#proc_angle_moderne",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:faubourg",
-        "quartier:grands_ensembles",
-        "immeuble",
-        "angle",
-        "commerces",
-        "style:reconstruction",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
-      "id": "proc_residence_gradins",
-      "nameFr": "Résidence à gradins",
-      "category": "apartment_high",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_residence_gradins_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 15152
-        },
-        {
-          "file": "buildings/procedural/proc_residence_gradins_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 4910
-        },
-        {
-          "file": "buildings/procedural/proc_residence_gradins_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 2218
-        }
-      ],
-      "dimensions": {
-        "width": 30.84,
-        "depth": 22.02,
-        "height": 22.2
-      },
-      "footprint": {
-        "tilesX": 4,
-        "tilesZ": 3
-      },
-      "cost": 1733000,
-      "upkeepPerMonth": 2770,
-      "capacity": {
-        "residents": 120,
-        "jobs": 0
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 11.01,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Béton clair, allèges grises"
-        },
-        {
-          "id": "couleur",
-          "nameFr": "Panneaux colorés",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          }
-        },
-        {
-          "id": "sombre",
-          "nameFr": "Béton gris sombre",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          }
-        },
-        {
-          "id": "blanc",
-          "nameFr": "Béton blanc, bois",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e8e5dc"
-            },
-            "facade_b": {
-              "textureSet": "bardage_bois",
-              "color": "#d9b98c"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Panneaux colorés, hauteur ×0,94",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Béton gris sombre, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "bardage_bois",
-        "beton_facade",
-        "carreaux_facade",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "sol_beton_brut",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/residences.ts#proc_residence_gradins",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:grands_ensembles",
-        "quartier:faubourg",
-        "residence",
-        "terrasses",
-        "gradins",
-        "style:beton_moderne",
-        "densite:tres_forte",
-        "genere"
-      ]
-    },
-    {
-      "id": "proc_residence_bardage",
-      "nameFr": "Résidence à bardage bois",
-      "category": "apartment_mid",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_residence_bardage_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 8998
-        },
-        {
-          "file": "buildings/procedural/proc_residence_bardage_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 3032
-        },
-        {
-          "file": "buildings/procedural/proc_residence_bardage_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 1388
-        }
-      ],
-      "dimensions": {
-        "width": 22.74,
-        "depth": 15.02,
-        "height": 16.7
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 2
-      },
-      "cost": 643000,
-      "upkeepPerMonth": 1030,
-      "capacity": {
-        "residents": 52,
-        "jobs": 6
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 7.51,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Béton clair, allèges grises"
-        },
-        {
-          "id": "couleur",
-          "nameFr": "Panneaux colorés",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          }
-        },
-        {
-          "id": "sombre",
-          "nameFr": "Béton gris sombre",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          }
-        },
-        {
-          "id": "blanc",
-          "nameFr": "Béton blanc, bois",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e8e5dc"
-            },
-            "facade_b": {
-              "textureSet": "bardage_bois",
-              "color": "#d9b98c"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Panneaux colorés, hauteur ×0,94",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Béton gris sombre, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "bardage_bois",
-        "beton_facade",
-        "carreaux_facade",
-        "enduit_blanc",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "panneaux_facade_sombres",
-        "sol_beton_brut",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/residences.ts#proc_residence_bardage",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:faubourg",
-        "quartier:pavillonnaire",
-        "residence",
-        "bois",
-        "balcons",
-        "style:beton_moderne",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_residence_verre",
       "nameFr": "Résidence de standing vitrée",
       "category": "apartment_high",
@@ -12510,17 +11264,17 @@
         {
           "file": "buildings/procedural/proc_residence_verre_lod0.glb",
           "maxDistance": 150,
-          "triangles": 12570
+          "triangles": 10878
         },
         {
           "file": "buildings/procedural/proc_residence_verre_lod1.glb",
           "maxDistance": 600,
-          "triangles": 5016
+          "triangles": 3008
         },
         {
           "file": "buildings/procedural/proc_residence_verre_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 2358
+          "triangles": 1512
         }
       ],
       "dimensions": {
@@ -12673,17 +11427,17 @@
         {
           "file": "buildings/procedural/proc_barre_loggias_lod0.glb",
           "maxDistance": 150,
-          "triangles": 19688
+          "triangles": 13052
         },
         {
           "file": "buildings/procedural/proc_barre_loggias_lod1.glb",
           "maxDistance": 600,
-          "triangles": 6828
+          "triangles": 3582
         },
         {
           "file": "buildings/procedural/proc_barre_loggias_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 1762
+          "triangles": 1126
         }
       ],
       "dimensions": {
@@ -12824,17 +11578,17 @@
         {
           "file": "buildings/procedural/proc_barre_redans_lod0.glb",
           "maxDistance": 150,
-          "triangles": 18694
+          "triangles": 13840
         },
         {
           "file": "buildings/procedural/proc_barre_redans_lod1.glb",
           "maxDistance": 600,
-          "triangles": 6804
+          "triangles": 3452
         },
         {
           "file": "buildings/procedural/proc_barre_redans_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 2478
+          "triangles": 1458
         }
       ],
       "dimensions": {
@@ -12973,158 +11727,6 @@
       ]
     },
     {
-      "id": "proc_barre_commerces",
-      "nameFr": "Barre à commerces en pied",
-      "category": "apartment_high",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_barre_commerces_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 16318
-        },
-        {
-          "file": "buildings/procedural/proc_barre_commerces_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 5410
-        },
-        {
-          "file": "buildings/procedural/proc_barre_commerces_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 2192
-        }
-      ],
-      "dimensions": {
-        "width": 39.24,
-        "depth": 14.07,
-        "height": 25.01
-      },
-      "footprint": {
-        "tilesX": 5,
-        "tilesZ": 2
-      },
-      "cost": 1016000,
-      "upkeepPerMonth": 1630,
-      "capacity": {
-        "residents": 170,
-        "jobs": 24
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 7.04,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Béton clair, allèges grises"
-        },
-        {
-          "id": "couleur",
-          "nameFr": "Panneaux colorés",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          }
-        },
-        {
-          "id": "sombre",
-          "nameFr": "Béton gris sombre",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          }
-        },
-        {
-          "id": "blanc",
-          "nameFr": "Béton blanc, bois",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e8e5dc"
-            },
-            "facade_b": {
-              "textureSet": "bardage_bois",
-              "color": "#d9b98c"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Panneaux colorés, hauteur ×0,94",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Béton gris sombre, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "bardage_bois",
-        "beton_facade",
-        "carreaux_facade",
-        "enduit_blanc",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "panneaux_facade_sombres",
-        "sol_beton_brut",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/collectifs.ts#proc_barre_commerces",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:grands_ensembles",
-        "barre",
-        "commerces",
-        "collectif",
-        "style:beton_moderne",
-        "densite:tres_forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_barre_brique",
       "nameFr": "Barre de brique à cages vitrées",
       "category": "apartment_high",
@@ -13132,17 +11734,17 @@
         {
           "file": "buildings/procedural/proc_barre_brique_lod0.glb",
           "maxDistance": 150,
-          "triangles": 9312
+          "triangles": 7564
         },
         {
           "file": "buildings/procedural/proc_barre_brique_lod1.glb",
           "maxDistance": 600,
-          "triangles": 3408
+          "triangles": 1984
         },
         {
           "file": "buildings/procedural/proc_barre_brique_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 1052
+          "triangles": 644
         }
       ],
       "dimensions": {
@@ -13286,156 +11888,6 @@
       ]
     },
     {
-      "id": "proc_tour_plot_balcons",
-      "nameFr": "Tour d’habitation à balcons",
-      "category": "apartment_high",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_tour_plot_balcons_lod0.glb",
-          "maxDistance": 190,
-          "triangles": 21224
-        },
-        {
-          "file": "buildings/procedural/proc_tour_plot_balcons_lod1.glb",
-          "maxDistance": 760,
-          "triangles": 7402
-        },
-        {
-          "file": "buildings/procedural/proc_tour_plot_balcons_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 3118
-        }
-      ],
-      "dimensions": {
-        "width": 21.34,
-        "depth": 20.34,
-        "height": 38.76
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 3
-      },
-      "cost": 1532000,
-      "upkeepPerMonth": 2450,
-      "capacity": {
-        "residents": 240,
-        "jobs": 0
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 10.17,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Béton clair, allèges grises"
-        },
-        {
-          "id": "couleur",
-          "nameFr": "Panneaux colorés",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          }
-        },
-        {
-          "id": "sombre",
-          "nameFr": "Béton gris sombre",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          }
-        },
-        {
-          "id": "blanc",
-          "nameFr": "Béton blanc, bois",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e8e5dc"
-            },
-            "facade_b": {
-              "textureSet": "bardage_bois",
-              "color": "#d9b98c"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Panneaux colorés, hauteur ×0,94",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Béton gris sombre, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "bardage_bois",
-        "beton_facade",
-        "carreaux_facade",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "sol_beton_brut",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/collectifs.ts#proc_tour_plot_balcons",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:grands_ensembles",
-        "tour",
-        "plot",
-        "balcons",
-        "style:beton_moderne",
-        "densite:tres_forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_tour_plot_loggias",
       "nameFr": "Tour à loggias et socle commercial",
       "category": "apartment_high",
@@ -13443,17 +11895,17 @@
         {
           "file": "buildings/procedural/proc_tour_plot_loggias_lod0.glb",
           "maxDistance": 200,
-          "triangles": 21092
+          "triangles": 16906
         },
         {
           "file": "buildings/procedural/proc_tour_plot_loggias_lod1.glb",
           "maxDistance": 800,
-          "triangles": 7090
+          "triangles": 2576
         },
         {
           "file": "buildings/procedural/proc_tour_plot_loggias_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 3028
+          "triangles": 1664
         }
       ],
       "dimensions": {
@@ -13605,12 +12057,12 @@
         {
           "file": "buildings/procedural/proc_tour_verre_logements_lod1.glb",
           "maxDistance": 900,
-          "triangles": 2078
+          "triangles": 1950
         },
         {
           "file": "buildings/procedural/proc_tour_verre_logements_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 858
+          "triangles": 666
         }
       ],
       "dimensions": {
@@ -13762,17 +12214,17 @@
         {
           "file": "buildings/procedural/proc_collectif_faubourg_lod0.glb",
           "maxDistance": 150,
-          "triangles": 6738
+          "triangles": 5476
         },
         {
           "file": "buildings/procedural/proc_collectif_faubourg_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1418
+          "triangles": 808
         },
         {
           "file": "buildings/procedural/proc_collectif_faubourg_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 480
+          "triangles": 340
         }
       ],
       "dimensions": {
@@ -13912,164 +12364,6 @@
       ]
     },
     {
-      "id": "proc_collectif_comble",
-      "nameFr": "Petit collectif à combles",
-      "category": "apartment_low",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_collectif_comble_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 6405
-        },
-        {
-          "file": "buildings/procedural/proc_collectif_comble_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 2069
-        },
-        {
-          "file": "buildings/procedural/proc_collectif_comble_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 593
-        }
-      ],
-      "dimensions": {
-        "width": 14.8,
-        "depth": 13.7,
-        "height": 18.83
-      },
-      "footprint": {
-        "tilesX": 2,
-        "tilesZ": 2
-      },
-      "cost": 279000,
-      "upkeepPerMonth": 450,
-      "capacity": {
-        "residents": 28,
-        "jobs": 0
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 6.85,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Pierre blonde"
-        },
-        {
-          "id": "grise",
-          "nameFr": "Pierre grise, ardoise bleue",
-          "materialOverrides": {
-            "facade": {
-              "color": "#d9d9d4"
-            },
-            "encadrement": {
-              "color": "#e8e8e2"
-            },
-            "toiture": {
-              "color": "#4e5a67"
-            }
-          }
-        },
-        {
-          "id": "ocre",
-          "nameFr": "Pierre dorée, toiture brune",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e3cfa4"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles_grises",
-              "color": "#9c8a7a"
-            },
-            "porte": {
-              "color": "#6d2f33"
-            }
-          }
-        },
-        {
-          "id": "enduit",
-          "nameFr": "Enduit clair sur pierre",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "enduit_creme",
-              "color": "#f1e8d6"
-            },
-            "volet": {
-              "color": "#8aa3a8"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Pierre grise, ardoise bleue, hauteur ×0,94",
-          "materialOverrides": {
-            "facade": {
-              "color": "#d9d9d4"
-            },
-            "encadrement": {
-              "color": "#e8e8e2"
-            },
-            "toiture": {
-              "color": "#4e5a67"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Pierre dorée, toiture brune, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e3cfa4"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles_grises",
-              "color": "#9c8a7a"
-            },
-            "porte": {
-              "color": "#6d2f33"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "beton_facade",
-        "brique_rouge",
-        "enduit_creme",
-        "metal_larme",
-        "pierre_rustique",
-        "pierre_taille",
-        "toit_ardoise",
-        "toit_tole_ondulee",
-        "toit_tuiles",
-        "toit_tuiles_grises"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/collectifs.ts#proc_collectif_comble",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:faubourg",
-        "quartier:centre_historique",
-        "collectif",
-        "pierre",
-        "mansarde",
-        "style:pierre_claire",
-        "densite:moyenne",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_collectif_brique",
       "nameFr": "Petit collectif en brique",
       "category": "apartment_low",
@@ -14077,17 +12371,17 @@
         {
           "file": "buildings/procedural/proc_collectif_brique_lod0.glb",
           "maxDistance": 150,
-          "triangles": 6153
+          "triangles": 4627
         },
         {
           "file": "buildings/procedural/proc_collectif_brique_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1825
+          "triangles": 1121
         },
         {
           "file": "buildings/procedural/proc_collectif_brique_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 551
+          "triangles": 351
         }
       ],
       "dimensions": {
@@ -15202,17 +13496,17 @@
         {
           "file": "buildings/procedural/proc_bureaux_pierre_lod0.glb",
           "maxDistance": 150,
-          "triangles": 8937
+          "triangles": 6819
         },
         {
           "file": "buildings/procedural/proc_bureaux_pierre_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2783
+          "triangles": 1477
         },
         {
           "file": "buildings/procedural/proc_bureaux_pierre_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 965
+          "triangles": 589
         }
       ],
       "dimensions": {
@@ -15354,154 +13648,6 @@
       ]
     },
     {
-      "id": "proc_bureaux_brique",
-      "nameFr": "Bureaux en brique et verre",
-      "category": "commercial",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_bureaux_brique_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 7460
-        },
-        {
-          "file": "buildings/procedural/proc_bureaux_brique_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 2854
-        },
-        {
-          "file": "buildings/procedural/proc_bureaux_brique_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 1146
-        }
-      ],
-      "dimensions": {
-        "width": 22.76,
-        "depth": 15.17,
-        "height": 22.17
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 2
-      },
-      "cost": 619000,
-      "upkeepPerMonth": 990,
-      "capacity": {
-        "residents": 0,
-        "jobs": 140
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 7.58,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Brique rouge, acier sombre"
-        },
-        {
-          "id": "jaune",
-          "nameFr": "Brique jaune",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_orange",
-              "color": "#d8bd90"
-            },
-            "encadrement": {
-              "color": "#e0d9ca"
-            }
-          }
-        },
-        {
-          "id": "noire",
-          "nameFr": "Brique noircie",
-          "materialOverrides": {
-            "facade": {
-              "color": "#6d5b53"
-            },
-            "toiture": {
-              "textureSet": "toit_tole_ondulee",
-              "color": "#7d8386"
-            }
-          }
-        },
-        {
-          "id": "beton",
-          "nameFr": "Béton et verre",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "beton_facade",
-              "color": "#c8c3b8"
-            },
-            "allege": {
-              "textureSet": "beton_facade",
-              "color": "#bdb8ad"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Brique jaune, hauteur ×0,94",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "brique_orange",
-              "color": "#d8bd90"
-            },
-            "encadrement": {
-              "color": "#e0d9ca"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Brique noircie, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#6d5b53"
-            },
-            "toiture": {
-              "textureSet": "toit_tole_ondulee",
-              "color": "#7d8386"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "beton_facade",
-        "brique_orange",
-        "brique_rouge",
-        "enduit_blanc",
-        "metal_larme",
-        "sol_beton_brut",
-        "toit_bac_acier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/tertiaire.ts#proc_bureaux_brique",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:activites",
-        "quartier:affaires",
-        "mitoyen",
-        "bureaux",
-        "brique",
-        "service:emplois_tertiaires",
-        "style:brique_industrielle",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_hotel_pierre",
       "nameFr": "Hôtel à marquise",
       "category": "commercial",
@@ -15509,17 +13655,17 @@
         {
           "file": "buildings/procedural/proc_hotel_pierre_lod0.glb",
           "maxDistance": 150,
-          "triangles": 21033
+          "triangles": 14711
         },
         {
           "file": "buildings/procedural/proc_hotel_pierre_lod1.glb",
           "maxDistance": 600,
-          "triangles": 6064
+          "triangles": 3662
         },
         {
           "file": "buildings/procedural/proc_hotel_pierre_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 1494
+          "triangles": 848
         }
       ],
       "dimensions": {
@@ -15662,318 +13808,6 @@
       ]
     },
     {
-      "id": "proc_hotel_moderne",
-      "nameFr": "Hôtel contemporain",
-      "category": "commercial",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_hotel_moderne_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 18778
-        },
-        {
-          "file": "buildings/procedural/proc_hotel_moderne_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 5952
-        },
-        {
-          "file": "buildings/procedural/proc_hotel_moderne_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 1644
-        }
-      ],
-      "dimensions": {
-        "width": 30.44,
-        "depth": 15.92,
-        "height": 22.26
-      },
-      "footprint": {
-        "tilesX": 4,
-        "tilesZ": 2
-      },
-      "cost": 1244000,
-      "upkeepPerMonth": 1990,
-      "capacity": {
-        "residents": 0,
-        "jobs": 110
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 7.96,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Béton clair, allèges grises"
-        },
-        {
-          "id": "couleur",
-          "nameFr": "Panneaux colorés",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          }
-        },
-        {
-          "id": "sombre",
-          "nameFr": "Béton gris sombre",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          }
-        },
-        {
-          "id": "blanc",
-          "nameFr": "Béton blanc, bois",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e8e5dc"
-            },
-            "facade_b": {
-              "textureSet": "bardage_bois",
-              "color": "#d9b98c"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Panneaux colorés, hauteur ×0,94",
-          "materialOverrides": {
-            "allege": {
-              "textureSet": "carreaux_facade",
-              "color": "#d2894f"
-            },
-            "facade_b": {
-              "color": "#6d7c84"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Béton gris sombre, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#aeaba4"
-            },
-            "allege": {
-              "color": "#8e989a"
-            },
-            "menuiserie": {
-              "color": "#3e4448"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "bardage_bois",
-        "beton_facade",
-        "carreaux_facade",
-        "enduit_blanc",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "sol_beton_brut",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/tertiaire.ts#proc_hotel_moderne",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:affaires",
-        "quartier:faubourg",
-        "hotel",
-        "tourisme",
-        "service:tourisme",
-        "style:beton_moderne",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
-      "id": "proc_boutiques_pierre",
-      "nameFr": "Rangée de boutiques en pierre",
-      "category": "commercial",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_boutiques_pierre_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 5359
-        },
-        {
-          "file": "buildings/procedural/proc_boutiques_pierre_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 2180
-        },
-        {
-          "file": "buildings/procedural/proc_boutiques_pierre_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 622
-        }
-      ],
-      "dimensions": {
-        "width": 22.2,
-        "depth": 15.23,
-        "height": 16.11
-      },
-      "footprint": {
-        "tilesX": 3,
-        "tilesZ": 2
-      },
-      "cost": 336000,
-      "upkeepPerMonth": 540,
-      "capacity": {
-        "residents": 8,
-        "jobs": 26
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 7.61,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Pierre blonde"
-        },
-        {
-          "id": "grise",
-          "nameFr": "Pierre grise, ardoise bleue",
-          "materialOverrides": {
-            "facade": {
-              "color": "#d9d9d4"
-            },
-            "encadrement": {
-              "color": "#e8e8e2"
-            },
-            "toiture": {
-              "color": "#4e5a67"
-            }
-          }
-        },
-        {
-          "id": "ocre",
-          "nameFr": "Pierre dorée, toiture brune",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e3cfa4"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles_grises",
-              "color": "#9c8a7a"
-            },
-            "porte": {
-              "color": "#6d2f33"
-            }
-          }
-        },
-        {
-          "id": "enduit",
-          "nameFr": "Enduit clair sur pierre",
-          "materialOverrides": {
-            "facade": {
-              "textureSet": "enduit_creme",
-              "color": "#f1e8d6"
-            },
-            "volet": {
-              "color": "#8aa3a8"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Pierre grise, ardoise bleue, hauteur ×0,94",
-          "materialOverrides": {
-            "facade": {
-              "color": "#d9d9d4"
-            },
-            "encadrement": {
-              "color": "#e8e8e2"
-            },
-            "toiture": {
-              "color": "#4e5a67"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Pierre dorée, toiture brune, hauteur ×1,06",
-          "materialOverrides": {
-            "facade": {
-              "color": "#e3cfa4"
-            },
-            "toiture": {
-              "textureSet": "toit_tuiles_grises",
-              "color": "#9c8a7a"
-            },
-            "porte": {
-              "color": "#6d2f33"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_blanc",
-        "brique_rouge",
-        "enduit_blanc",
-        "enduit_creme",
-        "metal_larme",
-        "pierre_rustique",
-        "pierre_taille",
-        "toit_ardoise",
-        "toit_tole_ondulee",
-        "toit_tuiles",
-        "toit_tuiles_grises"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/commerces.ts#proc_boutiques_pierre",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:centre_historique",
-        "quartier:faubourg",
-        "mitoyen",
-        "commerce",
-        "boutiques",
-        "service:commerces",
-        "rayon:500",
-        "style:pierre_claire",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_boutiques_colombage",
       "nameFr": "Échoppes à pans de bois",
       "category": "commercial",
@@ -15981,17 +13815,17 @@
         {
           "file": "buildings/procedural/proc_boutiques_colombage_lod0.glb",
           "maxDistance": 150,
-          "triangles": 3949
+          "triangles": 3627
         },
         {
           "file": "buildings/procedural/proc_boutiques_colombage_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1376
+          "triangles": 1128
         },
         {
           "file": "buildings/procedural/proc_boutiques_colombage_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 572
+          "triangles": 504
         }
       ],
       "dimensions": {
@@ -16140,17 +13974,17 @@
         {
           "file": "buildings/procedural/proc_boutiques_faubourg_lod0.glb",
           "maxDistance": 150,
-          "triangles": 5904
+          "triangles": 5584
         },
         {
           "file": "buildings/procedural/proc_boutiques_faubourg_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1332
+          "triangles": 1028
         },
         {
           "file": "buildings/procedural/proc_boutiques_faubourg_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 556
+          "triangles": 492
         }
       ],
       "dimensions": {
@@ -16299,12 +14133,12 @@
         {
           "file": "buildings/procedural/proc_halle_marche_lod0.glb",
           "maxDistance": 150,
-          "triangles": 4252
+          "triangles": 3932
         },
         {
           "file": "buildings/procedural/proc_halle_marche_lod1.glb",
           "maxDistance": 600,
-          "triangles": 864
+          "triangles": 704
         },
         {
           "file": "buildings/procedural/proc_halle_marche_lod2.glb",
@@ -16447,12 +14281,12 @@
         {
           "file": "buildings/procedural/proc_halle_pierre_lod0.glb",
           "maxDistance": 150,
-          "triangles": 3362
+          "triangles": 3106
         },
         {
           "file": "buildings/procedural/proc_halle_pierre_lod1.glb",
           "maxDistance": 600,
-          "triangles": 674
+          "triangles": 546
         },
         {
           "file": "buildings/procedural/proc_halle_pierre_lod2.glb",
@@ -16602,17 +14436,17 @@
         {
           "file": "buildings/procedural/proc_grand_magasin_lod0.glb",
           "maxDistance": 150,
-          "triangles": 8054
+          "triangles": 6276
         },
         {
           "file": "buildings/procedural/proc_grand_magasin_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2468
+          "triangles": 1398
         },
         {
           "file": "buildings/procedural/proc_grand_magasin_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 808
+          "triangles": 476
         }
       ],
       "dimensions": {
@@ -16756,170 +14590,6 @@
       ]
     },
     {
-      "id": "proc_galerie_moderne",
-      "nameFr": "Galerie commerciale moderne",
-      "category": "commercial",
-      "lods": [
-        {
-          "file": "buildings/procedural/proc_galerie_moderne_lod0.glb",
-          "maxDistance": 150,
-          "triangles": 4976
-        },
-        {
-          "file": "buildings/procedural/proc_galerie_moderne_lod1.glb",
-          "maxDistance": 600,
-          "triangles": 1502
-        },
-        {
-          "file": "buildings/procedural/proc_galerie_moderne_lod2.glb",
-          "maxDistance": 1000000000,
-          "triangles": 532
-        }
-      ],
-      "dimensions": {
-        "width": 30.24,
-        "depth": 22.25,
-        "height": 18.4
-      },
-      "footprint": {
-        "tilesX": 4,
-        "tilesZ": 3
-      },
-      "cost": 990000,
-      "upkeepPerMonth": 1580,
-      "capacity": {
-        "residents": 0,
-        "jobs": 230
-      },
-      "frontage": [
-        {
-          "x": 0,
-          "z": 11.12,
-          "nx": 0,
-          "nz": 1,
-          "kind": "pedestrian"
-        }
-      ],
-      "variants": [
-        {
-          "id": "origine",
-          "nameFr": "Verre bleuté, métal gris"
-        },
-        {
-          "id": "bronze",
-          "nameFr": "Verre bronze",
-          "materialOverrides": {
-            "verre": {
-              "color": "#8a7656"
-            },
-            "menuiserie": {
-              "color": "#6b6153"
-            },
-            "allege": {
-              "color": "#7a6f5e"
-            }
-          }
-        },
-        {
-          "id": "blanc",
-          "nameFr": "Métal blanc, verre clair",
-          "materialOverrides": {
-            "menuiserie": {
-              "color": "#d9dcde"
-            },
-            "encadrement": {
-              "color": "#d9dcde"
-            },
-            "verre": {
-              "color": "#8fa7b2"
-            },
-            "allege": {
-              "textureSet": "beton_facade",
-              "color": "#dcd9d1"
-            }
-          }
-        },
-        {
-          "id": "vert",
-          "nameFr": "Verre vert, bardage bois",
-          "materialOverrides": {
-            "verre": {
-              "color": "#6f8c7e"
-            },
-            "facade": {
-              "textureSet": "bardage_bois",
-              "color": "#c9a173"
-            }
-          }
-        },
-        {
-          "id": "h94",
-          "nameFr": "Verre bronze, hauteur ×0,94",
-          "materialOverrides": {
-            "verre": {
-              "color": "#8a7656"
-            },
-            "menuiserie": {
-              "color": "#6b6153"
-            },
-            "allege": {
-              "color": "#7a6f5e"
-            }
-          },
-          "heightScale": 0.94
-        },
-        {
-          "id": "h106",
-          "nameFr": "Métal blanc, verre clair, hauteur ×1,06",
-          "materialOverrides": {
-            "menuiserie": {
-              "color": "#d9dcde"
-            },
-            "encadrement": {
-              "color": "#d9dcde"
-            },
-            "verre": {
-              "color": "#8fa7b2"
-            },
-            "allege": {
-              "textureSet": "beton_facade",
-              "color": "#dcd9d1"
-            }
-          },
-          "heightScale": 1.06
-        }
-      ],
-      "textureSets": [
-        "bardage_bois",
-        "beton_facade",
-        "enduit_blanc",
-        "metal_conteneur",
-        "metal_larme",
-        "metal_rideau",
-        "panneaux_facade_sombres",
-        "pierre_taille",
-        "terrain_gravier",
-        "toit_tole_ondulee"
-      ],
-      "license": {
-        "spdx": "CC0-1.0",
-        "source": "tools/buildings/procedural/models/commerces.ts#proc_galerie_moderne",
-        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
-      },
-      "tags": [
-        "procedural",
-        "quartier:affaires",
-        "quartier:grands_ensembles",
-        "commerce",
-        "galerie",
-        "service:commerces",
-        "rayon:1800",
-        "style:verre_contemporain",
-        "densite:forte",
-        "genere"
-      ]
-    },
-    {
       "id": "proc_supermarche_quartier",
       "nameFr": "Supermarché de quartier",
       "category": "commercial",
@@ -16927,17 +14597,17 @@
         {
           "file": "buildings/procedural/proc_supermarche_quartier_lod0.glb",
           "maxDistance": 150,
-          "triangles": 1758
+          "triangles": 1722
         },
         {
           "file": "buildings/procedural/proc_supermarche_quartier_lod1.glb",
           "maxDistance": 600,
-          "triangles": 566
+          "triangles": 534
         },
         {
           "file": "buildings/procedural/proc_supermarche_quartier_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 152
+          "triangles": 144
         }
       ],
       "dimensions": {
@@ -17081,17 +14751,17 @@
         {
           "file": "buildings/procedural/proc_magasin_bricolage_lod0.glb",
           "maxDistance": 150,
-          "triangles": 1760
+          "triangles": 1724
         },
         {
           "file": "buildings/procedural/proc_magasin_bricolage_lod1.glb",
           "maxDistance": 600,
-          "triangles": 556
+          "triangles": 524
         },
         {
           "file": "buildings/procedural/proc_magasin_bricolage_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 152
+          "triangles": 144
         }
       ],
       "dimensions": {
@@ -17230,17 +14900,17 @@
         {
           "file": "buildings/procedural/proc_usine_sheds_brique_lod0.glb",
           "maxDistance": 150,
-          "triangles": 7766
+          "triangles": 7226
         },
         {
           "file": "buildings/procedural/proc_usine_sheds_brique_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1684
+          "triangles": 1260
         },
         {
           "file": "buildings/procedural/proc_usine_sheds_brique_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 856
+          "triangles": 840
         }
       ],
       "dimensions": {
@@ -17380,17 +15050,17 @@
         {
           "file": "buildings/procedural/proc_manufacture_cour_lod0.glb",
           "maxDistance": 150,
-          "triangles": 8431
+          "triangles": 7873
         },
         {
           "file": "buildings/procedural/proc_manufacture_cour_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1757
+          "triangles": 1313
         },
         {
           "file": "buildings/procedural/proc_manufacture_cour_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 867
+          "triangles": 851
         }
       ],
       "dimensions": {
@@ -17531,17 +15201,17 @@
         {
           "file": "buildings/procedural/proc_entrepot_quais_lod0.glb",
           "maxDistance": 150,
-          "triangles": 1636
+          "triangles": 1608
         },
         {
           "file": "buildings/procedural/proc_entrepot_quais_lod1.glb",
           "maxDistance": 600,
-          "triangles": 696
+          "triangles": 664
         },
         {
           "file": "buildings/procedural/proc_entrepot_quais_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 244
+          "triangles": 236
         }
       ],
       "dimensions": {
@@ -17833,12 +15503,12 @@
         {
           "file": "buildings/procedural/proc_atelier_artisan_lod0.glb",
           "maxDistance": 150,
-          "triangles": 1856
+          "triangles": 1712
         },
         {
           "file": "buildings/procedural/proc_atelier_artisan_lod1.glb",
           "maxDistance": 600,
-          "triangles": 472
+          "triangles": 368
         },
         {
           "file": "buildings/procedural/proc_atelier_artisan_lod2.glb",
@@ -17981,17 +15651,17 @@
         {
           "file": "buildings/procedural/proc_atelier_bois_lod0.glb",
           "maxDistance": 150,
-          "triangles": 2416
+          "triangles": 2130
         },
         {
           "file": "buildings/procedural/proc_atelier_bois_lod1.glb",
           "maxDistance": 600,
-          "triangles": 734
+          "triangles": 460
         },
         {
           "file": "buildings/procedural/proc_atelier_bois_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 260
+          "triangles": 216
         }
       ],
       "dimensions": {
@@ -18138,17 +15808,17 @@
         {
           "file": "buildings/procedural/proc_atelier_moderne_lod0.glb",
           "maxDistance": 150,
-          "triangles": 1586
+          "triangles": 1300
         },
         {
           "file": "buildings/procedural/proc_atelier_moderne_lod1.glb",
           "maxDistance": 600,
-          "triangles": 510
+          "triangles": 236
         },
         {
           "file": "buildings/procedural/proc_atelier_moderne_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 172
+          "triangles": 128
         }
       ],
       "dimensions": {
@@ -18290,17 +15960,17 @@
         {
           "file": "buildings/procedural/proc_depot_cuves_lod0.glb",
           "maxDistance": 150,
-          "triangles": 1074
+          "triangles": 948
         },
         {
           "file": "buildings/procedural/proc_depot_cuves_lod1.glb",
           "maxDistance": 600,
-          "triangles": 526
+          "triangles": 430
         },
         {
           "file": "buildings/procedural/proc_depot_cuves_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 161
+          "triangles": 133
         }
       ],
       "dimensions": {
@@ -18443,17 +16113,17 @@
         {
           "file": "buildings/procedural/proc_depot_silo_lod0.glb",
           "maxDistance": 150,
-          "triangles": 1160
+          "triangles": 998
         },
         {
           "file": "buildings/procedural/proc_depot_silo_lod1.glb",
           "maxDistance": 600,
-          "triangles": 505
+          "triangles": 385
         },
         {
           "file": "buildings/procedural/proc_depot_silo_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 162
+          "triangles": 126
         }
       ],
       "dimensions": {
@@ -18592,17 +16262,17 @@
         {
           "file": "buildings/procedural/proc_ecole_brique_lod0.glb",
           "maxDistance": 150,
-          "triangles": 7666
+          "triangles": 6364
         },
         {
           "file": "buildings/procedural/proc_ecole_brique_lod1.glb",
           "maxDistance": 600,
-          "triangles": 2526
+          "triangles": 1366
         },
         {
           "file": "buildings/procedural/proc_ecole_brique_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 817
+          "triangles": 557
         }
       ],
       "dimensions": {
@@ -18754,17 +16424,17 @@
         {
           "file": "buildings/procedural/proc_ecole_moderne_lod0.glb",
           "maxDistance": 150,
-          "triangles": 4128
+          "triangles": 3414
         },
         {
           "file": "buildings/procedural/proc_ecole_moderne_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1478
+          "triangles": 802
         },
         {
           "file": "buildings/procedural/proc_ecole_moderne_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 636
+          "triangles": 448
         }
       ],
       "dimensions": {
@@ -18908,17 +16578,17 @@
         {
           "file": "buildings/procedural/proc_creche_lod0.glb",
           "maxDistance": 150,
-          "triangles": 2634
+          "triangles": 2228
         },
         {
           "file": "buildings/procedural/proc_creche_lod1.glb",
           "maxDistance": 600,
-          "triangles": 954
+          "triangles": 552
         },
         {
           "file": "buildings/procedural/proc_creche_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 342
+          "triangles": 234
         }
       ],
       "dimensions": {
@@ -19066,12 +16736,12 @@
         {
           "file": "buildings/procedural/proc_mediatheque_lod0.glb",
           "maxDistance": 150,
-          "triangles": 3842
+          "triangles": 3134
         },
         {
           "file": "buildings/procedural/proc_mediatheque_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1162
+          "triangles": 544
         },
         {
           "file": "buildings/procedural/proc_mediatheque_lod2.glb",
@@ -19233,17 +16903,17 @@
         {
           "file": "buildings/procedural/proc_mairie_annexe_lod0.glb",
           "maxDistance": 150,
-          "triangles": 5265
+          "triangles": 4379
         },
         {
           "file": "buildings/procedural/proc_mairie_annexe_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1652
+          "triangles": 1082
         },
         {
           "file": "buildings/procedural/proc_mairie_annexe_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 664
+          "triangles": 512
         }
       ],
       "dimensions": {
@@ -19391,17 +17061,17 @@
         {
           "file": "buildings/procedural/proc_poste_quartier_lod0.glb",
           "maxDistance": 150,
-          "triangles": 2476
+          "triangles": 2014
         },
         {
           "file": "buildings/procedural/proc_poste_quartier_lod1.glb",
           "maxDistance": 600,
-          "triangles": 796
+          "triangles": 414
         },
         {
           "file": "buildings/procedural/proc_poste_quartier_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 332
+          "triangles": 224
         }
       ],
       "dimensions": {
@@ -19548,17 +17218,17 @@
         {
           "file": "buildings/procedural/proc_centre_sante_lod0.glb",
           "maxDistance": 150,
-          "triangles": 3488
+          "triangles": 2788
         },
         {
           "file": "buildings/procedural/proc_centre_sante_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1218
+          "triangles": 560
         },
         {
           "file": "buildings/procedural/proc_centre_sante_lod2.glb",
           "maxDistance": 1000000000,
-          "triangles": 514
+          "triangles": 326
         }
       ],
       "dimensions": {
@@ -19706,7 +17376,7 @@
         {
           "file": "buildings/procedural/proc_gymnase_lod1.glb",
           "maxDistance": 600,
-          "triangles": 446
+          "triangles": 438
         },
         {
           "file": "buildings/procedural/proc_gymnase_lod2.glb",
@@ -19859,7 +17529,7 @@
         {
           "file": "buildings/procedural/proc_salle_polyvalente_lod1.glb",
           "maxDistance": 600,
-          "triangles": 426
+          "triangles": 418
         },
         {
           "file": "buildings/procedural/proc_salle_polyvalente_lod2.glb",
@@ -20016,12 +17686,12 @@
         {
           "file": "buildings/procedural/proc_chapelle_pierre_lod0.glb",
           "maxDistance": 150,
-          "triangles": 4361
+          "triangles": 4055
         },
         {
           "file": "buildings/procedural/proc_chapelle_pierre_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1229
+          "triangles": 1025
         },
         {
           "file": "buildings/procedural/proc_chapelle_pierre_lod2.glb",
@@ -20176,12 +17846,12 @@
         {
           "file": "buildings/procedural/proc_temple_brique_lod0.glb",
           "maxDistance": 150,
-          "triangles": 4541
+          "triangles": 4199
         },
         {
           "file": "buildings/procedural/proc_temple_brique_lod1.glb",
           "maxDistance": 600,
-          "triangles": 1252
+          "triangles": 1024
         },
         {
           "file": "buildings/procedural/proc_temple_brique_lod2.glb",

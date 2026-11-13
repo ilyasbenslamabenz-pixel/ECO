@@ -234,7 +234,7 @@ export function archedWindow(r: Rect, wallMat: string, o: WindowOpts = {}): Elem
         glassFan(ctx, f, uc, vs, rad, 0, 4, lit);
         return;
       }
-      const seg = ctx.lod === 0 ? 10 : 6;
+      const seg = ctx.lod === 0 ? 8 : 4;
       archFill(ctx, f, upper, wallMat, R, seg);
       // tableaux latéraux (+ seuil si porte-fenêtre)
       fq(ctx, wallMat, f, [r.u0, r.v0, 0], [r.u0, r.v0, -R], [r.u0, vs, -R], [r.u0, vs, 0]);
@@ -245,7 +245,7 @@ export function archedWindow(r: Rect, wallMat: string, o: WindowOpts = {}): Elem
       const fm = o.frameMat ?? 'menuiserie';
       glass(ctx, f, r.u0, r.u1, r.v0, vs, dg, lit);
       glassFan(ctx, f, uc, vs, rad, dg, seg, lit);
-      if (sill) fbox(ctx, sm, f, r.u0 - 0.06, r.u1 + 0.06, r.v0 - 0.07, r.v0, -R, 0.055, ctx.lod === 0 ? 'back' : 'back bottom left right');
+      if (sill && ctx.lod === 0) fbox(ctx, sm, f, r.u0 - 0.06, r.u1 + 0.06, r.v0 - 0.07, r.v0, -R, 0.055, 'back bottom');
       if (ctx.lod === 0) {
         fbox(ctx, fm, f, r.u0, r.u0 + fw, r.v0, vs, dg, dg + 0.04, 'back left top bottom');
         fbox(ctx, fm, f, r.u1 - fw, r.u1, r.v0, vs, dg, dg + 0.04, 'back right top bottom');
@@ -264,7 +264,7 @@ export function archedWindow(r: Rect, wallMat: string, o: WindowOpts = {}): Elem
           archivolt(ctx, f, uc, vs, rad, sw, sm, seg, o.keystone ?? false);
         }
       }
-      if (o.railing) railLine(ctx, P(f, r.u0 - 0.04, r.v0, 0.07), P(f, r.u1 + 0.04, r.v0, 0.07), 1.0, o.railing);
+      if (o.railing) railLine(ctx, P(f, r.u0 - 0.04, r.v0, 0.07), P(f, r.u1 + 0.04, r.v0, 0.07), 1.0, o.railing, { outward: true });
     },
   };
 }

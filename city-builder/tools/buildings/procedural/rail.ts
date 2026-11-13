@@ -23,7 +23,7 @@ function step(L: number, style: RailStyle): number {
  * Garde-corps rectiligne de A à B (pieds, coordonnées du modèle), hauteur `h`.
  * `plainMat` sert au style `plein`.
  */
-export function railLine(ctx: Ctx, A: V3, B: V3, h: number, style: RailStyle = 'barreaux', o: { posts?: boolean; plainMat?: string; mat?: string } = {}): void {
+export function railLine(ctx: Ctx, A: V3, B: V3, h: number, style: RailStyle = 'barreaux', o: { posts?: boolean; plainMat?: string; mat?: string; outward?: boolean } = {}): void {
   const { mb } = ctx;
   const dx = B[0] - A[0];
   const dz = B[2] - A[2];
@@ -37,14 +37,14 @@ export function railLine(ctx: Ctx, A: V3, B: V3, h: number, style: RailStyle = '
     return;
   }
   const t = style === 'bois' ? 0.045 : 0.025;
-  // main courante (toujours)
-  mb.box(gm, 0, h - t * 2, -t, L, h, t, ctx.lod === 2 ? 'ny nx px' : 'ny');
   if (ctx.lod === 2) {
-    if (style === 'verre') { const p = mb.lit; mb.lit = -1; mb.quad('verre_gc', [0, 0.06, 0], [L, 0.06, 0], [L, h - 0.05, 0], [0, h - 0.05, 0]); mb.lit = p; }
-    else mb.quad(gm, [0, 0.05, 0], [L, 0.05, 0], [L, h * 0.55, 0], [0, h * 0.55, 0]);
+    // un seul aplat (la main courante ne se lit plus à cette distance)
+    if (style === 'verre') { const p = mb.lit; mb.lit = -1; mb.quad('verre_gc', [0, 0.06, 0], [L, 0.06, 0], [L, h, 0], [0, h, 0]); mb.lit = p; }
+    else mb.quad(gm, [0, 0.05, 0], [L, 0.05, 0], [L, h, 0], [0, h, 0]);
     mb.pop();
     return;
   }
+  mb.box(gm, 0, h - t * 2, -t, L, h, t, ctx.lod === 1 ? 'ny nx px' : 'ny');
   if (style === 'verre') {
     const p = mb.lit;
     mb.lit = -1;
@@ -55,8 +55,7 @@ export function railLine(ctx: Ctx, A: V3, B: V3, h: number, style: RailStyle = '
     mb.pop();
     return;
   }
-  // lisse basse
-  mb.box(gm, 0, 0.05, -0.016, L, 0.1, 0.016, 'ny py nx px');
+  if (ctx.lod === 0) mb.box(gm, 0, 0.05, -0.016, L, 0.1, 0.016, 'ny py nx px'); // lisse basse
   if (ctx.lod === 1) {
     // panneau plein translucide visuellement (deux faces) : même silhouette, coût constant
     mb.quad(gm, [0.02, 0.1, 0], [L - 0.02, 0.1, 0], [L - 0.02, h - t * 2, 0], [0.02, h - t * 2, 0]);
@@ -78,7 +77,8 @@ export function railLine(ctx: Ctx, A: V3, B: V3, h: number, style: RailStyle = '
     for (let i = 1; i < n; i++) {
       const x = (L * i) / n;
       mb.quad(gm, [x - bw, 0.1, 0.012], [x + bw, 0.1, 0.012], [x + bw, h - t * 2, 0.012], [x - bw, h - t * 2, 0.012]);
-      mb.quad(gm, [x + bw, 0.1, -0.012], [x - bw, 0.1, -0.012], [x - bw, h - t * 2, -0.012], [x + bw, h - t * 2, -0.012]);
+      // face arrière omise quand la face +z regarde la rue (balcons, balconnets : on ne voit jamais l'envers de près)
+      if (!o.outward) mb.quad(gm, [x + bw, 0.1, -0.012], [x - bw, 0.1, -0.012], [x - bw, h - t * 2, -0.012], [x + bw, h - t * 2, -0.012]);
     }
     if (style === 'fer') {
       // frise : bande ajourée sous la main courante
@@ -86,7 +86,7 @@ export function railLine(ctx: Ctx, A: V3, B: V3, h: number, style: RailStyle = '
       for (let i = 0; i < m; i++) {
         const x = (L * (i + 0.5)) / m;
         mb.quad(gm, [x - 0.09, h - 0.3, 0.014], [x + 0.09, h - 0.3, 0.014], [x + 0.09, h - 0.2, 0.014], [x - 0.09, h - 0.2, 0.014]);
-        mb.quad(gm, [x + 0.09, h - 0.3, -0.014], [x - 0.09, h - 0.3, -0.014], [x - 0.09, h - 0.2, -0.014], [x + 0.09, h - 0.2, -0.014]);
+        if (!o.outward) mb.quad(gm, [x + 0.09, h - 0.3, -0.014], [x - 0.09, h - 0.3, -0.014], [x - 0.09, h - 0.2, -0.014], [x + 0.09, h - 0.2, -0.014]);
       }
     }
   }
@@ -124,10 +124,10 @@ export function balcon(ctx: Ctx, f: Frame, u0: number, u1: number, v: number, o:
   const rs = o.rail ?? 'barreaux';
   const h = o.railH ?? 1.0;
   const inset = rs === 'plein' ? 0.06 : 0.035;
-  railLine(ctx, p(u0 + inset, v, D - inset), p(u1 - inset, v, D - inset), h, rs, { plainMat: sm });
+  railLine(ctx, p(u0 + inset, v, D - inset), p(u1 - inset, v, D - inset), h, rs, { plainMat: sm, outward: true });
   const sides = o.sides ?? 'both';
-  if (sides === 'both' || sides === 'left') railLine(ctx, p(u0 + inset, v, 0.02), p(u0 + inset, v, D - inset), h, rs, { posts: false, plainMat: sm });
-  if (sides === 'both' || sides === 'right') railLine(ctx, p(u1 - inset, v, D - inset), p(u1 - inset, v, 0.02), h, rs, { posts: false, plainMat: sm });
+  if (sides === 'both' || sides === 'left') railLine(ctx, p(u0 + inset, v, 0.02), p(u0 + inset, v, D - inset), h, rs, { posts: false, plainMat: sm, outward: true });
+  if (sides === 'both' || sides === 'right') railLine(ctx, p(u1 - inset, v, D - inset), p(u1 - inset, v, 0.02), h, rs, { posts: false, plainMat: sm, outward: true });
   if (o.consoles && ctx.lod === 0) {
     const n = Math.max(2, Math.round((u1 - u0) / 2.2) + 1);
     for (let i = 0; i < n; i++) consoleEquerre(ctx, f, u0 + 0.2 + ((u1 - u0 - 0.4) * i) / (n - 1), v - T, D);

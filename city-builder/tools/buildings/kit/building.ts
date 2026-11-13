@@ -33,6 +33,8 @@ export interface BuildingDef {
   variants: AssetVariant[];
   /** Distances maximales LOD0 / LOD1 (m). */
   lodDistances?: [number, number];
+  /** Mode économe des LOD (voir `Ctx.eco`). */
+  eco?: boolean;
   /** Accès supplémentaires (coordonnées de build(), recentrées à l'export) ; l'entrée piétonne au milieu de la façade +Z est toujours ajoutée. */
   frontage?: FrontagePoint[];
   /** Fichier + fonction générateurs (licence / traçabilité), ex. « tools/buildings/residential/houses.ts#pavillon ». */
@@ -68,7 +70,7 @@ export function buildLodsWithOffset(def: BuildingDef): { lods: MeshBuilder[]; of
   const out: MeshBuilder[] = [];
   for (const lod of [0, 1, 2] as const) {
     const mb = new MeshBuilder(uv, glass);
-    def.build({ mb, lod, r: rng(hashSeed(def.id)) });
+    def.build({ mb, lod, r: rng(hashSeed(def.id)), ...(def.eco ? { eco: true } : {}) });
     out.push(mb);
   }
   // recentrage commun : centre de l'emprise du LOD0 en (0, 0), base à y = 0
@@ -99,7 +101,7 @@ export function exportBuilding(def: BuildingDef, assetsDir: string, relDir: stri
   const dist = def.lodDistances ?? [150, 600];
   const lodEntries = lods.map((mb, i) => {
     const file = `${relDir}/${def.id}_lod${i}.glb`;
-    const st = writeGlb(mb, def.palette, sets, join(assetsDir, file), assetsDir);
+    const st = writeGlb(mb, def.palette, sets, join(assetsDir, file), assetsDir, def.eco === true);
     triangles.push(st.triangles);
     bytes.push(st.bytes);
     return { file, maxDistance: i === 0 ? dist[0] : i === 1 ? dist[1] : 1e9, triangles: st.triangles };

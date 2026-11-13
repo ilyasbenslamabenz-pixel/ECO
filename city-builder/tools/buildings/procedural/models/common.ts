@@ -5,6 +5,7 @@
 import type { BuildingCategory, FrontagePoint } from '../../../../src/shared/catalog';
 import type { BuildingDef, Ctx, Density } from '../../kit/index';
 import { STYLES, styleVariants, type StyleId } from '../styles';
+import { mergeRoles } from '../merge';
 
 /** Types de quartier (identiques à `DistrictType` de src/sim/districts/types.ts). */
 export type QuartierTag = 'centre_historique' | 'faubourg' | 'pavillonnaire' | 'affaires' | 'activites' | 'grands_ensembles';
@@ -54,7 +55,8 @@ export function makeDef(m: Meta, build: (ctx: Ctx) => void): BuildingDef {
     palette,
     variants: styleVariants(s, m.heights ?? [0.94, 1.06]),
     source: `${m.src}#${m.id}`,
-    build,
+    build: (ctx) => { build(ctx); mergeRoles(ctx.mb, palette, ctx.lod); },
+    eco: true,
   };
   if (m.lodDistances) def.lodDistances = m.lodDistances;
   if (m.frontage) def.frontage = m.frontage;

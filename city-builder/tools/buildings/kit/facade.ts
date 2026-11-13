@@ -19,6 +19,16 @@ export interface Ctx {
   lod: 0 | 1 | 2;
   /** Aléatoire déterministe (même suite pour les trois LOD d'un bâtiment). */
   r: () => number;
+  /**
+   * Mode économe (bâtiments procéduraux) : au LOD1 les fenêtres deviennent des aplats sur mur plein (comme au LOD2),
+   * cadres sans retours et barreaux en quadrilatères au LOD0, pas d'appuis au LOD2. Absent = rendu historique.
+   */
+  eco?: boolean;
+}
+
+/** Fenêtres rendues en aplats (mur plein) : LOD2, ou LOD1 en mode économe. */
+export function flatWindows(ctx: Ctx): boolean {
+  return ctx.lod === 2 || (ctx.lod === 1 && ctx.eco === true);
 }
 
 export interface Frame { o: V3; u: V3; n: V3; w: number; h: number }
@@ -176,7 +186,7 @@ export function window(ctx: Ctx, f: Frame, r: Rect, wallMat: string, o: WindowOp
   const closed = rShut < (o.closedRatio ?? 0.12);
   const rollF = [0, 0, 0, 0.12, 0.3, 0.55, 0.85, 1][Math.floor(rRoll * 8)]!;
 
-  if (ctx.lod === 2) {
+  if (flatWindows(ctx)) {
     // Aplats saillants : verre (ou volet fermé), volets ouverts, appui.
     const d = 0.03;
     if (o.shutters === 'battants' && closed) fq(ctx, 'volet', f, [r.u0, r.v0, d], [r.u1, r.v0, d], [r.u1, r.v1, d], [r.u0, r.v1, d]);
@@ -190,7 +200,8 @@ export function window(ctx: Ctx, f: Frame, r: Rect, wallMat: string, o: WindowOp
       fq(ctx, 'volet', f, [r.u0 - sw, r.v0, d], [r.u0, r.v0, d], [r.u0, r.v1, d], [r.u0 - sw, r.v1, d]);
       fq(ctx, 'volet', f, [r.u1, r.v0, d], [r.u1 + sw, r.v0, d], [r.u1 + sw, r.v1, d], [r.u1, r.v1, d]);
     }
-    if (sill) fbox(ctx, o.surroundMat ?? 'encadrement', f, r.u0 - 0.05, r.u1 + 0.05, r.v0 - 0.06, r.v0, 0, 0.05, 'back bottom left right');
+    if (sill && !ctx.eco) fbox(ctx, o.surroundMat ?? 'encadrement', f, r.u0 - 0.05, r.u1 + 0.05, r.v0 - 0.06, r.v0, 0, 0.05, 'back bottom left right');
+    if (ctx.lod === 1 && o.railing) railing(ctx, P(f, r.u0 - 0.04, r.v0, 0.07), P(f, r.u1 + 0.04, r.v0, 0.07), 1.0, o.railing, true);
     return;
   }
 
@@ -198,7 +209,7 @@ export function window(ctx: Ctx, f: Frame, r: Rect, wallMat: string, o: WindowOp
   const dg = -R + 0.04; // plan du vitrage
   const fw = o.frameW ?? 0.065;
   // dormant (cadre) : anneau (face avant + retours intérieurs) — LOD0 seulement
-  if (ctx.lod === 0) frameRing(ctx, fm, f, r, fw, dg - 0.01, dg + 0.04);
+  if (ctx.lod === 0) frameRing(ctx, fm, f, r, fw, dg - 0.01, dg + 0.04, !ctx.eco);
   const iu0 = r.u0 + fw;
   const iu1 = r.u1 - fw;
   let iv0 = r.v0 + fw;
@@ -215,7 +226,7 @@ export function window(ctx: Ctx, f: Frame, r: Rect, wallMat: string, o: WindowOp
   // vantaux : montants (LOD0)
   for (let k = 1; k < leaves && ctx.lod === 0; k++) {
     const uc = iu0 + ((iu1 - iu0) * k) / leaves;
-    fbox(ctx, fm, f, uc - fw * 0.6, uc + fw * 0.6, iv0, leafTop, dg - 0.01, dg + 0.045, 'back top bottom');
+    fbox(ctx, fm, f, uc - fw * 0.6, uc + fw * 0.6, iv0, leafTop, dg - 0.01, dg + 0.045, ctx.eco ? 'back top bottom left right' : 'back top bottom');
   }
   // petits bois (LOD0)
   if (ctx.lod === 0 && (o.bars ?? 0) > 0) {
@@ -223,22 +234,24 @@ export function window(ctx: Ctx, f: Frame, r: Rect, wallMat: string, o: WindowOp
     const bw = 0.022;
     for (let k = 1; k <= n; k++) {
       const vc = iv0 + ((leafTop - iv0) * k) / (n + 1);
-      fbox(ctx, fm, f, iu0, iu1, vc - bw, vc + bw, dg, dg + 0.025, 'back left right');
+      fbox(ctx, fm, f, iu0, iu1, vc - bw, vc + bw, dg, dg + 0.025, ctx.eco ? 'back left right bottom' : 'back left right');
     }
   }
   // appui
   if (sill) {
     const sm = o.surroundMat ?? 'encadrement';
-    fbox(ctx, sm, f, r.u0 - 0.06, r.u1 + 0.06, r.v0 - 0.07, r.v0, -R, 0.055, ctx.lod === 0 ? 'back' : 'back bottom left right');
+    fbox(ctx, sm, f, r.u0 - 0.06, r.u1 + 0.06, r.v0 - 0.07, r.v0, -R, 0.055, ctx.lod === 0 ? (ctx.eco ? 'back bottom' : 'back') : 'back bottom left right');
   }
   // encadrement saillant
   if (ctx.lod === 0 && (o.surround ?? 0) > 0) {
     const s = o.surround!;
     const sm = o.surroundMat ?? 'encadrement';
     const vb = sill ? r.v0 : r.v0 - 0.0;
-    fbox(ctx, sm, f, r.u0 - s, r.u0, vb, r.v1, 0, 0.025, 'back');
-    fbox(ctx, sm, f, r.u1, r.u1 + s, vb, r.v1, 0, 0.025, 'back');
-    fbox(ctx, sm, f, r.u0 - s, r.u1 + s, r.v1, r.v1 + s, 0, 0.025, 'back');
+    // mode économe : faces jointives (haut des jambages sous le linteau, bas sur l'appui, sous-face du linteau) omises
+    const jamb = ctx.eco ? (sill ? 'back top bottom' : 'back top') : 'back';
+    fbox(ctx, sm, f, r.u0 - s, r.u0, vb, r.v1, 0, 0.025, jamb);
+    fbox(ctx, sm, f, r.u1, r.u1 + s, vb, r.v1, 0, 0.025, jamb);
+    fbox(ctx, sm, f, r.u0 - s, r.u1 + s, r.v1, r.v1 + s, 0, 0.025, ctx.eco ? 'back bottom' : 'back');
     if (o.keystone) fbox(ctx, sm, f, (r.u0 + r.u1) / 2 - 0.12, (r.u0 + r.u1) / 2 + 0.12, r.v1 - 0.06, r.v1 + s + 0.08, 0, 0.05, 'back');
   }
   if (o.lintel) fbox(ctx, o.surroundMat ?? 'encadrement', f, r.u0 - 0.12, r.u1 + 0.12, r.v1, r.v1 + 0.2, 0, 0.03, 'back');
@@ -260,7 +273,7 @@ export function window(ctx: Ctx, f: Frame, r: Rect, wallMat: string, o: WindowOp
  * Cadre rectangulaire (dormant) : 4 quads de face (à dFront) + 4 retours intérieurs (de dFront à dBack).
  * Les faces extérieures, plaquées contre les tableaux, ne sont pas dessinées.
  */
-export function frameRing(ctx: Ctx, mat: string, f: Frame, r: Rect, fw: number, dBack: number, dFront: number): void {
+export function frameRing(ctx: Ctx, mat: string, f: Frame, r: Rect, fw: number, dBack: number, dFront: number, returns = true): void {
   const { u0, u1, v0, v1 } = r;
   const a0 = u0 + fw, a1 = u1 - fw, b0 = v0 + fw, b1 = v1 - fw;
   const d = dFront;
@@ -268,6 +281,7 @@ export function frameRing(ctx: Ctx, mat: string, f: Frame, r: Rect, fw: number, 
   fq(ctx, mat, f, [a1, b0, d], [u1, v0, d], [u1, v1, d], [a1, b1, d]);
   fq(ctx, mat, f, [a0, b1, d], [a1, b1, d], [u1, v1, d], [u0, v1, d]);
   fq(ctx, mat, f, [u0, v0, d], [a0, b0, d], [a0, b1, d], [u0, v1, d]);
+  if (!returns) return;
   // retours (faces tournées vers le centre de la baie)
   fq(ctx, mat, f, [a0, b0, d], [a1, b0, d], [a1, b0, dBack], [a0, b0, dBack]);
   fq(ctx, mat, f, [a1, b1, d], [a0, b1, d], [a0, b1, dBack], [a1, b1, dBack]);
@@ -560,16 +574,20 @@ export function railing(ctx: Ctx, A: V3, B: V3, h: number, style: RailStyle, end
     mb.lit = prev;
   } else {
     const sp = style === 'bois' ? 0.16 : style === 'fer' ? 0.11 : 0.13;
-    const step = ctx.lod === 0 ? sp : sp * 4;
+    const step = (ctx.lod === 0 ? sp : sp * 4) * (ctx.eco ? 1.5 : 1);
     const n = Math.max(1, Math.floor(L / step));
     const bw = style === 'bois' ? 0.035 : 0.009;
     for (let i = 1; i < n; i++) {
       const x = (L * i) / n;
-      mb.box(gm, x - bw, 0.08, -bw, x + bw, h - rail * 2, bw, 'ny py');
+      if (ctx.eco && style !== 'bois') {
+        // barreau = deux quadrilatères (avant / arrière) au lieu d'une boîte
+        mb.quad(gm, [x - bw, 0.08, bw], [x + bw, 0.08, bw], [x + bw, h - rail * 2, bw], [x - bw, h - rail * 2, bw]);
+        mb.quad(gm, [x + bw, 0.08, -bw], [x - bw, 0.08, -bw], [x - bw, h - rail * 2, -bw], [x + bw, h - rail * 2, -bw]);
+      } else mb.box(gm, x - bw, 0.08, -bw, x + bw, h - rail * 2, bw, 'ny py');
     }
     if (style === 'fer' && ctx.lod === 0) {
       // frise : petits cercles stylisés (barrettes croisées) dans la bande haute
-      const m = Math.max(1, Math.floor(L / 0.3));
+      const m = Math.max(1, Math.floor(L / (ctx.eco ? 0.6 : 0.3)));
       for (let i = 0; i < m; i++) {
         const x = (L * (i + 0.5)) / m;
         mb.box(gm, x - 0.06, h - 0.13 - 0.004, -0.008, x + 0.06, h - 0.13 + 0.004, 0.008, 'ny py');
@@ -717,7 +735,9 @@ export type OpeningSpec =
  * Au LOD2 le mur est plein et les ouvertures sont des aplats.
  */
 export function facade(ctx: Ctx, f: Frame, wallMat: string, openings: OpeningSpec[], opts: { u0?: number; u1?: number; v0?: number; v1?: number } = {}): void {
-  const holes = ctx.lod === 2 ? openings.filter((o) => o.kind === 'blind').map((o) => o.r) : openings.map((o) => o.r);
+  const holes = ctx.lod === 2 ? openings.filter((o) => o.kind === 'blind').map((o) => o.r)
+    : flatWindows(ctx) ? openings.filter((o) => o.kind !== 'window').map((o) => o.r)
+    : openings.map((o) => o.r);
   wall(ctx, wallMat, f, holes, opts.u0 ?? 0, opts.u1 ?? f.w, opts.v0 ?? 0, opts.v1 ?? f.h);
   for (const op of openings) {
     switch (op.kind) {

@@ -35,7 +35,9 @@ export interface GlbStats { bytes: number; triangles: number; vertices: number; 
  * @param glbPath chemin absolu du fichier à écrire
  * @param assetsDir dossier assets/ (racine des chemins des jeux de textures)
  */
-export function writeGlb(mb: MeshBuilder, palette: Palette, sets: Map<string, TextureSet>, glbPath: string, assetsDir: string): GlbStats {
+/** `compact` (mode économe) : nombres du JSON arrondis (teintes, transformations d'UV) — le JSON pèse lourd par primitive. */
+export function writeGlb(mb: MeshBuilder, palette: Palette, sets: Map<string, TextureSet>, glbPath: string, assetsDir: string, compact = false): GlbStats {
+  const rd = (x: number, p: number): number => (compact ? +x.toPrecision(p) : x);
   const json: Record<string, unknown> & {
     accessors: unknown[]; bufferViews: unknown[]; materials: unknown[]; images: unknown[]; textures: unknown[];
   } = {
@@ -84,7 +86,7 @@ export function writeGlb(mb: MeshBuilder, palette: Palette, sets: Map<string, Te
 
   const materialIndex = new Map<string, number>();
   const makeMaterial = (role: string, m: KitMaterial, uvq: [number, number, number, number]): number => {
-    const col = hexToLinear(m.color);
+    const col = hexToLinear(m.color).map((c) => rd(c, 4));
     const ex: Record<string, unknown> = { set: m.set ?? null, uv: m.uv ?? 'meters', kind: m.kind ?? 'opaque', uvq: uvq.map((x) => +x.toFixed(6)) };
     if (m.kind === 'glass' || !m.set) {
       json.materials.push({
@@ -99,7 +101,7 @@ export function writeGlb(mb: MeshBuilder, palette: Palette, sets: Map<string, Te
     if (!set) throw new Error(`Jeu de textures inconnu « ${m.set} » (matériau ${role})`);
     // uv_glTF = offset + scale * q  avec  q ∈ [0,1] (uint16 normalisé) ;  uv_mètres = min + plage * q ;  uv_texture = uv_mètres / tuile
     const s = (m.uv ?? 'meters') === 'meters' ? 1 / set.tileSizeM : 1;
-    const tt = { offset: [uvq[0] * s, uvq[1] * s], scale: [uvq[2] * s, uvq[3] * s] };
+    const tt = { offset: [uvq[0] * s, uvq[1] * s].map((x) => (compact ? +x.toFixed(5) : x)), scale: [rd(uvq[2] * s, 7), rd(uvq[3] * s, 7)] };
     const ti = (file: string): Record<string, unknown> => ({ index: textureFor(file), extensions: { KHR_texture_transform: tt } });
     const pbr: Record<string, unknown> = {
       baseColorFactor: [...col, 1],

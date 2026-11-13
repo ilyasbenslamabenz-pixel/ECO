@@ -27,7 +27,19 @@ import { EQUIPEMENTS } from './models/equipements';
 export const PROCEDURAL_DIR = 'buildings/procedural';
 export const PROCEDURAL_FRAGMENT = 'catalog.buildings.procedural.json';
 
-export const PROCEDURAL: BuildingDef[] = [...RESIDENCES, ...COLLECTIFS, ...TERTIAIRE, ...COMMERCES, ...ACTIVITES, ...EQUIPEMENTS];
+/**
+ * Modèles définis mais NON exportés, faute de place dans le budget de distribution (dist ≤ 60 Mo, cible module ≤ 54 Mo) :
+ * les plus lourds parmi ceux qui ont un proche parent dans le même style et le même type de quartier. Les définitions
+ * restent dans models/*.ts : retirer un identifiant de cette liste suffit à le réactiver.
+ */
+export const HORS_BUDGET = new Set([
+  'proc_tour_plot_balcons', 'proc_barre_commerces', 'proc_hotel_moderne', 'proc_residence_gradins', 'proc_immeuble_pierre_r5',
+  'proc_immeuble_loggias', 'proc_residence_bardage', 'proc_angle_moderne', 'proc_bande_pierre_balcons', 'proc_immeuble_brique_r4',
+  'proc_bureaux_brique', 'proc_boutiques_pierre', 'proc_collectif_comble', 'proc_bande_contemporaine', 'proc_galerie_moderne',
+]);
+
+export const PROCEDURAL: BuildingDef[] = [...RESIDENCES, ...COLLECTIFS, ...TERTIAIRE, ...COMMERCES, ...ACTIVITES, ...EQUIPEMENTS]
+  .filter((d) => !HORS_BUDGET.has(d.id));
 
 export interface ProceduralOutput { assets: CatalogAsset[]; textureSets: TextureSet[] }
 

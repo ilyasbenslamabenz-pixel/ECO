@@ -22,6 +22,11 @@ generateProcedural({ assetsDir }, only).then((r) => {
   if (merge) {
     const p = join(assetsDir, 'catalog.json');
     const cat = JSON.parse(readFileSync(p, 'utf8')) as AssetCatalog;
+    // entrées procédurales disparues (modèle retiré) : supprimées du catalogue (sauf en mode ONLY, partiel)
+    if (!only) {
+      const keep = new Set(r.assets.map((a) => a.id));
+      cat.assets = cat.assets.filter((x) => !x.lods?.[0]?.file.startsWith('buildings/procedural/') || keep.has(x.id));
+    }
     for (const a of r.assets) {
       const i = cat.assets.findIndex((x) => x.id === a.id);
       if (i >= 0) cat.assets[i] = a; else cat.assets.push(a);
