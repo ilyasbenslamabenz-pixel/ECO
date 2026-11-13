@@ -10,6 +10,7 @@ import { handleCommand } from '../../src/sim/handler';
 import { SIM_PLUGINS, type PluginContext, type SimPlugin } from '../../src/sim/plugins';
 import { SAVE_SECTIONS } from '../../src/sim/save-sections';
 import { PHASE2_MODULES } from '../../src/shared/protocol-ext';
+import { ELECTRICITE_MODULES } from '../../src/shared/power/types';
 import { RENDER_PLUGINS } from '../../src/render/plugins';
 import { UI_PANELS } from '../../src/ui/panels/index';
 import { PROTOCOL_VERSION } from '../../src/shared/constants';
@@ -67,12 +68,14 @@ function recorder(id = 'essai', opts: { failTick?: boolean } = {}): SimPlugin & 
 }
 
 test('registres : les quatre modules sont enregistrés partout, vides, avec leur section de sauvegarde', () => {
-  const ids = [...PHASE2_MODULES];
+  // Modules de gestion de phase 2B (électricité, tests/electricite) : enregistrés partout, testés à part.
+  const ids = [...PHASE2_MODULES, ...ELECTRICITE_MODULES];
+  const filled = (id: string): boolean => (ELECTRICITE_MODULES as readonly string[]).includes(id);
   assert.deepEqual(SIM_PLUGINS.map((p) => p.id), ids);
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), ids);
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
   assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), ids);
-  for (const p of SIM_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
+  for (const p of SIM_PLUGINS) if (!filled(p.id)) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
   for (const sec of SAVE_SECTIONS) {
     assert.deepEqual(sec.migrate(sec.empty(), sec.version), sec.empty());
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);

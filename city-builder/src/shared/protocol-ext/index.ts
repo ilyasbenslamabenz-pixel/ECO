@@ -8,6 +8,7 @@ import type { BatimentsCommands, BatimentsDelta, BatimentsSnapshot } from './bat
 import type { ChantiersCommands, ChantiersDelta, ChantiersSnapshot } from './chantiers';
 import type { CirculationCommands, CirculationDelta, CirculationSnapshot } from './circulation';
 import type { PietonsCommands, PietonsDelta, PietonsSnapshot } from './pietons';
+export type * from './electricite';
 
 export type * from './batiments';
 export type * from './circulation';
