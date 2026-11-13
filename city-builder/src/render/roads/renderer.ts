@@ -31,9 +31,10 @@ export interface RoadRendererDeps {
 export const DECOR_ASSETS: Record<DecorKind, string[]> = {
   lamp: ['lampadaire_fonte'],
   tree: ['arbre_feuillu_jeune', 'arbre_feuillu_rond', 'arbre_platane'],
-  bench: ['banc_bois'],
-  planter: ['jardiniere_plante_a', 'jardiniere_plante_b'],
-  bin: ['poubelle_metal'],
+  // Variantes du mobilier phase 2C (docs/requests/mobilier.md §3) : même mécanisme de choix déterministe.
+  bench: ['banc_bois', 'banc_modulaire', 'banc_beton'],
+  planter: ['jardiniere_plante_a', 'jardiniere_plante_b', 'jardiniere_bac_bois', 'jardiniere_haute_bois', 'jardiniere_beton'],
+  bin: ['poubelle_metal', 'poubelles_tri'],
 };
 
 /** Distance (m) caméra-chunk au-delà de laquelle le décor passe au LOD le plus léger. */

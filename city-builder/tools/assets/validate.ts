@@ -53,7 +53,7 @@ function checkLicense(id: string, lic: AssetLicense | undefined, licensesMd: str
   if (lic.spdx !== 'CC0-1.0') err(id, `licence ${lic.spdx} non autorisée (CC0-1.0 attendu)`);
   if (!lic.author) err(id, 'auteur absent');
   const ph = /^https:\/\/polyhaven\.com\/a\/[A-Za-z0-9_-]+$/.test(lic.source);
-  const gen = /^tools\/(generators|buildings|vehicles)\//.test(lic.source);
+  const gen = /^tools\/(generators|buildings|vehicles|props)\//.test(lic.source);
   if (!ph && !gen) err(id, `source non autorisée ou imprécise : « ${lic.source} »`);
   if (!licensesMd.includes(`\`${id}\``)) err(id, 'absent de assets/LICENSES.md');
 }
