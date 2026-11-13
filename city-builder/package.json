@@ -11,7 +11,7 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test tests/unit/*.test.ts tests/sim/*.test.ts tests/roads/*.test.ts tests/terrain/*.test.ts tests/vehicles/*.test.ts tests/construction/*.test.ts tests/integration/*.test.ts tests/plugins/*.test.ts tests/batiments/*.test.ts tests/circulation/*.test.ts tests/pietons/*.test.ts tests/chantiers/*.test.ts tests/props/*.test.ts tests/weather/*.test.ts tests/municipal/*.test.ts tests/save/*.test.ts",
+    "test": "tsx --test tests/unit/*.test.ts tests/sim/*.test.ts tests/roads/*.test.ts tests/terrain/*.test.ts tests/vehicles/*.test.ts tests/construction/*.test.ts tests/integration/*.test.ts tests/plugins/*.test.ts tests/batiments/*.test.ts tests/circulation/*.test.ts tests/pietons/*.test.ts tests/chantiers/*.test.ts tests/props/*.test.ts tests/weather/*.test.ts tests/municipal/*.test.ts tests/save/*.test.ts tests/electricite/*.test.ts",
     "assets": "tsx tools/pipeline.ts",
     "validate:assets": "tsx tools/validate-models.ts",
     "validate:visual": "node tests/e2e/validate-visual.mjs",
@@ -40,7 +40,9 @@
     "captures": "node tests/e2e/captures.mjs",
     "circulation:bench": "tsx tests/circulation/bench.ts",
     "transport:build": "tsx tools/transport/build.ts",
-    "transport:showcase": "tsx tools/transport/showcase/run.ts"
+    "transport:showcase": "tsx tools/transport/showcase/run.ts",
+    "power:build": "tsx tools/power/build.ts",
+    "e2e:electricite": "node tests/electricite/e2e.mjs"
   },
   "dependencies": {
     "three": "0.187.0"

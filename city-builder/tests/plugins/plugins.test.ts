@@ -11,6 +11,7 @@ import { SIM_PLUGINS, type PluginContext, type SimPlugin } from '../../src/sim/p
 import { SAVE_SECTIONS } from '../../src/sim/save-sections';
 import { PHASE2_MODULES } from '../../src/shared/protocol-ext';
 import { ATMOSPHERE_MODULES } from '../../src/shared/weather/types';
+import { ELECTRICITE_MODULES } from '../../src/shared/power/types';
 import { RENDER_PLUGINS } from '../../src/render/plugins';
 import { UI_PANELS } from '../../src/ui/panels/index';
 import { PROTOCOL_VERSION } from '../../src/shared/constants';
@@ -82,11 +83,13 @@ function recorder(id = 'essai', opts: { failTick?: boolean } = {}): SimPlugin & 
 test('registres : les quatre modules sont enregistrés partout, vides, avec leur section de sauvegarde', () => {
   const ids = [...PHASE2_MODULES];
   // Modules d'atmosphère (phase 2C, tests/weather) : enregistrés en simulation et rendu, testés à part.
+  // Électricité (phase 2B, tests/electricite) : enregistrée partout, testée à part.
   const all = [...PHASE2_MODULES, ...ATMOSPHERE_MODULES];
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY]);
-  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), all);
-  assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY]);
+  const elec = [...ELECTRICITE_MODULES];
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...elec]);
+  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...elec]);
+  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...elec]);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...elec]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
   const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];
   for (const p of SIM_PLUGINS) {
@@ -101,7 +104,7 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY]);
+  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...elec]);
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 
