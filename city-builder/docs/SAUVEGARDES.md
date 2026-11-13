@@ -53,7 +53,7 @@ markup.html et hud.ts inchangés), branchement dans `src/main.ts`.
 ## En ligne (artifact claude.ai)
 
 `src/save/cloud.ts` — sauvegardes privées par joueur, synchronisées entre appareils, quand le jeu
-tourne dans un artifact publié avec `capabilities: { db: {}, user: {} }` (règles par défaut).
+tourne dans un artifact publié avec `capabilities: { db: {}, user: {}, downloads: true }` (règles par défaut ; `downloads` sert à l'export de fichier).
 
 ### Branchement (`src/main.ts`, 2 lignes)
 
