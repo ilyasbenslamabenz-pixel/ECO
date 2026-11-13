@@ -19,7 +19,7 @@ export function serve(dir = dist) {
       if (url.pathname === '/__artifact_wrapped.html') {
         const frag = readFileSync(join(dir, 'artifact.html'), 'utf8');
         res.writeHead(200, { 'content-type': TYPES['.html'] });
-        res.end(`<!doctype html><html lang="fr"><head><meta charset="utf-8"></head><body>${frag}</body></html>`);
+        res.end(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><link rel="icon" href="./favicon.svg" type="image/svg+xml"></head><body>${frag}</body></html>`);
         return;
       }
       const p = normalize(join(dir, decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)));
