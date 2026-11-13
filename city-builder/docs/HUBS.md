@@ -109,4 +109,13 @@ mouvements, temps physique, activité, réservations, contributions appliquées 
 
 ## 8. Preuves (2026-11-13)
 
-Voir le compte rendu de la session (typecheck, `npm test`, build, e2e, captures regardées).
+- `npm run typecheck` ✓ ; `npm test` 215/215 (dont 15 dans `tests/hubs`) ; `tests/transport-assets` 4/4 ;
+  `tools/assets/validate.ts` OK (127 assets, sources 67,4 Mo / 75).
+- `npm run build` ✓ : dist 47,87 Mo (budget 60 Mo ; GLB transport compressés meshopt).
+- `npm run e2e` SUCCÈS ; `npm run validate:visual` SUCCÈS (38 assets transport inspectés et rendus, démo inchangée).
+- `npm run hubs:captures` SUCCÈS — images regardées : `tests/hubs/out/port-navire-a-quai.png` (porte-conteneurs à
+  quai sous les deux portiques, ferry au poste passagers, parc à conteneurs, entrepôt, gare maritime, capitainerie),
+  `aeroport-decollage.png` (gros porteur en fin de roulage de décollage, avions aux postes, passerelles, aérogare,
+  hangar), `aeroport-ensemble.png`.
+- Limites vues sur les captures : quelques arbres du terrain restent sur le terre-plein portuaire ; le terrain
+  n'est pas aplani sous les pôles (demande §5).

@@ -16,6 +16,7 @@ Documentation : `docs/HUBS.md`.
 | `tools/assets/validate.ts` | `PLAUSIBLE.transport = [0.05, 90, 260]`, source `tools/transport/` acceptée, quille des navires (`origine:flottaison`) jusqu'à −10,6 m | demande §1-2 de `assets-transport.md` |
 | `tools/generators/index.ts` | générateur `generateTransport` enregistré | demande §3 de `assets-transport.md` |
 | `assets/catalog.json`, `assets/LICENSES.md` | 35 pièces transport + 3 entrées de construction (`hub_port`, `hub_port_passagers`, `hub_aeroport`) | fusion par `tools/transport/catalog.ts` (sans relancer Poly Haven) |
+| `src/render/plugins/types.ts`, `src/render/index.ts` | champ facultatif `vegetation` (`removeInFootprint`) dans `RenderPluginContext`, passé par `initRender` | dégager les arbres du terrain sous un pôle (sinon ils traversent le terre-plein et les pistes) |
 | `package.json` | `tests/hubs` dans `npm test`, `tests/transport-assets` dans `test:assets`, scripts `transport:build`, `transport:showcase`, `hubs:captures` | |
 
 ## 1. Veto de pose dans le cœur (servitudes appliquées par la simulation elle-même)
