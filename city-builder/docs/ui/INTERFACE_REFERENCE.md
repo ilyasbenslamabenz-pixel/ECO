@@ -28,7 +28,7 @@ référence** ; la ville rendue en arrière-plan n'est pas une cible de rendu.
 - Graphiques avec axes corrects ; onglets jamais tronqués.
 - Toutes les valeurs affichées proviennent de la simulation réelle ; aucun bouton sans action
   (les fonctions pas encore développées restent grisées avec leur phase).
-- Nom affiché : à confirmer par le propriétaire (projet actuel : « Aube Urbaine »).
+- Nom du jeu : **Meknes City** (choisi par le propriétaire ; aucun jeu vidéo existant de ce nom trouvé le 2026-11-13). Remplace « Aube Urbaine » dans l'interface lors de la refonte (titre, menu, logo, <title>), sans renommer le code ni casser les sauvegardes.
 
 ## Planification
 
