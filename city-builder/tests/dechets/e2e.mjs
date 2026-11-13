@@ -53,55 +53,53 @@ try {
   await snapWait;
   await send('setSpeed', { speed: 0 });
 
-  // Avenue est-ouest sur terrain sec : essais autour du centre (validation par la simulation).
-  let z0 = null, x0 = null;
-  for (let r = 0; r < 700 && z0 === null; r += 50) {
-    for (let a = 0; a < 8 && z0 === null; a++) {
-      const x = Math.round(Math.cos(a * 0.8) * r), z = Math.round(Math.sin(a * 0.8) * r);
-      const res = await send('buildRoad', { type: 'avenue', points: [x - 200, z, x + 200, z] });
-      if (res.ok) { z0 = z; x0 = x; }
+  // Site : rue est-ouest dont les deux rives sont sèches (essais `dryRun` de tous les lots AVANT de tracer la rue).
+  const north = ['immeuble_petit_enduit', 'immeuble_petit_enduit', 'commerce_boulangerie', 'maison_pavillon_enduit', 'immeuble_petit_enduit', 'maison_brique_pignon', 'immeuble_petit_enduit', 'maison_pavillon_enduit', 'immeuble_petit_enduit'].filter((id) => byId.has(id));
+  const south = ['dechets_depot_camions', 'dechets_centre_tri', 'dechets_incinerateur', 'dechets_decharge'];
+  const OFF = 9.5; // demi-emprise d'une rue (6,7 m) + marge
+  const lots = (x0, z0) => {
+    const l = [];
+    let x = x0 - 180;
+    for (const id of north) { const a = byId.get(id); const w = a.footprint.tilesX * 8, d = a.footprint.tilesZ * 8; l.push({ id, x: x + w / 2, z: z0 - OFF - d / 2, rot: 0 }); x += w + 4; }
+    x = x0 - 180;
+    for (const id of south) { const a = byId.get(id); const w = a.footprint.tilesX * 8, d = a.footprint.tilesZ * 8; l.push({ id, x: x + w / 2, z: z0 + OFF + d / 2, rot: 2 }); x += w + 6; }
+    return l;
+  };
+  let z0 = null, x0 = null, plan = null;
+  for (let r = 0; r < 900 && z0 === null; r += 60) {
+    for (let a = 0; a < 10 && z0 === null; a++) {
+      const cx = Math.round(Math.cos(a * 0.63) * r), cz = Math.round(Math.sin(a * 0.63) * r);
+      const l = lots(cx, cz);
+      let ok = true;
+      for (const lot of l) { const res = await send('placeBuilding', { assetId: lot.id, x: lot.x, z: lot.z, rot: lot.rot, dryRun: true }); if (!res.ok) { ok = false; break; } }
+      if (!ok) continue;
+      const rd = await send('buildRoad', { type: 'street', points: [cx - 200, cz, cx + 200, cz] });
+      if (rd.ok) { z0 = cz; x0 = cx; plan = l; }
     }
   }
-  check(z0 !== null, `avenue construite (x0 ${x0}, z0 ${z0})`);
-  // Logements / commerces au nord (façade +Z vers l'avenue, rot 0).
-  const north = ['immeuble_petit_enduit', 'immeuble_petit_enduit', 'commerce_boulangerie', 'maison_pavillon_enduit', 'immeuble_petit_enduit', 'maison_brique_pignon', 'immeuble_petit_enduit', 'maison_pavillon_enduit'].filter((id) => byId.has(id));
-  let placedN = 0, x = x0 - 190;
-  for (const id of north) {
-    const a = byId.get(id);
-    const w = a.footprint.tilesX * 8, d = a.footprint.tilesZ * 8;
-    for (let k = 0; k < 4; k++) {
-      const res = await send('placeBuilding', { assetId: id, x: x + w / 2, z: z0 - 9.5 - d / 2 - k * 2, rot: 0 });
-      if (res.ok) { placedN++; break; }
-    }
-    x += w + 4;
-  }
-  check(placedN >= 5, `logements et commerces posés au nord : ${placedN}`);
-  // Installations au sud (façade vers l'avenue : rot 2).
+  check(z0 !== null, `rue construite sur un site sec (x0 ${x0}, z0 ${z0})`);
   const fac = {};
-  x = x0 - 190;
-  for (const id of ['dechets_depot_camions', 'dechets_centre_tri', 'dechets_incinerateur', 'dechets_decharge']) {
-    const a = byId.get(id);
-    check(!!a, `modèle ${id} au catalogue`);
-    const w = a.footprint.tilesX * 8, d = a.footprint.tilesZ * 8;
-    for (let k = 0; k < 6 && !fac[id]; k++) {
-      const res = await send('placeBuilding', { assetId: id, x: x + w / 2 + k * 6, z: z0 + 9.5 + d / 2, rot: 2 });
-      if (res.ok) fac[id] = { id: res.r.buildingId, x: x + w / 2 + k * 6, z: z0 + 9.5 + d / 2 };
-    }
-    check(!!fac[id], `${id} posé`);
-    x += w + 6;
+  let placedN = 0;
+  for (const lot of plan ?? []) {
+    const res = await send('placeBuilding', { assetId: lot.id, x: lot.x, z: lot.z, rot: lot.rot });
+    if (!res.ok) { console.log(`   refus ${lot.id} : ${res.e}`); continue; }
+    if (lot.id.startsWith('dechets_')) fac[lot.id] = { id: res.r.buildingId, x: lot.x, z: lot.z }; else placedN++;
   }
+  check(placedN >= 6, `logements et commerces posés au nord : ${placedN}`);
+  for (const id of south) check(!!fac[id], `${id} posé`);
   const etat0 = await cmd('etat');
   check(etat0 && etat0.facilities.length === 4 && etat0.facilities.every((f) => f.connected), 'simulation : 4 installations reliées à la route', etat0?.facilities);
   check(etat0 && etat0.fleet === 4, `flotte : ${etat0?.fleet} camions`);
 
-  // La ville se peuple et produit (vitesse ×16 ≈ 9 s réelles par jour de jeu).
-  await send('setSpeed', { speed: 16 });
-  await page.waitForFunction(() => (window.__aube.lastStats?.clock?.totalMinutes ?? 0) > 3.2 * 1440, null, { timeout: 600000, polling: 1000 });
+  // La ville se peuple et produit (vitesse ×8). NB : en ×16 sans boucle d'affichage, l'onglet se fige puis plante vers
+  // la minute 5 350 de jeu, AUSSI sur la base sans ce module (docs/requests/dechets.md §8) : on reste sous ce seuil.
+  await send('setSpeed', { speed: 8 });
+  await page.waitForFunction(() => (window.__aube.lastStats?.date?.totalMinutes ?? 0) > 1440 + 9 * 60, null, { timeout: 600000, polling: 1000 });
   await send('setSpeed', { speed: 0 });
   const s1 = await cmd('etat');
   check(s1.producers > 0 && s1.productionPerDay > 0, `production : ${Math.round(s1.productionPerDay)} kg/j, ${s1.producers} producteurs, ${Math.round(s1.storedKg)} kg en attente`);
   const st1 = await stats();
-  console.log(`   population ${st1?.population ?? '?'} ; jour ${Math.floor((st1?.clock?.totalMinutes ?? 0) / 1440)}`);
+  console.log(`   population ${st1?.population ?? '?'} ; jour ${Math.floor((st1?.date?.totalMinutes ?? 0) / 1440)}`);
 
   // 2. Collecte : camions sur la chaussée.
   const col = await cmd('collecter');
@@ -125,7 +123,7 @@ try {
   await page.waitForTimeout(800);
   const panelText = await page.evaluate(() => document.getElementById('dechets-panel').innerText);
   const s2 = await cmd('etat');
-  check(panelText.includes('Production') && panelText.includes('Filières') && panelText.includes('Budget'), 'panneau : sections production, filières, budget');
+  check(/production/i.test(panelText) && /filières/i.test(panelText) && /budget/i.test(panelText), 'panneau : sections production, filières, budget');
   check(panelText.includes(`${s2.fleet} · ${s2.activeTrucks}`), `panneau : camions ${s2.fleet} · ${s2.activeTrucks} = simulation`);
   await page.evaluate(() => { const r = document.querySelector('#dechets-panel input[data-reglage="funding"]'); r.value = '50'; r.dispatchEvent(new Event('change')); });
   await page.waitForTimeout(800);
@@ -138,8 +136,8 @@ try {
   await page.keyboard.press('Shift+KeyJ');
   await page.waitForTimeout(300);
   check(await page.evaluate(() => window.__dechets.layerVisible()), 'calque affiché (Maj+J)');
-  await send('setSpeed', { speed: 16 });
-  await page.waitForTimeout(2500);
+  await send('setSpeed', { speed: 8 });
+  await page.waitForTimeout(4000);
   await send('setSpeed', { speed: 0 });
   const ls = await page.evaluate(() => window.__dechets.layerStats());
   check(ls.bins > 0, `calque : ${ls.bins} colonnes de bacs, ${ls.cells} cellules colorées`);

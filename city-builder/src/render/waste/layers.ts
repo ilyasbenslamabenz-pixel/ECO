@@ -233,10 +233,10 @@ export class ContainerLayer {
 /* ------------------------------------------------------------------ */
 
 const ramp = (v: number, out: THREE.Color): THREE.Color => {
-  // 0 vert pâle -> 0,5 jaune -> 1 rouge brique
+  // 0 vert -> 0,5 jaune -> 1 rouge (couleurs saturées, lisibles de jour comme de nuit)
   const t = Math.min(1, Math.max(0, v));
-  if (t < 0.5) return out.setRGB(0.35 + t * 1.2, 0.75, 0.3 - t * 0.3);
-  return out.setRGB(0.95, 0.75 - (t - 0.5) * 1.2, 0.1);
+  if (t < 0.5) return out.setRGB(0.1 + t * 1.7, 0.7, 0.1);
+  return out.setRGB(0.95, 0.7 - (t - 0.5) * 1.3, 0.05);
 };
 
 export class WasteOverlay {
