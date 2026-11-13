@@ -44,6 +44,7 @@ export const CATEGORY_FR: Record<AssetCategory, string> = {
   house: 'Maison individuelle', townhouse: 'Maisons mitoyennes', apartment_low: 'Petit immeuble', apartment_mid: 'Immeuble moyen',
   apartment_high: 'Haute densité', skyscraper: 'Gratte-ciel', commercial: 'Commerce / bureaux', industrial: 'Industrie', public: 'Service public',
   vehicle: 'Véhicule', tree: 'Arbre', vegetation: 'Végétation', street_furniture: 'Mobilier urbain', prop: 'Décor',
+  transport: 'Transport (port, aéroport)',
 };
 
 export function assetsForTab(cat: AssetCatalog, tab: Tab): CatalogAsset[] {

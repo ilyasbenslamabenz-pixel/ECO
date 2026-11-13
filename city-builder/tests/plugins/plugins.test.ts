@@ -72,7 +72,9 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), ids);
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
   assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), ids);
-  for (const p of SIM_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
+  // Modules remplis (phase 2C) : seule leur inactivité sans usage est exigée (test « identique tick à tick » ci-dessous).
+  const ACTIVE = ['hubs'];
+  for (const p of SIM_PLUGINS) if (!ACTIVE.includes(p.id)) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
   for (const sec of SAVE_SECTIONS) {
     assert.deepEqual(sec.migrate(sec.empty(), sec.version), sec.empty());
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
