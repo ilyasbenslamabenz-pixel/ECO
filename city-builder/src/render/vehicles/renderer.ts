@@ -144,6 +144,8 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     this.now = opts.now ?? (() => performance.now());
     this.shadows = opts.shadows ?? true;
     this.group.name = 'vehicules';
+    // sonde e2e (lecture seule) : bits d'état et plaques effectivement envoyés au GPU
+    (globalThis as { __aubeVehicules?: unknown }).__aubeVehicules = { probe: () => this.probe() };
     scene.add(this.group);
     const cat = src.catalog;
     cat.assets.forEach((a, i) => {
@@ -457,6 +459,22 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     this.dispY[i] = y0 + (y1 - y0) * alpha;
     this.dispZ[i] = z0 + (z1 - z0) * alpha;
     this.dispH[i] = h0 + dh * alpha;
+  }
+
+  /** Sonde e2e : instances par bit d'état (1 frein, 2 / 4 clignotants), bandes de plaques distinctes, shader. */
+  probe(): { instances: number; brake: number; left: number; right: number; inFrame: number; plateRows: number; plates: number; detailShader: string } {
+    let instances = 0, brake = 0, left = 0, right = 0;
+    const plates = new Set<number>();
+    for (const m of this.models) if (m) for (const lot of m.lods) for (let i = 0; i < lot.count; i++) {
+      instances++;
+      const f = lot.lights[i]!;
+      if (f & 1) brake++; if (f & 2) left++; if (f & 4) right++;
+      if (lot.plate) plates.add(lot.plates[i]!);
+    }
+    let inFrame = 0;
+    for (let i = 0; i < this.curCount; i++) if (this.curFlags[i]! & 6) inFrame++;
+    const key = this.detailMat ? String((this.detailMat as { customProgramCacheKey: () => string }).customProgramCacheKey()) : '';
+    return { instances, brake, left, right, inFrame, plateRows: this.plateRows, plates: plates.size, detailShader: key };
   }
 
   /* ----------------------------- mise à jour ----------------------------- */

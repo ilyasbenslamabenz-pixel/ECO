@@ -24,6 +24,10 @@ try {
   const send = (name, args) => page.evaluate(([n, a]) => window.__aube.send(n, a), [name, args]);
   const cmd = (name, payload = {}) => send('pluginCommand', { plugin: 'circulation', name, payload });
   await page.evaluate(() => { window.__aube.trackVehicles = true; });
+  // --demand=x : échelle de la demande de déplacements (réglage du joueur ; 1 = normal)
+  const demand = process.argv.find((a) => a.startsWith('--demand='));
+  if (demand) report.reglages = await cmd('reglages', { demandScale: Number(demand.slice(9)) });
+  const tag = process.argv.find((a) => a.startsWith('--tag='))?.slice(6) ?? '';
   await send('setSpeed', { speed: 4 });
   await page.waitForTimeout(45000); // files d'attente qui se forment
   report.statsBefore = await cmd('stats');
@@ -104,9 +108,9 @@ try {
   await page.waitForTimeout(800);
   const cx = bestN ? bestN.x : 0, cz = bestN ? bestN.z : 0;
   await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 650, 1.15, 0.3), [cx, cz]);
-  await shoot('circ-congestion.png');
+  await shoot(`circ-congestion${tag}.png`);
   await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 220, 1.0, 0.3), [cx, cz]);
-  await shoot('circ-congestion-proche.png');
+  await shoot(`circ-congestion-proche${tag}.png`);
   report.congestionLevels = await page.evaluate(async () => {
     const r = await window.__aube.send('pluginCommand', { plugin: 'circulation', name: 'congestion', payload: {} });
     const lv = Object.values(r.data?.level ?? r.level ?? {});
@@ -123,7 +127,7 @@ try {
   report.exception = String(e);
   process.exitCode = 1;
 } finally {
-  writeFileSync(join(out, 'circ-captures.json'), JSON.stringify(report, null, 2));
+  writeFileSync(join(out, `circ-captures${process.argv.find((a) => a.startsWith('--tag='))?.slice(6) ?? ''}.json`), JSON.stringify(report, null, 2));
   await browser.close();
   server.close();
 }
