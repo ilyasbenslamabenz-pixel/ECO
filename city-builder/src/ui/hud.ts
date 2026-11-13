@@ -307,6 +307,10 @@ export function initUI(h: UIHandlers): UIHandle {
   };
   if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(measure); ro.observe(hud); ro.observe(toolbar); }
   window.addEventListener('resize', measure);
+  // Safari iOS : la barre d'adresse qui se replie déplace la page sans redimensionner la barre du haut.
+  window.visualViewport?.addEventListener('resize', measure);
+  window.visualViewport?.addEventListener('scroll', measure);
+  window.setInterval(measure, 1500);
 
   /* ---------- Clavier global ---------- */
   window.addEventListener('keydown', (e) => {

@@ -284,10 +284,10 @@ body.drawer-open #tool-options, body.confirming #tool-options { display: none; }
 
 /* =========================== Panneaux (à droite) =========================== */
 .panel { position: fixed; z-index: 16; right: max(10px, var(--safe-r)); top: calc(var(--hud-h) + 10px); width: min(380px, calc(100vw - 24px));
-  max-height: calc(100dvh - var(--hud-h) - 108px); display: flex; flex-direction: column;
+  max-height: calc(100dvh - var(--hud-h) - 108px); display: flex; flex-direction: column; overflow: hidden;
   background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
   backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); animation: panel-in .24s cubic-bezier(.2,.8,.2,1); }
-.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 10px 10px 14px; }
+.panel-head { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 10px 10px 14px; }
 .ph-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ph-ico { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: 0 0 auto;
   background: color-mix(in srgb, var(--ic, #3ddc84) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ic, #3ddc84) 35%, transparent); }
@@ -299,7 +299,7 @@ body.drawer-open #tool-options, body.confirming #tool-options { display: none; }
 .panel-btns .icon-btn svg.ic { width: 18px; height: 18px; }
 .fold svg.ic { transition: transform .2s; }
 .panel.folded .fold svg.ic { transform: rotate(-90deg); }
-.panel-body { padding: 10px 14px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
+.panel-body { flex: 1 1 auto; min-height: 0; padding: 10px 14px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
 .panel.folded .panel-body, .panel.folded .ptabs { display: none; }
 /* Onglets : grille à colonnes égales, libellés jamais tronqués (retour à la ligne si besoin). */
 .ptabs { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 3px; margin: 0 12px; padding: 3px; border-radius: 12px; background: rgba(0,0,0,.25); border: 1px solid var(--line); }
