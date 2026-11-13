@@ -167,7 +167,7 @@ try {
 
   // Tour : ossature haute et grue, puis vue de rue.
   await capturePhase('tour', 'structure', () => window.__aube.lookAt(120, -40, 170, 0.45), 'grue et ossature de la tour');
-  await page.evaluate(() => window.__aube.streetLook(120, 60, 120, -40));
+  await page.evaluate(() => window.__aube.streetLook(78, -9, 120, -40));
   noteSites(await shot(page, 'tour-rue', 'vue de rue : palissade, baraque, engins'));
   await page.evaluate(() => window.__aube.lookAt(0, -30, 330, 0.62));
   noteSites(await shot(page, 'chantiers-ensemble', 'vue d\'ensemble'));

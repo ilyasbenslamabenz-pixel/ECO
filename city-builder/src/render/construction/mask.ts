@@ -20,10 +20,14 @@ export interface BuildingVisibilityApi {
   setBuildingsVisible(ids: readonly number[], visible: boolean): void;
 }
 
-interface Hidden { prefix: string; x: number; y: number; z: number }
+interface Saved { mesh: THREE.InstancedMesh; index: number; linear: number[] }
+interface Hidden { prefix: string; x: number; y: number; z: number; saved: Saved[] }
+const LINEAR = [0, 1, 2, 4, 5, 6, 8, 9, 10] as const;
 
 export class BuildingMask {
   private readonly hidden = new Map<number, Hidden>();
+  /** Instances à rétablir (le rendu de base ne réécrit pas une matrice qu'il croit à jour). */
+  private restores: (Saved & { x: number; y: number; z: number })[] = [];
   private group: THREE.Object3D | null = null;
   private searched = false;
   /** Instances neutralisées à la dernière image (diagnostic e2e). */
@@ -38,18 +42,24 @@ export class BuildingMask {
   /** Déclare qu'un bâtiment doit être masqué (chantier en cours). */
   hide(buildingId: number, assetId: string, variant: number, x: number, y: number, z: number): void {
     if (this.api) { this.api.setBuildingsVisible([buildingId], false); return; }
+    if (this.hidden.has(buildingId)) return;
     const v = variant >= 0 ? variant : 0;
-    this.hidden.set(buildingId, { prefix: `${assetId}#${v}_lod`, x, y, z });
+    this.hidden.set(buildingId, { prefix: `${assetId}#${v}_lod`, x, y, z, saved: [] });
   }
 
   /** Le bâtiment redevient visible (chantier achevé ou abandonné). */
   show(buildingId: number): void {
     if (this.api) { this.api.setBuildingsVisible([buildingId], true); return; }
+    const h = this.hidden.get(buildingId);
+    if (!h) return;
+    for (const sv of h.saved) this.restores.push({ ...sv, x: h.x, y: h.y, z: h.z });
     this.hidden.delete(buildingId);
   }
 
   clear(): void {
     if (this.api && this.hidden.size > 0) this.api.setBuildingsVisible([...this.hidden.keys()], true);
+    for (const id of [...this.hidden.keys()]) this.show(id);
+    this.restoreAll();
     this.hidden.clear();
     this.masked = 0;
   }
@@ -57,6 +67,7 @@ export class BuildingMask {
   /** Applique le masque (appelé à chaque image, après la mise à jour du rendu des bâtiments). */
   apply(): void {
     this.masked = 0;
+    this.restoreAll();
     if (this.api || this.hidden.size === 0) return;
     if (!this.searched) { this.group = this.scene.getObjectByName('batiments') ?? null; this.searched = true; }
     const group = this.group;
@@ -78,7 +89,10 @@ export class BuildingMask {
         for (const h of targets) {
           if (Math.abs(x - h.x) > 0.05 || Math.abs(z - h.z) > 0.05 || Math.abs(y - h.y) > 0.2) continue;
           if (arr[o] === 0 && arr[o + 5] === 0 && arr[o + 10] === 0) { this.masked++; break; }
-          for (const k of [0, 1, 2, 4, 5, 6, 8, 9, 10]) arr[o + k] = 0;
+          // Partie linéaire conservée pour la restituer à l'achèvement (rotation + échelle de l'instance).
+          h.saved = h.saved.filter((sv) => sv.mesh !== mesh || sv.index !== i);
+          h.saved.push({ mesh, index: i, linear: LINEAR.map((k) => arr[o + k]!) });
+          for (const k of LINEAR) arr[o + k] = 0;
           changed = true;
           this.masked++;
           break;
@@ -86,5 +100,20 @@ export class BuildingMask {
       }
       if (changed) mesh.instanceMatrix.needsUpdate = true;
     }
+  }
+
+  /** Rétablit les instances des bâtiments redevenus visibles, si l'emplacement n'a pas été réattribué. */
+  private restoreAll(): void {
+    if (this.restores.length === 0) return;
+    for (const r of this.restores) {
+      const arr = r.mesh.instanceMatrix.array as Float32Array;
+      const o = r.index * 16;
+      if (o + 15 >= arr.length) continue;
+      if (Math.abs(arr[o + 12]! - r.x) > 0.05 || Math.abs(arr[o + 14]! - r.z) > 0.05 || Math.abs(arr[o + 13]! - r.y) > 0.2) continue;
+      if (!(arr[o] === 0 && arr[o + 5] === 0 && arr[o + 10] === 0)) continue;
+      LINEAR.forEach((k, j) => { arr[o + k] = r.linear[j]!; });
+      r.mesh.instanceMatrix.needsUpdate = true;
+    }
+    this.restores = [];
   }
 }
