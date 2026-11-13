@@ -72,6 +72,14 @@ interface DebugInfo {
   worldToScreen?: (x: number, z: number) => { x: number; y: number };
   /** Feux tricolores dessinés (e2e) : bras, positions, états, instances. */
   signals?: () => unknown;
+  /** Décor routier posé (e2e) : type et position de chaque lampadaire, arbre, banc… */
+  roadDecor?: () => { kind: string; x: number; z: number }[];
+  /** Dernier préchargement des bâtiments au chargement d'une partie (e2e : attente, préchauffage, plafond atteint). */
+  lastPreload?: { totalMs: number; capped: boolean; pending: number };
+  /** Plante des arbres / plantes (e2e : planche des essences). */
+  plantVeg?: (items: { x: number; z: number; assetId: string }[]) => number;
+  /** Blocs de rivière maillés (e2e : cadrer une berge). */
+  riverBlocks?: () => { x: number; z: number; tris: number }[];
   /** Copie de la dernière trame véhicules reçue (e2e : véhicules arrêtés aux feux). */
   lastVehicles?: { tick: number; ids: number[]; positions: number[] } | null;
   /** Active la copie `lastVehicles` (désactivée par défaut : aucune allocation en jeu). */
@@ -129,7 +137,14 @@ async function boot(): Promise<void> {
     },
     onOptions: (o) => applyGraphicsOptions(o, { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera }),
     onSpeed: (speed) => { void needBridge().send('setSpeed', { speed }).catch((e: unknown) => ui.toast(errText(e), 'error')); },
-    onToggleCamera: () => { input.camera.setMode(input.camera.mode === 'aerial' ? 'street' : 'aerial'); },
+    onToggleCamera: () => {
+      if (input.camera.mode === 'aerial') {
+        // Démo : tant que la vue aérienne est restée sur le centre (un carrefour), la vue rue part du trottoir prévu.
+        const p = input.camera.getPose();
+        if (demoRunning && demoViews && Math.hypot(p.targetX - demoViews.ax, p.targetZ - demoViews.az) < 40) setDemoCamera('street');
+        else input.camera.setMode('street');
+      } else input.camera.setMode('aerial');
+    },
     onSave: () => { void saveSlot(QUICK_SLOT); },
     onMenu: () => {
       speedBeforeMenu = (state.stats?.speed ?? 1) || 1;
@@ -175,7 +190,10 @@ async function boot(): Promise<void> {
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
   debug.signals = () => render.signals.debug();
+  debug.roadDecor = () => render.roads.decorItems();
   debug.heightAt = (x, z) => render.terrain.heightAt(x, z);
+  debug.riverBlocks = () => render.water.inlandCenters();
+  debug.plantVeg = (items) => render.veg.plant(items);
   debug.streetLook = (x, z, lx, lz) => {
     input.camera.setStreetPosition(x, z, Math.atan2(-(lx - x), -(lz - z)));
     if (input.camera.mode !== 'street') input.camera.setMode('street');
@@ -330,6 +348,33 @@ async function boot(): Promise<void> {
     } catch (e) { ui.toast(errText(e), 'error'); }
   }
 
+  /**
+   * Partie chargée : les modèles des bâtiments VUS depuis la caméra se chargent, et leurs textures partent au GPU,
+   * sous l'écran de chargement, avant la première image (sinon la ville apparaît vide puis se remplit pendant
+   * quelques secondes, avec une image figée le temps des envois). Attente plafonnée (PRELOAD_CAP_MS) : au-delà,
+   * la scène s'affiche, les derniers modèles arrivent par petites tranches et un message le signale.
+   */
+  const PRELOAD_CAP_MS = 1000;
+  async function preloadVisibleBuildings(): Promise<void> {
+    if (render.buildings.count === 0) return;
+    ui.setLoading(0.9, 'Chargement des bâtiments…');
+    const wasRunning = !params.has('norender');
+    const t0 = performance.now();
+    render.ctx.stop(); // pas de boucle d'affichage : le thread principal décode les modèles et envoie les textures
+    let ready = false;
+    render.ctx.renderNow(1 / 60); // calcule les LOD visibles : les modèles voulus sont demandés
+    // whenReady() envoie au GPU, par tranches, les textures des modèles reçus, entrelacé avec le téléchargement
+    // et le décodage des modèles restants.
+    await Promise.race([
+      render.buildings.whenReady().then(() => { ready = true; }),
+      new Promise<void>((r) => setTimeout(r, Math.max(0, PRELOAD_CAP_MS - (performance.now() - t0)))),
+    ]);
+    render.ctx.renderNow(1 / 60); // instances reçues posées : la première image visible les montre déjà
+    debug.lastPreload = { totalMs: Math.round(performance.now() - t0), capped: !ready, pending: render.buildings.loading };
+    if (wasRunning) render.ctx.start();
+    if (!ready) ui.toast('Chargement des derniers bâtiments…', 'info');
+  }
+
   async function loadSlot(slot: string): Promise<void> {
     const r = await st.load(slot);
     if (!r.ok) { ui.toast(`Chargement impossible : ${r.message}`, 'error'); return; }
@@ -342,11 +387,13 @@ async function boot(): Promise<void> {
       const c = cityCenter;
       if (c) focusCamera(c.x, c.z, Math.min(900, Math.max(220, c.extent * 2.2)));
       else focusCamera(0, 0, 420);
+      await preloadVisibleBuildings();
       ui.hideMenu();
+      ui.hideLoading();
       ui.toast('Partie chargée', 'ok');
       autosaver?.start();
       await b.send('setSpeed', { speed: 1 });
-    } catch (e) { ui.toast(`Chargement impossible : ${errText(e)}`, 'error'); }
+    } catch (e) { ui.hideLoading(); ui.toast(`Chargement impossible : ${errText(e)}`, 'error'); }
   }
 
   debug.saveSlot = saveSlot;

@@ -197,11 +197,14 @@ export class RoadPreview {
   private center = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.95));
   private markers: THREE.Mesh[] = [];
   private ctrlLine = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.6));
+  /** Guide d'aimantation : droite d'alignement (axe de la route, perpendiculaire, 45°…) depuis le départ. */
+  private guide = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.55));
 
   constructor(scene: THREE.Scene, private heightAt: HeightFn) {
     this.group.name = 'road-preview';
-    this.ribbon.renderOrder = 10; this.center.renderOrder = 11; this.ctrlLine.renderOrder = 11;
-    this.group.add(this.ribbon, this.center, this.ctrlLine);
+    this.ribbon.renderOrder = 10; this.center.renderOrder = 11; this.ctrlLine.renderOrder = 11; this.guide.renderOrder = 11;
+    (this.guide.material as THREE.MeshBasicMaterial).color.copy(COLORS.snap);
+    this.group.add(this.ribbon, this.center, this.ctrlLine, this.guide);
     const ring = new THREE.RingGeometry(2.2, 3.2, 40).rotateX(-Math.PI / 2);
     for (let i = 0; i < 3; i++) {
       const m = new THREE.Mesh(ring, overlayMaterial(0.95));
@@ -215,8 +218,29 @@ export class RoadPreview {
 
   hide(): void { this.group.visible = false; }
 
-  show(o: { points: number[] | null; width: number; validity: Validity; start: { x: number; z: number } | null; control: { x: number; z: number } | null; hover: { x: number; z: number; snap: string } | null }): void {
+  show(o: { points: number[] | null; width: number; validity: Validity; start: { x: number; z: number } | null; control: { x: number; z: number } | null; hover: { x: number; z: number; snap: string; guide?: { x0: number; z0: number; x1: number; z1: number } } | null }): void {
     this.group.visible = true;
+    const g = o.hover?.guide;
+    this.guide.visible = !!g;
+    if (g) {
+      // Tirets de 4 m (guide discret, distinct de l'aperçu de chaussée).
+      const L = Math.hypot(g.x1 - g.x0, g.z1 - g.z0), ux = (g.x1 - g.x0) / L, uz = (g.z1 - g.z0) / L;
+      const pos: number[] = [], idx: number[] = [];
+      const w = 0.22;
+      for (let d = 0; d + 2.5 <= L; d += 4) {
+        const ax = g.x0 + ux * d, az = g.z0 + uz * d, bx = ax + ux * 2.5, bz = az + uz * 2.5;
+        const i = pos.length / 3;
+        for (const [x, z, sgn] of [[ax, az, -1], [ax, az, 1], [bx, bz, 1], [bx, bz, -1]] as const) {
+          const px = x - uz * w * sgn, pz = z + ux * w * sgn;
+          pos.push(px, this.heightAt(px, pz) + 0.45, pz);
+        }
+        idx.push(i, i + 1, i + 2, i, i + 2, i + 3);
+      }
+      const geo = this.guide.geometry;
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setIndex(idx);
+      geo.computeBoundingSphere();
+    }
     const tint = colorOf(o.validity);
     const hasPath = !!o.points && o.points.length >= 4;
     this.ribbon.visible = hasPath; this.center.visible = hasPath;

@@ -49,18 +49,23 @@ export function computeJunction(net: RoadNetwork, nodeId: number): JunctionInfo 
   if (arms.length === 2) {
     const [p, q] = arms as [JunctionArm, JunctionArm];
     const dot = p.dirX * q.dirX + p.dirZ * q.dirZ;
-    // Même profil en travers et virage modéré : tronçons raccordés sans dalle (onglet).
-    if (p.kind === q.kind && dot < -0.5) return { nodeId, type: 'continuous', arms };
+    // Même profil en travers et virage léger (< ~20°) : tronçons raccordés sans dalle (onglet). Au-delà (angle
+    // obtus, droit ou aigu), une dalle de raccord arrondit le coin : l'onglet donnait des angles vifs, et des
+    // bords et trottoirs qui se chevauchaient dans les virages serrés.
+    if (p.kind === q.kind && dot < -0.94) return { nodeId, type: 'continuous', arms };
   }
   const n = arms.length;
   for (let i = 0; i < n; i++) {
     const a = arms[i]!;
     let need = 0;
-    for (const j of [(i + 1) % n, (i + n - 1) % n]) {
+    // Voisins des deux côtés. Avec deux branches, c'est la MÊME branche des deux côtés : les deux angles (aigu et
+    // rentrant) doivent être évalués, sinon l'une des branches ne recule pas du côté aigu et ses trottoirs
+    // traversent la chaussée de l'autre.
+    for (const [j, next] of [[(i + 1) % n, true], [(i + n - 1) % n, false]] as const) {
       if (j === i) continue;
       const b = arms[j]!;
       // Angle entre les branches, côté du voisin.
-      let alpha = j === (i + 1) % n ? b.angle - a.angle : a.angle - b.angle;
+      let alpha = next ? b.angle - a.angle : a.angle - b.angle;
       while (alpha <= 0) alpha += 2 * Math.PI;
       while (alpha > 2 * Math.PI) alpha -= 2 * Math.PI;
       let t: number;

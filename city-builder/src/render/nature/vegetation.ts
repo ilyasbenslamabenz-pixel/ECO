@@ -57,6 +57,11 @@ interface SpeciesRender {
   baseHeight: number;
 }
 
+/** Seuil (triangles) sous lequel un LOD est un jeu de « cartes croisées » et non un modèle. */
+export const CARD_LOD_TRIANGLES = 16;
+/** Seuil (triangles du LOD0) sous lequel un arbre n'a qu'un LOD détaillé avant l'imposteur. */
+export const LIGHT_TREE_TRIANGLES = 3000;
+
 /** Choisit le rôle d'un asset de végétation d'après sa catégorie et ses tags. */
 export function roleOf(a: CatalogAsset): VegRole | null {
   const tags = a.tags.map((t) => t.toLowerCase());
@@ -88,7 +93,9 @@ export function speciesFromCatalog(assets: readonly CatalogAsset[]): VegSpecies[
       case 'feuillu':
         // Un jeune arbre garde sa taille réelle (sinon il serait agrandi à 8-15 m et paraîtrait clairsemé).
         if (a.id.includes('jeune')) { minH = h * 0.85; maxH = h * 1.2; weight = 0.6; break; }
-        minH = Math.max(h * 0.9, 8); maxH = Math.max(h * 1.1, 15); weight = a.id.includes('jacaranda') ? 0.25 : 1; break;
+        minH = Math.max(h * 0.9, 8); maxH = Math.max(h * 1.1, 15); // Jacaranda (Poly Haven) : feuillage épars en grappes qui semblent flotter autour du houppier ; plus semé
+        // (poids nul), il reste plantable à la main.
+        weight = a.id.includes('jacaranda') ? 0 : 1; break;
       case 'conifere': minH = Math.max(h * 0.85, 10); maxH = Math.max(h * 1.15, 20); weight = 1; break;
       case 'ornement': minH = Math.max(h, 5); maxH = Math.max(h * 1.3, 8); weight = 0.3; break;
       case 'arbuste': minH = h * 0.8; maxH = h * 1.3; weight = 1; break;
@@ -183,7 +190,15 @@ export class VegetationSystem {
     if (this.species.length > 255) this.species.length = 255;
     this.renders = [];
     for (const sp of this.species) {
-      const lodCount = Math.min(3, sp.asset.lods.length);
+      // Dernier LOD en « cartes croisées » (≤ 16 triangles, arbres générés) : illisible vu du dessus (lamelles) ;
+      // on ne le charge pas, l'imposteur orienté caméra (vraies vues du modèle, dont la vue zénithale) prend le relais.
+      // Ce LOD contient aussi une grande carte HORIZONTALE (près de la moitié de l'emprise du houppier) : vue de
+      // côté, une plaque plate traversait la couronne. Il n'est donc jamais chargé, imposteur disponible ou non.
+      const cardLod = sp.asset.category === 'tree' && sp.asset.lods.length >= 3 && (sp.asset.lods[2]?.triangles ?? 1e9) <= CARD_LOD_TRIANGLES;
+      // Modèle déjà léger (épicéa : 1,6 k triangles) : ses LOD réduits ne gardent qu'un mât et quelques branches
+      // basses ; le LOD0 sert jusqu'à l'imposteur.
+      const light = sp.impostor && !!r && (sp.asset.lods[0]?.triangles ?? 1e9) <= LIGHT_TREE_TRIANGLES;
+      const lodCount = Math.min(light ? 1 : cardLod ? 2 : 3, sp.asset.lods.length);
       const roots = await Promise.all(Array.from({ length: lodCount }, (_, l) => this.lib.load(sp.asset.id, l)));
       const rec: SpeciesRender = { sp, lods: [], imp: null, baseHeight: sp.asset.dimensions.height };
       roots.forEach((root, l) => {
@@ -227,6 +242,16 @@ export class VegetationSystem {
   }
 
   get speciesList(): readonly VegSpecies[] { return this.species; }
+
+  /**
+   * Matériau d'imposteur d'une essence (partagé, éclairage déjà synchronisé par syncLights), ou null. Sert au
+   * décor routier : ses arbres d'alignement lointains utilisent le même imposteur que la végétation.
+   * Géométrie attendue : PlaneGeometry(2, 2) instanciée + attribut instancié `instanceTint` (vec3).
+   */
+  impostorMaterial(assetId: string): THREE.Material | null {
+    const r = this.renders.find((x) => x.sp.asset.id === assetId);
+    return r?.imp ? (r.imp.mesh.material as THREE.Material) : null;
+  }
 
   /** Définit les essences sans charger de modèle (semis et suppressions seuls : outils, tests). */
   setSpecies(species: VegSpecies[]): void {
@@ -278,8 +303,9 @@ export class VegetationSystem {
     let tot = 0;
     for (const c of cands) tot += this.species[c]!.weight;
     let r = rnd() * tot;
-    for (const c of cands) { r -= this.species[c]!.weight; if (r <= 0) return c; }
-    return cands[cands.length - 1]!;
+    let last = cands[cands.length - 1]!;
+    for (const c of cands) { const w = this.species[c]!.weight; if (w <= 0) continue; last = c; r -= w; if (r <= 0) return c; }
+    return last;
   }
 
   private scaleFor(sp: number, rnd: () => number): number {

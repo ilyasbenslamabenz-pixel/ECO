@@ -268,12 +268,14 @@ export function buildCity(sim: Simulation, opts: CityPlanOptions): CityBuildResu
     if (a?.id !== 'public_parc_kiosque') continue;
     const th = rotAngle(b.rot[i]!);
     const c = Math.cos(th), s = Math.sin(th);
-    const pts: [number, number, string][] = [[11, 6, 'arbre_jacaranda'], [-11, 6, 'arbre_feuillu_rond'], [11, -2, 'arbre_feuillu_jeune'], [-11, 2, 'arbre_feuillu_rond'],
+    const pts: [number, number, string][] = [[11, 6, 'arbre_platane'], [-11, 6, 'arbre_feuillu_rond'], [11, -2, 'arbre_feuillu_jeune'], [-11, 2, 'arbre_feuillu_rond'],
       [6, 11, 'arbre_peuplier'], [-6, 11, 'arbre_feuillu_jeune'], [-12, -2, 'arbre_petit_ornement'], [3, -12, 'arbre_feuillu_rond']];
     for (const [lx, lz, id] of pts) res.decor.push({ assetId: id, x: b.x[i]! + lx * c + lz * s, z: b.z[i]! - lx * s + lz * c, rot: 0 });
   }
-  // Vue rue : sur le trottoir du boulevard, regard vers les tours du centre.
-  res.views.street = { x: cx - colStep * 0.9, z: cz + halfWidth('boulevard') - 2.2, lookX: cx + colStep, lookZ: cz + 6 };
+  // Vue rue : au milieu d'un îlot, sur le trottoir du boulevard (entre lampadaires et arbres d'alignement), regard
+  // le long de la rue vers les tours du centre : façades à droite, arbres, chaussée sur un tiers de l'image.
+  const hwB = halfWidth('boulevard');
+  res.views.street = { x: cx - colStep * 0.44, z: cz + hwB - 2.3, lookX: cx + colStep, lookZ: cz + hwB - 4 };
   res.ms = Date.now() - t0;
   return res;
 }

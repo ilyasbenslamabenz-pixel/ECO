@@ -86,6 +86,16 @@ export function pointInObb(o: Obb, x: number, z: number, margin = 0): boolean {
   return Math.abs(lx) <= o.hx + margin && Math.abs(lz) <= o.hz + margin;
 }
 
+/**
+ * Écart minimal (m) entre deux bâtiments quand l'un d'eux est une maison individuelle : les modèles débordent
+ * parfois un peu de leur emprise (débords de toit, pignons) et deux maisons posées bord à bord se touchaient,
+ * voire se chevauchaient à l'écran. Les autres bâtiments restent mitoyens possibles (rangées de commerces…).
+ */
+export const HOUSE_GAP = 1.0;
+export function buildingGap(categoryA: string, categoryB: string): number {
+  return categoryA === 'house' || categoryB === 'house' ? HOUSE_GAP : 0;
+}
+
 /** Recouvrement strict (séparation par les axes). `eps` > 0 tolère un contact bord à bord. */
 export function obbOverlap(a: Obb, b: Obb, eps = 0.01): boolean {
   // Axes : x et z locaux de a puis de b. Axe local x de o en monde = (c, −s), axe z = (s, c).

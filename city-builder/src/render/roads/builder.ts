@@ -191,7 +191,13 @@ function flatQuad(b: LayerBuffer, x0: number, y0: number, z0: number, x1: number
 export interface BuildContext {
   net: RoadNetwork;
   junctions: Map<number, JunctionInfo>;
+  /** Obstacles au sol que le décor doit éviter (paires x, z : pieds des mâts de feux tricolores). */
+  avoid?: readonly number[];
 }
+
+/** Distance libre (m) entre un obstacle (mât de feu) et un lampadaire / un autre élément de décor. */
+const AVOID_LAMP = 6;
+const AVOID_OTHER = 3.5;
 
 export function junctionOf(ctx: BuildContext, nodeId: number): JunctionInfo {
   let j = ctx.junctions.get(nodeId);
@@ -460,7 +466,8 @@ function markings(out: BuildOutput, ctx: BuildContext, k: RoadKindDef, sm: SegSa
   // Abords de carrefour : passages piétons, lignes d'arrêt, flèches.
   const ends: { j: JunctionInfo; atStart: boolean }[] = [{ j: startJ, atStart: true }, { j: endJ, atStart: false }];
   for (const { j, atStart } of ends) {
-    if (j.type !== 'junction') continue;
+    // Simple coude (deux branches) : pas de passage piéton ni de ligne d'arrêt.
+    if (j.type !== 'junction' || j.arms.length < 3) continue;
     const sBase = atStart ? s0 : s1;
     const dir = atStart ? 1 : -1;
     if (s1 - s0 < 14) continue;
@@ -523,7 +530,7 @@ function arrow(P: LayerBuffer, sm: SegSampler, sCenter: number, off: number, for
 }
 
 /** Décor d'un tronçon : lampadaires, arbres d'alignement, mobilier des rues piétonnes. */
-function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1: number, segId: number): void {
+function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1: number, segId: number, avoid?: readonly number[]): void {
   const hc = carriagewayWidth(k) / 2;
   const ht = totalWidth(k) / 2;
   const curb = k.curbHeight;
@@ -532,7 +539,22 @@ function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1:
   if (b <= a) return;
   const put = (kind: DecorKind, s: number, off: number, dy: number, rotExtra: number, scale: number): void => {
     sm.at(s);
-    const x = sm.x + sm.nx * off, z = sm.z + sm.nz * off;
+    let x = sm.x + sm.nx * off, z = sm.z + sm.nz * off;
+    if (avoid && avoid.length) {
+      // Trop près d'un mât de feu : on glisse l'élément le long du tronçon, vers son milieu (abandon au-delà).
+      const clear = kind === 'lamp' ? AVOID_LAMP : AVOID_OTHER;
+      const mid = (a + b) / 2, dir = s <= mid ? 1 : -1;
+      const blocked = (): boolean => {
+        for (let i = 0; i + 1 < avoid.length; i += 2) if (Math.hypot(avoid[i]! - x, avoid[i + 1]! - z) < clear) return true;
+        return false;
+      };
+      for (let tries = 0; blocked(); tries++) {
+        s += dir * 1.5;
+        if (tries >= 8 || (dir > 0 ? s > mid : s < mid)) return;
+        sm.at(s);
+        x = sm.x + sm.nx * off; z = sm.z + sm.nz * off;
+      }
+    }
     // Rotation autour de Y : face du modèle (+Z) tournée vers l'axe de la route.
     const fx = -Math.sign(off) * sm.nx, fz = -Math.sign(off) * sm.nz;
     out.decor.push({ kind, x, y: sm.y + dy, z, rot: Math.atan2(fx, fz) + rotExtra, scale });
@@ -619,7 +641,7 @@ export function buildSegment(out: BuildOutput, ctx: BuildContext, segId: number)
   if (k.median === 'planted') plantedMedian(out, k, sm, s0, s1, ja.type !== 'continuous', jb.type !== 'continuous');
   piers(out, k, sm, net.env.waterLevel, s0, s1);
   markings(out, ctx, k, sm, s0, s1, ja, jb);
-  decor(out, k, sm, s0, s1, segId);
+  decor(out, k, sm, s0, s1, segId, ctx.avoid);
   if (ja.type === 'end') deadEnd(out, k, st[0]!, -1);
   if (jb.type === 'end') deadEnd(out, k, st[st.length - 1]!, 1);
   return { s0, s1 };
@@ -722,10 +744,30 @@ export function buildJunction(out: BuildOutput, ctx: BuildContext, nodeId: numbe
     // côté « -p » (vers la branche précédente) puis côté « +p » (vers la suivante)
     contour.push([e.x - e.nx * hcE, e.y + surfLift, e.z - e.nz * hcE]);
     contour.push([e.x + e.nx * hcE, e.y + surfLift, e.z + e.nz * hcE]);
+    // Angle du coin, de la branche e à la suivante f (sens croissant) : > 180° = coin rentrant (côté extérieur
+    // d'un virage, d'une épingle ou d'un angle droit à deux branches).
+    let alpha = f.arm.angle - e.arm.angle;
+    while (alpha <= 0) alpha += 2 * Math.PI;
+    const reflex = alpha > (185 * Math.PI) / 180;
     // Coin entre e (+p) et f (-p).
     const quadCorner = (offE: number, offF: number, dy: number): [number, number, number][] => {
       const ax = e.x + e.nx * offE, az = e.z + e.nz * offE;
       const bx = f.x - f.nx * offF, bz = f.z - f.nz * offF;
+      if (reflex) {
+        // Coin rentrant : les bords filent parallèlement aux branches jusqu'au droit du nœud, puis un arc centré
+        // sur le nœud les raccorde (rayon = demi-largeur). Plus de corde droite qui coupait une pointe d'asphalte
+        // dans l'herbe, ni de trottoirs qui se croisent. Même découpage pour toutes les courbes du coin (les bandes
+        // de bordure et de trottoir relient les points de même rang).
+        const pts: [number, number, number][] = [[ax, e.y + dy, az]];
+        const a0 = Math.atan2(e.nz, e.nx), sweep = alpha - Math.PI;
+        const yN = node.y;
+        for (let q = 0; q <= Q - 2; q++) {
+          const u = q / (Q - 2), th = a0 + sweep * u, r = offE + (offF - offE) * u;
+          pts.push([node.x + Math.cos(th) * r, yN + dy, node.z + Math.sin(th) * r]);
+        }
+        pts.push([bx, f.y + dy, bz]);
+        return pts;
+      }
       // Point de contrôle : intersection des bords (droites parallèles aux branches).
       let t = lineIntersectT(ax, az, -e.dx, -e.dz, bx, bz, -f.dx, -f.dz);
       let cx: number, cz: number;

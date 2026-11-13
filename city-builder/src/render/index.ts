@@ -18,7 +18,7 @@ import type { AssetCatalog } from '../shared/catalog';
 import { TILE_SIZE } from '../shared/constants';
 import type { BuildingRecord, CameraPose, RoadEdgeRecord } from '../shared/contracts';
 import { rotAngle } from '../shared/footprint';
-import type { DeltaMessage, SnapshotMessage } from '../shared/protocol';
+import { SIGNAL_HEAD_STRIDE, type DeltaMessage, type SignalLayoutMsg, type SnapshotMessage } from '../shared/protocol';
 import { cubic, polyline } from '../sim/roads/bezier';
 import { halfWidth, isRoadKind } from '../sim/roads/types';
 import { isWorldTerrain } from '../sim/terrain';
@@ -87,9 +87,10 @@ export async function initRender(
   const heightAt = (x: number, z: number): number => terrain.heightAt(x, z);
   const veg = new VegetationSystem(ctx.scene, lib, { heightAt, renderer: ctx.renderer });
   await veg.load();
-  const roads = new RoadNetworkRenderer(ctx.scene, heightAt, { lib });
+  const roads = new RoadNetworkRenderer(ctx.scene, heightAt, { lib, treeImpostor: (id) => veg.impostorMaterial(id) });
   const buildings = new InstancedBuildingRenderer(ctx.scene, lib);
   buildings.attachCamera(ctx.camera);
+  buildings.attachRenderer(ctx.renderer);
   const vehicles = new InstancedVehicleRenderer(ctx.scene, lib);
   vehicles.attachCamera(ctx.camera);
   const signals = new TrafficSignalRenderer(ctx.scene);
@@ -125,6 +126,14 @@ export async function initRender(
     }
   };
 
+  /** Le décor routier (lampadaires, arbres) s'écarte des pieds de mâts de feux (disposition lue, jamais modifiée). */
+  const setSignalObstacles = (layout: SignalLayoutMsg): void => {
+    const n = layout.nodeIds.length;
+    const xz = new Float32Array(n * 2);
+    for (let i = 0; i < n; i++) { xz[i * 2] = layout.heads[i * SIGNAL_HEAD_STRIDE]!; xz[i * 2 + 1] = layout.heads[i * SIGNAL_HEAD_STRIDE + 2]!; }
+    roads.setDecorObstacles(xz, layout.nodeIds);
+  };
+
   const handle: RenderHandle = {
     ctx, sky, terrain, water, roads, buildings, vehicles, signals, veg, plugins,
     disposePlugins() { plugins.dispose(); },
@@ -152,6 +161,7 @@ export async function initRender(
       buildingIds.clear();
       vehicles.setVehicles(new Float32Array(0), new Uint16Array(0), 0);
       signals.clear(); // la disposition des feux arrive avec le delta suivant
+      roads.setDecorObstacles([], []);
       roads.addRoads(s.roads.nodes, s.roads.edges);
       clearVegForRoads(s.roads.nodes, s.roads.edges);
       buildings.add(s.buildings);
@@ -177,7 +187,10 @@ export async function initRender(
         for (const b of d.buildingsAdded) buildingIds.add(b.id);
         clearVegForBuildings(d.buildingsAdded);
       }
-      if (d.signals) signals.apply(d.signals);
+      if (d.signals) {
+        signals.apply(d.signals);
+        if (d.signals.layout) setSignalObstacles(d.signals.layout);
+      }
       if (d.vehicles) vehicles.setFrame(d.vehicles);
       else if (vehicles.count > 0) vehicles.setVehicles(new Float32Array(0), new Uint16Array(0), 0);
       if (d.ext) plugins.applyDelta(d.ext);
