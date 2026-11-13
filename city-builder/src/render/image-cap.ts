@@ -53,6 +53,8 @@ function workCanvas(w: number, h: number): typeof work {
  * bâtiments, accessoires) en mode allégé.
  */
 const reduced = new WeakMap<object, ImageData>();
+/** Image d'origine d'une réduction (partage des textures entre modèles, voir capModelTextures). */
+const originalOf = new WeakMap<object, object>();
 
 /** Image réduite à `cap` px de côté au plus (même orientation), ou l'image d'origine si elle tient déjà. */
 export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | ImageData {
@@ -74,6 +76,7 @@ export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | Ima
   const out = ctx.getImageData(0, 0, w, h);
   refillTransparent(out);
   reduced.set(img as object, out);
+  originalOf.set(out, img as object);
   // Libère l'original au plus tôt (ImageBitmap : mémoire décodée rendue tout de suite).
   (img as { close?: () => void }).close?.();
   return out;
@@ -137,9 +140,15 @@ export function capModelTextures(root: THREE.Object3D, cap = imageLimits.texture
     const m = (o as THREE.Mesh).material;
     if (!m) return;
     for (const mat of Array.isArray(m) ? m : [m]) {
-      for (const v of Object.values(mat)) {
+      const slots = mat as unknown as Record<string, unknown>;
+      for (const [key, v] of Object.entries(slots)) {
         const t = v as THREE.Texture | null;
-        if (!t || !t.isTexture || seen.has(t)) continue;
+        if (!t || !t.isTexture) continue;
+        // Même image d'origine et mêmes réglages qu'une texture d'un modèle déjà chargé : on réutilise celle-ci
+        // (une seule copie au GPU au lieu d'une par modèle qui cite le fichier).
+        const shared = canonical(t);
+        if (shared !== t) { slots[key] = shared; continue; }
+        if (seen.has(t)) continue;
         seen.add(t);
         const img = t.image as unknown;
         const out = downscaleImage(img, cap);
@@ -147,4 +156,22 @@ export function capModelTextures(root: THREE.Object3D, cap = imageLimits.texture
       }
     }
   });
+}
+
+/** Textures déjà réduites, par image d'origine puis par réglages d'échantillonnage et de transformation. */
+const shared = new WeakMap<object, Map<string, THREE.Texture>>();
+
+function canonical(t: THREE.Texture): THREE.Texture {
+  const img = t.image as unknown;
+  if (!img || typeof img !== 'object') return t;
+  // Image déjà remplacée par sa réduction : on retrouve l'original par la table inverse.
+  const src = originalOf.get(img as object) ?? (img as object);
+  const k = [t.colorSpace, t.wrapS, t.wrapT, t.flipY, t.channel, t.offset.x, t.offset.y, t.repeat.x, t.repeat.y, t.rotation, t.center.x, t.center.y,
+    t.magFilter, t.minFilter, t.premultiplyAlpha, t.generateMipmaps].join('|');
+  let byKey = shared.get(src);
+  if (!byKey) { byKey = new Map(); shared.set(src, byKey); }
+  const c = byKey.get(k);
+  if (c) return c;
+  byKey.set(k, t);
+  return t;
 }

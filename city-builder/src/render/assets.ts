@@ -83,7 +83,14 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
         root.name = `${assetId}_lod${lod}`;
         root.traverse((o) => {
           const m = o as THREE.Mesh;
-          if (m.isMesh) { dequantizeGeometry(m.geometry); m.castShadow = true; m.receiveShadow = true; }
+          if (m.isMesh) {
+            dequantizeGeometry(m.geometry); m.castShadow = true; m.receiveShadow = true;
+            // Feuillage découpé (alphaTest) : bords lissés par le multiéchantillonnage (alpha-to-coverage) au lieu
+            // d'un seuil tout-ou-rien qui rendait les arbres granuleux et scintillants, surtout sur iPhone.
+            for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+              if (mat.alphaTest > 0 && !mat.transparent) mat.alphaToCoverage = true;
+            }
+          }
         });
         this.loaded.add(key);
         this.release();

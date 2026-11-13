@@ -54,7 +54,7 @@ export function phaseBadge(n: number | string): HTMLSpanElement { return el('spa
 export function scrollHints(elm: HTMLElement): void {
   const upd = (): void => {
     const max = elm.scrollWidth - elm.clientWidth;
-    const v = max > 2 ? `${elm.scrollLeft > 2 ? 'l' : ''}${elm.scrollLeft < max - 2 ? 'r' : ''}` : '';
+    const v = max > 8 ? `${elm.scrollLeft > 8 ? 'l' : ''}${elm.scrollLeft < max - 8 ? 'r' : ''}` : '';
     if (v) elm.dataset['more'] = v; else delete elm.dataset['more'];
   };
   elm.addEventListener('scroll', upd, { passive: true });

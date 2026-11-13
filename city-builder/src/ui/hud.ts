@@ -402,6 +402,7 @@ export function initUI(h: UIHandlers): UIHandle {
     showHud(name) {
       cityName = name;
       $('hud-city').textContent = name;
+      $('hud-city').title = name; // nom complet au survol quand il est raccourci
       for (const id of ['hud', 'toolbar', 'sidebar', 'bottom', 'objectives']) $(id).classList.remove('hidden');
       document.body.classList.add('in-game');
       measure();
@@ -447,7 +448,13 @@ export function initUI(h: UIHandlers): UIHandle {
           const centered = matchMedia('(max-width: 760px)').matches; // même règle que styles.css (étiquette centrée)
           const x = centered ? Math.min(Math.max(sx, w / 2 + 6), W - w / 2 - 6) : Math.min(sx, W - w - 22);
           cursorTag.style.left = `${Math.max(0, x)}px`;
-          cursorTag.style.top = `${sy}px`;
+          // Jamais sur la barre du haut ni sous les outils : au doigt, avant le premier toucher de la carte, la
+          // position est celle du bouton d'outil (ou 0,0) et l'étiquette recouvrait la barre du haut.
+          const off = centered ? 30 : 14;
+          const css = getComputedStyle(document.documentElement);
+          const hudH = parseFloat(css.getPropertyValue('--hud-h')) || 0, tbH = parseFloat(css.getPropertyValue('--tb-h')) || 0;
+          const minY = hudH + 6 - off, maxY = window.innerHeight - tbH - cursorTag.offsetHeight - 6 - off;
+          cursorTag.style.top = `${Math.max(minY, Math.min(Math.max(minY, maxY), sy))}px`;
         },
         touchConfirm(o) {
           document.body.classList.toggle('confirming', !!o);

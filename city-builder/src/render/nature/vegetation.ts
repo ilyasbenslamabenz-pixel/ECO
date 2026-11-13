@@ -257,6 +257,7 @@ export class VegetationSystem {
       const u = (rec.imp.mesh.material as THREE.ShaderMaterial).uniforms;
       u['tAlb']!.value = atlas.albedo;
       u['tNor']!.value = atlas.normal;
+      (u['uBg']!.value as THREE.Vector3).set(atlas.check.meanRgb[0] / 255, atlas.check.meanRgb[1] / 255, atlas.check.meanRgb[2] / 255);
       rec.imp.atlas.dispose();
       rec.imp.atlas = atlas;
     }

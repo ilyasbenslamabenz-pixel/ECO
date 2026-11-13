@@ -130,6 +130,28 @@ export class ThumbnailRenderer implements ThumbnailSource {
     const { renderer, scene } = this.ensure();
     const target = this.target!;
     const obj = src.clone(true);
+    // Mode allégé : matériaux simplifiés (albédo seul) ; les cartes de normales et ARM, invisibles à cette taille,
+    // triplaient les textures envoyées au GPU pour chaque vignette.
+    const liteMats: THREE.Material[] = [];
+    if (this.releaseAfter) {
+      obj.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const one = (mat: THREE.Material): THREE.Material => {
+          const s = mat as THREE.MeshStandardMaterial;
+          if (!s.isMeshStandardMaterial) return mat;
+          const l = new THREE.MeshStandardMaterial({
+            map: s.map, color: s.color, vertexColors: s.vertexColors, side: s.side, transparent: s.transparent, opacity: s.opacity, alphaTest: s.alphaTest,
+            // Sans carte ARM, le facteur de métal du glTF (1) rendrait la façade noire : surfaces mates non métalliques.
+            roughness: s.roughnessMap ? Math.max(0.7, s.roughness * 0.85) : s.roughness, metalness: s.metalnessMap ? 0 : s.metalness,
+            envMapIntensity: s.envMapIntensity,
+          });
+          liteMats.push(l);
+          return l;
+        };
+        m.material = Array.isArray(m.material) ? m.material.map(one) : one(m.material);
+      });
+    }
     scene.add(obj);
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
@@ -166,6 +188,7 @@ export class ThumbnailRenderer implements ThumbnailSource {
       renderer.toneMapping = prevTone; renderer.toneMappingExposure = prevExp;
       renderer.shadowMap.autoUpdate = prevShadowAuto;
       scene.remove(obj);
+      for (const l of liteMats) l.dispose();
     }
     if (this.releaseAfter) {
       src.traverse((o) => {

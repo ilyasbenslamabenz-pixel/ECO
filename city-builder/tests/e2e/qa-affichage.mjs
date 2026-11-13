@@ -92,7 +92,7 @@ async function closeAll(page) {
 
 async function tap(page, dev, sel) {
   const loc = page.locator(sel).first();
-  if (dev === 'iphone') await loc.tap({ timeout: 5000 }); else await loc.click({ timeout: 5000 });
+  if (dev !== 'desktop') await loc.tap({ timeout: 5000 }); else await loc.click({ timeout: 5000 });
   await page.waitForTimeout(500);
 }
 
@@ -142,7 +142,7 @@ async function runDevice(dev) {
     const p = await page.evaluate(([x, z]) => window.__aube.worldToScreen(x, z + 22), [cx, cz]);
     await page.mouse.move(p.x, p.y);
     for (let i = 0; i < 4; i++) { await page.mouse.move(p.x + i * 3, p.y); await render(page, 1, 0.05); }
-    if (dev === 'iphone') await page.touchscreen.tap(p.x, p.y);
+    if (dev !== 'desktop') await page.touchscreen.tap(p.x, p.y);
     await page.waitForTimeout(500);
     await shot(page, dev, '10-placement');
     await page.locator('button', { hasText: 'Construire' }).first().click({ timeout: 3000 }).catch(() => page.mouse.click(p.x, p.y));
@@ -150,10 +150,21 @@ async function runDevice(dev) {
     await closeAll(page);
     await render(page, 3);
     // Panneau d'information du bâtiment posé.
-    const b = await page.evaluate(async () => (await window.__aube.send('save', { slot: 'qa' })).buildings?.[0] ?? null).catch(() => null);
+    let b = await page.evaluate(async () => (await window.__aube.send('save', { slot: 'qa' })).data?.buildings?.[0] ?? null).catch(() => null);
+    if (!b) {
+      // Geste non abouti (rendu logiciel lent) : maison posée par la simulation, comme le ferait l'outil.
+      for (const dz of [16, 22, -16, -22, 30]) {
+        const ok = await page.evaluate(([x, z]) => window.__aube.send('placeBuilding', { assetId: 'maison_pavillon_enduit', x, z, rot: 0 }).then(() => true, (e) => e.message), [cx, cz + dz]);
+        if (ok === true) break;
+        console.log(`  pose directe refusée : ${ok}`);
+      }
+      await page.waitForTimeout(1200);
+      await render(page, 3);
+      b = await page.evaluate(async () => (await window.__aube.send('save', { slot: 'qa' })).data?.buildings?.[0] ?? null).catch(() => null);
+    }
     if (b) {
       const s = await page.evaluate(([x, z]) => window.__aube.worldToScreen(x, z), [b.x, b.z]);
-      if (dev === 'iphone') await page.touchscreen.tap(s.x, s.y); else await page.mouse.click(s.x, s.y);
+      if (dev !== 'desktop') await page.touchscreen.tap(s.x, s.y); else await page.mouse.click(s.x, s.y);
       await page.waitForTimeout(800);
       await page.waitForFunction(() => { const i = document.querySelector('#info-thumb'); return i && !i.classList.contains('hidden') && i.complete && i.naturalWidth > 0; }, null, { timeout: 60000 }).catch(() => undefined);
       const l = await thumbLuma(page, '#info-thumb');
@@ -165,8 +176,8 @@ async function runDevice(dev) {
   }
   // Panneau d'information d'une route.
   {
-    const s = await page.evaluate(([x, z]) => window.__aube.worldToScreen(x - 60, z), [cx, cz]);
-    if (dev === 'iphone') await page.touchscreen.tap(s.x, s.y); else await page.mouse.click(s.x, s.y);
+    const s = await page.evaluate(([x, z]) => window.__aube.worldToScreen(x + 24, z), [cx, cz]);
+    if (dev !== 'desktop') await page.touchscreen.tap(s.x, s.y); else await page.mouse.click(s.x, s.y);
     await page.waitForTimeout(800);
     await shot(page, dev, '12-info-route');
     await closeAll(page);
@@ -177,7 +188,7 @@ async function runDevice(dev) {
     await page.waitForTimeout(800);
     const a = await page.evaluate(([x, z]) => window.__aube.worldToScreen(x - 40, z - 50), [cx, cz]);
     const e = await page.evaluate(([x, z]) => window.__aube.worldToScreen(x + 40, z - 70), [cx, cz]);
-    if (dev === 'iphone') await page.touchscreen.tap(a.x, a.y); else await page.mouse.click(a.x, a.y);
+    if (dev !== 'desktop') await page.touchscreen.tap(a.x, a.y); else await page.mouse.click(a.x, a.y);
     await page.mouse.move(e.x, e.y);
     for (let i = 0; i < 3; i++) { await page.mouse.move(e.x - 6 + i * 3, e.y); await render(page, 1, 0.05); }
     await shot(page, dev, '13-trace-route');

@@ -239,7 +239,7 @@ button.hud-stat:hover:not(:disabled) { background: rgba(255,255,255,.05); }
 .chip-tab .n { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chip-tab.active { box-shadow: var(--accent-glow); }
 .drawer-note { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
-.drawer-body { display: flex; gap: 10px; padding: 10px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; }
+.drawer-body { display: flex; gap: 10px; padding: 10px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; scroll-padding-inline: 10px; }
 .card { flex: 0 0 auto; width: 140px; display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden; border-radius: 13px; text-align: left;
   scroll-snap-align: start; background: rgba(255,255,255,.04); border-color: var(--line); }
 .card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ic, #3ddc84) 60%, transparent); }
@@ -270,7 +270,8 @@ button.hud-stat:hover:not(:disabled) { background: rgba(255,255,255,.05); }
 #tool-options { display: flex; gap: 10px; align-items: center; padding: 6px 8px 6px 14px; background: var(--glass-2); border: 1px solid var(--line); border-radius: 999px;
   backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: rise .2s ease-out; }
 body.drawer-open #tool-options, body.confirming #tool-options { display: none; }
-.tool-hint { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* Consigne entière sur deux lignes au plus (elle était coupée « 16×… » à côté des boutons d'options). */
+.tool-hint { font-size: 12.5px; line-height: 1.3; color: var(--muted); white-space: normal; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-width: 0; flex: 1 1 auto; }
 .tool-actions { display: flex; gap: 4px; flex: 0 0 auto; }
 .tool-actions button { min-height: 32px; padding: 4px 11px; font-size: 12px; border-radius: 999px; }
 
@@ -530,6 +531,8 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .drawer-note { white-space: normal; flex: 1 1 100%; min-width: 0; line-height: 1.3; }
   .drawer-title { flex: 1; }
   .card { width: 118px; }
+  /* Noms longs (« Pavillon enduit à toit quatre pans ») entiers sur deux lignes dans une carte étroite. */
+  .card .nm { font-size: 11px; letter-spacing: -0.01em; }
   .road-card { width: 140px; }
   .tile { width: 92px; min-height: 88px; }
   #tool-options { border-radius: 14px; flex-wrap: wrap; justify-content: center; padding: 6px; }
@@ -543,6 +546,8 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .panel-head { padding: 10px 8px 8px 12px; }
   .panel-head h3 { font-size: 16px; }
   .panel-head::before { content: ''; position: absolute; left: 50%; top: 5px; width: 38px; height: 4px; margin-left: -19px; border-radius: 2px; background: rgba(255,255,255,.22); }
+  /* Vignette du panneau d'information : taille proche de sa définition (moins floue), place laissée aux lignes. */
+  .info-thumb { width: auto; max-width: 100%; height: min(160px, 22dvh); display: block; margin: 0 auto 6px; }
   .kpis3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .row2 { grid-template-columns: 1fr; }
   .brand { font-size: 24px; }
@@ -591,6 +596,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   #toolbar .tb-sep { margin: 6px 2px; }
   #build-drawer { max-height: 52dvh; }
   .card { width: 112px; }
+  .card .nm { font-size: 11px; letter-spacing: -0.01em; }
   #objectives { display: none !important; }
   .panel { top: calc(var(--hud-h) + 4px); bottom: calc(var(--tb-h) + 4px); max-height: none; width: min(400px, 58vw); }
   #toasts { bottom: auto; top: calc(var(--hud-h) + 8px); }

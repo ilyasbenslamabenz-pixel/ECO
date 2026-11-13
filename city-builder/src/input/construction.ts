@@ -47,8 +47,10 @@ export function initConstruction(o: ConstructionOptions): ConstructionHandle {
   o.sim.onSnapshot((s) => { mirror.applySnapshot(s); o.ui.resetFinance(); });
   o.sim.onDelta((d) => mirror.applyDelta(d));
   const machine = new ConstructionTools(mirror, o.sim, (t, k) => o.ui.toast(t, k));
+  // Mode allégé : 192×144 (128×96 paraissait flou, étiré dans le panneau d'information d'un écran 3×) ; le
+  // modèle reste le plus léger et ses textures sont libérées après la vignette.
   const thumbs = o.thumbs === undefined
-    ? new ThumbnailRenderer(o.models, { renderer: o.renderer ?? null, ...(o.lite ? { width: 128, height: 96, lod: Infinity, releaseAfter: true } : {}) })
+    ? new ThumbnailRenderer(o.models, { renderer: o.renderer ?? null, ...(o.lite ? { width: 192, height: 144, lod: Infinity, releaseAfter: true } : {}) })
     : o.thumbs;
   const { camera, tools } = o.input;
   tools.attach({ scene: o.scene, camera, machine, models: o.models, heightAt: o.heightAt }, o.ui.toolHooks());

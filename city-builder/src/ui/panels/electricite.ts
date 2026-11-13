@@ -46,7 +46,8 @@ const CSS = `
 #elec-launcher{top:auto;bottom:calc(var(--tb-h,150px) + 6px);min-width:48px;height:48px;padding:0;font-size:20px}#elec-launcher .t{display:none}
 body.drawer-open #elec-launcher,body.tool-opts #elec-launcher,body.confirming #elec-launcher,body.sidebar-open #elec-launcher,body:has(.panel:not(.hidden)) #elec-launcher{display:none}}
 @media (max-height:500px) and (orientation:landscape){#elec-panel{top:calc(var(--hud-h,60px) + 4px);bottom:calc(var(--tb-h,60px) + 4px);max-height:none}
-#elec-launcher{top:calc(var(--hud-h,60px) + 8px);bottom:auto}#elec-launcher .t{display:none}}
+#elec-launcher{top:auto;bottom:calc(var(--tb-h,60px) + 6px);min-width:44px;padding:0;font-size:19px}#elec-launcher .t{display:none}
+body.drawer-open #elec-launcher,body.tool-opts #elec-launcher,body.confirming #elec-launcher,body.sidebar-open #elec-launcher,body:has(.panel:not(.hidden)) #elec-launcher{display:none}}
 .elec h3{margin:0 0 8px;font-size:15px;display:flex;justify-content:space-between;align-items:center}
 .elec h4{margin:12px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#8f9baa}
 .elec .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}

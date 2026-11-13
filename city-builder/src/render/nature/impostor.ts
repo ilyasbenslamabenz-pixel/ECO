@@ -259,6 +259,7 @@ uniform vec3 uSky;
 uniform vec3 uGround;
 uniform float uEnv;
 uniform float uSpec;
+uniform vec3 uBg;
 varying vec2 vUv;
 varying float vRot;
 varying vec3 vTint;
@@ -272,8 +273,15 @@ void main() {
   float al = clamp((a.a - 0.3) / max(fwidth(a.a) * 1.4, 0.0001) + 0.5, 0.0, 1.0);
   if (al < 0.04) discard;
   // Pas de division par l'alpha : l'atlas n'est pas prémultiplié et son fond est déjà vert feuillage.
+  // Bord du houppier (couverture partielle) : bouts de branches et feuilles vues par la tranche y formaient un
+  // liseré sombre autour de chaque arbre (fond d'atlas olive, plus sombre que le feuillage éclairé) ; on le ramène
+  // vers la couleur moyenne réelle du feuillage de l'essence (mesurée à la fabrication de l'atlas).
+  a.rgb = mix(uBg, a.rgb, smoothstep(0.3, 0.85, a.a));
   a.rgb = sRGBTransferEOTF(vec4(a.rgb, 1.0)).rgb; // atlas stocké encodé en sRGB (cible RGBA8)
-  vec3 n = texture2D(tNor, vUv).xyz * 2.0 - 1.0;
+  // Normales lues un niveau de mip plus flou et rapprochées de la verticale : la variation feuille à feuille,
+  // échantillonnée à un ou deux pixels par feuille en vue haute, donnait un grain sombre/clair « pixelisé ».
+  vec3 n = texture2D(tNor, vUv, 1.0).xyz * 2.0 - 1.0;
+  n = mix(n, vec3(0.0, 1.0, 0.0), 0.4);
   // Normales capturées pour l'arbre à rotation nulle : on applique la rotation de l'instance.
   float c = cos(vRot), s = sin(vRot);
   n = normalize(vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z));
@@ -308,6 +316,8 @@ export function makeImpostorMaterial(atlas: ImpostorAtlas, lights: ImpostorMater
     uRadius: { value: atlas.radius },
     uCenterY: { value: atlas.centerY },
     uSpec: { value: atlas.specular },
+    // Couleur moyenne (sRGB) des pixels couverts de l'atlas.
+    uBg: { value: new THREE.Vector3(...atlas.check.meanRgb.map((v) => v / 255) as [number, number, number]) },
     ...lights,
   };
   // alphaToCoverage : bords du feuillage lissés par le multiéchantillonnage du canevas (antialias: true), sans tri
