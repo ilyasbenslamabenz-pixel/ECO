@@ -60,6 +60,31 @@ création du rendu.
 Ces réglages s'appliquent au démarrage. Un changement de « Qualité » en cours de partie modifie tout de
 suite la résolution et les ombres ; les textures et les LOD changent au prochain chargement de la page.
 
+## Pic au chargement (plantage au chargement sur iPhone)
+
+Le plafond `maxTextureSize` n'agit qu'à l'envoi au GPU : les images étaient d'abord décodées en pleine taille
+côté CPU. En mode allégé, chaque image de texture est désormais réduite **dès son chargement**, puis l'original
+est libéré (fichier `src/render/image-cap.ts`) :
+- textures intégrées aux GLB : chargeur d'assets ;
+- jeux de textures des bâtiments.
+
+Les modèles GLB sont aussi chargés **un par un** (file d'attente du chargeur d'assets).
+
+Pic de tas JS pendant le chargement (`Performance.getMetrics` toutes les 250 ms, iPhone 390×844 émulé) :
+
+| Chargement | Profil normal (`?lite=0`) | Mode allégé |
+|---|---|---|
+| Nouvelle partie : pic de tas JS / textures GPU | 28 Mo / 248 Mo | 32 Mo / 111 Mo |
+| Démo : pic de tas JS / textures GPU | 91 Mo / 808 Mo | 74 Mo / 165 Mo |
+
+Détection : iPadOS, et Safari en mode « version ordinateur » sur iPhone, se présentent comme un Mac. Une
+plateforme `MacIntel` avec plus d'un point de contact (`maxTouchPoints`) est donc traitée comme un mobile.
+
+**Repli sûr** : un drapeau est posé dans le stockage local au début du chargement, puis retiré quand le jeu
+est prêt. S'il est encore présent au démarrage suivant, c'est que Safari a fermé l'onglet pendant le
+chargement. Le jeu redémarre alors en mode allégé forcé et en qualité basse, avec un message. Choisir une
+qualité dans les réglages désactive ce mode sûr. Ce comportement a été vérifié en simulant le plantage.
+
 ## Perte du contexte WebGL
 
 Le code se trouve dans `src/main.ts`.

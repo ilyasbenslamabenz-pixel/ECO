@@ -7,6 +7,8 @@
  * ?seed=N (graine de la partie), ?h=H (heure de départ).
  */
 import * as THREE from 'three';
+import { bootDone, bootStarted, deviceProfile, isSafeMode, setSafeMode } from './render/device-profile';
+import { imageLimits } from './render/image-cap';
 import { DEFAULT_START_MONEY, GAME_NAME, PROTOCOL_VERSION, type SimSpeed } from './shared/constants';
 import { validateCatalog } from './shared/catalog';
 import type { CommandError, NewGameParams, SaveFile, SimStats } from './shared/contracts';
@@ -85,6 +87,9 @@ interface DebugInfo {
   lastPreload?: { totalMs: number; capped: boolean; pending: number };
   /** Compteurs de la scène et du rendu (e2e : non-régression mémoire). */
   memStats?: () => { geometries: number; textures: number; programs: number; objects: number; instanced: number; meshes: number; dom: number };
+  /** Mode allégé retenu au démarrage, et mode sûr (après un chargement planté). */
+  liteMode?: boolean;
+  safeMode?: boolean;
   /** Nombre de pertes du contexte WebGL depuis le chargement (e2e). */
   contextLost?: number;
   /** Estimation de la mémoire GPU (Mo) : textures, géométries, cibles de rendu (e2e : mode mobile). */
@@ -119,6 +124,12 @@ async function boot(): Promise<void> {
     lastStats: null, demoReady: false, demo: null, renderStats: () => null,
   };
   window.__aube = debug;
+  // Repli sûr : si le chargement précédent ne s'est pas terminé (Safari a fermé l'onglet), on redémarre en
+  // mode allégé forcé et qualité basse.
+  const crashedBefore = bootStarted();
+  const enteredSafeMode = crashedBefore && !isSafeMode();
+  if (enteredSafeMode) setSafeMode(true);
+  debug.safeMode = isSafeMode();
   // GLTFLoader : les textures externes partagées entre GLB ne sont téléchargées qu'une fois.
   THREE.Cache.enabled = true;
   const state = createClientState();
@@ -152,7 +163,7 @@ async function boot(): Promise<void> {
       state.inGame = false;
       void refreshMenu();
     },
-    onOptions: (o) => applyGraphicsOptions(o, { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera }),
+    onOptions: (o) => { if (o.quality !== 'auto') setSafeMode(false); applyGraphicsOptions(o, { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera }); },
     onSpeed: (speed) => { void needBridge().send('setSpeed', { speed }).catch((e: unknown) => ui.toast(errText(e), 'error')); },
     onToggleCamera: () => {
       if (input.camera.mode === 'aerial') {
@@ -180,6 +191,11 @@ async function boot(): Promise<void> {
   const issues = validateCatalog(catalog);
   if (issues.length) console.warn('Catalogue : problèmes détectés', issues);
   debug.catalogAssets = catalog.assets.length;
+  // Mode allégé (téléphone) : images réduites dès leur chargement, modèles chargés un par un.
+  const bootProfile = deviceProfile(ui.currentOptions().quality);
+  imageLimits.textureCap = bootProfile.textureCap;
+  imageLimits.maxConcurrentModels = bootProfile.maxConcurrentModels;
+  debug.liteMode = bootProfile.lite;
   const lib = new AssetLibrary(catalog, assetsBase);
 
   if (params.has('validate')) {
@@ -187,6 +203,7 @@ async function boot(): Promise<void> {
     const { validateAllAssets } = await import('./render/validation');
     debug.validate = () => validateAllAssets(lib);
     debug.ready = true;
+    bootDone();
     ui.hideLoading();
     return;
   }
@@ -621,6 +638,8 @@ async function boot(): Promise<void> {
   else if (params.has('autostart')) await startNewGame();
   else await refreshMenu();
   debug.ready = true;
+  bootDone();
+  if (enteredSafeMode) ui.toast('Le chargement précédent a échoué : mode sûr activé (qualité basse, affichage allégé). Réglages pour revenir à la qualité normale.', 'info');
 }
 
 boot().catch((e: unknown) => {
@@ -668,4 +687,3 @@ function estimateGpuMemory(scene: THREE.Scene, renderer: THREE.WebGLRenderer): {
   const mo = (b: number): number => Math.round(b / 1048576);
   return { texturesMo: mo(tb), textures: tex.size, geometriesMo: mo(gb), geometries: geo.size, ombresMo: mo(sb) };
 }
-

@@ -7,6 +7,31 @@
 
 export type QualitySetting = 'auto' | 'basse' | 'moyenne' | 'haute';
 
+/** Posé au début du chargement, retiré quand le jeu est prêt : présent au démarrage suivant = chargement planté. */
+export const BOOT_PENDING_KEY = 'meknes:chargement-en-cours';
+/** Mode sûr (allégé forcé, qualité basse), activé après un chargement planté. */
+export const SAFE_MODE_KEY = 'meknes:mode-sur';
+
+function storageGet(k: string): string | null { try { return globalThis.localStorage?.getItem(k) ?? null; } catch { return null; } }
+function storageSet(k: string, v: string | null): void {
+  try { if (v === null) globalThis.localStorage?.removeItem(k); else globalThis.localStorage?.setItem(k, v); } catch { /* navigation privée */ }
+}
+
+/** Mode sûr actif (après un chargement planté ; désactivé en choisissant une autre qualité dans les réglages). */
+export function isSafeMode(): boolean { return storageGet(SAFE_MODE_KEY) === '1'; }
+export function setSafeMode(on: boolean): void { storageSet(SAFE_MODE_KEY, on ? '1' : null); }
+
+/**
+ * Début du chargement. Renvoie vrai si le chargement PRÉCÉDENT ne s'est pas terminé (Safari a tué l'onglet) :
+ * l'appelant bascule alors en mode sûr. `bootDone` retire le drapeau une fois le jeu prêt.
+ */
+export function bootStarted(): boolean {
+  const crashed = storageGet(BOOT_PENDING_KEY) === '1';
+  storageSet(BOOT_PENDING_KEY, '1');
+  return crashed;
+}
+export function bootDone(): void { storageSet(BOOT_PENDING_KEY, null); }
+
 export interface DeviceProfile {
   /** Mode allégé (téléphone / faible mémoire). */
   lite: boolean;
@@ -22,6 +47,8 @@ export interface DeviceProfile {
   buildingLodBias: number;
   /** Préchargement de tous les modèles (démo) ; sinon chargement à la demande. */
   preloadAll: boolean;
+  /** Modèles GLB chargés en parallèle au plus (1 = un par un : pic mémoire du chargement borné). */
+  maxConcurrentModels: number;
 }
 
 /** Vrai sur un appareil tactile à petit écran, un téléphone / une tablette, ou un navigateur à faible mémoire. */
@@ -30,8 +57,12 @@ export function isLiteDevice(): boolean {
   try {
     const params = new URLSearchParams(globalThis.location?.search ?? '');
     if (params.has('lite')) return params.get('lite') !== '0';
+    if (isSafeMode()) return true;
     const ua = g.navigator?.userAgent ?? '';
     if (/iPhone|iPad|iPod|Android|Mobile/i.test(ua)) return true;
+    // iPadOS (et Safari en « version ordinateur » sur iPhone) se présente comme un Mac : écran tactile = mobile.
+    const nav = g.navigator as (Navigator & { maxTouchPoints?: number }) | undefined;
+    if ((nav?.platform === 'MacIntel' || /Macintosh/.test(ua)) && (nav?.maxTouchPoints ?? 0) > 1) return true;
     const mem = g.navigator?.deviceMemory;
     if (typeof mem === 'number' && mem > 0 && mem <= 4) return true;
     const coarse = g.matchMedia?.('(pointer: coarse)').matches ?? false;
@@ -42,11 +73,12 @@ export function isLiteDevice(): boolean {
 
 const FULL: DeviceProfile = {
   lite: false, textureCap: Infinity, maxPixelRatio: 2, shadowSize: 2048,
-  vegDistances: [50, 120, 240, 3800], buildingLodBias: 1, preloadAll: true,
+  vegDistances: [50, 120, 240, 3800], buildingLodBias: 1, preloadAll: true, maxConcurrentModels: Infinity,
 };
 
 /** Profil effectif d'un réglage de qualité (« auto » : allégé si l'appareil le demande). */
 export function deviceProfile(quality: QualitySetting = 'auto', lite = isLiteDevice()): DeviceProfile {
+  if (isSafeMode() && quality === 'auto') quality = 'basse';
   if (quality === 'haute' || ((quality === 'moyenne') && !lite) || (quality === 'auto' && !lite)) return { ...FULL };
   // Allégé (auto sur téléphone, basse, ou moyenne sur téléphone : textures et ombres réduites quand même).
   const basse = quality === 'basse';
@@ -59,5 +91,6 @@ export function deviceProfile(quality: QualitySetting = 'auto', lite = isLiteDev
     vegDistances: [35, 90, 200, 2600],
     buildingLodBias: basse ? 0.55 : 0.7,
     preloadAll: false,
+    maxConcurrentModels: 1,
   };
 }

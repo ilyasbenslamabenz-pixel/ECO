@@ -11,6 +11,7 @@
  * immeuble a son propre motif ; 2 = vitrine toujours allumée ; -1 = jamais).
  */
 import * as THREE from 'three';
+import { downscaleImage } from '../image-cap';
 import type { AssetCatalog, TextureSet } from '../../shared/catalog';
 
 export interface AubeMaterialExtras { set: string | null; uv: 'meters' | 'unit'; kind: 'opaque' | 'glass' }
@@ -26,7 +27,7 @@ export const VARYING_ROLES = new Set(['facade', 'facade_b', 'toiture', 'soubasse
 
 export class BuildingMaterials {
   private readonly loader = new THREE.TextureLoader();
-  private readonly images = new Map<string, Promise<HTMLImageElement | ImageBitmap | null>>();
+  private readonly images = new Map<string, Promise<HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas | null>>();
   private readonly textures = new Map<string, THREE.Texture>();
   private readonly materials = new Map<string, THREE.Material>();
   private readonly sets: Map<string, TextureSet>;
@@ -43,7 +44,12 @@ export class BuildingMaterials {
    * qui figeait la première image d'une ville chargée. Sans ImageBitmap : élément <img> comme avant.
    * Pas de retournement (flipY = false, comme pour l'élément <img>) ni de conversion de couleur (cartes de normales).
    */
-  private async loadImage(url: string): Promise<HTMLImageElement | ImageBitmap> {
+  private async loadImage(url: string): Promise<HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas> {
+    // Mode allégé : image réduite dès son décodage, original libéré (src/render/image-cap.ts).
+    return downscaleImage(await this.decodeImage(url));
+  }
+
+  private async decodeImage(url: string): Promise<HTMLImageElement | ImageBitmap> {
     if (typeof createImageBitmap === 'function' && typeof fetch === 'function') {
       try {
         const r = await fetch(url);

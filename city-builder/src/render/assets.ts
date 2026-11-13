@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { capModelTextures, imageLimits } from './image-cap';
 import type { AssetCatalog, CatalogAsset } from '../shared/catalog';
 import type { IAssetLibrary } from '../shared/contracts';
 
@@ -47,6 +48,15 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
   private cache = new Map<string, Promise<THREE.Group>>();
   private loaded = new Set<string>();
   private byId: Map<string, CatalogAsset>;
+  /** File des chargements GLB (mode allégé : un modèle à la fois, pic mémoire borné). */
+  private active = 0;
+  private readonly waiting: (() => void)[] = [];
+  private async slot(): Promise<void> {
+    if (this.active < imageLimits.maxConcurrentModels) { this.active++; return; }
+    await new Promise<void>((r) => this.waiting.push(r));
+    this.active++;
+  }
+  private release(): void { this.active--; this.waiting.shift()?.(); }
 
   constructor(readonly catalog: AssetCatalog, private readonly base: URL) {
     this.byId = new Map(catalog.assets.map((a) => [a.id, a]));
@@ -65,16 +75,18 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
     const key = l.file;
     let p = this.cache.get(key);
     if (!p) {
-      p = this.loader.loadAsync(this.url(l.file)).then((gltf) => {
+      p = this.slot().then(() => this.loader.loadAsync(this.url(l.file))).then((gltf) => {
         const root = gltf.scene;
+        capModelTextures(root); // mode allégé : images réduites dès le chargement, originaux libérés
         root.name = `${assetId}_lod${lod}`;
         root.traverse((o) => {
           const m = o as THREE.Mesh;
           if (m.isMesh) { dequantizeGeometry(m.geometry); m.castShadow = true; m.receiveShadow = true; }
         });
         this.loaded.add(key);
+        this.release();
         return root;
-      });
+      }, (e: unknown) => { this.release(); throw e; });
       p.catch(() => this.cache.delete(key));
       this.cache.set(key, p);
     }
