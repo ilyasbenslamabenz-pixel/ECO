@@ -321,7 +321,9 @@ async function boot(): Promise<void> {
   debug.toolPreview = () => {
     const p = cons.machine.preview;
     if (p.kind === 'building') return { kind: p.kind, assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot, snapped: p.proposal.snapped, validity: p.validity, message: p.message };
-    if (p.kind === 'road') return { kind: p.kind, type: p.type, mode: p.mode, validity: p.validity, message: p.message, length: p.length };
+    if (p.kind === 'road') return { kind: p.kind, type: p.type, mode: p.mode, validity: p.validity, message: p.message, length: p.length, cost: p.cost, angle: p.angle, chained: p.chained, drawing: cons.machine.drawing, guide: p.hover?.guide?.label ?? null };
+    if (p.kind === 'grid') return { kind: p.kind, validity: p.validity, message: p.message, cost: p.cost, lines: p.layout?.lines.length ?? 0, nx: p.layout?.nx ?? 0, nz: p.layout?.nz ?? 0, length: p.layout?.length ?? 0, drawing: cons.machine.drawing };
+    if (p.kind === 'upgrade') return { kind: p.kind, validity: p.validity, message: p.message, cost: p.cost, refund: p.refund, target: p.target?.id ?? null, from: p.target?.kindId ?? null, toKind: p.toKind, reverse: p.reverse };
     return { kind: p.kind };
   };
 

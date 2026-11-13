@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ROAD_KINDS, RoadNetwork, commitRoadPlan, commitUpgrade, nextUpgradeKind, planRoad, planUpgrade, type ProfileEnv } from '../../src/sim/roads';
+import { ROAD_KINDS, RoadNetwork, commitRoadPlan, commitUpgrade, nextUpgradeKind, prevUpgradeKind, planRoad, planUpgrade, type ProfileEnv } from '../../src/sim/roads';
 import { Simulation } from '../../src/sim/world';
 import { handleCommand } from '../../src/sim/handler';
 import { validateCommandMessage, type ResultMessage } from '../../src/shared/protocol';
@@ -50,6 +50,9 @@ test('échelle de l\'outil : rue → avenue → boulevard → rue', () => {
   assert.equal(nextUpgradeKind('avenue'), 'boulevard');
   assert.equal(nextUpgradeKind('boulevard'), 'street');
   assert.equal(nextUpgradeKind('oneway'), 'street');
+  assert.equal(prevUpgradeKind('boulevard'), 'avenue');
+  assert.equal(prevUpgradeKind('avenue'), 'street');
+  assert.equal(prevUpgradeKind('street'), 'street');
 });
 
 test('simulation : amélioration facturée à la différence, déclassement remboursé à 25 %', () => {

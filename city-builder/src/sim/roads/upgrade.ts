@@ -68,6 +68,12 @@ export function nextUpgradeKind(k: RoadKindId): RoadKindId {
   return i < 0 ? 'street' : UPGRADE_LADDER[(i + 1) % UPGRADE_LADDER.length]!;
 }
 
+/** Type précédent dans l'échelle (boulevard → avenue → rue ; les autres types passent en rue). */
+export function prevUpgradeKind(k: RoadKindId): RoadKindId {
+  const i = UPGRADE_LADDER.indexOf(k);
+  return i <= 0 ? 'street' : UPGRADE_LADDER[i - 1]!;
+}
+
 const err = (code: UpgradeErrorCode, message: string, phase?: number): { ok: false; error: UpgradeError } =>
   ({ ok: false, error: phase === undefined ? { code, message } : { code, message, phase } });
 

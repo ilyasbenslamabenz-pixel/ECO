@@ -58,6 +58,7 @@ réponse `{ kind:'result', reqId, ok:true, data }` ou `{ ok:false, error:{ code,
 | `newGame` | seed, mapChunks, startMoney, cityName | seed (+ instantané) | bornes |
 | `buildRoad` | type (hérité), kind (6 types), points[x,z,…], control? (courbe quadratique si 2 points), dryRun? | edgeIds, cost | limites, pente par type, eau (ponts automatiques), carrefours automatiques, collision bâtiments, fonds |
 | `removeRoad` | edgeId | refund (25 %) | existence |
+| `upgradeRoad` | edgeId, kind?, reverse?, dryRun? | edgeId (nouveau), kind, cost, refund | existence, type ≠ actuel ou inversion (sens unique seulement), emprise élargie libre (bâtiment nommé dans le refus, routes voisines), rayon, pente et ponts du nouveau type, raccord autoroute ; coût = différence de prix (ponts compris), déclassement remboursé à 25 % — `src/sim/roads/upgrade.ts` |
 | `placeBuilding` | assetId, x, z (au cm, pas de grille), rot (quarts de tour, **décimal autorisé** : 0,5 = 45°), variant?, dryRun? | buildingId, cost | asset bâtiment, empreinte ORIENTÉE (`src/shared/footprint.ts`) : collision bâtiments (séparation par axes) et routes courbes (distance segment/rectangle orienté), relief, eau, fonds |
 | `demolish` | buildingId | refund (25 %) | existence |
 | `setSpeed` | 0/1/2/4 | speed | valeur |

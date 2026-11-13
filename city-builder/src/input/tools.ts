@@ -5,7 +5,9 @@
  * Les outils n'appliquent jamais rien eux-mêmes : tout passe par des commandes au worker.
  *
  * Souris : clic = action (poser, sélectionner, démolir) ; route = clic départ puis clic arrivée
- *          (ou glisser) ; clic droit / Échap = étape précédente puis retour à la Sélection.
+ *          (ou glisser), le tracé continue depuis l'extrémité jusqu'à Entrée / « Terminer » ;
+ *          quadrillage = coin puis coin opposé (ou glisser) ; améliorer = clic sur une route ;
+ *          clic droit / Échap = étape précédente puis retour à la Sélection.
  * Tactile: le doigt déplace l'aperçu (décalé au-dessus du doigt pour rester visible) ; le
  *          relâcher ouvre la barre de confirmation (Construire / Pivoter / Annuler).
  * Clavier: R = pivoter, X = variante, G = alignement auto, Ctrl+Z = annuler, Suppr = démolir la
@@ -19,7 +21,7 @@ import { footprintGroundY } from '../client/tools/geometry';
 import { TOOL_PHASE, type ConstructionTools, type ToolPreview } from '../client/tools/machine';
 import { roadWidth, type PickResult } from '../client/tools/mirror';
 import type { CameraController, PointerToolSink } from './camera';
-import { COLORS, GhostPreview, RoadPreview, SelectionMarker, type ModelSource } from './previews';
+import { COLORS, GhostPreview, GridPreview, RoadPreview, SelectionMarker, type ModelSource } from './previews';
 
 export { TOOL_PHASE };
 
@@ -42,6 +44,8 @@ export interface ToolUiHooks {
 }
 
 const TOUCH_LIFT_PX = 70;
+/** Noms courts des types de route (étiquette de l'outil Améliorer). */
+const ROAD_NAMES: Record<string, string> = { street: 'Rue', avenue: 'Avenue', boulevard: 'Boulevard', oneway: 'Sens unique', pedestrian: 'Rue piétonne', highway: 'Autoroute' };
 const fmt = (n: number): string => new Intl.NumberFormat('fr-FR').format(Math.round(n));
 
 export class ToolController implements IToolController, PointerToolSink {
@@ -49,6 +53,7 @@ export class ToolController implements IToolController, PointerToolSink {
   private hooks: ToolUiHooks | null = null;
   private ghost: GhostPreview | null = null;
   private road: RoadPreview | null = null;
+  private grid: GridPreview | null = null;
   private hoverMarker: SelectionMarker | null = null;
   private selMarker: SelectionMarker | null = null;
   private selected: PickResult | null = null;
@@ -69,6 +74,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.hooks = hooks;
     this.ghost = new GhostPreview(deps.scene, deps.models, deps.heightAt);
     this.road = new RoadPreview(deps.scene, deps.heightAt);
+    this.grid = new GridPreview(deps.scene, deps.heightAt);
     this.hoverMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.select);
     this.selMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.select);
     deps.camera.toolSink = this;
@@ -102,7 +108,8 @@ export class ToolController implements IToolController, PointerToolSink {
     if (!d) return;
     this.lastType = type;
     // Au doigt, l'aperçu est décalé au-dessus du point de contact pour rester visible.
-    const lift = type === 'touch' && this.activeTool !== 'select' ? TOUCH_LIFT_PX : 0;
+    // (Outil Améliorer : on désigne la route sous le doigt, sans décalage.)
+    const lift = type === 'touch' && this.activeTool !== 'select' && !(this.activeTool === 'road' && d.machine.roadSub === 'upgrade') ? TOUCH_LIFT_PX : 0;
     this.lastScreen.x = sx; this.lastScreen.y = sy - lift;
     const ray = d.camera.screenRay(sx, sy - lift);
     const g = d.camera.groundAt(sx, sy - lift);
@@ -125,7 +132,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.pendingHover = null;
     this.feed(sx, sy, type);
     this.roadStartedThisGesture = false;
-    if (type !== 'touch' && d.machine.tool === 'road' && d.machine.draft.phase === 'idle') {
+    if (type !== 'touch' && d.machine.tool === 'road' && d.machine.roadSub !== 'upgrade' && !d.machine.drawing) {
       this.roadStartedThisGesture = true;
       void d.machine.primary();
     }
@@ -141,20 +148,35 @@ export class ToolController implements IToolController, PointerToolSink {
     const m = d.machine;
     if (type === 'touch' && m.tool !== 'select') {
       // Route : les étapes intermédiaires se posent au relâcher ; l'action finale se confirme.
-      if (m.tool === 'road' && (m.draft.phase === 'idle' || (m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
+      if (m.tool === 'road' && m.roadSub !== 'upgrade' && (!m.drawing || (m.roadSub === 'draw' && m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
+      if (m.tool === 'road' && m.roadSub === 'upgrade' && !(m.preview.kind === 'upgrade' && m.preview.target)) return;
+      if (m.tool === 'road' && m.roadSub === 'draw' && !m.draft.points()) return; // doigt relâché sur le départ
       if (m.tool === 'bulldoze' && !(m.preview.kind === 'bulldoze' && m.preview.target)) return;
       this.pendingTouchConfirm = true;
-      const label = m.tool === 'building' ? 'Construire' : m.tool === 'road' ? 'Tracer la route' : 'Démolir';
-      this.hooks?.touchConfirm({ label, canRotate: m.tool === 'building' });
+      this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: m.tool === 'building' });
       return;
     }
     if (m.tool === 'road') {
+      if (m.roadSub === 'upgrade' && !tap) return; // Améliorer : un clic franc, pas un glisser
       if (tap && this.roadStartedThisGesture) return; // simple clic de départ
       void m.primary();
       return;
     }
     if (m.tool === 'select' && !tap) return;
     void m.primary();
+  }
+
+  /** Libellé du bouton de confirmation tactile, avec le coût dès qu'il est connu. */
+  private confirmLabel(): string {
+    const m = this.deps?.machine;
+    if (!m) return 'Construire';
+    const p = m.preview;
+    if (m.tool === 'building') return 'Construire';
+    if (m.tool === 'bulldoze') return 'Démolir';
+    if (p.kind === 'grid') return p.validity === 'error' ? 'Îlot refusé' : `Construire l’îlot · ${fmt(p.cost)} ¢`;
+    if (p.kind === 'upgrade') return p.validity === 'error' ? 'Modification refusée' : p.refund > 0 ? `Modifier · +${fmt(p.refund)} ¢` : `Modifier · ${fmt(p.cost)} ¢`;
+    if (p.kind === 'road') return p.validity === 'error' ? 'Tracé refusé' : `Tracer · ${fmt(p.cost)} ¢`;
+    return 'Construire';
   }
 
   cancel(): void {
@@ -200,9 +222,12 @@ export class ToolController implements IToolController, PointerToolSink {
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { consume(); void m.undoLast(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     switch (e.code) {
+      case 'Enter': case 'NumpadEnter':
+        if (m.tool === 'road' && m.drawing) { consume(); this.cancelTouch(); m.finishRoad(); }
+        return;
       case 'Escape':
         if (this.pendingTouchConfirm) { consume(); this.cancelTouch(); return; }
-        if (m.tool !== 'select' || m.draft.phase !== 'idle') { consume(); m.secondary(); return; }
+        if (m.tool !== 'select' || m.drawing) { consume(); m.secondary(); return; }
         if (this.selected) { consume(); this.select(null); return; }
         return; // laisse le HUD ouvrir le menu
       case 'KeyR':
@@ -270,7 +295,10 @@ export class ToolController implements IToolController, PointerToolSink {
     if (!d || !this.ghost || !this.road || !this.hoverMarker) return;
     const tag = (text: string | null, kind: 'ok' | 'error' | 'pending' | 'info'): void => this.hooks?.cursorTag(text, kind, this.lastScreen.x, this.lastScreen.y);
     if (p.kind !== 'building') this.ghost.hide();
-    if (p.kind !== 'road') this.road.hide();
+    if (p.kind !== 'road' && p.kind !== 'upgrade') this.road.hide();
+    if (p.kind !== 'grid') this.grid?.hide();
+    // Barre de confirmation tactile ouverte : son libellé suit le coût validé par la simulation.
+    if (this.pendingTouchConfirm && (p.kind === 'road' || p.kind === 'grid' || p.kind === 'upgrade')) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
     if (p.kind !== 'select' && p.kind !== 'bulldoze') this.hoverMarker.hide();
     switch (p.kind) {
       case 'building': {
@@ -283,12 +311,38 @@ export class ToolController implements IToolController, PointerToolSink {
         else tag(`${head}\n${fmt(p.cost)} ¢${snap}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
       }
-      case 'road':
-        this.road.show({ points: p.points, width: roadWidth(p.type), validity: p.points ? p.validity : 'ok', start: p.start, control: p.control, hover: p.hover });
-        if (!p.points) tag(p.message || null, 'info');
-        else if (p.validity === 'error') tag(`${fmt(p.length)} m\n${p.message}`, 'error');
-        else tag(`${fmt(p.length)} m · ${fmt(p.cost)} ¢${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}`, p.validity === 'ok' ? 'ok' : 'pending');
+      case 'road': {
+        this.road.show({ points: p.points, width: roadWidth(p.type), validity: p.points ? p.validity : 'ok', start: p.start, control: p.control, hover: p.hover, arrows: p.type === 'oneway' });
+        const head = `${fmt(p.length)} m${p.angle ? ` · ${p.angle}` : ''}`;
+        if (!p.points) tag(p.message ? `${p.message}${p.chained ? `\n${p.chained} tronçon${p.chained > 1 ? 's' : ''} · Terminer pour arrêter` : ''}` : null, 'info');
+        else if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');
+        else tag(`${head} · ${fmt(p.cost)} ¢${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
+      }
+      case 'grid': {
+        const L = p.layout;
+        this.grid?.show({ start: p.start, hover: p.hover, lines: L ? L.lines : [], rect: L ? { x0: L.x0, z0: L.z0, x1: L.x1, z1: L.z1 } : null, width: roadWidth(p.type), validity: L ? p.validity : 'ok' });
+        if (!L) tag(p.message || null, 'info');
+        else {
+          const head = `${L.nx}×${L.nz} îlot${L.nx * L.nz > 1 ? 's' : ''} de ${L.block} m · ${fmt(L.length)} m de rues`;
+          if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');
+          else tag(`${head}\n${p.validity === 'ok' ? '' : '≈ '}${fmt(p.cost)} ¢${p.message ? ` · ${p.message}` : ''}`, p.validity === 'ok' ? 'ok' : 'pending');
+        }
+        break;
+      }
+      case 'upgrade': {
+        const e = p.target;
+        if (!e) { this.road.hide(); tag(p.message || null, 'info'); break; }
+        const toKind = p.toKind ?? e.kindId;
+        const pts = Array.from(e.poly);
+        if (p.reverse) for (let i = 0, j = pts.length - 2; i < j; i += 2, j -= 2) { [pts[i], pts[j]] = [pts[j]!, pts[i]!]; [pts[i + 1], pts[j + 1]] = [pts[j + 1]!, pts[i + 1]!]; }
+        this.road.show({ points: pts, width: roadWidth(toKind), validity: p.validity, start: null, control: null, hover: null, arrows: toKind === 'oneway' });
+        const from = ROAD_NAMES[e.kindId] ?? e.kindId, to = ROAD_NAMES[toKind] ?? toKind;
+        const what = toKind !== e.kindId ? `${from} → ${to}${p.reverse ? ' · sens inversé' : ''}` : `${from} · sens inversé`;
+        if (p.validity === 'error') tag(`${what}\n${p.message}`, 'error');
+        else tag(`${what} · ${fmt(e.length)} m\n${p.validity === 'pending' ? '…' : p.cost > 0 ? `${fmt(p.cost)} ¢ (différence)` : p.refund > 0 ? `+${fmt(p.refund)} ¢ remboursés` : 'gratuit'}`, p.validity === 'ok' ? 'ok' : 'pending');
+        break;
+      }
       case 'bulldoze':
         this.hoverMarker.setColor(COLORS.error);
         this.showMarker(this.hoverMarker, p.target);
@@ -323,7 +377,7 @@ export class ToolController implements IToolController, PointerToolSink {
   dispose(): void {
     for (const d of this.disposers) d();
     this.disposers = [];
-    this.ghost?.dispose(); this.road?.dispose(); this.hoverMarker?.dispose(); this.selMarker?.dispose();
+    this.ghost?.dispose(); this.road?.dispose(); this.grid?.dispose(); this.hoverMarker?.dispose(); this.selMarker?.dispose();
     if (this.deps) this.deps.camera.toolSink = null;
   }
 }

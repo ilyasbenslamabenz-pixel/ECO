@@ -9,7 +9,8 @@ import { TILE_SIZE } from '../shared/constants';
 import type { RoadKindId, ToolId } from '../shared/contracts';
 import { roadDef } from '../client/tools/mirror';
 import { ROAD_KINDS, ROAD_KIND_ORDER } from '../sim/roads/types';
-import type { ConstructionTools } from '../client/tools/machine';
+import type { ConstructionTools, RoadSubTool, UpgradeTarget } from '../client/tools/machine';
+import { GRID_BLOCK_SIZES } from '../client/tools/grid';
 import type { ToolController } from '../input/tools';
 import { $, el, fmt, money, phaseBadge } from './dom';
 import { iconEl } from './icons';
@@ -178,6 +179,15 @@ export interface BuildBarDeps {
   notify: (t: string, k?: 'info' | 'error' | 'ok') => void;
 }
 
+/** Actions de l'outil « Améliorer » (barre d'options). */
+const UPGRADE_LABELS = { next: 'Gamme +', prev: 'Gamme −', oneway: 'Sens unique', reverse: 'Inverser' } as const;
+const UPGRADE_TIPS = {
+  next: 'Type supérieur : rue → avenue → boulevard (la différence de prix est facturée)',
+  prev: 'Type inférieur : boulevard → avenue → rue (25 % de la différence remboursés)',
+  oneway: 'Passer en sens unique (sur un sens unique : inverse le sens)',
+  reverse: 'Inverser le sens d’une rue à sens unique',
+} as const;
+
 const PLANNED_IDS: readonly string[] = ['zones', 'energy', 'water', 'waste', 'terrain'];
 
 export class BuildBar {
@@ -190,6 +200,9 @@ export class BuildBar {
   private hint = $('tool-hint');
   private actions = $('tool-actions');
   private undoBtn = $<HTMLButtonElement>('btn-undo');
+  /** Bouton flottant « Terminer » (tracé enchaîné ou quadrillage en cours), bien visible au doigt. */
+  private finishBtn = $<HTMLButtonElement>('road-finish');
+  private wasDrawing = false;
   private open: DrawerId | null = null;
   private tab: Record<string, string> = {};
 
@@ -227,7 +240,12 @@ export class BuildBar {
     });
     $('drawer-close').addEventListener('click', () => this.closeDrawer());
     d.machine.onToolChange(() => this.sync());
-    d.machine.onPreview(() => { this.syncUndo(); if (this.d.machine.tool !== 'select') this.hint.textContent = this.hintText(); });
+    d.machine.onPreview(() => {
+      this.syncUndo();
+      if (this.d.machine.tool !== 'select') this.hint.textContent = this.hintText();
+      this.syncFinish();
+    });
+    this.finishBtn.addEventListener('click', () => { d.tools.cancel(); d.machine.finishRoad(); this.sync(); });
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
@@ -358,8 +376,15 @@ export class BuildBar {
       b.addEventListener('click', () => { m.setRoadMode(id); this.renderDrawer(); this.sync(); });
       mode.append(b);
     }
-    this.tabsEl.append(el('span', { cls: 'drawer-note' }, el('span', { text: '6 types · droites ou courbes · carrefours et ponts automatiques' })));
-    this.body.append(el('div', { cls: 'drawer-opts' }, mode, el('span', { cls: 'hint', text: 'Maj : angle magnétique 15°' }), el('span', { cls: 'hint', text: 'Extrémités aimantées aux carrefours' })));
+    const more = el('div', { cls: 'seg', attrs: { role: 'group', 'aria-label': 'Outils de voirie' } });
+    for (const [id, label, tip] of [['grid', 'Quadrillage', 'Quadrillage : tracez un rectangle, un îlot de rues est créé sur la grille de 8 m'], ['upgrade', 'Améliorer', 'Améliorer : touchez une route pour changer son type ou son sens sans la démolir']] as const) {
+      const b = el('button', { cls: m.roadSub === id ? 'active' : '', text: label, attrs: { 'data-road-sub': id } });
+      b.dataset['tip'] = tip;
+      b.addEventListener('click', () => { this.d.tools.setTool('road'); m.setRoadSub(id); this.closeDrawer(); });
+      more.append(b);
+    }
+    this.tabsEl.append(el('span', { cls: 'drawer-note' }, el('span', { text: '6 types · droites ou courbes · quadrillage · carrefours et ponts automatiques' })));
+    this.body.append(el('div', { cls: 'drawer-opts' }, mode, more, el('span', { cls: 'hint', text: 'Maj : angle magnétique 15°' }), el('span', { cls: 'hint', text: `Lignes guides parallèles à ${m.gridBlock} m (taille d'îlot)` })));
   }
 
   private markActive(): void {
@@ -378,7 +403,12 @@ export class BuildBar {
       const v = m.variant >= 0 ? m.asset.variants[m.variant] : undefined;
       return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m`;
     }
-    if (m.tool === 'road') return `${ROAD_KINDS[m.roadType].nameFr} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'clic départ, clic arrivée'} — clic droit : étape précédente`;
+    if (m.tool === 'road') {
+      if (m.roadSub === 'grid') return `Quadrillage · ${ROAD_KINDS[m.roadType].nameFr} · îlots de ${m.gridBlock} m — premier coin, puis coin opposé (coût affiché avant validation)`;
+      if (m.roadSub === 'upgrade') return `Améliorer · ${UPGRADE_LABELS[m.upgradeTarget as keyof typeof UPGRADE_LABELS] ?? ROAD_KINDS[m.upgradeTarget as RoadKindId]?.nameFr ?? ''} — désignez une route (coût de la différence)`;
+      const chain = m.draft.chained > 0 ? ` · ${m.draft.chained} tronçon${m.draft.chained > 1 ? 's' : ''} — le tracé continue, « Terminer » pour arrêter` : ' — le tracé continue depuis l’extrémité';
+      return `${ROAD_KINDS[m.roadType].nameFr} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'départ puis arrivée'}${chain}`;
+    }
     if (m.tool === 'bulldoze') return 'Démolir : cliquez un bâtiment ou un tronçon de route (remboursement 25 %)';
     return '';
   }
@@ -421,10 +451,37 @@ export class BuildBar {
       if (m.asset.variants.length > 1) act('Variante', `Variante suivante (X) — ${m.asset.variants.length} disponibles`, () => m.cycleVariant());
       act('Façade → route', 'Alignement automatique de la façade côté route (G)', () => m.setAutoAlign(!m.autoAlign), m.autoAlign);
     } else if (t === 'road') {
-      act('Droite', 'Tracé droit', () => m.setRoadMode('straight'), m.draft.mode === 'straight');
-      act('Courbe', 'Tracé courbe', () => m.setRoadMode('curve'), m.draft.mode === 'curve');
+      const sub = m.roadSub;
+      act('Droite', 'Tracé droit (le tracé continue depuis l’extrémité)', () => m.setRoadMode('straight'), sub === 'draw' && m.draft.mode === 'straight');
+      act('Courbe', 'Tracé courbe : départ, point de courbure, arrivée', () => m.setRoadMode('curve'), sub === 'draw' && m.draft.mode === 'curve');
+      act('Quadrillage', 'Quadrillage : un rectangle devient un îlot de rues sur la grille de 8 m', () => m.setRoadSub(sub === 'grid' ? 'draw' : 'grid'), sub === 'grid');
+      act('Améliorer', 'Améliorer : changer le type ou le sens d’une route sans la démolir', () => m.setRoadSub(sub === 'upgrade' ? 'draw' : 'upgrade'), sub === 'upgrade');
+      this.actions.append(el('span', { cls: 'ta-break', attrs: { 'aria-hidden': 'true' } }));
+      if (sub === 'grid' || sub === 'draw') {
+        for (const b of GRID_BLOCK_SIZES) act(`${b} m`, `Taille d’îlot ${b} m (quadrillage et lignes guides parallèles)`, () => m.setGridBlock(b), m.gridBlock === b);
+      }
+      if (sub === 'draw') act('Guides', `Lignes guides parallèles aux routes, à ${m.gridBlock} m (avec l’aimantation)`, () => m.setGuides(!m.guides), m.guides && m.magnet);
+      if (sub === 'upgrade') {
+        for (const [id, label] of Object.entries(UPGRADE_LABELS) as [UpgradeTarget, string][]) act(label, UPGRADE_TIPS[id as keyof typeof UPGRADE_TIPS] ?? label, () => m.setUpgradeTarget(id), m.upgradeTarget === id);
+      }
     }
     this.hint.textContent = this.hintText();
-    act('Terminer', 'Revenir à la sélection (Échap)', () => { this.d.tools.setTool('select'); this.closeDrawer(); });
+    act('Terminer', t === 'road' ? 'Terminer le tracé en cours ; sinon revenir à la sélection (Échap)' : 'Revenir à la sélection (Échap)', () => {
+      if (t === 'road' && m.finishRoad()) { this.d.tools.cancel(); return; }
+      this.d.tools.setTool('select'); this.closeDrawer();
+    });
+    this.syncFinish();
+  }
+
+  /** Bouton flottant « Terminer » : visible tant qu'un tracé enchaîné ou un quadrillage est en cours. */
+  private syncFinish(): void {
+    const on = this.d.machine.drawing;
+    this.finishBtn.classList.toggle('hidden', !on);
+    document.body.classList.toggle('road-drawing', on);
+    if (on !== this.wasDrawing) {
+      this.wasDrawing = on;
+      // La barre d'options suit (libellés « Terminer » et indications).
+      if (this.d.machine.tool === 'road') this.hint.textContent = this.hintText();
+    }
   }
 }

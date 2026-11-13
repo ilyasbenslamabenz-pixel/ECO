@@ -267,6 +267,12 @@ body.drawer-open #tool-options, body.confirming #tool-options { display: none; }
 .tool-hint { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tool-actions { display: flex; gap: 4px; flex: 0 0 auto; }
 .tool-actions button { min-height: 32px; padding: 4px 11px; font-size: 12px; border-radius: 999px; }
+.tool-actions { flex-wrap: wrap; justify-content: center; }
+.tool-actions .ta-break { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--line-2); }
+/* « Terminer le tracé » : grand bouton au-dessus des options, visible tant qu'un tracé enchaîné est en cours. */
+#road-finish { align-self: center; min-height: 46px; padding: 0 24px; font-size: 15px; font-weight: 700; border-radius: 999px; box-shadow: var(--shadow); animation: rise .2s ease-out; }
+body.confirming #road-finish { margin-bottom: 78px; }
+body.drawer-open #road-finish { display: none; }
 
 /* Objectifs (phase 2C : panneau discret repliable) */
 #objectives { position: fixed; z-index: 13; right: max(10px, var(--safe-r)); bottom: calc(max(10px, var(--safe-b)) + 86px); width: 250px;
@@ -513,6 +519,9 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .tile { width: 92px; min-height: 88px; }
   #tool-options { border-radius: 14px; flex-wrap: wrap; justify-content: center; padding: 6px; }
   .tool-hint { flex-basis: 100%; text-align: center; white-space: normal; }
+  .tool-actions .ta-break { flex-basis: 100%; height: 0; width: auto; margin: 0; background: none; }
+  .tool-actions button { padding: 4px 9px; }
+  #road-finish { min-height: 50px; font-size: 16px; }
   #objectives { display: none !important; }
 
   /* Panneaux : feuille glissante pleine largeur entre la barre du haut et les outils. */
