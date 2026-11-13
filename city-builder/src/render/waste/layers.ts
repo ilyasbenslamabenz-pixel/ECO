@@ -141,8 +141,9 @@ export class FacilityLayer {
         m.position.set(mx, this.ctx.heightAt(f.x, f.z) + 0.05, mz);
         m.rotation.set(0, f.rot, 0);
         // Le modèle est le tumulus plein (100 %) : la hauteur suit le remplissage, l'emprise grandit un peu.
-        const sxz = 0.55 + 0.45 * Math.sqrt(fill);
-        m.scale.set(sxz, Math.max(0.02, fill), sxz);
+        const k = WASTE_MODEL_ANCHORS.moundModelScale;
+        const sxz = (0.55 + 0.45 * Math.sqrt(fill)) * k;
+        m.scale.set(sxz, Math.max(0.02, fill) * k, sxz);
         m.visible = fill > 0.002;
       }
       if (f.kind === 'incinerateur') {
@@ -179,7 +180,7 @@ export class FacilityLayer {
     }
   }
 
-  moundScale(id: number): number | null { const m = this.mounds.get(id); return m ? m.scale.y : null; }
+  moundScale(id: number): number | null { const m = this.mounds.get(id); return m ? m.scale.y / WASTE_MODEL_ANCHORS.moundModelScale : null; }
   dispose(): void { this.ctx.scene.remove(this.group); this.puffGeo.dispose(); this.puffMat.dispose(); }
 }
 

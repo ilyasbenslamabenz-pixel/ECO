@@ -212,4 +212,6 @@ export const WASTE_MODEL_ANCHORS = {
   /** Casier de la décharge : centre (x, z) et taille du tumulus à 100 % (largeur, profondeur, hauteur). */
   moundCenter: [0, -5] as const,
   moundSize: [50, 42, 14] as const,
+  /** Le modèle `dechets_tumulus` mesure 1/moundModelScale du tumulus plein (catégorie décor ≤ 15 m). */
+  moundModelScale: 5,
 };
