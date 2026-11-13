@@ -5,8 +5,7 @@
  * Propriétaire : agent assets (chargement) / agent bâtiments (usage instancié).
  */
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { createGltfLoader } from './gzip-assets';
 import { capModelTextures, imageLimits } from './image-cap';
 import { traceStep } from '../boot-trace';
 import type { AssetCatalog, CatalogAsset } from '../shared/catalog';
@@ -45,7 +44,7 @@ export function dequantizeGeometry(g: THREE.BufferGeometry): void {
 }
 
 export class AssetLibrary implements IAssetLibrary<THREE.Group> {
-  private loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  private loader = createGltfLoader();
   private cache = new Map<string, Promise<THREE.Group>>();
   private loaded = new Set<string>();
   private byId: Map<string, CatalogAsset>;

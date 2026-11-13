@@ -9,8 +9,7 @@
  * Le rendu ne modifie jamais l'état du jeu.
  */
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { createGltfLoader } from '../gzip-assets';
 import { GANTRY_HEIGHT, POWER_ELEMENT_FILES, PYLON, TURBINE } from '../../shared/power/render-spec';
 import { dequantizeGeometry } from '../assets';
 import { LINE_SPEC, windPowerShare } from '../../shared/power/model';
@@ -30,7 +29,7 @@ class InstancedModel {
 
   /** Charge les LOD (fichiers GLB relatifs au dossier assets, hors catalogue) et crée les InstancedMesh. */
   async load(ctx: RenderPluginContext, files: readonly string[]): Promise<void> {
-    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+    const loader = createGltfLoader();
     for (let l = 0; l < files.length; l++) {
       const gltf = await loader.loadAsync(ctx.lib.url(files[l]!));
       const root = gltf.scene;

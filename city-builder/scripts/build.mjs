@@ -9,7 +9,7 @@ import * as esbuild from 'esbuild';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { optimizeGlbDir } from './optimize-glb.mjs';
+import { gzipFilesIn, optimizeGlbDir } from './optimize-glb.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -105,7 +105,9 @@ if (watch) {
   if (!process.argv.includes('--no-glb-opt')) {
     const r = await optimizeGlbDir(join(dist, 'assets'), join(root, '.cache/glb-opt'));
     const mb = (n) => (n / 1024 / 1024).toFixed(2);
-    console.log(`GLB compressés (meshopt) : ${r.files} fichiers (${r.fresh} recompressés), ${mb(r.before)} Mo -> ${mb(r.after)} Mo`);
+    console.log(`GLB compressés (prune/dedup, images plafonnées, meshopt, gzip) : ${r.files} fichiers (${r.fresh} recompressés), ${mb(r.before)} Mo -> ${mb(r.after)} Mo`);
+    const h = gzipFilesIn(join(dist, 'assets'), ['.hdr']);
+    console.log(`HDRI gzip : ${h.files} fichiers, ${mb(h.before)} Mo -> ${mb(h.after)} Mo`);
   }
   writePages();
   if (!checkBudget()) process.exit(1);

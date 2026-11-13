@@ -8,8 +8,7 @@
  * transformations de nœud « cuites » (les GLB distribués sont quantifiés/compressés meshopt).
  */
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { createGltfLoader } from '../gzip-assets';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export interface ManifestLod { file: string; maxDistance: number; triangles: number; bytes: number }
@@ -44,7 +43,7 @@ const roleOf = (m: THREE.Material): string => {
 export class ConstructionAssets {
   private manifest: ConstructionManifest | null = null;
   private readonly entries = new Map<string, ManifestEntry>();
-  private readonly loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  private readonly loader = createGltfLoader();
   private readonly parts = new Map<string, Promise<ModelPart[]>>();
   private readonly ready = new Map<string, ModelPart[]>();
   /** Matériaux par rôle (partagés entre modèles et LOD). */
