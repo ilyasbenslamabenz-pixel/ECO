@@ -7,7 +7,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Simulation } from '../../src/sim/world';
-import { SIM_PLUGINS, type SimPlugin } from '../../src/sim/plugins';
+import { SIM_PLUGINS as REGISTRY, type SimPlugin } from '../../src/sim/plugins';
+
+/** Registre SANS les modules municipaux (enregistrés depuis la branche p2b-dechets) : ces tests injectent leur propre instance. */
+const SIM_PLUGINS: readonly SimPlugin[] = REGISTRY.filter((p) => p.id !== 'municipal' && p.id !== 'dechets');
 import { validateSave } from '../../src/sim/save-format';
 import { createMunicipalPlugin, Municipal, MUNICIPAL_SERVICE } from '../../src/sim/municipal';
 import { emptyMunicipalSave, migrateMunicipal, municipalSaveSection, MUNICIPAL_SAVE_VERSION } from '../../src/sim/save-sections/municipal';

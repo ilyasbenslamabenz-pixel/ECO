@@ -17,6 +17,17 @@ import { collectTransferables, validateCommandMessage, type DeltaMessage, type R
 import { validateSave } from '../../src/sim/save-format';
 import { buildTown, runDays, townCatalog } from '../sim/fixtures';
 
+/**
+ * Modules DÉJÀ IMPLÉMENTÉS par une branche (crochets, `ext`, section de sauvegarde) : les contrôles « module vide =
+ * aucun effet » ci-dessous portent sur les AUTRES. `municipal` est un module de simulation sans rendu ni panneau
+ * (phase 2B, enregistré avant les modules qui l'utilisent) ; `dechets` a rendu et panneau.
+ */
+const IMPLEMENTED = new Set(['municipal', 'dechets']);
+const SIM_ONLY = ['municipal'];
+const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id));
+/** Ordre du registre de simulation : modules de PHASE2_MODULES, `municipal` inséré avant `dechets`. */
+const simIds = (): string[] => { const l: string[] = [...PHASE2_MODULES]; l.splice(l.indexOf('dechets'), 0, ...SIM_ONLY); return l; };
+
 function town(plugins?: readonly SimPlugin[]): Simulation {
   const s = plugins ? new Simulation(plugins) : new Simulation();
   s.setCatalog(townCatalog());
@@ -68,23 +79,23 @@ function recorder(id = 'essai', opts: { failTick?: boolean } = {}): SimPlugin & 
 
 test('registres : les quatre modules sont enregistrés partout, vides, avec leur section de sauvegarde', () => {
   const ids = [...PHASE2_MODULES];
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), ids);
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), simIds());
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), ids);
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), ids);
-  for (const p of SIM_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), simIds());
+  for (const p of EMPTY_PLUGINS) assert.deepEqual(Object.keys(p), ['id'], `${p.id} : plugin vide attendu`);
   for (const sec of SAVE_SECTIONS) {
     assert.deepEqual(sec.migrate(sec.empty(), sec.version), sec.empty());
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), ids);
+  assert.deepEqual(new Simulation().plugins.ids(), simIds());
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 
 test('modules vides : simulation identique tick à tick avec et sans le registre', () => {
   const a = town([]);
-  const b = town(); // registre SIM_PLUGINS (vide)
+  const b = town(EMPTY_PLUGINS); // registre des modules encore vides
   buildTown(a);
   buildTown(b);
   assert.deepEqual(a.takeDelta(), b.takeDelta());

@@ -7,6 +7,8 @@ import { batimentsSaveSection } from './batiments';
 import { chantiersSaveSection } from './chantiers';
 import { circulationSaveSection } from './circulation';
 import { pietonsSaveSection } from './pietons';
+import { municipalSaveSection } from './municipal';
+import { dechetsSaveSection } from './dechets';
 import type { SaveSectionSpec } from './types';
 
 export type { SaveSectionSpec } from './types';
@@ -17,4 +19,6 @@ export const SAVE_SECTIONS: readonly SaveSectionSpec<unknown>[] = [
   circulationSaveSection,
   pietonsSaveSection,
   chantiersSaveSection,
+  municipalSaveSection,
+  dechetsSaveSection,
 ];
