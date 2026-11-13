@@ -38,6 +38,25 @@ export class BuildingMaterials {
     this.sets = new Map(catalog.textureSets.map((t) => [t.id, t]));
   }
 
+  /**
+   * Image décodée HORS du thread principal (createImageBitmap) : l'envoi au GPU ne paie plus le décodage PNG/JPEG,
+   * qui figeait la première image d'une ville chargée. Sans ImageBitmap : élément <img> comme avant.
+   * Pas de retournement (flipY = false, comme pour l'élément <img>) ni de conversion de couleur (cartes de normales).
+   */
+  private async loadImage(url: string): Promise<HTMLImageElement | ImageBitmap> {
+    if (typeof createImageBitmap === 'function' && typeof fetch === 'function') {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return await createImageBitmap(await r.blob(), { imageOrientation: 'from-image', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+      } catch (e) {
+        if (e instanceof Error && e.message.startsWith('HTTP')) throw e;
+        // options non prises en charge (anciens navigateurs) : repli sur l'élément <img>
+      }
+    }
+    return (await this.loader.loadAsync(url)).image as HTMLImageElement;
+  }
+
   private texture(file: string, repeat: number, srgb: boolean): THREE.Texture {
     const key = `${file}|${repeat}`;
     let t = this.textures.get(key);
@@ -51,7 +70,7 @@ export class BuildingMaterials {
     tex.flipY = false;
     let img = this.images.get(file);
     if (!img) {
-      img = this.loader.loadAsync(this.url(file)).then((l) => l.image as HTMLImageElement).catch((e: unknown) => {
+      img = this.loadImage(this.url(file)).catch((e: unknown) => {
         this.errors.push(`${file} : ${e instanceof Error ? e.message : String(e)}`);
         return null;
       });

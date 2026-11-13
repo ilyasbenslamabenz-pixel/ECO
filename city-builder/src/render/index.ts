@@ -90,6 +90,7 @@ export async function initRender(
   const roads = new RoadNetworkRenderer(ctx.scene, heightAt, { lib, treeImpostor: (id) => veg.impostorMaterial(id) });
   const buildings = new InstancedBuildingRenderer(ctx.scene, lib);
   buildings.attachCamera(ctx.camera);
+  buildings.attachRenderer(ctx.renderer);
   const vehicles = new InstancedVehicleRenderer(ctx.scene, lib);
   vehicles.attachCamera(ctx.camera);
   const signals = new TrafficSignalRenderer(ctx.scene);

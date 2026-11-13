@@ -192,19 +192,21 @@ export function meshChunk(src: MeshSource, req: ChunkRequest): ChunkMesh {
       // échantillon mouillé. Les berges de rivière reçoivent un poids PROGRESSIF selon cette distance (et un peu
       // de bruit) au lieu d'un tout-ou-rien sur les 8 voisins, qui dessinait des berges en escalier.
       let riverD = 9;
-      let nearSea = 0;
+      let seaD = 9;
       for (let dj = -2; dj <= 2; dj++) {
         for (let di = -2; di <= 2; di++) {
           const w = wsAt(i + di, j + dj);
           if (w > -1000 && w > hAt(i + di, j + dj)) {
             const dd = Math.sqrt(di * di + dj * dj);
-            if (w > wl + 0.05) { if (dd < riverD) riverD = dd; } else if (dd <= 1.5) nearSea = 1;
+            if (w > wl + 0.05) { if (dd < riverD) riverD = dd; } else if (dd < seaD) seaD = dd;
           }
         }
       }
       const nearRiver = 1 - sstep(0.6, 2.4 + (nz1 - 0.5) * 0.8, riverD);
       let rock = sstep(0.42, 0.85, slope + (nz1 - 0.5) * 0.25) + sstep(0.62, 0.9, alt + (nz2 - 0.5) * 0.15) * 0.8;
-      let sand = (1 - sstep(wl + 1.0, wl + 3.2 + nz1 * 1.5, h)) * (nearSea > 0 || h < wl + 2.5 ? 1 : 0.4);
+      // Plage : poids progressif selon la distance à la mer (plus de tout-ou-rien sur les 8 voisins, en escalier).
+      const nearSea = 1 - sstep(1.0, 2.6 + (nz2 - 0.5) * 0.8, seaD);
+      let sand = (1 - sstep(wl + 1.0, wl + 3.2 + nz1 * 1.5, h)) * Math.max(0.4, nearSea, 1 - sstep(wl + 2.0, wl + 2.8, h));
       let gravel = nearRiver * 0.45 * (1 - sand) + sstep(0.5, 0.75, alt) * sstep(0.2, 0.45, slope) * 0.6;
       let dirt = nearRiver * 0.35 + sstep(0.2, 0.42, slope) * 0.55 + forest * 0.45 * sstep(0.35, 0.7, nz2) + (1 - moist) * sstep(0.62, 0.85, nz2) * 0.5;
       // Normalisation : somme <= 1 (le reste = herbe).

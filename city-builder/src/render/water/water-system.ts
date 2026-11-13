@@ -110,7 +110,10 @@ float terrainH(vec2 xz) {
   vec2 d = texelFetch(tHeights, p + ivec2(1, 1), 0).rg;
   vec2 e = mix(mix(a, b, t.x), mix(c, d, t.x), t.y);
   // g : 1 si l'échantillon appartient à la mer / au lac (surface d'eau de la simulation au niveau global).
-  wSeaMask = e.g;
+  // Masque DILATÉ (max des 4 coins) : seule une cellule entièrement sèche est retirée ; le rivage suit alors la
+  // courbe de niveau du terrain (profondeur nulle) au lieu du contour 0,5 du masque bilinéaire, qui dessinait
+  // des berges en escalier sur la grille de 8 m.
+  wSeaMask = max(max(a.g, b.g), max(c.g, d.g));
   return outD > 0.0 ? e.r - outD * 0.04 : e.r;
 }
 vec3 wnrm(vec2 uv) { return texture2D(tWaterN, uv).xyz * 2.0 - 1.0; }
@@ -159,7 +162,8 @@ const FRAG_MAIN = /* glsl */ `
     float fres = pow(1.0 - clamp(dot(wN, V), 0.0, 1.0), 5.0);
     float alpha = clamp(1.0 - exp(-wDepth * uClarity), 0.0, 1.0);
     alpha = clamp(max(alpha * 0.92, fres) + wFoam * 0.6, 0.0, 1.0);
-    alpha *= smoothstep(0.0, 0.06, wDepth);
+    // Liseré de rive fondu sur ~20 cm de profondeur (bord net mais sans crénelage).
+    alpha *= smoothstep(0.0, 0.2, wDepth);
     diffuseColor.a = alpha;
   }
 `;
@@ -303,7 +307,11 @@ export class WaterSystem {
           const key = j * (W + 1) + i;
           let v = vmap.get(key);
           if (v !== undefined) return v;
-          const s = surfAt(i, j);
+          let s = surfAt(i, j);
+          // Sommet posé sur un échantillon SEC (bord du maillage) : la surface plonge juste sous le terrain. La rive
+          // visible est alors l'intersection eau / terrain, interpolée à travers la cellule (contour en biais),
+          // et non plus l'arête de la cellule, coupée net à pas de 8 m. Purement visuel : la simulation est intacte.
+          if (!wet(i, j) && i >= 0 && j >= 0 && i < W && j < H) s = Math.min(s, t.heights[j * W + i]! - 0.25);
           v = pos.length / 3;
           pos.push(t.originX + i * t.spacing, s, t.originZ + j * t.spacing);
           // Courant : opposé au gradient de surface.
@@ -368,6 +376,14 @@ export class WaterSystem {
     let tris = 0;
     for (const m of this.inland) tris += (m.geometry.index?.count ?? 0) / 3;
     return { seaPlane: !!this.sea, inlandMeshes: this.inland.length, inlandTriangles: tris };
+  }
+
+  /** Centres des blocs de rivière (e2e : cadrer une berge). */
+  inlandCenters(): { x: number; z: number; tris: number }[] {
+    return this.inland.map((m) => {
+      const b = m.geometry.boundingSphere!;
+      return { x: b.center.x, z: b.center.z, tris: (m.geometry.index?.count ?? 0) / 3 };
+    });
   }
 
   private clear(): void {

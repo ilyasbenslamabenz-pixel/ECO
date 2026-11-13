@@ -125,6 +125,10 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   private readonly idToBatch = new Map<number, Batch>();
   private readonly assets: Map<string, CatalogAsset>;
   private camera: THREE.Camera | null = null;
+  /** Rendu WebGL : les textures d'un LOD reçu lui sont envoyées par petites tranches avant son affichage. */
+  private gl: THREE.WebGLRenderer | null = null;
+  /** LOD reçus dont les textures restent à envoyer au GPU (affichés seulement une fois envoyées). */
+  private readonly uploads: { texs: THREE.Texture[]; since: number; finish: () => void }[] = [];
   private pending = 0;
   private readonly waiters: (() => void)[] = [];
   private forceUpdate = true;
@@ -149,6 +153,35 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
 
   /** Caméra pour le culling par instance (facultatif). */
   attachCamera(camera: THREE.Camera | null): void { this.camera = camera; this.forceUpdate = true; }
+
+  /**
+   * Rendu WebGL (facultatif) : sans lui, un LOD reçu s'affiche tout de suite et ses textures partent au GPU à la
+   * première image qui le dessine (près d'une seconde d'un bloc pour une ville entière qui se charge).
+   */
+  attachRenderer(gl: THREE.WebGLRenderer | null): void { this.gl = gl; }
+
+  /**
+   * Envoie au GPU les textures des LOD reçus, dans la limite de `budgetMs` ; un LOD complet devient affichable.
+   * Appelé à chaque mise à jour (petit budget) et pendant l'écran de chargement (budget large).
+   * Renvoie le nombre de LOD encore en attente d'envoi.
+   */
+  pumpUploads(budgetMs: number): number {
+    const gl = this.gl;
+    const t0 = performance.now();
+    for (let i = 0; i < this.uploads.length;) {
+      const u = this.uploads[i]!;
+      while (u.texs.length && performance.now() - t0 < budgetMs) {
+        const t = u.texs[u.texs.length - 1]!;
+        // Image pas encore décodée : on y reviendra (abandon de l'attente au bout de 5 s, comme sans file).
+        if (t.version === 0 && performance.now() - u.since < 5000) break;
+        u.texs.pop();
+        if (gl && t.version > 0) gl.initTexture(t);
+      }
+      if (u.texs.length === 0) { this.uploads.splice(i, 1); u.finish(); } else i++;
+      if (performance.now() - t0 >= budgetMs) break;
+    }
+    return this.uploads.length;
+  }
 
   /** Force le recalcul des LOD à la prochaine mise à jour. */
   invalidate(): void { this.forceUpdate = true; }
@@ -273,9 +306,19 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
         slot.parts.push({ mesh, vary: VARYING_ROLES.has(name) });
         this.group.add(mesh);
       });
-      slot.state = 2;
-      this.allocLod(b, l);
-      this.forceUpdate = true;
+      const finish = (): void => {
+        slot.state = 2;
+        this.allocLod(b, l);
+        this.forceUpdate = true;
+      };
+      if (!this.gl) { finish(); return; }
+      const texs = new Set<THREE.Texture>();
+      for (const p of slot.parts) {
+        const m = p.mesh.material as THREE.MeshStandardMaterial;
+        for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap, m.aoMap, m.emissiveMap, m.alphaMap]) if (t) texs.add(t);
+      }
+      // `pending` couvre aussi l'envoi : whenReady() résout quand les LOD demandés sont affichables.
+      return new Promise<void>((res) => { this.uploads.push({ texs: [...texs], since: performance.now(), finish: () => { finish(); res(); } }); });
     }).catch((e: unknown) => {
       slot.state = 3;
       this.errors.push(`${b.asset.id} LOD${l} : ${e instanceof Error ? e.message : String(e)}`);
@@ -293,7 +336,12 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   /** Résout quand aucun chargement de modèle n'est en cours et que les textures sont décodées. */
   async whenReady(): Promise<void> {
     for (;;) {
-      if (this.pending > 0) await new Promise<void>((r) => this.waiters.push(r));
+      // Boucle d'affichage éventuellement arrêtée (écran de chargement) : la file d'envois est vidée ici.
+      while (this.pending > 0 && this.uploads.length > 0) {
+        this.pumpUploads(30);
+        await new Promise<void>((r) => setTimeout(r, 4));
+      }
+      if (this.pending > 0) await Promise.race([new Promise<void>((r) => this.waiters.push(r)), new Promise<void>((r) => setTimeout(r, 30))]);
       await this.materials.whenReady();
       if (this.pending === 0) return;
     }
@@ -302,6 +350,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   get loading(): number { return this.pending; }
 
   update(cx: number, cy: number, cz: number): void {
+    if (this.uploads.length) this.pumpUploads(6);
     _camPos.set(cx, cy, cz);
     const cam = this.camera;
     let moved = this.forceUpdate || _camPos.distanceToSquared(_lastPos) > 0.25;
