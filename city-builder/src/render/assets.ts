@@ -77,7 +77,8 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
     if (!p) {
       p = this.slot().then(() => this.loader.loadAsync(this.url(l.file))).then((gltf) => {
         const root = gltf.scene;
-        capModelTextures(root); // mode allégé : images réduites dès le chargement, originaux libérés
+        // Mode allégé : images réduites dès le chargement, originaux libérés (arbres : plafond plus haut).
+        capModelTextures(root, a.category === 'tree' ? imageLimits.treeTextureCap : imageLimits.textureCap);
         root.name = `${assetId}_lod${lod}`;
         root.traverse((o) => {
           const m = o as THREE.Mesh;

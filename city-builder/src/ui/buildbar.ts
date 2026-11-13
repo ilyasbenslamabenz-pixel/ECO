@@ -318,11 +318,20 @@ export class BuildBar {
       });
     }
     if (this.d.thumbs) {
-      this.d.thumbs.get(a.id).then((url) => {
-        const img = el('img', { attrs: { alt: a.nameFr, src: url, draggable: 'false' } });
-        thumb.querySelector('.spin')?.remove();
-        thumb.prepend(img);
-      }).catch(() => { thumb.querySelector('.spin')?.remove(); thumb.prepend(el('span', { text: 'Modèle indisponible' })); });
+      const thumbs = this.d.thumbs;
+      const load = (): void => {
+        thumbs.get(a.id).then((url) => {
+          const img = el('img', { attrs: { alt: a.nameFr, src: url, draggable: 'false' } });
+          thumb.querySelector('.spin')?.remove();
+          thumb.prepend(img);
+        }).catch(() => { thumb.querySelector('.spin')?.remove(); thumb.prepend(el('span', { text: 'Modèle indisponible' })); });
+      };
+      // Vignette (et chargement du modèle) seulement quand la carte devient visible : sur téléphone, ouvrir le
+      // tiroir ne charge plus d'un coup tous les modèles de la catégorie.
+      if (typeof IntersectionObserver === 'function') {
+        const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) { io.disconnect(); load(); } }, { rootMargin: '0px 120px' });
+        io.observe(b);
+      } else load();
     } else thumb.querySelector('.spin')?.remove();
     return b;
   }

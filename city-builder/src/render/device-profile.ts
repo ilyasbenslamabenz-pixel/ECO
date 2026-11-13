@@ -35,8 +35,12 @@ export function bootDone(): void { storageSet(BOOT_PENDING_KEY, null); }
 export interface DeviceProfile {
   /** Mode allégé (téléphone / faible mémoire). */
   lite: boolean;
-  /** Côté maximal des textures d'image envoyées au GPU (px) ; Infinity = taille d'origine. */
+  /** Côté maximal des images des MODÈLES (bâtiments, accessoires) réduites au chargement (px) ; Infinity = origine. */
   textureCap: number;
+  /** Côté maximal des images d'arbres (feuillage alpha : trop réduit, il devient granuleux, imposteurs compris). */
+  treeTextureCap: number;
+  /** Côté maximal de toute image envoyée au GPU (terrain, ciel…) ; Infinity = taille d'origine. */
+  gpuTextureCap: number;
   /** Plafond du rapport de pixels du rendu. */
   maxPixelRatio: number;
   /** Côté de la carte d'ombre du soleil (px). */
@@ -72,7 +76,7 @@ export function isLiteDevice(): boolean {
 }
 
 const FULL: DeviceProfile = {
-  lite: false, textureCap: Infinity, maxPixelRatio: 2, shadowSize: 2048,
+  lite: false, textureCap: Infinity, treeTextureCap: Infinity, gpuTextureCap: Infinity, maxPixelRatio: 2, shadowSize: 2048,
   vegDistances: [50, 120, 240, 3800], buildingLodBias: 1, preloadAll: true, maxConcurrentModels: Infinity,
 };
 
@@ -86,7 +90,11 @@ export function deviceProfile(quality: QualitySetting = 'auto', lite = isLiteDev
     lite: true,
     // 256 px suffisent sur un écran de téléphone (façades tuilées au mètre) ; « moyenne » choisie à la main : 512.
     textureCap: quality === 'moyenne' ? 512 : 256,
-    maxPixelRatio: basse ? 1 : 1.25,
+    treeTextureCap: 512,
+    // Terrain et ciel : 512 px (à 256 px, le sol paraissait granuleux sur iPhone).
+    gpuTextureCap: 512,
+    // 1,5× : à 1,25× le sol et les arbres paraissaient granuleux sur un écran 3× ; « basse » : 1×.
+    maxPixelRatio: basse ? 1 : 1.5,
     shadowSize: 1024,
     vegDistances: [35, 90, 200, 2600],
     buildingLodBias: basse ? 0.55 : 0.7,

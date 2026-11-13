@@ -35,6 +35,7 @@
     "stress": "node tests/e2e/stress.mjs",
     "e2e:game": "node tests/e2e/gameplay.mjs",
     "e2e:play": "node tests/e2e/play.mjs",
+    "e2e:mobile": "node tests/e2e/mobile-batiment.mjs",
     "e2e:signals": "node tests/e2e/signals.mjs",
     "captures": "node tests/e2e/captures.mjs",
     "circulation:bench": "tsx tests/circulation/bench.ts",

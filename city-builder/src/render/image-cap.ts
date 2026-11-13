@@ -7,8 +7,10 @@
 import type * as THREE from 'three';
 
 export const imageLimits = {
-  /** Côté maximal (px) des images de texture gardées en mémoire. */
+  /** Côté maximal (px) des images de texture gardées en mémoire (modèles). */
   textureCap: Infinity,
+  /** Idem pour les arbres (feuillage alpha, plus sensible à la réduction). */
+  treeTextureCap: Infinity,
   /** Nombre maximal de modèles GLB chargés en même temps. */
   maxConcurrentModels: Infinity,
 };

@@ -87,7 +87,7 @@ export async function initRender(
   const profile = deviceProfile(quality);
   // Mode allégé : toute texture d'image plus grande est réduite par three avant l'envoi au GPU (resizeImage).
   // Fixé AVANT tout envoi ; la carte d'ombre a déjà lu la vraie limite à la création du rendu.
-  if (Number.isFinite(profile.textureCap)) ctx.renderer.capabilities.maxTextureSize = Math.min(ctx.renderer.capabilities.maxTextureSize, profile.textureCap);
+  if (Number.isFinite(profile.gpuTextureCap)) ctx.renderer.capabilities.maxTextureSize = Math.min(ctx.renderer.capabilities.maxTextureSize, profile.gpuTextureCap);
   const sky = await SkySystem.create({
     renderer: ctx.renderer, scene: ctx.scene, sun: ctx.sun, hemi: ctx.hemi, catalog, assetsBase,
     shadowMapSize: profile.lite ? profile.shadowSize : Math.min(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1) > 1100 ? 4096 : 2048,

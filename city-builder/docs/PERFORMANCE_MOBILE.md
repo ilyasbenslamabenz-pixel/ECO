@@ -85,6 +85,37 @@ est prêt. S'il est encore présent au démarrage suivant, c'est que Safari a fe
 chargement. Le jeu redémarre alors en mode allégé forcé et en qualité basse, avec un message. Choisir une
 qualité dans les réglages désactive ce mode sûr. Ce comportement a été vérifié en simulant le plantage.
 
+## Plantage en posant un bâtiment (vignettes du menu Bâtiments)
+
+Sur un vrai iPhone, en qualité basse, le jeu plantait dès que le joueur voulait poser un bâtiment.
+
+En cause, `src/ui/thumbnails.ts` : les vignettes du menu étaient rendues dans un **second contexte WebGL**.
+Les textures de chaque modèle y étaient renvoyées au GPU une deuxième fois, sans le plafond du mode allégé.
+
+La correction :
+- les vignettes sont rendues avec le **renderer principal**, dans une cible hors écran. Le résultat est lu
+  (`readRenderTargetPixels`), retourné verticalement dans un canevas 2D, puis converti en image WebP.
+  L'état du renderer (cible, couleur de fond, exposition, ombres) est sauvegardé puis rétabli ;
+- en mode allégé, les vignettes font 128×96 et utilisent le LOD le plus léger ;
+- une seule vignette est rendue à la fois, et seulement pour les cartes visibles (IntersectionObserver) ;
+- après chaque vignette, les textures et géométries du modèle sont libérées du GPU.
+
+Mesures du scénario `npm run e2e:mobile` (iPhone émulé : nouvelle partie, menu Bâtiments ouvert et
+parcouru, maison choisie, fantôme déplacé, maison posée) :
+
+| | Avant (`f6c039d`) | Après |
+|---|---|---|
+| Contextes WebGL | **2** | **1** |
+| Textures vivantes dans le renderer principal après le parcours du tiroir | — | 231 (438 sans libération après vignette) |
+| Tas JS à l'ouverture du menu | +3,9 Mo | +3,0 Mo |
+
+Réglages d'affichage du mode allégé, ajustés après les essais sur un vrai iPhone (sol et arbres granuleux) :
+- rendu à 1,5× au lieu de 1,25× ;
+- 512 px au plus pour les images envoyées au GPU (terrain, ciel) et pour les textures des arbres ;
+- 256 px pour les textures des autres modèles.
+
+Une nouvelle partie envoie ainsi 147 Mo de textures au GPU, contre 103 Mo avec les réglages précédents.
+
 ## Perte du contexte WebGL
 
 Le code se trouve dans `src/main.ts`.

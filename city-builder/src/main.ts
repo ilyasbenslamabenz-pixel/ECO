@@ -194,6 +194,7 @@ async function boot(): Promise<void> {
   // Mode allégé (téléphone) : images réduites dès leur chargement, modèles chargés un par un.
   const bootProfile = deviceProfile(ui.currentOptions().quality);
   imageLimits.textureCap = bootProfile.textureCap;
+  imageLimits.treeTextureCap = bootProfile.treeTextureCap;
   imageLimits.maxConcurrentModels = bootProfile.maxConcurrentModels;
   debug.liteMode = bootProfile.lite;
   const lib = new AssetLibrary(catalog, assetsBase);
@@ -295,7 +296,7 @@ async function boot(): Promise<void> {
   b.onLog((m) => { (m.level === 'error' ? console.error : console.log)(`[sim] ${m.message}`); if (m.level === 'error') debug.errors.push(m.message); });
 
   // Construction (miroir de la simulation, outils, aperçus) : branchée AVANT le premier instantané.
-  const cons = initConstruction({ sim: b, ui, input, scene: render.ctx.scene, models: lib, catalog, heightAt: (x, z) => render.terrain.heightAt(x, z) });
+  const cons = initConstruction({ sim: b, ui, input, scene: render.ctx.scene, models: lib, catalog, heightAt: (x, z) => render.terrain.heightAt(x, z), renderer: render.ctx.renderer, lite: render.profile.lite });
   render.ctx.onFrame.push((dt) => cons.update(dt));
   debug.constructionApplied = () => cons.machine.applied;
   debug.worldToScreen = (x, z) => {
