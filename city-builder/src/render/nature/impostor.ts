@@ -78,8 +78,8 @@ varying vec3 vCol;
 void main() {
   vec4 t = useMap > 0.5 ? texture2D(map, vUv, bias) : vec4(1.0);
   if (t.a < alphaTest) discard;
-  gl_FragColor = vec4(t.rgb * tint * vCol, 1.0);
-  #include <colorspace_fragment>
+  // Encodage sRGB fait ici, dans une cible RGBA8 ordinaire (voir bakeImpostor) : décodé par IMP_FRAG.
+  gl_FragColor = sRGBTransferOETF(vec4(t.rgb * tint * vCol, 1.0));
 }`;
 
 /** Fabrique l'atlas d'imposteur d'un modèle (racine glTF chargée). */
@@ -93,16 +93,19 @@ export function bakeImpostor(renderer: THREE.WebGLRenderer, model: THREE.Object3
   scene.add(new THREE.AmbientLight(0xffffff, 1));
   const W = frame * IMP_AZ;
   const H = frame * IMP_EL;
-  const mk = (srgb: boolean): THREE.WebGLRenderTarget => {
-    const rt = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true, samples: 0 });
-    rt.texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  // Cibles RGBA8 ordinaires (jamais SRGB8_ALPHA8) : sur iPhone (WebGL Apple / ANGLE-Metal), les mipmaps générées
+  // d'une cible sRGB donnaient des imposteurs brun-noir et déchiquetés en vue aérienne haute. L'albédo y est
+  // stocké déjà encodé en sRGB (précision des tons sombres) et décodé à la lecture.
+  const mk = (): THREE.WebGLRenderTarget => {
+    const rt = new THREE.WebGLRenderTarget(W, H, { depthBuffer: true, samples: 0, type: THREE.UnsignedByteType, format: THREE.RGBAFormat });
+    rt.texture.colorSpace = THREE.NoColorSpace;
     rt.texture.generateMipmaps = true;
     rt.texture.minFilter = THREE.LinearMipmapLinearFilter;
     rt.texture.magFilter = THREE.LinearFilter;
     return rt;
   };
-  const rtA = mk(true);
-  const rtN = mk(false);
+  const rtA = mk();
+  const rtN = mk();
   // Matériaux de capture : albedo non éclairé (couleur + texture + alpha test) et normales monde.
   const albedoMats = new Map<THREE.Material, THREE.ShaderMaterial>();
   const normalMats = new Map<THREE.Material, THREE.ShaderMaterial>();
@@ -144,7 +147,12 @@ export function bakeImpostor(renderer: THREE.WebGLRenderer, model: THREE.Object3
       m.material = which === 'a' ? albedoMats.get(src)! : normalMats.get(src)!;
     });
     renderer.setRenderTarget(rt);
-    renderer.setClearColor(which === 'a' ? 0x3c4a2e : 0x8080ff, 0);
+    // Fond transparent de l'albédo : vert feuillage moyen (valeurs sRGB écrites telles quelles), pour que les
+    // mipmaps lointaines, qui mêlent feuilles et fond, restent vertes au lieu de virer au brun sombre.
+    if (which === 'a') renderer.setClearColor(new THREE.Color().setRGB(70 / 255, 92 / 255, 38 / 255, THREE.LinearSRGBColorSpace), 0);
+    // Normales : fond orienté vers le haut (0, 1, 0), sinon le bord des imposteurs (mipmaps) paraît éclairé de
+    // biais et cerne chaque arbre d'un liseré sombre.
+    else renderer.setClearColor(new THREE.Color().setRGB(0.5, 1, 0.5, THREE.LinearSRGBColorSpace), 0);
     rt.scissorTest = false;
     rt.viewport.set(0, 0, W, H);
     renderer.setRenderTarget(rt);
@@ -261,7 +269,8 @@ void main() {
   // Alpha « net » malgré les mipmaps (préserve la couverture du feuillage au loin).
   float al = (a.a - 0.3) / max(fwidth(a.a), 0.0001) + 0.5;
   if (al < 0.5) discard;
-  a.rgb /= max(a.a, 0.35);
+  // Pas de division par l'alpha : l'atlas n'est pas prémultiplié et son fond est déjà vert feuillage.
+  a.rgb = sRGBTransferEOTF(vec4(a.rgb, 1.0)).rgb; // atlas stocké encodé en sRGB (cible RGBA8)
   vec3 n = texture2D(tNor, vUv).xyz * 2.0 - 1.0;
   // Normales capturées pour l'arbre à rotation nulle : on applique la rotation de l'instance.
   float c = cos(vRot), s = sin(vRot);
