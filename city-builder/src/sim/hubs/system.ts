@@ -21,7 +21,7 @@ import type { IndicatorGrid } from '../municipal/grid';
 import type { PluginContext } from '../plugins/types';
 import { obbToWorld } from '../../shared/footprint';
 import { BERTH_OFFSET, hubLayout, hubNoise, hubObb } from '../../shared/hubs/layout';
-import { movementActive, movementDuration, runwayWindows } from '../../shared/hubs/paths';
+import { movementActive, movementDuration, movementPose, runwayWindows } from '../../shared/hubs/paths';
 import {
   HUB_SPECS, emptyActivity, hubTypeOfAsset,
   type HubActivity, type HubEasementApi, type HubFreightApi, type HubKind, type HubMovement, type HubNuisance, type HubRecord, type HubSummary, type HubType,
@@ -605,6 +605,20 @@ export class HubsSystem {
   /** Contrôle d'un bâtiment ordinaire (commande `checkBuilding`). */
   checkBuilding(ctx: PluginContext, assetId: string, x: number, z: number, rot: number, variant = -1): string | null {
     return checkBuildingEasement(ctx, this.records(), assetId, x, z, rot, assetHeight(ctx, assetId, variant));
+  }
+
+  /** Phases courantes des mouvements visibles (diagnostic, captures). */
+  movementStates(): { id: number; hub: number; asset: string; role: string; phase: string; u: number; alt: number; x: number; z: number }[] {
+    const out: ReturnType<HubsSystem['movementStates']> = [];
+    for (const mv of this.movements) {
+      const h = this.hubs.find((x) => x.rec.id === mv.hub);
+      if (!h) continue;
+      const p = movementPose(h.rec.type, mv, this.phys);
+      if (!p) continue;
+      const [x, z] = obbToWorld(hubObb(h.rec.type, h.rec.x, h.rec.z, h.rec.rot), p.x, p.z);
+      out.push({ id: mv.id, hub: mv.hub, asset: mv.asset, role: mv.role, phase: p.phase, u: p.u, alt: p.alt, x, z });
+    }
+    return out;
   }
 
   /** Durée d'une rotation visible (diagnostic). */

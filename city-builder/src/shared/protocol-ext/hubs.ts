@@ -36,6 +36,10 @@ export interface HubsCommands {
   checkBuilding: { payload: { assetId: string; x: number; z: number; rot: number; variant?: number }; result: { limit: number } };
   /** Résumé pour le panneau Transports. */
   summary: { payload: undefined; result: { hubs: HubSummary[]; port: HubsCapacityView; aeroport: HubsCapacityView; violations: { id: number; name: string; height: number; limit: number }[]; sharedMunicipal: boolean } };
+  /** Emplacements valides (balayage de la carte, `max` premiers). */
+  suggest: { payload: { type: HubType; step?: number; max?: number; rots?: number[] }; result: { x: number; z: number; rot: number }[] };
+  /** Phases courantes des navires et avions visibles. */
+  movements: { payload: undefined; result: { id: number; hub: number; asset: string; role: string; phase: string; u: number; alt: number; x: number; z: number }[] };
   /** Contribution sonore et limite de hauteur en un point (inspection). */
   probe: { payload: { x: number; z: number }; result: { noise: number; limit: number; satisfaction: number; landValue: number; bruit: number } };
 }

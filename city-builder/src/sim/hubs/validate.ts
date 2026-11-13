@@ -22,8 +22,10 @@ export type PlaceCheck =
 export const PORT_MAX_RELIEF = 8;
 export const AIRPORT_MAX_RELIEF = 6;
 /** Parts minimales d'échantillons en eau : bassin devant le quai, chenal d'approche. */
-export const BASIN_WET_MIN = 0.9;
-export const CHANNEL_WET_MIN = 0.85;
+export const BASIN_WET_MIN = 0.75;
+export const CHANNEL_WET_MIN = 0.75;
+/** Part maximale du terre-plein en eau (anses comblées par la dalle portuaire). */
+export const LAND_WET_MAX = 0.12;
 /** Profondeur médiane minimale du bassin en mer (m). */
 export const SEA_MIN_DEPTH = 3;
 
@@ -92,7 +94,7 @@ function checkPort(ctx: PluginContext, type: 'port_commerce' | 'port_passagers',
     if (ctx.terrain.isWet(x, z)) wetLand++;
     else land.push(ctx.terrain.heightAt(x, z));
   });
-  if (wetLand > 0) return fail('UNDER_WATER', 'Le terre-plein du port doit être sur la terre ferme (seul le front de quai borde l\'eau)');
+  if (wetLand > LAND_WET_MAX * (wetLand + land.length)) return fail('UNDER_WATER', `Le terre-plein du port doit être sur la terre ferme (${Math.round((100 * wetLand) / (wetLand + land.length))} % en eau > ${Math.round(100 * LAND_WET_MAX)} % ; seul le front de quai borde l'eau)`);
   const lMin = Math.min(...land), lMax = Math.max(...land);
   if (!(lMax - lMin <= PORT_MAX_RELIEF)) return fail('TOO_STEEP', `Terre-plein trop accidenté (dénivelé ${fmt1(lMax - lMin)} m > ${PORT_MAX_RELIEF} m)`);
   // 2. Bassin devant le quai : en eau sur 64 m de profondeur.

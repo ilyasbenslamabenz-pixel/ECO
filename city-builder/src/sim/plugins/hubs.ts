@@ -70,6 +70,24 @@ export function createHubsPlugin(): SimPlugin & { readonly system: HubsSystem } 
           const limit = ctx.use<{ limitAt(x: number, z: number): number }>('servitudes')?.limitAt(x, z) ?? Infinity;
           return { ok: true, data: { noise: sys.noiseAt(x, z), limit, satisfaction: g.read('satisfaction', x, z), landValue: g.read('valeur_fonciere', x, z), bruit: g.read('bruit', x, z) } };
         }
+        case 'suggest': {
+          // Emplacements valides (balayage de la carte) : aide au joueur et aux tests visuels.
+          const type = (typeof p.type === 'string' && p.type in HUB_SPECS ? p.type : 'port_commerce') as HubType;
+          const step = Math.max(16, num(p.step) ?? 48), max = Math.max(1, Math.min(50, num(p.max) ?? 5));
+          const rots = Array.isArray(p.rots) ? (p.rots as unknown[]).filter((r): r is number => typeof r === 'number') : [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5];
+          const b = ctx.terrain.bounds();
+          const out: { x: number; z: number; rot: number }[] = [];
+          if (b) {
+            for (let z = b.minZ + step; z < b.maxZ - step && out.length < max; z += step) {
+              for (let x = b.minX + step; x < b.maxX - step && out.length < max; x += step) {
+                for (const rot of rots) if (sys.check(ctx, type, x, z, rot).ok) { out.push({ x, z, rot }); break; }
+              }
+            }
+          }
+          return { ok: true, data: out };
+        }
+        case 'movements':
+          return { ok: true, data: sys.movementStates() };
         default:
           return { ok: false, code: 'INVALID_ARGS', message: `Commande inconnue du module hubs : ${name}` };
       }
