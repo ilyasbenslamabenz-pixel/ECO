@@ -93,12 +93,40 @@ centre du vitrage). Pour harmoniser : vitrage des lanternes `emissiveIntensity =
 `roads_lamp_pools` plus larges (×1,3) quand `wetness > 0.5` (reflets sur sol mouillé), via une méthode
 `setWetness(w)` que l'atmosphère appellerait.
 
-## 7. Décision à prendre : saison de départ de la démo / des nouvelles parties
+## 7. Saison de départ : printemps (décision du superviseur) — diff à appliquer (propriétaire simulation)
 
-Les parties commencent le 1er janvier : avec les saisons, la démo (et les bancs de captures des autres modules)
-s'affiche désormais **en hiver** (feuillus nus, herbe terne ; pas de neige au sol au départ : le premier épisode
-météo est toujours ensoleillé ou nuageux). Options : démarrer la démo en mai (`newGame` : ajouter un mois de départ,
-propriétaire simulation) ou forcer `pluginCommand weather force { dayOfYear: 135 }` dans la démo (propriétaire main.ts).
+Une nouvelle partie commence début mai (jour de l'année 120 = 1er mai, calendrier de 30 jours) ; paramètre de
+nouvelle partie `startSeason`, défaut `printemps`. La démo en hérite sans forçage dans main.ts. Le module météo
+n'a rien à changer : il lit le jour de l'année dans l'horloge (`dayOfYearAt(totalMinutes)`), et son premier épisode
+reste ensoleillé ou nuageux.
+
+```diff
+// src/shared/contracts.ts — NewGameParams
+   /** Heure de départ de l'horloge (0..23,99) ; défaut 0 h. */
+   startHour?: number;
++  /** Saison de départ (printemps = 1er mai, été = 1er juin, automne = 1er septembre, hiver = 1er décembre) ; défaut 'printemps' (1er mai). */
++  startSeason?: 'printemps' | 'ete' | 'automne' | 'hiver';
+ }
++/** Jour de l'année de départ par saison (calendrier de jeu, 30 jours par mois). */
++export const START_DAY_OF_YEAR = { printemps: 120, ete: 150, automne: 240, hiver: 330 } as const;
+
+// src/sim/world.ts — newGame()
+-    this.clock.totalMinutes = Math.round(Math.max(0, Math.min(23.99, p.startHour ?? 0)) * 60);
++    const startDay = START_DAY_OF_YEAR[p.startSeason ?? 'printemps'];
++    this.clock.totalMinutes = startDay * MINUTES_PER_DAY + Math.round(Math.max(0, Math.min(23.99, p.startHour ?? 0)) * 60);
++    // (import { START_DAY_OF_YEAR } from '../shared/contracts' ; MINUTES_PER_DAY depuis ./clock)
+     // + replanifier DayStart / MonthStart / YearStart à partir de cette heure (le code de planification
+     //   existant `next(period)` part déjà de `t = this.clock.totalMinutes` : vérifier qu'il est appelé APRÈS).
+
+// src/shared/protocol.ts — validation de newGame
+       if (a.startHour !== undefined && (!isNum(a.startHour) || a.startHour < 0 || a.startHour >= 24)) return bad('Heure de départ invalide');
++      if (a.startSeason !== undefined && !['printemps', 'ete', 'automne', 'hiver'].includes(a.startSeason as string)) return bad('Saison de départ invalide');
+```
+
+Effets à vérifier par le propriétaire : l'année affichée reste « an 1 » (mai an 1) ; les tests qui supposent
+`totalMinutes = startHour * 60` (horloge, économie mensuelle, empreintes de tests/plugins) devront fixer
+`startSeason: 'hiver'`… ou mieux, utiliser le nouveau défaut et recalculer leurs attendus. Les sauvegardes existantes
+ne changent pas (l'horloge est sauvegardée).
 
 ## 8. Coût mesuré (SwiftShader, scène de démonstration, `tests/weather/captures.mjs`)
 
