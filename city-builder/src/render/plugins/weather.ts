@@ -13,6 +13,8 @@ export interface AtmosphereDebug {
   state(): WeatherPayload | null;
   stats(): AtmosphereStats | null;
   strike(): void;
+  /** Applique immédiatement une charge utile (résultat d'une commande `force`, simulation en pause). */
+  apply(p: WeatherPayload): void;
 }
 
 let system: AtmosphereSystem | null = null;
@@ -30,6 +32,7 @@ export const weatherRenderPlugin: RenderPlugin = {
       state: () => system?.payload ?? null,
       stats: () => system?.stats() ?? null,
       strike: () => system?.strike(),
+      apply: (p) => system?.apply(p, true),
     };
     (globalThis as unknown as { __atmo?: AtmosphereDebug }).__atmo = dbg;
   },

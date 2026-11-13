@@ -201,7 +201,7 @@ export class WeatherModel {
   }
 
   /** Forçage (démonstration / captures). */
-  force(rng: RandomSource, totalMinutes: number, o: { kind?: WeatherKind; hours?: number; dayOfYear?: number | null; settle?: boolean }): void {
+  force(rng: RandomSource, totalMinutes: number, o: { kind?: WeatherKind; hours?: number; dayOfYear?: number | null; settle?: boolean; wetness?: number; snowCover?: number }): void {
     const s = this.state;
     if (o.dayOfYear !== undefined) s.dayOverride = o.dayOfYear === null ? null : ((Math.floor(o.dayOfYear) % 360) + 360) % 360;
     const t = s.lastStep;
@@ -225,6 +225,8 @@ export class WeatherModel {
       if (o.kind && o.kind !== 'neige' && s.temp > 2) s.snowCover = 0;
       if (o.kind === 'ensoleille' || o.kind === 'nuageux' || o.kind === 'brouillard') s.wetness = o.kind === 'brouillard' ? 0.35 : 0;
     }
+    if (o.wetness !== undefined) s.wetness = clamp(o.wetness, 0, 1);
+    if (o.snowCover !== undefined) s.snowCover = clamp(o.snowCover, 0, 1);
     void totalMinutes;
     this.dirty = true;
   }

@@ -63,6 +63,8 @@ export function createWeatherPlugin(): SimPlugin & { modelOf(ctx: PluginContext)
           ...(hours !== undefined ? { hours: hours as number } : {}),
           ...(doy !== undefined ? { dayOfYear: doy as number | null } : {}),
           settle: p['settle'] === true,
+          ...(typeof p['wetness'] === 'number' && Number.isFinite(p['wetness']) ? { wetness: p['wetness'] } : {}),
+          ...(typeof p['snowCover'] === 'number' && Number.isFinite(p['snowCover']) ? { snowCover: p['snowCover'] } : {}),
         });
         return { ok: true, data: model.payload(ctx.clock.totalMinutes) };
       }

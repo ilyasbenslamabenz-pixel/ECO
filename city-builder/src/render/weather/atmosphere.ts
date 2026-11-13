@@ -191,6 +191,7 @@ export class AtmosphereSystem {
         this.skyTimer = 0.25;
         sky.setDayOfYear(astronomicalDay(s.doy));
         sky.setWeather({ cloud: s.cloud, rain: s.rain, snow: s.snow, fog: s.fog, storm: s.storm, wind: s.wind, windDir: s.windDir });
+        this.syncImpostorLights(sky);
       }
     }
     this.scanTimer -= dt;
@@ -198,6 +199,27 @@ export class AtmosphereSystem {
     const light = sky?.ambientSky ?? new THREE.Color(0.5, 0.5, 0.5);
     this.precip?.update(dt, this.d.camera, s.rain, s.snow, s.wind, s.windDir, light);
     this.glows?.update(dt, this.d.nightFactor(), s.fog, Math.min(1, s.rain + s.snow));
+  }
+
+  /**
+   * Recopie soleil / hémisphère dans les uniformes partagés des imposteurs d'arbres (même formule que
+   * VegetationSystem.syncLights, appelée seulement au changement d'heure par src/render/index.ts).
+   */
+  private syncImpostorLights(sky: SkySystem): void {
+    let lights: Record<string, THREE.IUniform> | null = null;
+    let hemi: THREE.HemisphereLight | null = null;
+    let sun: THREE.DirectionalLight | null = null;
+    this.d.scene.traverse((o) => {
+      if (!hemi && (o as THREE.HemisphereLight).isHemisphereLight) hemi = o as THREE.HemisphereLight;
+      if (!sun && (o as THREE.DirectionalLight).isDirectionalLight && (o as THREE.DirectionalLight).castShadow) sun = o as THREE.DirectionalLight;
+      const m = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+      if (!lights && m && !Array.isArray(m) && m.name === 'imposteur_arbre') lights = m.uniforms;
+    });
+    const L = lights as Record<string, THREE.IUniform> | null, H = hemi as THREE.HemisphereLight | null, S = sun as THREE.DirectionalLight | null;
+    if (!L || !H || !S || !L['uSunColor'] || !L['uSky'] || !L['uGround']) return;
+    (L['uSunColor'].value as THREE.Color).copy(S.color).multiplyScalar(S.intensity / Math.PI);
+    (L['uSky'].value as THREE.Color).copy(H.color).multiplyScalar(H.intensity / Math.PI).add(sky.ambientSky);
+    (L['uGround'].value as THREE.Color).copy(H.groundColor).multiplyScalar(H.intensity / Math.PI).add(sky.ambientGround);
   }
 
   /** Éclair immédiat (démonstration, captures). */

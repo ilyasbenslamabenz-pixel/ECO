@@ -69,7 +69,8 @@ export interface WeatherCommands {
   /**
    * Forçage (démonstration, captures) : `kind` impose un temps pour `hours` heures (défaut 6, transitions comprises) ;
    * `dayOfYear` fige le jour de l'année vu par la météo et le rendu (saisons) ; `null` rend le calendrier.
-   * `settle: true` applique immédiatement les valeurs cibles (pas de transition), y compris sol mouillé / neige au sol.
+   * `settle: true` applique immédiatement les valeurs cibles (pas de transition), y compris sol mouillé / neige au sol ;
+   * `wetness` / `snowCover` (0..1) imposent l'état du sol.
    */
-  force: { payload: { kind?: WeatherKind; hours?: number; dayOfYear?: number | null; settle?: boolean }; result: WeatherPayload };
+  force: { payload: { kind?: WeatherKind; hours?: number; dayOfYear?: number | null; settle?: boolean; wetness?: number; snowCover?: number }; result: WeatherPayload };
 }
