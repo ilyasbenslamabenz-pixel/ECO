@@ -250,16 +250,19 @@ output { color: var(--text); font-variant-numeric: tabular-nums; }
   #touch-confirm { bottom: calc(max(12px, var(--safe-b)) + 162px); }
   /* Barre supérieure en grille : ville + date / trésorerie, population, actions / vitesses sur toute la largeur.
      Chaque bouton tactile garde au moins 40 px de large (6 vitesses : ≈ 58 px chacune sur 375 px). */
-  #hud { display: grid; grid-template-columns: auto auto 1fr auto auto auto auto; column-gap: 6px; row-gap: 6px; align-items: center; }
+  #hud { display: grid; grid-template-columns: auto auto 1fr auto auto auto; column-gap: 4px; row-gap: 6px; align-items: center; }
+  #hud-money-btn, #hud-pop-btn { padding: 4px 8px; white-space: nowrap; }
+  /* La trésorerie ouvre déjà les finances : pas de doublon ¢ sur téléphone, les chiffres restent entiers. */
+  #btn-finance { display: none !important; }
+  #btn-camera, #btn-save, #btn-menu { min-width: 40px; width: 40px; padding: 4px; }
   #hud > .hud-group { display: contents; }
   #hud-city { grid-row: 1; grid-column: 1 / 3; max-width: 150px; }
   #hud-date { grid-row: 1; grid-column: 3 / -1; justify-self: end; max-width: 100%; }
   #hud-money-btn { grid-row: 2; grid-column: 1; }
   #hud-pop-btn { grid-row: 2; grid-column: 2; }
   #btn-camera { grid-row: 2; grid-column: 4; }
-  #btn-finance { grid-row: 2; grid-column: 5; }
-  #btn-save { grid-row: 2; grid-column: 6; }
-  #btn-menu { grid-row: 2; grid-column: 7; }
+  #btn-save { grid-row: 2; grid-column: 5; }
+  #btn-menu { grid-row: 2; grid-column: 6; }
   #hud .seg { grid-row: 3; grid-column: 1 / -1; display: flex; width: 100%; }
   #hud .seg button { min-width: 40px; flex: 1 1 0; padding: 6px 2px; }
   #toolbar .tl { font-size: 9.5px; letter-spacing: -0.1px; }
