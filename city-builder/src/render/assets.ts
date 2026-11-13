@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { capModelTextures, imageLimits } from './image-cap';
+import { traceStep } from '../boot-trace';
 import type { AssetCatalog, CatalogAsset } from '../shared/catalog';
 import type { IAssetLibrary } from '../shared/contracts';
 
@@ -75,7 +76,7 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
     const key = l.file;
     let p = this.cache.get(key);
     if (!p) {
-      p = this.slot().then(() => this.loader.loadAsync(this.url(l.file))).then((gltf) => {
+      p = this.slot().then(() => { traceStep(`modèle ${l.file.split('/').pop()}`); return this.loader.loadAsync(this.url(l.file)); }).then((gltf) => {
         const root = gltf.scene;
         // Mode allégé : images réduites dès le chargement, originaux libérés (arbres : plafond plus haut).
         capModelTextures(root, a.category === 'tree' ? imageLimits.treeTextureCap : imageLimits.textureCap);

@@ -489,6 +489,9 @@ async function boot(): Promise<void> {
   const PRELOAD_CAP_MS = 1000;
   async function preloadVisibleBuildings(): Promise<void> {
     if (render.buildings.count === 0) return;
+    // Téléphone : pas de préparation groupée (boucle d'affichage arrêtée, tous les modèles et textures envoyés
+    // d'un coup) ; Safari iOS fermait la page à cette étape. Les bâtiments apparaissent au fil du chargement.
+    if (render.profile.lite) { traceStep('bâtiments progressifs'); return; }
     ui.setLoading(0.9, 'Chargement des bâtiments…');
     const wasRunning = !params.has('norender');
     const t0 = performance.now();
