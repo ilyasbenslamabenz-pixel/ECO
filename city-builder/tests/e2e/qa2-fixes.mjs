@@ -4,7 +4,7 @@
  *      grossier de 64 m qui recouvre les rivières par blocs) — capture immédiate, sans attendre le worker ;
  *  (a) pose d'une route : le chunk nivelé est re-maillé au LOD fin (l'herbe ne recouvre plus la chaussée) —
  *      capture juste après la pose ;
- *  (c) horloge : une journée = 12 min réelles à x1 (minutes de jeu écoulées en 10 s réelles) ;
+ *  (c) horloge : une journée ≈ 2 min 24 s réelles à x1 (constante GAME_MINUTES_PER_TICK, minutes de jeu écoulées en 10 s réelles) ;
  *  (d) chargement d'une sauvegarde par le chemin de l'interface : caméra recentrée sur la ville.
  * Captures : tests/e2e/out/qa2fix-ouverture.png, qa2fix-route.png, qa2fix-charge.png ; rapport qa2fix.json.
  */
@@ -64,7 +64,7 @@ try {
   const m1 = await page.evaluate(() => window.__aube.lastStats.date.totalMinutes);
   const perDayMin = ((24 * 60) / Math.max(1e-6, m1 - m0)) * 10 / 60;
   R.clock = { m0, m1, realMinutesPerDay: perDayMin };
-  check(perDayMin > 9 && perDayMin < 30, `journée de jeu ≈ ${perDayMin.toFixed(1)} min réelles à x1 (${(m1 - m0).toFixed(1)} min de jeu en 10 s)`);
+  check(perDayMin > 2 && perDayMin < 3.5, `journée de jeu ≈ ${perDayMin.toFixed(1)} min réelles à x1 (${(m1 - m0).toFixed(1)} min de jeu en 10 s)`);
 
   // (d) sauvegarde, caméra déplacée loin, chargement par le chemin de l'interface -> recentrage
   await page.evaluate(() => window.__aube.saveSlot('qa2fix'));

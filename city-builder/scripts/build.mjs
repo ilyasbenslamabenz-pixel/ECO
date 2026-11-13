@@ -47,8 +47,11 @@ function html({ fragment }) {
   ].join('\n');
   const body = `${markup}\n<script type="module" src="./game.js"></script>`;
   if (fragment) return `${head}\n${body}\n`;
-  return `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
+  // Page complète : icône locale (évite le 404 /favicon.ico qu'un Chromium complet demande, compté comme erreur par l'e2e).
+  return `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<link rel="icon" href="./favicon.svg" type="image/svg+xml">\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
 }
+
+const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#141920"/><path d="M14 50V30l8-6v26zm12 0V18l10-8v40zm14 0V26l10 6v18z" fill="#e8b65a"/></svg>\n';
 
 function copyAssets() {
   const src = join(root, 'assets');
@@ -81,6 +84,7 @@ function checkBudget() {
 
 function writePages() {
   writeFileSync(join(dist, 'index.html'), html({ fragment: false }));
+  writeFileSync(join(dist, 'favicon.svg'), FAVICON);
   writeFileSync(join(dist, 'artifact.html'), html({ fragment: true }));
 }
 
