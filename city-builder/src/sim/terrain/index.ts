@@ -8,6 +8,11 @@ export { DEFAULT_WORLD_PARAMS, normalizeParams, generateWorld, computeFlow, erod
 export { applyTerraform, applyPatch, extractPatch, rectForDisc, unionRect, updateWaterInRect, TERRAFORM_LIMITS } from './terraform';
 export type { TerraformKind, TerraformOp, TerraformResult } from './terraform';
 export { gradNoise2, fbm, ridged, hash01 } from './noise';
+export {
+  planEdit, commitEdit, parseEdits, normalizeEdit, editShapeError, flattenWalls, EDIT_LIMITS, EDIT_COSTS, QUAY_STRIDE,
+  QUAY_FREEBOARD, QUAY_FOOT_DEPTH, DIG_DEPTH,
+} from './edits';
+export type { TerrainEdit, TerrainEditKind, EditPlan, QuayWall, EditableTerrain } from './edits';
 
 import type { WorldTerrain } from './types';
 

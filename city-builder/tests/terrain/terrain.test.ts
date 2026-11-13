@@ -68,7 +68,7 @@ test('lac intérieur et aucune étendue d\'eau', () => {
 });
 
 test('hydrologie : les rivières descendent jusqu\'à l\'eau ou au bord', () => {
-  const t = generateWorld({ seed: 7, mapChunks: 8, hydrology: 'mer', rivers: 0.7 });
+  const t = generateWorld({ seed: 7, mapChunks: 8, hydrology: 'mer', rivers: 0.7, riverMode: 'plusieurs' });
   assert.ok(t.rivers.length >= 2, `rivières ${t.rivers.length}`);
   for (const r of t.rivers.slice(0, 5)) {
     const n = r.points.length / 4;

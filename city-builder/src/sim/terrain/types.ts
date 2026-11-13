@@ -7,6 +7,16 @@ import type { TerrainData } from '../../shared/contracts';
 /** Type d'étendue d'eau principale. */
 export type HydrologyKind = 'mer' | 'lac' | 'aucune';
 
+/** Réseau de rivières (génération v2) : aucune, une seule rivière principale, ou réseau complet (dense selon `rivers`). */
+export type RiverMode = 'aucune' | 'une' | 'plusieurs';
+
+/**
+ * Version de l'algorithme de génération. 1 = génération d'origine (forêts denses, réseau de rivières) : conservée
+ * à l'identique pour les sauvegardes antérieures, dont le terrain est régénéré au chargement. 2 = génération actuelle
+ * (forêt ≈ ÷3 en bosquets avec grandes clairières, une rivière principale plus étroite et moins sinueuse par défaut).
+ */
+export const TERRAIN_GEN_VERSION = 2;
+
 /** Paramètres de génération du monde (tous bornés par `normalizeParams`). */
 export interface WorldGenParams {
   seed: number;
@@ -28,6 +38,10 @@ export interface WorldGenParams {
   erosion: number;
   /** Abondance des ressources 0..1. */
   resources: number;
+  /** Version de l'algorithme (1 = d'origine, 2 = actuelle) ; défaut : TERRAIN_GEN_VERSION. */
+  genVersion: 1 | 2;
+  /** Réseau de rivières (v2) ; défaut 'une'. Ignoré en v1 (réseau selon `rivers`). `rivers` = 0 : aucune rivière. */
+  riverMode: RiverMode;
 }
 
 /** Ressources naturelles par échantillon (Uint8). */
@@ -85,6 +99,11 @@ export interface WorldTerrain extends TerrainData {
   resources: Uint8Array;
   rivers: RiverPath[];
   stats: WorldStats;
+  /**
+   * Murs de quai des éditions du joueur (src/sim/terrain/edits.ts), à plat : QUAY_STRIDE nombres par mur
+   * (ax, az, bx, bz, dessus, pied, normale x/z vers l'eau). Tableau simple (copié, jamais transféré). Absent = aucun.
+   */
+  quays?: number[];
 }
 
 /** Région rectangulaire d'échantillons (bornes incluses). */
@@ -102,4 +121,10 @@ export interface SampleRect {
 export interface TerrainPatch extends SampleRect {
   heights: Float32Array;
   waterSurface: Float32Array;
+  /** Forêt de la région (éditions du joueur : défrichage, remblai, creusement). */
+  forest?: Uint8Array;
+  /** Murs de quai de TOUTE la carte (remplace la liste du rendu) quand ils ont changé. */
+  quays?: number[];
+  /** Zones où le rendu retire la végétation naturelle : disques (x, z, rayon) à plat. */
+  cleared?: number[];
 }
