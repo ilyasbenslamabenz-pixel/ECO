@@ -7,7 +7,7 @@ name: Publier Meknes City sur GitHub Pages
 
 on:
   push:
-    branches: [claude/amazing-meitner-vtryts, claude/test-iphone]
+    branches: [claude/amazing-meitner-vtryts, claude/test-iphone, claude/test-iphone-b]
     paths: ["city-builder/**", "moon-dust/**", ".github/workflows/pages-meknes-city.yml"]
   workflow_dispatch:
 
@@ -47,27 +47,29 @@ jobs:
         working-directory: city-builder
         run: npm run build
 
-      - name: Compiler la version de test (branche claude/test-iphone -> /test/)
+      - name: Compiler les versions de test (branches claude/test-iphone et claude/test-iphone-b)
         run: |
-          if git ls-remote --exit-code --heads origin claude/test-iphone >/dev/null; then
-            git fetch -q origin claude/test-iphone
-            git worktree add -q ../test-iphone FETCH_HEAD
-            cd ../test-iphone/city-builder && npm ci --no-audit --no-fund && npm run build
-          fi
+          for br in test-iphone test-iphone-b; do
+            if git ls-remote --exit-code --heads origin claude/$br >/dev/null; then
+              git fetch -q origin claude/$br
+              git worktree add -q ../$br FETCH_HEAD
+              (cd ../$br/city-builder && npm ci --no-audit --no-fund && npm run build)
+            fi
+          done
 
       - name: Assembler le site
         run: |
           mkdir -p _site
           cp -r city-builder/dist/. _site/
           if [ -d moon-dust ]; then mkdir -p _site/moon-dust && cp -r moon-dust/. _site/moon-dust/; fi
-          if [ -d ../test-iphone/city-builder/dist ]; then
-            # Adresse propre à chaque version de test (/test-<commit>/) : pas de fichiers d'une ancienne version en cache.
-            T=test-$(git -C ../test-iphone rev-parse --short=7 HEAD)
-            mkdir -p _site/$T && cp -r ../test-iphone/city-builder/dist/. _site/$T/
-            echo "<meta http-equiv=refresh content='0;url=../$T/'>" > _site/test.html
-            mkdir -p _site/test && cp _site/test.html _site/test/index.html && sed -i "s#\.\./$T/#../$T/#" _site/test/index.html
-            echo "Version de test : $T"
-          fi
+          for br in test-iphone test-iphone-b; do
+            if [ -d ../$br/city-builder/dist ]; then
+              # Adresse propre à chaque version de test (/test-<commit>/) : pas de fichiers d'une ancienne version en cache.
+              T=test-$(git -C ../$br rev-parse --short=7 HEAD)
+              mkdir -p _site/$T && cp -r ../$br/city-builder/dist/. _site/$T/
+              echo "Version de test ($br) : $T"
+            fi
+          done
           touch _site/.nojekyll
           du -sh _site
 
