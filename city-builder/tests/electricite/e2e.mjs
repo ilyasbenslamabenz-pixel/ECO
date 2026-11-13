@@ -53,13 +53,18 @@ try {
   check(!!road, `avenue construite en (${at})`);
   const place = async (assetId, x, z, rot = 0) => { const r = await send('placeBuilding', { assetId, x, z, rot, variant: 0 }); return r.ok ? r.r.buildingId : null; };
   let homes = 0;
+  const refus = new Map();
   const homeModels = ['maison_pavillon_enduit', 'immeuble_petit_enduit', 'maison_brique_pignon', 'commerce_boulangerie'];
-  for (let k = 0; k < 10; k++) {
-    const x = at[0] - 140 + k * 28;
-    if (await place(homeModels[k % homeModels.length], x, at[1] - 18, 2)) homes++;
+  for (const [dz, rot] of [[-21, 0], [21, 2], [-24, 0], [24, 2]]) {
+    for (let k = 0; k < 12; k++) {
+      const x = at[0] - 150 + k * 26;
+      const r = await send('placeBuilding', { assetId: homeModels[(k + homes) % homeModels.length], x, z: at[1] + dz, rot, variant: 0 });
+      if (r.ok) homes++; else refus.set(r.e, (refus.get(r.e) ?? 0) + 1);
+    }
   }
-  const hopital = await place('public_hopital', at[0] - 90, at[1] + 34, 0) ?? await place('public_hopital', at[0] + 60, at[1] + 34, 0);
-  const usine = await place('industrie_manufacture_sheds', at[0] + 110, at[1] + 30, 0) ?? await place('industrie_atelier', at[0] + 120, at[1] + 26, 0);
+  console.log(`     refus de pose : ${JSON.stringify([...refus])}`);
+  const hopital = await place('public_hopital', at[0] - 90, at[1] + 60, 2) ?? await place('public_hopital', at[0] + 60, at[1] - 60, 0);
+  const usine = await place('industrie_manufacture_sheds', at[0] + 110, at[1] + 60, 2) ?? await place('industrie_atelier', at[0] + 120, at[1] - 50, 0);
   check(homes >= 5, `${homes} logements / commerces posés, hôpital ${hopital ?? 'refusé'}, industrie ${usine ?? 'refusée'}`);
 
   // 2. Installations électriques (recherche d'un emplacement accepté par la simulation).
@@ -113,14 +118,16 @@ try {
 
   // Captures.
   const posOf = (id) => st.data.facilities.find((f) => f.id === id);
-  const shot = async (name) => { await render(2, 0.2); await page.screenshot({ path: join(out, `${name}.png`), timeout: 600000 }); };
+  const shot = async (name) => { await render(2, 0.2); await page.waitForTimeout(2500); await render(2, 0.2); await page.waitForTimeout(1500); await render(2, 0.2); await page.screenshot({ path: join(out, `${name}.png`), timeout: 600000 }); };
   const c = posOf(centrale);
-  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 150, 0.45, 0.7), [c.x, c.z]);
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 170, 0.75, 0.7), [c.x, c.z]);
   await shot('elec-centrale');
   const t0 = posOf(turbines[0]), t3 = posOf(turbines[turbines.length - 1]);
-  await page.evaluate(([x, z, lx, lz]) => window.__aube.streetLook(x, z, lx, lz), [t0.x - 60, t0.z + 160, (t0.x + t3.x) / 2, (t0.z + t3.z) / 2]);
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 300, 0.32, 0.4), [(t0.x + t3.x) / 2, (t0.z + t3.z) / 2]);
   await render(4, 0.25);
   await shot('elec-eoliennes');
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 110, 0.25, 0.4), [t0.x, t0.z]);
+  await shot('elec-eolienne-proche');
   const angleA = await page.evaluate(() => window.__electricite.debug());
   const ln = st.data.lines[0];
   await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 520, 0.5, 0.3), [(ln.ax + ln.bx) / 2, (ln.az + ln.bz) / 2]);
@@ -129,7 +136,7 @@ try {
   const ux = (ln.bx - ln.ax) / ln.lengthM, uz = (ln.bz - ln.az) / ln.lengthM;
   await page.evaluate(([x, z, lx, lz]) => window.__aube.streetLook(x, z, lx, lz), [ln.ax + ux * pyl + uz * 70, ln.az + uz * pyl - ux * 70, ln.ax + ux * (pyl + 60), ln.az + uz * (pyl + 60)]);
   await shot('elec-ligne-rue');
-  if (solaire) { const p = posOf(solaire); await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 120, 0.6, 2.4), [p.x, p.z]); await shot('elec-solaire'); }
+  if (solaire) { const p = posOf(solaire); await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 130, 0.8, 2.4), [p.x, p.z]); await shot('elec-solaire'); }
   if (barrage) { const p = posOf(barrage); if (p) { await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 140, 0.5, 1.2), [p.x, p.z]); await shot('elec-barrage'); } }
   { const p = posOf(poste); await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 110, 0.6, 0.9), [p.x, p.z]); await shot('elec-poste'); }
   void angleA;
@@ -150,7 +157,7 @@ try {
   check(Math.abs(fund - 0.6) < 1e-9, `financement réglé par le curseur : ${fund}`);
   await page.click('#elec-panel button[data-act="overlay"]');
   await page.waitForTimeout(300);
-  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 1300, 1.1, 0.2), [at[0] - 150, at[1]]);
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 700, 1.1, 0.2), [at[0], at[1]]);
   await render(2, 0.2);
   const dbg2 = await page.evaluate(() => window.__electricite.debug());
   check(dbg2.overlay && dbg2.overlayVisible && dbg2.overlayCells > 0, `calque réseau affiché : ${dbg2.overlayCells} cellules colorées`);
