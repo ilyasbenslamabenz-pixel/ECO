@@ -268,7 +268,7 @@ export function buildCity(sim: Simulation, opts: CityPlanOptions): CityBuildResu
     if (a?.id !== 'public_parc_kiosque') continue;
     const th = rotAngle(b.rot[i]!);
     const c = Math.cos(th), s = Math.sin(th);
-    const pts: [number, number, string][] = [[11, 6, 'arbre_jacaranda'], [-11, 6, 'arbre_feuillu_rond'], [11, -2, 'arbre_feuillu_jeune'], [-11, 2, 'arbre_feuillu_rond'],
+    const pts: [number, number, string][] = [[11, 6, 'arbre_platane'], [-11, 6, 'arbre_feuillu_rond'], [11, -2, 'arbre_feuillu_jeune'], [-11, 2, 'arbre_feuillu_rond'],
       [6, 11, 'arbre_peuplier'], [-6, 11, 'arbre_feuillu_jeune'], [-12, -2, 'arbre_petit_ornement'], [3, -12, 'arbre_feuillu_rond']];
     for (const [lx, lz, id] of pts) res.decor.push({ assetId: id, x: b.x[i]! + lx * c + lz * s, z: b.z[i]! - lx * s + lz * c, rot: 0 });
   }

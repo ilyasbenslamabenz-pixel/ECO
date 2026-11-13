@@ -163,8 +163,11 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       const lods: { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[][] = [];
       // Proche : LOD0 (LOD1 pour les arbres, très denses) ; loin : dernier LOD.
       const near = a.category === 'tree' ? Math.min(1, a.lods.length - 1) : 0;
-      const far = a.lods.length - 1;
-      const imp = a.category === 'tree' && far > near && (a.lods[far]?.triangles ?? 1e9) <= 16 ? this.treeImpostor?.(id) ?? null : null;
+      let far = a.lods.length - 1;
+      const cards = a.category === 'tree' && far > near && (a.lods[far]?.triangles ?? 1e9) <= 16;
+      const imp = cards ? this.treeImpostor?.(id) ?? null : null;
+      // Sans imposteur, jamais les « cartes » : elles comportent une plaque horizontale visible de côté.
+      if (cards && !imp) far = near;
       for (const lod of [near, far]) {
         if (imp && lod === far) {
           // Loin : imposteur de la végétation (quad orienté caméra ; la géométrie est créée par lot, voir rebuildDecor).
