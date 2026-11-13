@@ -14,11 +14,11 @@ export const SimEvent = {
   MonthStart: 2,
   /** Début d'année : bilan annuel. */
   YearStart: 3,
-  /** Mise à jour de l'attractivité et des immigrations (toutes les 6 h de jeu). */
+  /** Mise à jour de l'attractivité et des immigrations (toutes les 180 ticks = 18 s réelles à x1). */
   Migration: 4,
   /** Rappel ponctuel : avertissement de déficit. */
   DeficitWarning: 5,
-  /** Synchronisation des occupants vers le module trafic (toutes les heures). */
+  /** Synchronisation des occupants vers le module trafic (toutes les 30 ticks = 3 s réelles à x1). */
   TrafficSync: 6,
 } as const;
 export type SimEventType = (typeof SimEvent)[keyof typeof SimEvent];
@@ -74,6 +74,20 @@ export class EventScheduler {
     const keep = this.heap.filter((e) => e.type !== type);
     this.heap.length = 0;
     for (const e of keep) this.push(e);
+  }
+
+  /**
+   * Change la période des événements récurrents d'un type (sauvegarde faite avec une autre durée de tick) :
+   * l'échéance est ramenée au plus à `now + every`. Sans effet si la période est déjà la bonne.
+   */
+  retime(type: number, every: number, now: number): void {
+    if (!this.heap.some((e) => e.type === type && e.every > 0 && e.every !== every)) return;
+    const all = this.heap.slice();
+    this.heap.length = 0;
+    for (const e of all) {
+      if (e.type === type && e.every > 0) { e.every = every; if (e.at > now + every) e.at = now + every; }
+      this.push(e);
+    }
   }
 
   has(type: number): boolean { return this.heap.some((e) => e.type === type); }

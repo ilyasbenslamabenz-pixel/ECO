@@ -13,6 +13,7 @@ import type { CommandError, NewGameParams, SaveFile, SimStats } from './shared/c
 import { terrainBounds } from './shared/terrain-gen';
 import type { CityBuildResult } from './sim/city-builder';
 import type { SimNotice, SimReport } from './sim/sim-protocol';
+import type { SnapshotMessage } from './shared/protocol';
 import { SimBridge, SimCommandError } from './client/sim-bridge';
 import { createClientState } from './client/state';
 import { AssetLibrary, fetchCatalog } from './render/assets';
@@ -60,7 +61,7 @@ interface DebugInfo {
   pauseRender?: (paused: boolean) => void;
   /** Rend `n` images immédiatement (boucle suspendue : captures rapides en rendu logiciel). */
   renderNow?: (n?: number, dt?: number) => number;
-  lookAt?: (x: number, z: number, distance: number) => void;
+  lookAt?: (x: number, z: number, distance: number, pitch?: number, yaw?: number) => void;
   /** Aperçu courant de l'outil de construction (e2e : rotation proposée, aimantation, validité). */
   toolPreview?: () => unknown;
   /** Statistiques portées par le dernier instantané complet (état exact au chargement). */
@@ -75,6 +76,11 @@ interface DebugInfo {
   trackVehicles?: boolean;
   /** Caméra rue placée en (x, z) regardant (lookX, lookZ). */
   streetLook?: (x: number, z: number, lookX: number, lookZ: number) => void;
+  /** Hauteur du terrain (rendu) en (x, z). */
+  heightAt?: (x: number, z: number) => number;
+  /** Sauvegarde / chargement d'un emplacement nommé par le même chemin que l'interface (e2e). */
+  saveSlot?: (slot: string) => Promise<void>;
+  loadSlot?: (slot: string) => Promise<void>;
 }
 declare global { interface Window { __aube: DebugInfo } }
 
@@ -166,13 +172,14 @@ async function boot(): Promise<void> {
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
   debug.signals = () => render.signals.debug();
+  debug.heightAt = (x, z) => render.terrain.heightAt(x, z);
   debug.streetLook = (x, z, lx, lz) => {
     input.camera.setStreetPosition(x, z, Math.atan2(-(lx - x), -(lz - z)));
     if (input.camera.mode !== 'street') input.camera.setMode('street');
   };
-  debug.lookAt = (x, z, distance) => {
+  debug.lookAt = (x, z, distance, pitch, yaw) => {
     if (input.camera.mode === 'street') input.camera.setMode('aerial');
-    input.camera.setPose({ targetX: x, targetZ: z, targetY: render.terrain.heightAt(x, z), distance });
+    input.camera.setPose({ targetX: x, targetZ: z, targetY: render.terrain.heightAt(x, z), distance, ...(pitch !== undefined ? { pitch } : {}), ...(yaw !== undefined ? { yaw } : {}) });
   };
   debug.benchFrame = () => {
     const r = render.ctx.renderer;
@@ -234,10 +241,30 @@ async function boot(): Promise<void> {
   };
 
   let firstSnapshot: (() => void) | null = null;
+  /** Barycentre et étendue de la ville du dernier instantané (bâtiments + nœuds de routes), null si vide. */
+  let cityCenter: { x: number; z: number; extent: number } | null = null;
+  const computeCityCenter = (s: SnapshotMessage): typeof cityCenter => {
+    const pts: { x: number; z: number }[] = [...s.buildings, ...s.roads.nodes];
+    if (pts.length === 0) return null;
+    let x = 0, z = 0;
+    for (const p of pts) { x += p.x; z += p.z; }
+    x /= pts.length; z /= pts.length;
+    // étendue : 90e centile des distances au barycentre (quelques routes isolées ne font pas dézoomer)
+    const d = pts.map((p) => Math.hypot(p.x - x, p.z - z)).sort((a, b) => a - b);
+    return { x, z, extent: d[Math.min(d.length - 1, Math.floor(d.length * 0.9))] ?? 0 };
+  };
+  /** Place la caméra aérienne sur (x, z) et affine aussitôt le terrain autour (pas de maillage grossier visible). */
+  const focusCamera = (x: number, z: number, distance: number, yaw?: number): void => {
+    if (input.camera.mode === 'street') input.camera.setMode('aerial');
+    input.camera.setPose({ targetX: x, targetZ: z, targetY: render.terrain.heightAt(x, z), distance, ...(yaw !== undefined ? { yaw } : {}) });
+    input.camera.setHome();
+    render.terrain.refineAround(x, z, distance);
+  };
   const seenNotices = new Set<string>();
   b.onSnapshot((s) => {
     debug.snapshotReceived = true;
     debug.snapshotStats = s.stats;
+    cityCenter = computeCityCenter(s);
     state.inGame = true;
     state.cityName = s.params.cityName;
     render.applySnapshot(s);
@@ -305,12 +332,19 @@ async function boot(): Promise<void> {
       const snap = waitSnapshot();
       await b.send('load', { data: r.value });
       await snap;
+      // Recentrage sur la ville chargée (barycentre des bâtiments et des routes), sinon sur le centre de la carte.
+      const c = cityCenter;
+      if (c) focusCamera(c.x, c.z, Math.min(900, Math.max(220, c.extent * 2.2)));
+      else focusCamera(0, 0, 420);
       ui.hideMenu();
       ui.toast('Partie chargée', 'ok');
       autosaver?.start();
       await b.send('setSpeed', { speed: 1 });
     } catch (e) { ui.toast(`Chargement impossible : ${errText(e)}`, 'error'); }
   }
+
+  debug.saveSlot = saveSlot;
+  debug.loadSlot = loadSlot;
 
   async function startNewGame(p: Partial<NewGameParams> = {}): Promise<void> {
     try {
@@ -324,9 +358,7 @@ async function boot(): Promise<void> {
         startHour: params.has('h') ? Number(params.get('h')) : 9,
       });
       await snap;
-      const s = render.terrain.heightAt(0, 0);
-      input.camera.setPose({ targetX: 0, targetZ: 0, targetY: s, distance: 420, yaw: 0.6 });
-      input.camera.setHome();
+      focusCamera(0, 0, 420, 0.6);
       ui.hideMenu();
       autosaver?.start();
       await b.send('setSpeed', { speed: 1 });
@@ -365,6 +397,7 @@ async function boot(): Promise<void> {
       demoViews = { ax, az, street: city.views.street };
       setDemoCamera('aerial');
       input.camera.setHome();
+      render.terrain.refineAround(ax, az, 560);
       debug.demo = { ...city, decor: city.decor.length };
       ui.hideLoading();
       ui.toast(`Démonstration : ${city.buildings} bâtiments (${city.distinctBuildings} modèles différents), ${city.vehicles} véhicules. Touche V : vue rue.`, 'info');

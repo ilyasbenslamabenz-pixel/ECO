@@ -188,17 +188,21 @@ export function meshChunk(src: MeshSource, req: ChunkRequest): ChunkMesh {
       const alt = (h - wl) / Math.max(10, src.maxAltitude);
       const nz1 = vnoise(i / 5.3, j / 5.3);
       const nz2 = vnoise(i / 17.7 + 40, j / 17.7 - 13);
-      // Eau proche (rivière / lac d'altitude / mer) dans un rayon d'un échantillon.
-      let nearRiver = 0;
+      // Eau proche (rivière / lac d'altitude / mer) : distance (en échantillons, fenêtre 5×5) au plus proche
+      // échantillon mouillé. Les berges de rivière reçoivent un poids PROGRESSIF selon cette distance (et un peu
+      // de bruit) au lieu d'un tout-ou-rien sur les 8 voisins, qui dessinait des berges en escalier.
+      let riverD = 9;
       let nearSea = 0;
-      for (let dj = -1; dj <= 1; dj++) {
-        for (let di = -1; di <= 1; di++) {
+      for (let dj = -2; dj <= 2; dj++) {
+        for (let di = -2; di <= 2; di++) {
           const w = wsAt(i + di, j + dj);
           if (w > -1000 && w > hAt(i + di, j + dj)) {
-            if (w > wl + 0.05) nearRiver = 1; else nearSea = 1;
+            const dd = Math.sqrt(di * di + dj * dj);
+            if (w > wl + 0.05) { if (dd < riverD) riverD = dd; } else if (dd <= 1.5) nearSea = 1;
           }
         }
       }
+      const nearRiver = 1 - sstep(0.6, 2.4 + (nz1 - 0.5) * 0.8, riverD);
       let rock = sstep(0.42, 0.85, slope + (nz1 - 0.5) * 0.25) + sstep(0.62, 0.9, alt + (nz2 - 0.5) * 0.15) * 0.8;
       let sand = (1 - sstep(wl + 1.0, wl + 3.2 + nz1 * 1.5, h)) * (nearSea > 0 || h < wl + 2.5 ? 1 : 0.4);
       let gravel = nearRiver * 0.45 * (1 - sand) + sstep(0.5, 0.75, alt) * sstep(0.2, 0.45, slope) * 0.6;

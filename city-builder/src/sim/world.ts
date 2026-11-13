@@ -60,6 +60,15 @@ const fail = (code: CommandError['code'], message: string, phase?: number): { ok
 const MAX_ROAD_HALF_WIDTH = Math.max(...(Object.keys(ROAD_KINDS) as RoadKindId[]).map((k) => halfWidth(k)));
 /** Trajets individuels transmis au trafic au plus par tick. */
 const TRIPS_PER_TICK = 8;
+/**
+ * Périodes (minutes de jeu) des événements au rythme réel fixe, indépendant de la durée de la journée :
+ * une vague d'immigration toutes les 180 ticks (18 s réelles à x1), une synchronisation bâtiments -> trafic
+ * toutes les 30 ticks (3 s).
+ */
+const REALTIME_PERIODS = {
+  mig: Math.round(180 * GAME_MINUTES_PER_TICK * 1000) / 1000,
+  sync: Math.round(30 * GAME_MINUTES_PER_TICK * 1000) / 1000,
+};
 const MAX_NOTICES = 30;
 
 /** Distance d'un point à un segment. */
@@ -286,8 +295,9 @@ export class Simulation {
     this.scheduler.schedule(next(MINUTES_PER_DAY), SimEvent.DayStart, 0, 0, MINUTES_PER_DAY);
     this.scheduler.schedule(next(MINUTES_PER_MONTH), SimEvent.MonthStart, 0, 0, MINUTES_PER_MONTH);
     this.scheduler.schedule(next(MINUTES_PER_YEAR), SimEvent.YearStart, 0, 0, MINUTES_PER_YEAR);
-    this.scheduler.schedule(next(360, 60), SimEvent.Migration, 0, 0, 360);
-    this.scheduler.schedule(next(60, 30), SimEvent.TrafficSync, 0, 0, 60);
+    const { mig, sync } = REALTIME_PERIODS;
+    this.scheduler.schedule(next(mig, mig / 6), SimEvent.Migration, 0, 0, mig);
+    this.scheduler.schedule(next(sync, sync / 2), SimEvent.TrafficSync, 0, 0, sync);
   }
 
   private clearPending(): void {
@@ -685,9 +695,13 @@ export class Simulation {
     }
   };
 
-  tick(): void {
+  /**
+   * Un pas de simulation. `minutes` (minutes de jeu du pas) vaut GAME_MINUTES_PER_TICK en jeu ; les tests
+   * l'augmentent pour faire défiler des journées entières rapidement (même logique, moins de pas).
+   */
+  tick(minutes: number = GAME_MINUTES_PER_TICK): void {
     if (!this.terrain) return;
-    this.clock.advance(GAME_MINUTES_PER_TICK);
+    this.clock.advance(minutes);
     const now = this.clock.totalMinutes;
     this.scheduler.runDue(now, this.onEvent);
     const demo = this.demography;
@@ -1006,6 +1020,9 @@ export class Simulation {
     if (s.sim) {
       this.rng.setState(s.sim.rng);
       this.scheduler.fromJSON(s.sim.scheduler);
+      // Sauvegardes antérieures au ralentissement de l'horloge : périodes « temps réel » remises à jour.
+      this.scheduler.retime(SimEvent.Migration, REALTIME_PERIODS.mig, this.clock.totalMinutes);
+      this.scheduler.retime(SimEvent.TrafficSync, REALTIME_PERIODS.sync, this.clock.totalMinutes);
     } else {
       this.scheduleRecurring();
     }

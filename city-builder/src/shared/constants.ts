@@ -25,8 +25,14 @@ export const MAX_TERRAIN_HEIGHT = 60;
 
 /** Fréquence de la simulation (ticks par seconde à vitesse x1). */
 export const SIM_TICKS_PER_SECOND = 10;
-/** Minutes de jeu écoulées par tick à vitesse x1. */
-export const GAME_MINUTES_PER_TICK = 2;
+/**
+ * Minutes de jeu écoulées par tick à vitesse x1 : 0,2 min => une journée = 7 200 ticks = 12 min réelles à x1
+ * (3 min à x4). Valeur précédente : 2 (journée de 72 s, jugée trop rapide par la recette QA n° 2). Les sauvegardes
+ * stockent des minutes de jeu (`totalMinutes`) : elles restent valides. L'économie reste mensuelle (mêmes montants
+ * par mois de jeu) ; un mois de jeu dure donc 6 h réelles à x1 (1 h 30 à x4). Les événements « temps réel »
+ * (vagues d'immigration, synchronisation du trafic) sont exprimés en ticks : leur rythme réel est inchangé.
+ */
+export const GAME_MINUTES_PER_TICK = 0.2;
 /** Vitesses de simulation autorisées (0 = pause). */
 export const SIM_SPEEDS = [0, 1, 2, 4] as const;
 export type SimSpeed = (typeof SIM_SPEEDS)[number];

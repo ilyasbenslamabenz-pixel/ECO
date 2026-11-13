@@ -56,7 +56,8 @@ export class GameClock {
 
   advance(minutes: number): ClockFlags {
     const t0 = this.totalMinutes;
-    const t1 = t0 + minutes;
+    // Arrondi au millionième de minute : pas de dérive en cumulant des pas non représentables (0,2 min).
+    const t1 = Math.round((t0 + minutes) * 1e6) / 1e6;
     this.totalMinutes = t1;
     const f = this.flags;
     f.hourChanged = Math.floor(t1 / MINUTES_PER_HOUR) !== Math.floor(t0 / MINUTES_PER_HOUR);

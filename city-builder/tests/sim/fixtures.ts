@@ -69,9 +69,10 @@ export function buildTown(s: Simulation): void {
   buildStreet(s, 80, -220, 220, ['immeuble', 'immeuble', 'bureaux', 'usine', 'hopital', 'commissariat', 'caserne', 'boutique', 'maison', 'maison']);
 }
 
-export function runDays(s: Simulation, days: number): void {
-  const ticks = Math.round((days * 24 * 60) / 2);
-  for (let i = 0; i < ticks; i++) s.tick();
+/** Fait défiler `days` journées en pas de 2 minutes de jeu (avance rapide : la journée réelle dure 7 200 ticks). */
+export function runDays(s: Simulation, days: number, minutesPerTick = 2): void {
+  const ticks = Math.round((days * 24 * 60) / minutesPerTick);
+  for (let i = 0; i < ticks; i++) s.tick(minutesPerTick);
 }
 
 /** Quartier dense : `rows` rues parallèles (pas de 40 m) bordées d'immeubles (13 par rue). */

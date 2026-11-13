@@ -45,6 +45,8 @@ interface Chunk {
   mesh: THREE.Mesh | null;
   lod: number;
   pendingLod: number;
+  /** LOD voulu pour la dernière caméra vue (-1 : inconnu). */
+  want: number;
   version: number;
   center: THREE.Vector3;
   radius: number;
@@ -139,7 +141,7 @@ export class TerrainSystem implements IRenderTerrain {
         const i0 = cx * this.cellsPerChunk;
         const j0 = cz * this.cellsPerChunk;
         const c: Chunk = {
-          cx, cz, i0, j0, ring, mesh: null, lod: -1, pendingLod: -1, version: 0,
+          cx, cz, i0, j0, ring, mesh: null, lod: -1, pendingLod: -1, want: -1, version: 0,
           center: new THREE.Vector3(t.originX + (i0 + this.cellsPerChunk / 2) * t.spacing, 0, t.originZ + (j0 + this.cellsPerChunk / 2) * t.spacing),
           radius: CHUNK_SIZE * 0.75, minY: 0, maxY: 0,
         };
@@ -208,6 +210,7 @@ export class TerrainSystem implements IRenderTerrain {
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       let want = d < d0 ? 0 : d < d1 ? 1 : d < d2 ? 2 : 3;
       if (c.ring) want = Math.max(want, 2);
+      c.want = want;
       this.sphere.center.copy(c.center);
       this.sphere.radius = c.radius;
       const visible = this.frustum.intersectsSphere(this.sphere);
@@ -243,6 +246,41 @@ export class TerrainSystem implements IRenderTerrain {
     }
   }
 
+  /**
+   * Affinage SYNCHRONE autour d'un point regardé (ouverture d'une partie, chargement, recentrage) : les chunks
+   * proches passent tout de suite au LOD que voudrait une caméra à `distance` m de ce point, les plus proches
+   * d'abord, dans la limite de `budgetMs`. Sans cela, la vue d'ouverture garde quelques secondes le maillage
+   * grossier initial (pas de 64 m) qui recouvre les rivières et découpe leurs berges par blocs.
+   * Renvoie le nombre de chunks affinés.
+   */
+  refineAround(x: number, z: number, distance: number, budgetMs = 900): number {
+    if (!this.data || this.chunks.length === 0) return 0;
+    const [d0, d1, d2] = this.opts.lodDistances;
+    const camH = Math.max(30, distance * 0.75);
+    const list: { c: Chunk; want: number; d: number }[] = [];
+    for (const c of this.chunks) {
+      const dx = Math.max(0, Math.abs(x - c.center.x) - CHUNK_SIZE / 2);
+      const dz = Math.max(0, Math.abs(z - c.center.z) - CHUNK_SIZE / 2);
+      const d = Math.hypot(dx, dz, camH);
+      let want = d < d0 ? 0 : d < d1 ? 1 : d < d2 ? 2 : 3;
+      if (c.ring) want = Math.max(want, 2);
+      if (c.lod >= 0 && want < c.lod) list.push({ c, want, d });
+    }
+    list.sort((a, b) => a.d - b.d);
+    const t0 = performance.now();
+    let n = 0;
+    for (const { c, want } of list) {
+      if (n > 0 && performance.now() - t0 > budgetMs) break;
+      const m = this.mesher.meshSync(this.request(c, want));
+      if (!m) continue;
+      c.version++; // un maillage plus grossier encore en vol dans le worker sera ignoré
+      c.pendingLod = -1;
+      this.install(c, want, m);
+      n++;
+    }
+    return n;
+  }
+
   /** Vrai quand aucun chunk n'attend de maillage pour la vue courante. */
   get settled(): boolean {
     for (const c of this.chunks) if (c.pendingLod >= 0) return false;
@@ -271,8 +309,12 @@ export class TerrainSystem implements IRenderTerrain {
       if (c.i0 - 1 > p.i1 || c.i0 + cs + 1 < p.i0 || c.j0 - 1 > p.j1 || c.j0 + cs + 1 < p.j0) continue;
       c.version++;
       c.pendingLod = -1;
-      const m = this.mesher.meshSync(this.request(c, Math.max(0, c.lod)));
-      if (m) this.install(c, Math.max(0, c.lod), m);
+      // LOD de re-maillage : au moins aussi fin que celui que veut la caméra (0 si inconnu). Re-mailler au LOD
+      // courant d'un chunk encore grossier (pas de 64 m) faisait déborder l'herbe sur la moitié d'une route
+      // fraîchement nivelée jusqu'à l'affinage suivant.
+      const lod = c.want >= 0 ? Math.min(Math.max(0, c.lod), c.want) : 0;
+      const m = this.mesher.meshSync(this.request(c, lod));
+      if (m) this.install(c, lod, m);
     }
   }
 

@@ -40,7 +40,7 @@ importe three, un module navigateur, ou utilise une API DOM.
 
 - La **simulation** est la seule source de vérité. Elle tourne dans un Web Worker
   (`dist/sim.worker.js`), à pas fixe de 100 ms (`SIM_TICKS_PER_SECOND = 10`), `speed` ticks par pas
-  (vitesses 0/1/2/4). Elle valide chaque commande (coût, collisions, pente, eau, limites).
+  (vitesses 0/1/2/4) ; un tick = 0,2 min de jeu (journée = 12 min réelles à x1). Elle valide chaque commande (coût, collisions, pente, eau, limites).
 - Le **rendu** ne modifie jamais l'état du jeu : il applique un **instantané** complet
   (après `newGame`/`load`) puis des **deltas** (ajouts/suppressions de routes et bâtiments,
   trame véhicules, statistiques).
@@ -66,7 +66,13 @@ réponse `{ kind:'result', reqId, ok:true, data }` ou `{ ok:false, error:{ code,
 | `load` | SaveFile | buildings (+ instantané) | format, version, assets connus |
 
 Worker -> main : `ready`, `result`, `snapshot`, `delta` (≈10/s), `log`.
-Transferables : `terrain.heights.buffer` (instantané), `vehicles.positions/assetIndices` (delta),
+Feux tricolores (ajout rétrocompatible, QA n° 2) : `DeltaMessage.signals?: SignalFrame` = `{ version, states: Uint8Array
+(0 vert, 1 orange, 2 rouge, un octet par bras régulé), layout?: { version, heads: Float32Array (SIGNAL_HEAD_STRIDE = 8
+flottants par bras : pied du poteau x/y/z, cap du trafic entrant, portée vers le centre des voies, voies, rayon du
+carrefour, index du carrefour), nodeIds: Int32Array } }`. La disposition n'est envoyée qu'après un changement de réseau
+ou un instantané ; les états seulement quand ils changent (aucun octet en régime établi). Rendu :
+`src/render/traffic/signals.ts` (7 `InstancedMesh`).
+Transferables : `terrain.heights.buffer` (instantané), `vehicles.positions/assetIndices` et `signals.*` (delta),
 listés par `collectTransferables()`. Les arguments sont revalidés à l'exécution par
 `validateCommandMessage()` (le worker ne fait pas confiance au thread principal).
 
