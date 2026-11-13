@@ -211,6 +211,9 @@ export class ToolController implements IToolController, PointerToolSink {
       case 'KeyX':
         if (m.tool === 'building') { consume(); m.cycleVariant(); }
         return;
+      case 'KeyM':
+        if (m.tool === 'building' || m.tool === 'road') { consume(); m.setMagnet(!m.magnet); m.notify(m.magnet ? 'Aimantation activée' : 'Aimantation désactivée', 'info'); }
+        return;
       case 'KeyG':
         if (m.tool === 'building') { consume(); m.setAutoAlign(!m.autoAlign); }
         return;
@@ -275,7 +278,7 @@ export class ToolController implements IToolController, PointerToolSink {
         this.ghost.show(p.asset, p.proposal.x, y, p.proposal.z, p.proposal.rot, p.variant, p.validity);
         const v = p.variant >= 0 ? p.asset.variants[p.variant] : undefined;
         const head = `${p.asset.nameFr}${v ? ` · ${v.nameFr}` : ''}`;
-        const snap = p.proposal.snapped ? ' · façade côté route' : '';
+        const snap = (p.proposal.snapped ? ' · façade côté route' : '') + (p.proposal.neighbor ? ' · aligné sur le voisin' : '');
         if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');
         else tag(`${head}\n${fmt(p.cost)} ¢${snap}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
@@ -284,7 +287,7 @@ export class ToolController implements IToolController, PointerToolSink {
         this.road.show({ points: p.points, width: roadWidth(p.type), validity: p.points ? p.validity : 'ok', start: p.start, control: p.control, hover: p.hover });
         if (!p.points) tag(p.message || null, 'info');
         else if (p.validity === 'error') tag(`${fmt(p.length)} m\n${p.message}`, 'error');
-        else tag(`${fmt(p.length)} m · ${fmt(p.cost)} ¢`, p.validity === 'ok' ? 'ok' : 'pending');
+        else tag(`${fmt(p.length)} m · ${fmt(p.cost)} ¢${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
       case 'bulldoze':
         this.hoverMarker.setColor(COLORS.error);

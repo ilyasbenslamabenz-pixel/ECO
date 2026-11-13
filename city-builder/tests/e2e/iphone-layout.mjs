@@ -14,11 +14,15 @@ const VIEWS = [
   { name: '13-portrait', w: 390, h: 844 },
   { name: 'promax-portrait', w: 430, h: 932 },
   { name: '13-paysage', w: 844, h: 390 },
+  // Artifact ouvert dans l'app Claude sur iPhone : la page est affichée sous la barre de l'app (~390×780).
+  { name: 'cadre-claude', w: 390, h: 780 },
 ];
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const MODES = [
   { name: 'partie', q: 'autostart&seed=42' },
   { name: 'demo', q: 'demo' },
+  // Fragment artifact.html enveloppé comme le fait l'hébergeur (claude.ai).
+  { name: 'artifact', q: 'autostart&seed=42', page: '__artifact_wrapped.html', only: ['cadre-claude', 'se-portrait'] },
 ];
 
 const { server, base } = await serve();
@@ -28,18 +32,24 @@ try {
   for (const mode of MODES) {
     for (const v of VIEWS) {
       if (ONLY && !ONLY.includes(`${mode.name}-${v.name}`)) continue;
+      if (mode.only && !mode.only.includes(v.name)) continue;
       const ctx = await browser.newContext({ viewport: { width: v.w, height: v.h }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
       const page = await ctx.newPage();
       const errors = collectErrors(page);
-      await page.goto(`${base}/index.html?${mode.q}`, { timeout: 300000, waitUntil: 'domcontentloaded' });
+      await page.goto(`${base}/${mode.page ?? 'index.html'}?${mode.q}`, { timeout: 300000, waitUntil: 'domcontentloaded' });
       await page.waitForFunction(() => {
         const a = window.__aube;
         return a && (a.demoReady || (a.snapshotReceived && !location.search.includes("demo")));
       }, null, { timeout: 300000 });
       await page.waitForTimeout(2500);
+      // Outil route ouvert au doigt : tiroir, options et étiquette « placer le départ » doivent tenir dans l'écran.
+      if (mode.page) { await page.tap('#toolbar button[data-tool=road]').catch(() => undefined); await page.waitForTimeout(600); }
       const bad = await page.evaluate(() => {
         const W = window.innerWidth, H = window.innerHeight, res = [];
-        const roots = document.querySelectorAll('#hud, #toolbar, .panel:not(.hidden), #build-drawer:not(.hidden), #tool-options:not(.hidden), #minimap');
+        // Document plus large que l'écran : dans le cadre de l'app Claude (iframe iOS), l'iframe s'élargit et la
+        // barre supérieure paraît coupée à droite.
+        if (document.documentElement.scrollWidth > W + 0.5) res.push(`document ${document.documentElement.scrollWidth} px de large, écran ${W}`);
+        const roots = document.querySelectorAll('#hud, #toolbar, .panel:not(.hidden), #build-drawer:not(.hidden), #tool-options:not(.hidden), #minimap, #cursor-tag:not(.hidden)');
         for (const r of roots) {
           for (const el of [r, ...r.querySelectorAll('*')]) {
             const cs = getComputedStyle(el);

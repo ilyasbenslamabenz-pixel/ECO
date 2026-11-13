@@ -11,7 +11,7 @@
 import { TILE_SIZE } from '../../shared/constants';
 import type { CatalogAsset } from '../../shared/catalog';
 import { rotateQuarter } from '../../shared/math';
-import { angleToRot, distSegmentObb, footprintObb, normRot, obbAabb, obbOverlap, type Obb } from '../../shared/footprint';
+import { angleToRot, buildingGap, distSegmentObb, footprintObb, normRot, obbAabb, obbOverlap, type Obb } from '../../shared/footprint';
 import { roadWidth, type WorldMirror } from './mirror';
 
 export interface PlacementProposal {
@@ -26,6 +26,50 @@ export interface PlacementProposal {
   obb: Obb;
   /** Avertissement local (indicatif) : chevauchement prévisible avec une route ou un bâtiment. */
   localConflict: boolean;
+  /** Vrai si la position a été aimantée contre un bâtiment voisin (côte à côte, façades alignées). */
+  neighbor?: boolean;
+}
+
+/** Demi-étendue d'une empreinte orientée selon la direction unitaire (ux, uz). */
+function extentAlong(o: Obb, ux: number, uz: number): number {
+  // Axe local x en monde = (c, −s), axe z = (s, c).
+  return o.hx * Math.abs(o.c * ux - o.s * uz) + o.hz * Math.abs(o.s * ux + o.c * uz);
+}
+
+/**
+ * Aimantation au voisin : dans le repère (t, n) — t le long de la rangée, n vers l'arrière (−n = côté façade) —,
+ * cherche la position la plus proche (déplacement ≤ maxShift) où le bâtiment se place côte à côte avec un voisin
+ * (écart minimal respecté, pas de chevauchement) et façade alignée sur la sienne. Renvoie le centre, ou null.
+ * `parallelOnly` : voisins d'orientation parallèle seulement (placement libre).
+ */
+export function snapToNeighbor(m: WorldMirror, asset: CatalogAsset, o: Obb, tx: number, tz: number, nx: number, nz: number, maxShift: number, parallelOnly = false): { x: number; z: number } | null {
+  const hT = extentAlong(o, tx, tz), hN = extentAlong(o, nx, nz);
+  let best: { x: number; z: number; cost: number } | null = null;
+  for (const b of m.buildings.values()) {
+    const ob = m.buildingObb(b);
+    if (!ob) continue;
+    const dx = ob.cx - o.cx, dz = ob.cz - o.cz;
+    if (dx * dx + dz * dz > (hT + 60) * (hT + 60)) continue;
+    if (parallelOnly) {
+      // Axes parallèles (au quart de tour près) : |sin(2·Δ)| ≈ 0.
+      const cross = ob.c * o.s - ob.s * o.c, dot = ob.c * o.c + ob.s * o.s;
+      if (Math.abs(2 * cross * dot) > 0.02) continue;
+    }
+    const dt = dx * tx + dz * tz, dn = dx * nx + dz * nz;
+    const hTb = extentAlong(ob, tx, tz), hNb = extentAlong(ob, nx, nz);
+    // Même rangée : les profondeurs se recouvrent.
+    if (Math.abs(dn) > hN + hNb) continue;
+    const gap = buildingGap(asset.category, m.asset(b.assetId)?.category ?? '') + 0.1;
+    // Façades alignées (bord côté −n).
+    const sn = dn - hNb + hN;
+    for (const side of [-1, 1]) {
+      const st = dt + side * (hTb + hT + gap);
+      if (Math.abs(st) > maxShift || Math.abs(sn) > maxShift) continue;
+      const cost = Math.abs(st) + Math.abs(sn) * 0.5;
+      if (!best || cost < best.cost) best = { x: o.cx + tx * st + nx * sn, z: o.cz + tz * st + nz * sn, cost };
+    }
+  }
+  return best ? { x: Math.round(best.x * 100) / 100, z: Math.round(best.z * 100) / 100 } : null;
 }
 
 /** Normale locale de façade (rot = 0) d'après le catalogue ; +Z par défaut. */
@@ -51,8 +95,11 @@ export function rotationFacing(asset: CatalogAsset, dx: number, dz: number): num
   return best;
 }
 
-/** Vrai si l'empreinte orientée chevauche une route (demi-largeur, axe courbe) ou un bâtiment existant. */
-export function obbConflicts(m: WorldMirror, o: Obb): boolean {
+/**
+ * Vrai si l'empreinte orientée chevauche une route (demi-largeur, axe courbe) ou un bâtiment existant (avec
+ * l'écart minimal exigé par la simulation autour des maisons quand `category` est donnée).
+ */
+export function obbConflicts(m: WorldMirror, o: Obb, category?: string): boolean {
   const bb = obbAabb(o);
   for (const e of m.edges.values()) {
     const v = m.edgeView(e);
@@ -68,7 +115,9 @@ export function obbConflicts(m: WorldMirror, o: Obb): boolean {
   }
   for (const b of m.buildings.values()) {
     const other = m.buildingObb(b);
-    if (other && obbOverlap(o, other, 0.05)) return true;
+    if (!other) continue;
+    const gap = category ? buildingGap(category, m.asset(b.assetId)?.category ?? '') : 0;
+    if (obbOverlap(o, other, gap > 0 ? -gap : 0.05)) return true;
   }
   return false;
 }
@@ -79,6 +128,8 @@ export interface SnapOptions {
   autoAlign: boolean;
   /** Distance supplémentaire (m) au-delà de laquelle on n'accroche plus la route. */
   reach?: number;
+  /** Aimantation contre les bâtiments voisins (côte à côte, façades alignées). */
+  magnet?: boolean;
 }
 
 /** Recul (m) entre le bord du trottoir et la façade. */
@@ -98,7 +149,18 @@ export function proposePlacement(m: WorldMirror, asset: CatalogAsset, x: number,
     const cx = ox + Math.round((x - ox - w / 2) / TILE_SIZE) * TILE_SIZE + w / 2;
     const cz = oz + Math.round((z - oz - d / 2) / TILE_SIZE) * TILE_SIZE + d / 2;
     const o = footprintObb(tX, tZ, cx, cz, rot);
-    return { x: cx, z: cz, rot, snapped: false, edgeId: null, obb: o, localConflict: obbConflicts(m, o) };
+    if (opt.magnet) {
+      // Voisin parallèle le plus proche : repère de ses propres axes, essayé dans les deux sens.
+      const r = Math.round(normRot(rot)) % 4;
+      const [ax, az] = r % 2 === 0 ? [1, 0] : [0, 1];
+      for (const [tx, tz, nx, nz] of [[ax, az, -az, ax], [-az, ax, ax, az]] as const) {
+        const q = snapToNeighbor(m, asset, o, tx, tz, nx, nz, TILE_SIZE * 0.75, true);
+        if (!q) continue;
+        const o2 = footprintObb(tX, tZ, q.x, q.z, rot);
+        if (!obbConflicts(m, o2, asset.category)) return { x: q.x, z: q.z, rot, snapped: false, edgeId: null, obb: o2, localConflict: false, neighbor: true };
+      }
+    }
+    return { x: cx, z: cz, rot, snapped: false, edgeId: null, obb: o, localConflict: obbConflicts(m, o, asset.category) };
   };
   const fw = Math.max(tX, tZ) * TILE_SIZE;
   const reach = opt.reach ?? 10;
@@ -122,9 +184,17 @@ export function proposePlacement(m: WorldMirror, asset: CatalogAsset, x: number,
     const cx = Math.round((near.px + nx * s) * 100) / 100;
     const cz = Math.round((near.pz + nz * s) * 100) / 100;
     const o = footprintObb(tX, tZ, cx, cz, rot);
-    const conflict = obbConflicts(m, o);
+    const conflict = obbConflicts(m, o, asset.category);
     const p: PlacementProposal = { x: cx, z: cz, rot, snapped: true, edgeId: e.id, obb: o, localConflict: conflict };
     if (!first) first = p;
+    if (opt.magnet && k === 0) {
+      // Le long de la route : côte à côte avec le voisin le plus proche, façades alignées (n = vers l'arrière).
+      const q = snapToNeighbor(m, asset, o, near.tx, near.tz, nx, nz, Math.max(4, Math.min(12, halfDepth)));
+      if (q) {
+        const o2 = footprintObb(tX, tZ, q.x, q.z, rot);
+        if (!obbConflicts(m, o2, asset.category)) return { x: q.x, z: q.z, rot, snapped: true, edgeId: e.id, obb: o2, localConflict: false, neighbor: true };
+      }
+    }
     if (!conflict) return p;
   }
   // Si le curseur s'est éloigné au-delà de la portée, placement libre.

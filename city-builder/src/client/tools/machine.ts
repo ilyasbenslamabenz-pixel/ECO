@@ -89,6 +89,8 @@ export class ConstructionTools {
   /** Rayon d'accrochage (m) ; l'appelant l'adapte au zoom. */
   snapRadius = 10;
   angleSnap = false;
+  /** Aimantation « droite » (angles et longueurs ronds pour les routes, alignement sur les voisins pour les bâtiments). */
+  magnet = true;
   readonly draft = new RoadDraft();
   readonly undo = new UndoStack();
   preview: ToolPreview = { kind: 'select', hover: null };
@@ -143,6 +145,8 @@ export class ConstructionTools {
 
   setAutoAlign(on: boolean): void { this.autoAlign = on; this.refresh(); }
 
+  setMagnet(on: boolean): void { this.magnet = on; this.refresh(); }
+
   cycleVariant(): void {
     if (!this.asset || this.asset.variants.length === 0) return;
     this.variant = (this.variant + 1) % this.asset.variants.length;
@@ -176,7 +180,7 @@ export class ConstructionTools {
       case 'building': {
         const a = this.asset;
         if (!a || !g) { this.preview = { kind: 'none' }; break; }
-        const proposal = proposePlacement(this.mirror, a, g.x, g.z, { rot: this.rot, autoAlign: this.autoAlign });
+        const proposal = proposePlacement(this.mirror, a, g.x, g.z, { rot: this.rot, autoAlign: this.autoAlign, magnet: this.magnet });
         const prev = this.preview;
         const same = prev.kind === 'building' && prev.asset === a && prev.proposal.x === proposal.x && prev.proposal.z === proposal.z && prev.proposal.rot === proposal.rot && prev.variant === this.variant;
         if (same && prev.kind === 'building' && (prev.validity === 'pending' || this.validatedVersion === this.mirror.version)) {
@@ -191,7 +195,7 @@ export class ConstructionTools {
       }
       case 'road': {
         const d = this.draft;
-        d.hover = g ? snapRoadPoint(this.mirror, g.x, g.z, { radius: this.snapRadius, angleSnap: this.angleSnap }, d.phase !== 'idle' ? (d.control ?? d.start ?? undefined) : undefined) : null;
+        d.hover = g ? snapRoadPoint(this.mirror, g.x, g.z, { radius: this.snapRadius, angleSnap: this.angleSnap, magnet: this.magnet }, d.phase !== 'idle' ? (d.control ?? d.start ?? undefined) : undefined) : null;
         const points = d.points();
         const def = roadDef(this.roadType);
         const length = d.length();

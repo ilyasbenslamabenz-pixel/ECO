@@ -337,7 +337,11 @@ export function initUI(h: UIHandlers): UIHandle {
           if (!text) { cursorTag.classList.add('hidden'); return; }
           cursorTag.textContent = text;
           cursorTag.className = kind;
-          cursorTag.style.left = `${sx}px`;
+          // Étiquette toujours entière à l'écran (centrée sous le doigt en tactile, à droite du curseur sinon).
+          const w = cursorTag.offsetWidth, W = window.innerWidth;
+          const centered = matchMedia('(max-width: 760px)').matches; // même règle que styles.css (étiquette centrée)
+          const x = centered ? Math.min(Math.max(sx, w / 2 + 6), W - w / 2 - 6) : Math.min(sx, W - w - 22);
+          cursorTag.style.left = `${Math.max(0, x)}px`;
           cursorTag.style.top = `${sy}px`;
         },
         touchConfirm(o) {
@@ -356,6 +360,9 @@ export function initUI(h: UIHandlers): UIHandle {
       info = new InfoPanel({ mirror: a.mirror, camera: a.camera, thumbs: a.thumbs, demolish: (p) => a.machine.demolishTarget(p).then((ok) => { if (ok) a.tools.select(null); return ok; }), close: () => a.tools.select(null) });
       $('tc-ok').addEventListener('click', () => a.tools.confirmTouch());
       $('tc-rotate').addEventListener('click', () => a.tools.rotate());
+      const mag = $('tc-magnet');
+      mag.addEventListener('click', () => { a.machine.setMagnet(!a.machine.magnet); mag.setAttribute('aria-pressed', String(a.machine.magnet)); mag.classList.toggle('active', a.machine.magnet); });
+      mag.classList.toggle('active', a.machine.magnet);
       $('tc-cancel').addEventListener('click', () => a.tools.cancelTouch());
       const cine = $('btn-cinematic');
       cine.classList.remove('hidden');

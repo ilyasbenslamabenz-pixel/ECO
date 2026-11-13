@@ -33,7 +33,7 @@ import {
 } from '../shared/contracts';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SignalFrame, SnapshotMessage } from '../shared/protocol';
 import { dist2 } from '../shared/math';
-import { distSegmentObb, footprintObb, makeObb, normRot, obbAabb, obbOverlap, obbToWorld, pointInObb, type Obb } from '../shared/footprint';
+import { buildingGap, distSegmentObb, footprintObb, HOUSE_GAP, makeObb, normRot, obbAabb, obbOverlap, obbToWorld, pointInObb, type Obb } from '../shared/footprint';
 import { terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
 import { GameClock, MINUTES_PER_DAY, MINUTES_PER_MONTH, MINUTES_PER_YEAR, formatDateFr } from './clock';
 import { DEMOLISH_REFUND_RATE, Economy } from './economy';
@@ -146,6 +146,8 @@ export class Simulation {
 
   /** Empreintes orientées des bâtiments (collisions exactes, angle libre). */
   private readonly obbs = new Map<number, Obb>();
+  /** Catégorie du modèle de chaque bâtiment (écart minimal autour des maisons). */
+  private readonly categoryOf = new Map<number, string>();
   private tilesPerSide = 0;
   private nextBuildingId = 1;
   private roadLength = 0;
@@ -201,6 +203,7 @@ export class Simulation {
     this.pendingPatch = null;
     this.tilesPerSide = this.terrain.samplesX - 1;
     this.obbs.clear();
+    this.categoryOf.clear();
     const size = this.tilesPerSide * TILE_SIZE;
     this.buildingIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
     this.edgeIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
@@ -342,13 +345,19 @@ export class Simulation {
     return 0;
   }
 
-  /** Premier bâtiment dont l'empreinte recouvre `o` (0 si aucun). */
-  private overlappingBuilding(o: Obb): number {
+  /**
+   * Premier bâtiment dont l'empreinte recouvre `o` (0 si aucun). Avec `category` (pose d'un nouveau bâtiment),
+   * l'écart minimal buildingGap() est exigé ; sans (chargement d'une sauvegarde), seul le recouvrement compte.
+   */
+  private overlappingBuilding(o: Obb, category?: string): number {
     const bb = obbAabb(o);
-    this.buildingIndex.query(bb.minX, bb.minZ, bb.maxX, bb.maxZ, this.q);
+    const m = category !== undefined ? HOUSE_GAP : 0;
+    this.buildingIndex.query(bb.minX - m, bb.minZ - m, bb.maxX + m, bb.maxZ + m, this.q);
     for (const id of this.q) {
       const other = this.obbs.get(id);
-      if (other && obbOverlap(o, other, 0.05)) return id;
+      if (!other) continue;
+      const gap = category !== undefined ? buildingGap(category, this.categoryOf.get(id) ?? '') : 0;
+      if (obbOverlap(o, other, gap > 0 ? -gap : 0.05)) return id;
     }
     return 0;
   }
@@ -387,7 +396,10 @@ export class Simulation {
     const tb = terrainBounds(t);
     const bb = obbAabb(o);
     if (bb.minX < tb.minX || bb.minZ < tb.minZ || bb.maxX > tb.maxX || bb.maxZ > tb.maxZ) return fail('OUT_OF_BOUNDS', 'Emplacement hors de la carte');
-    if (this.overlappingBuilding(o) !== 0) return fail('COLLISION', 'Emplacement déjà occupé par un bâtiment');
+    const hit = this.overlappingBuilding(o, asset.category);
+    if (hit !== 0) {
+      return fail('COLLISION', this.overlappingBuilding(o) !== 0 ? 'Emplacement déjà occupé par un bâtiment' : `Trop près d'un autre bâtiment (${HOUSE_GAP} m minimum autour d'une maison)`);
+    }
     if (this.roadClearance(o, MAX_ROAD_HALF_WIDTH) < 0) return fail('COLLISION', 'Le bâtiment empiète sur une route');
     // Relief : échantillons sur une grille LOCALE de l'empreinte (pas d'environ une case).
     let hMin = Infinity;
@@ -425,6 +437,7 @@ export class Simulation {
     const asset = this.getAsset(r.assetId)!;
     const o = this.obbFor(asset, r.x, r.z, r.rot);
     this.obbs.set(r.id, o);
+    this.categoryOf.set(r.id, asset.category);
     const bi = this.buildings.add(r.id, this.assetIndex.get(asset.id)!, r.variant, r.x, r.y, r.z, normRot(r.rot), asset.footprint.tilesX, asset.footprint.tilesZ);
     const bb = obbAabb(o);
     this.buildingIndex.insert(r.id, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
@@ -463,6 +476,7 @@ export class Simulation {
     if (i < 0) return fail('NOT_FOUND', 'Bâtiment introuvable');
     const asset = this.catalog!.assets[this.buildings.assetIndex[i]!]!;
     this.obbs.delete(a.buildingId);
+    this.categoryOf.delete(a.buildingId);
     const displaced = this.buildings.residents[i]!;
     this.demography?.onBuildingRemoved(a.buildingId, this.clock.totalMinutes);
     this.buildings.remove(a.buildingId);
