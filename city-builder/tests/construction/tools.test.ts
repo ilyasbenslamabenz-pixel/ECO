@@ -209,6 +209,7 @@ function setup(sim: SimPort & { start?: (n: number) => void; step?: () => void }
   sim.onDelta((d) => m.applyDelta(d));
   const notes: string[] = [];
   const tools = new ConstructionTools(m, sim, (t, k) => notes.push(`${k}:${t}`));
+  tools.gridSnap = false; // ces scénarios vérifient des coordonnées exactes (grille testée à part)
   return { m, tools, notes };
 }
 
@@ -393,4 +394,22 @@ test('machine (VRAIE simulation) : rue courbe = une vraie Bézier ; aimantation 
   await tools.primary();
   assert.equal(m.buildings.size, 1, notes.join(' | '));
   assert.ok(Math.abs([...m.buildings.values()][0]!.rot - p.proposal.rot) < 1e-6);
+});
+
+test('route : accroche à la grille de construction (premier point, longueur en cases de 8 m)', async () => {
+  const sim = flatMock();
+  const { tools } = setup(sim, sim.catalog);
+  tools.gridSnap = true;
+  sim.start(0);
+  tools.setTool('road', { roadType: 'street' });
+  tools.hover({ x: -61, z: 3 }, null);
+  await tools.primary();
+  assert.equal(tools.preview.kind === 'road' && tools.preview.start?.x, -64);
+  assert.equal(tools.preview.kind === 'road' && tools.preview.start?.z, 0);
+  tools.hover({ x: 58, z: 1 }, null);
+  await settle();
+  const pts = tools.preview.kind === 'road' ? tools.preview.points : null;
+  assert.ok(pts, 'aperçu de route');
+  assert.equal(pts![pts!.length - 2], 56, 'extrémité sur la grille (longueur 120 m)');
+  assert.equal(pts![pts!.length - 1], 0);
 });

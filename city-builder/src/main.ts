@@ -299,6 +299,8 @@ async function boot(): Promise<void> {
   // Construction (miroir de la simulation, outils, aperçus) : branchée AVANT le premier instantané.
   const cons = initConstruction({ sim: b, ui, input, scene: render.ctx.scene, models: lib, catalog, heightAt: (x, z) => render.terrain.heightAt(x, z), renderer: render.ctx.renderer, lite: render.profile.lite });
   render.ctx.onFrame.push((dt) => cons.update(dt));
+  // Grille de construction au sol (cases de 8 m) pendant le tracé des routes, la pose et le terrassement.
+  cons.machine.onToolChange((t) => render.terrain.setGrid(t === 'road' || t === 'building' || t === 'terraform'));
   debug.constructionApplied = () => cons.machine.applied;
   debug.worldToScreen = (x, z) => {
     const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);

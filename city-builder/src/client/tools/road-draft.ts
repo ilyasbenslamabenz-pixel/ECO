@@ -7,6 +7,7 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import type { RoadKindId } from '../../shared/contracts';
+import { TILE_SIZE } from '../../shared/constants';
 import { polylineLength, sampleBezier2, snapAngle } from './geometry';
 import type { WorldMirror } from './mirror';
 
@@ -33,6 +34,8 @@ export interface SnapSettings {
    * au point de départ (prolongement dans l'axe, perpendiculaire, 45°), longueur arrondie au mètre.
    */
   magnet?: boolean;
+  /** Grille de construction : premier point sur une intersection, longueur en multiples de 8 m. */
+  grid?: boolean;
 }
 
 /** Tolérance angulaire de l'aimantation (rad). */
@@ -62,7 +65,7 @@ function referenceDirs(m: WorldMirror, from: { x: number; z: number }): { a: num
 const wrapPi = (a: number): number => { let r = a % (2 * Math.PI); if (r > Math.PI) r -= 2 * Math.PI; if (r < -Math.PI) r += 2 * Math.PI; return r; };
 
 /** Aimantation d'angle et de longueur depuis `from` (null si le curseur est trop près du départ). */
-export function magnetPoint(m: WorldMirror, x: number, z: number, from: { x: number; z: number }): SnapPoint | null {
+export function magnetPoint(m: WorldMirror, x: number, z: number, from: { x: number; z: number }, grid = false): SnapPoint | null {
   const dx = x - from.x, dz = z - from.z;
   const len = Math.hypot(dx, dz);
   if (len < 2) return null;
@@ -81,12 +84,15 @@ export function magnetPoint(m: WorldMirror, x: number, z: number, from: { x: num
       best = { a, d, label, road: r.road };
     }
   }
-  const L = Math.max(1, Math.round(len)); // longueur arrondie au mètre
+  let L = Math.max(1, Math.round(len)); // longueur arrondie au mètre
   if (!best) {
     const u = L / len;
     return { x: from.x + dx * u, z: from.z + dz * u, snap: 'free' };
   }
   const ux = Math.cos(best.a), uz = Math.sin(best.a);
+  // Grille de construction : sur un axe nord-sud / est-ouest, la longueur est un multiple de la case (8 m).
+  const axial = Math.abs(Math.sin(2 * best.a)) < 1e-6;
+  if (grid && axial) L = Math.max(TILE_SIZE, Math.round(len / TILE_SIZE) * TILE_SIZE);
   const ext = Math.max(L + 40, L * 1.6);
   return {
     x: from.x + ux * L, z: from.z + uz * L, snap: 'angle',
@@ -105,14 +111,17 @@ export function snapRoadPoint(m: WorldMirror, x: number, z: number, s: SnapSetti
     const len = Math.hypot(dx, dz);
     if (len > 1) {
       const a = snapAngle(Math.atan2(dz, dx), Math.PI / 12);
-      const l = Math.max(1, Math.round(len)); // longueur au mètre
+      // Longueur au mètre ; grille active : multiple de la case (8 m), l'extrémité tombe sur la grille.
+      const l = s.grid ? Math.max(TILE_SIZE, Math.round(len / TILE_SIZE) * TILE_SIZE) : Math.max(1, Math.round(len));
       return { x: from.x + Math.cos(a) * l, z: from.z + Math.sin(a) * l, snap: 'angle' };
     }
   }
   if (s.magnet && from) {
-    const p = magnetPoint(m, x, z, from);
+    const p = magnetPoint(m, x, z, from, s.grid);
     if (p) return p;
   }
+  // Premier point d'une route, grille active : intersection de la grille de construction la plus proche.
+  if (s.grid && !from) return { x: Math.round(x / TILE_SIZE) * TILE_SIZE, z: Math.round(z / TILE_SIZE) * TILE_SIZE, snap: 'free' };
   return { x, z, snap: 'free' };
 }
 

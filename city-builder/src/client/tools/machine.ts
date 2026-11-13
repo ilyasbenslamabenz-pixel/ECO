@@ -91,6 +91,8 @@ export class ConstructionTools {
   angleSnap = false;
   /** Aimantation « droite » (angles et longueurs ronds pour les routes, alignement sur les voisins pour les bâtiments). */
   magnet = true;
+  /** Accroche des routes à la grille de construction (cases de 8 m). */
+  gridSnap = true;
   readonly draft = new RoadDraft();
   readonly undo = new UndoStack();
   preview: ToolPreview = { kind: 'select', hover: null };
@@ -195,7 +197,7 @@ export class ConstructionTools {
       }
       case 'road': {
         const d = this.draft;
-        d.hover = g ? snapRoadPoint(this.mirror, g.x, g.z, { radius: this.snapRadius, angleSnap: this.angleSnap, magnet: this.magnet }, d.phase !== 'idle' ? (d.control ?? d.start ?? undefined) : undefined) : null;
+        d.hover = g ? snapRoadPoint(this.mirror, g.x, g.z, { radius: this.snapRadius, angleSnap: this.angleSnap, magnet: this.magnet, grid: this.gridSnap && this.magnet }, d.phase !== 'idle' ? (d.control ?? d.start ?? undefined) : undefined) : null;
         const points = d.points();
         const def = roadDef(this.roadType);
         const length = d.length();

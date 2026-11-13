@@ -12,6 +12,7 @@
  * Basé sur MeshStandardMaterial (onBeforeCompile) : ombres, brouillard, IBL et tone mapping de three conservés.
  */
 import * as THREE from 'three';
+import { TILE_SIZE } from '../../shared/constants';
 import type { AssetCatalog, TextureSet } from '../../shared/catalog';
 
 /** Ordre des couches dans les tableaux de textures. */
@@ -280,7 +281,7 @@ const FRAG_MAIN = /* glsl */ `
 
 export interface TerrainMaterialHandle {
   material: THREE.MeshStandardMaterial;
-  uniforms: { uWaterLevel: { value: number }; uMacroStrength: { value: number } };
+  uniforms: { uWaterLevel: { value: number }; uMacroStrength: { value: number }; uGrid: { value: number } };
 }
 
 /** Crée le matériau de terrain (partagé par tous les chunks). */
@@ -294,11 +295,13 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
     uTileB: { value: 1 / tex.tileSizes[4]! },
     uWaterLevel: { value: waterLevel },
     uMacroStrength: { value: 0.32 },
+    /** Grille de construction (cases de 8 m, repère fort tous les 40 m) : 0 = masquée, 1 = visible. */
+    uGrid: { value: 0 },
     uGrassDry: { value: new THREE.Color(0.9, 0.9, 0.64) },
     uGrassLush: { value: new THREE.Color(0.66, 0.88, 0.5) },
   };
   const material = new THREE.MeshStandardMaterial({ name: 'terrain_pbr', roughness: 1, metalness: 0 });
-  material.customProgramCacheKey = (): string => 'aube-terrain-v1';
+  material.customProgramCacheKey = (): string => 'aube-terrain-v2';
   material.onBeforeCompile = (shader): void => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -306,7 +309,20 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\n${VERT_MAIN}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${FRAG_DECL}`)
-      .replace('#include <map_fragment>', FRAG_MAIN)
+      .replace('#include <common>', `#include <common>\nuniform float uGrid;`)
+      .replace('#include <map_fragment>', `${FRAG_MAIN}
+        if (uGrid > 0.001) {
+          vec2 gp = vTWorld.xz / ${TILE_SIZE.toFixed(1)};
+          vec2 gw = fwidth(gp);
+          vec2 gl = abs(fract(gp - 0.5) - 0.5) / max(gw, vec2(1e-4));
+          float line = 1.0 - min(min(gl.x, gl.y), 1.0);
+          vec2 gp5 = gp / 5.0; vec2 gw5 = fwidth(gp5);
+          vec2 gl5 = abs(fract(gp5 - 0.5) - 0.5) / max(gw5 * 1.6, vec2(1e-4));
+          float major = 1.0 - min(min(gl5.x, gl5.y), 1.0);
+          float fade = 1.0 - smoothstep(0.25, 0.6, max(gw.x, gw.y));
+          float g = max(line * 0.35 * fade, major * 0.6) * uGrid;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), g * 0.55);
+        }`)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = tRough;')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;')
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(tWorldN, 0.0)).xyz);')
