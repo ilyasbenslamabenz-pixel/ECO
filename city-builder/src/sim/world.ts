@@ -397,7 +397,7 @@ export class Simulation {
     const tb = terrainBounds(t);
     const bb = obbAabb(o);
     if (bb.minX < tb.minX || bb.minZ < tb.minZ || bb.maxX > tb.maxX || bb.maxZ > tb.maxZ) return fail('OUT_OF_BOUNDS', 'Emplacement hors de la carte');
-    const hit = this.overlappingBuilding(o, asset.category);
+    const hit = this.overlappingBuilding(o, a.planned ? undefined : asset.category);
     if (hit !== 0) {
       return fail('COLLISION', this.overlappingBuilding(o) !== 0 ? 'Emplacement déjà occupé par un bâtiment' : `Trop près d'un autre bâtiment (${HOUSE_GAP} m minimum autour d'une maison)`);
     }

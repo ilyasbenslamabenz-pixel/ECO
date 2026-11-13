@@ -69,9 +69,9 @@ test('batiments : section de sauvegarde courante relue à l\'identique, migratio
 test('batiments : sans quartier, le module n\'écrit ni delta, ni instantané, ni sauvegarde', () => {
   const s = sim();
   for (let i = 0; i < 48 * 31; i++) s.tick(30); // plus d'un mois
-  assert.equal(s.takeDelta().ext, undefined);
-  assert.equal(s.snapshot().ext, undefined);
-  assert.equal('plugins' in s.toSave(), false);
+  assert.equal(s.takeDelta().ext?.['batiments'], undefined);
+  assert.equal(s.snapshot().ext?.['batiments'], undefined);
+  assert.equal(s.toSave().plugins?.['batiments'], undefined);
 });
 
 test('batiments : planDistrict renvoie un plan sans rien construire ni enregistrer', () => {
@@ -118,11 +118,11 @@ test('batiments : applyDistrict exige l\'API d\'écriture, puis construit réell
 
 test('batiments : deltas, instantané et bascules overlay / évolution automatique', () => {
   const s = sim(7);
-  assert.equal(s.takeDelta().ext, undefined);
+  assert.equal(s.takeDelta().ext?.['batiments'], undefined);
   assert.equal(data<{ overlay: boolean }>(cmd(s, 'setOverlay', { on: true })).overlay, true);
   const d = s.takeDelta().ext?.['batiments'] as BatimentsDelta | undefined;
   assert.ok(d && d.overlay === true && d.version === 1);
-  assert.equal(s.takeDelta().ext, undefined, 'aucun delta tant que rien ne change');
+  assert.equal(s.takeDelta().ext?.['batiments'], undefined, 'aucun delta tant que rien ne change');
   data<unknown>(cmd(s, 'registerDistrict', { type: 'affaires', x: 0, z: 0, width: 256, depth: 192, seed: 3 }));
   const d2 = s.takeDelta().ext?.['batiments'] as BatimentsDelta;
   assert.equal(d2.districts.length, 1);
@@ -195,7 +195,7 @@ test('batiments : sauvegarde aller-retour (quartiers, propositions, options) et 
   const v = new Simulation();
   v.setCatalog(catalog);
   assert.equal(v.fromSave(bare), null);
-  assert.equal('plugins' in v.toSave(), false);
+  assert.equal(v.toSave().plugins?.['batiments'], undefined);
 });
 
 test('batiments : init du protocole puis commande hors partie', () => {

@@ -260,6 +260,7 @@ function fakeCtx(calls: [number, boolean][]): PluginContext {
     params: null, inGame: true, catalog: cat, getAsset: (id) => cat.assets.find((a) => a.id === id),
     terrain: { heightAt: () => 0, isWet: () => false, bounds: () => null },
     roads: {} as PluginContext['roads'],
+    economy: {} as PluginContext['economy'],
     buildings: {
       count: 1, store, indexOf: (id: number) => (id === 7 ? 0 : -1), record: () => null,
       assetOf: (id: number) => (id === 7 ? cat.assets[0] : undefined),

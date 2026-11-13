@@ -44,7 +44,7 @@ export interface CommandMap {
   };
   removeRoad: { args: { edgeId: number }; result: { refund: number } };
   placeBuilding: {
-    args: { assetId: string; x: number; z: number; rot: number; variant?: number; dryRun?: boolean };
+    args: { assetId: string; x: number; z: number; rot: number; variant?: number; dryRun?: boolean; /** Lot planifié (quartier généré, rangée mitoyenne) : pas d'écart minimal entre maisons, seul le recouvrement est refusé. */ planned?: boolean };
     result: { buildingId: number; cost: number };
   };
   demolish: { args: { buildingId: number }; result: { refund: number } };

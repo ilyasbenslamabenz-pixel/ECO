@@ -54,7 +54,7 @@ export function applyPlan(plan: DistrictPlan, actions: DistrictActions): ApplyRe
   for (const l of plan.lots) {
     // Sans la voie qu'il borde, le lot n'aurait pas d'accès route : on ne le pose pas.
     if (l.road >= 0 && l.road < roadOk.length && !roadOk[l.road]) { rep.lotsSkipped++; continue; }
-    const out = actions.placeBuilding({ assetId: l.assetId, x: l.x, z: l.z, rot: l.rot, variant: l.variant });
+    const out = actions.placeBuilding({ assetId: l.assetId, x: l.x, z: l.z, rot: l.rot, variant: l.variant, planned: true });
     if (out.ok) { rep.lotsOk++; rep.cost += out.data.cost; rep.buildingIds.push(out.data.buildingId); }
     else { rep.lotsRefused++; note(`${l.assetId} : ${out.error.message}`); }
   }
@@ -78,7 +78,7 @@ export interface ProposalOutcome {
 export function applyProposal(p: EvolutionProposal, actions: DistrictActions): ProposalOutcome {
   const dem = actions.demolish({ buildingId: p.buildingId });
   if (!dem.ok) return { ok: false, buildingId: 0, cost: 0, message: dem.error.message };
-  const built = actions.placeBuilding({ assetId: p.toAsset, x: p.x, z: p.z, rot: p.rot, variant: p.variant });
+  const built = actions.placeBuilding({ assetId: p.toAsset, x: p.x, z: p.z, rot: p.rot, variant: p.variant, planned: true });
   if (built.ok) return { ok: true, buildingId: built.data.buildingId, cost: built.data.cost - dem.data.refund };
   const back = actions.placeBuilding({ assetId: p.fromAsset, x: p.x, z: p.z, rot: p.rot, variant: p.fromVariant });
   return {

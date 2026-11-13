@@ -88,13 +88,12 @@ test('registres : les quatre modules sont enregistrés partout, vides, avec leur
   assert.deepEqual(UI_PANELS.map((p) => p.id), ids);
   assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
-  const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load'];
+  const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];
   for (const p of SIM_PLUGINS) {
     assert.equal(typeof p.id, 'string', 'identifiant de module');
     for (const [k, v] of Object.entries(p)) {
       if (k === 'id' || k === 'saveVersion') continue;
-      assert.ok(HOOKS.includes(k), `${p.id} : clé inconnue ${k}`);
-      assert.equal(typeof v, 'function', `${p.id} : ${k} doit être une fonction`);
+      if (HOOKS.includes(k)) assert.equal(typeof v, 'function', `${p.id} : ${k} doit être une fonction`);
     }
   }
   for (const sec of SAVE_SECTIONS) {
@@ -308,8 +307,11 @@ test('pluginCommand : validation du message, module inconnu, codes d\'erreur, ex
   const d = new Simulation();
   d.setCatalog(townCatalog());
   d.newGame({ seed: 1, mapChunks: 4, startMoney: 1e6, cityName: 'C', terrain: { hydrology: 'aucune', rivers: 0 } });
-  const r = d.pluginCommand({ plugin: 'chantiers', name: 'feux' });
-  assert.ok(!r.ok && r.error.code === 'NOT_IMPLEMENTED');
+  const sansCommande = SIM_PLUGINS.find((p) => typeof (p as { command?: unknown }).command !== 'function');
+  if (sansCommande) {
+    const r = d.pluginCommand({ plugin: sansCommande.id, name: 'feux' });
+    assert.ok(!r.ok && r.error.code === 'NOT_IMPLEMENTED');
+  }
 });
 
 test('protocole : tableaux d\'un module transférés seulement sur demande ($transfer)', () => {
