@@ -3,9 +3,9 @@
  * textures PBR partagées, GLB LOD0/1/2 par modèle, fragment de catalogue `assets/catalog.transport.json`.
  *   npx tsx tools/transport/build.ts [--only=id,id]
  *
- * Les fichiers sont écrits sous `assets/models/transport/_src/` : le segment `_src` est exclu de la copie
- * vers dist par scripts/build.mjs, donc ces assets ne pèsent RIEN dans le build tant qu'ils ne sont pas utilisés
- * (voir docs/requests/assets-transport.md pour l'activation). Le fragment `catalog.*.json` n'est pas copié non plus.
+ * Les fichiers sont écrits sous `assets/models/transport/` (activés par le module `hubs`, phase 2C : port et
+ * aéroport) ; le fragment `catalog.transport.json` est fusionné dans `assets/catalog.json` par
+ * `tools/transport/catalog.ts` (ou par le pipeline, générateur enregistré dans tools/generators/index.ts).
  * Exporte `generateTransport(ctx)` (même signature que les générateurs de tools/generators).
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -19,7 +19,7 @@ import { TModel } from './mesh';
 import { PORT_DEFS } from './port';
 import { writeTransportTextures, type TransportTextureFiles } from './textures';
 
-export const TRANSPORT_DIR = 'models/transport/_src';
+export const TRANSPORT_DIR = 'models/transport';
 export const ALL_DEFS: TransportDef[] = [...PORT_DEFS, ...AIRPORT_DEFS];
 const AUTHOR = 'Projet Aube Urbaine (générateur procédural, œuvre originale CC0)';
 
@@ -70,7 +70,8 @@ export async function buildTransport(def: TransportDef, assetsDir: string, tex: 
   const asset: CatalogAsset = {
     id: def.id,
     nameFr: def.nameFr,
-    category: def.category,
+    // Catégorie `transport` (hors bâtiments) : pièces composées par le module `hubs` (src/sim/hubs, src/render/hubs).
+    category: 'transport',
     lods,
     dimensions: dims,
     footprint: def.footprint ?? { tilesX: 0, tilesZ: 0 },
@@ -81,7 +82,7 @@ export async function buildTransport(def: TransportDef, assetsDir: string, tex: 
     variants: [{ id: 'origine', nameFr: 'Teintes d’origine' }, ...(def.variants ?? []).map((v) => ({ id: v.id, nameFr: v.nameFr, materialOverrides: Object.fromEntries(Object.entries(v.overrides).map(([k, c]) => [k, { color: c! }])) }))],
     textureSets: [...usedSets].sort(),
     license: { spdx: 'CC0-1.0', source: `tools/transport/${def.group === 'port' ? 'port' : 'airport'}.ts#${def.id}`, author: AUTHOR },
-    tags: ['transport', 'categorie:transport', 'unused', `groupe:${def.group}`, `type:${def.kind}`, 'genere', ...(def.origin === 'flottaison' ? ['origine:flottaison', `tirant_eau:${def.draftM ?? 0}`] : []), ...anims, ...(def.tags ?? [])],
+    tags: ['transport', 'categorie:transport', `groupe:${def.group}`, `type:${def.kind}`, 'genere', ...(def.origin === 'flottaison' ? ['origine:flottaison', `tirant_eau:${def.draftM ?? 0}`] : []), ...anims, ...(def.tags ?? [])],
     ...(def.vehicle ? { vehicle: { ...def.vehicle, lengthM: +Math.max(dims.depth, dims.width).toFixed(3) } } : {}),
   };
   return { asset, lodTriangles: tris, lodBytes: bytes, nodes };

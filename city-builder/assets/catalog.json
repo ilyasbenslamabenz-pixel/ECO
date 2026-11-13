@@ -20438,6 +20438,2915 @@
         "densite:faible",
         "genere"
       ]
+    },
+    {
+      "id": "port_quai_droit",
+      "nameFr": "Quai — module droit (32 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_quai_droit_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 1560
+        },
+        {
+          "file": "models/transport/port/port_quai_droit_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 496
+        },
+        {
+          "file": "models/transport/port/port_quai_droit_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 194
+        }
+      ],
+      "dimensions": {
+        "width": 32,
+        "depth": 24.75,
+        "height": 28.75
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_quai_droit",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:quai",
+        "genere",
+        "module",
+        "niveau:quai_y0",
+        "ecartement_rails:20"
+      ]
+    },
+    {
+      "id": "port_quai_angle",
+      "nameFr": "Quai — module d’angle",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_quai_angle_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 1228
+        },
+        {
+          "file": "models/transport/port/port_quai_angle_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 692
+        },
+        {
+          "file": "models/transport/port/port_quai_angle_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 208
+        }
+      ],
+      "dimensions": {
+        "width": 24.75,
+        "depth": 24.75,
+        "height": 23.75
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_quai_angle",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:quai",
+        "genere",
+        "module",
+        "niveau:quai_y0"
+      ]
+    },
+    {
+      "id": "port_quai_rampe",
+      "nameFr": "Quai — rampe ro-ro (ferries)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_quai_rampe_lod0.glb",
+          "maxDistance": 220,
+          "triangles": 1190
+        },
+        {
+          "file": "models/transport/port/port_quai_rampe_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 650
+        },
+        {
+          "file": "models/transport/port/port_quai_rampe_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 342
+        }
+      ],
+      "dimensions": {
+        "width": 24.1,
+        "depth": 37.392,
+        "height": 16.7
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_quai_rampe",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:quai",
+        "genere",
+        "anim:rampe",
+        "module",
+        "niveau:quai_y0",
+        "passagers"
+      ]
+    },
+    {
+      "id": "port_grue_portique",
+      "nameFr": "Portique à conteneurs",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_grue_portique_lod0.glb",
+          "maxDistance": 350,
+          "triangles": 2554
+        },
+        {
+          "file": "models/transport/port/port_grue_portique_lod1.glb",
+          "maxDistance": 1200,
+          "triangles": 1842
+        },
+        {
+          "file": "models/transport/port/port_grue_portique_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 844
+        }
+      ],
+      "dimensions": {
+        "width": 23.73,
+        "depth": 99.4,
+        "height": 72.489
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "orange",
+          "nameFr": "Portique orange",
+          "materialOverrides": {
+            "bleu": {
+              "color": "#d0622a"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Portique rouge",
+          "materialOverrides": {
+            "bleu": {
+              "color": "#b8312a"
+            },
+            "blanc": {
+              "color": "#e9e9e5"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Portique vert",
+          "materialOverrides": {
+            "bleu": {
+              "color": "#3e7a4f"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_grue_portique",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:grue",
+        "genere",
+        "anim:fleche",
+        "anim:chariot",
+        "anim:cables",
+        "anim:palonnier",
+        "ecartement_rails:20"
+      ]
+    },
+    {
+      "id": "port_grue_mobile",
+      "nameFr": "Grue mobile portuaire",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_grue_mobile_lod0.glb",
+          "maxDistance": 250,
+          "triangles": 3204
+        },
+        {
+          "file": "models/transport/port/port_grue_mobile_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 1524
+        },
+        {
+          "file": "models/transport/port/port_grue_mobile_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 780
+        }
+      ],
+      "dimensions": {
+        "width": 51.538,
+        "depth": 19.2,
+        "height": 37.968
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Grue jaune",
+          "materialOverrides": {
+            "orange": {
+              "color": "#e0a321"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Grue bleue",
+          "materialOverrides": {
+            "orange": {
+              "color": "#2a5b8c"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_grue_mobile",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:grue",
+        "genere",
+        "anim:tourelle",
+        "anim:fleche"
+      ]
+    },
+    {
+      "id": "port_conteneur_20",
+      "nameFr": "Conteneur 20 pieds (NORDA)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_conteneur_20_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 240
+        },
+        {
+          "file": "models/transport/port/port_conteneur_20_lod1.glb",
+          "maxDistance": 300,
+          "triangles": 16
+        },
+        {
+          "file": "models/transport/port/port_conteneur_20_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 10
+        }
+      ],
+      "dimensions": {
+        "width": 6.075,
+        "depth": 2.462,
+        "height": 2.593
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Coque rouge",
+          "materialOverrides": {
+            "ct_bleu": {
+              "color": "#a33a2c"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Coque vert",
+          "materialOverrides": {
+            "ct_bleu": {
+              "color": "#3f6e48"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Coque gris",
+          "materialOverrides": {
+            "ct_bleu": {
+              "color": "#9a9fa3"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Coque orange",
+          "materialOverrides": {
+            "ct_bleu": {
+              "color": "#c96b2c"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Coque blanc",
+          "materialOverrides": {
+            "ct_bleu": {
+              "color": "#dcdcd6"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Coque jaune",
+          "materialOverrides": {
+            "ct_bleu": {
+              "color": "#c9a236"
+            }
+          }
+        },
+        {
+          "id": "brun",
+          "nameFr": "Coque brun",
+          "materialOverrides": {
+            "ct_bleu": {
+              "color": "#734a33"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_conteneur_20",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:conteneur",
+        "genere",
+        "longueur_pieds:20"
+      ]
+    },
+    {
+      "id": "port_conteneur_40",
+      "nameFr": "Conteneur 40 pieds (KALIX)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_conteneur_40_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 240
+        },
+        {
+          "file": "models/transport/port/port_conteneur_40_lod1.glb",
+          "maxDistance": 300,
+          "triangles": 16
+        },
+        {
+          "file": "models/transport/port/port_conteneur_40_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 10
+        }
+      ],
+      "dimensions": {
+        "width": 12.209,
+        "depth": 2.462,
+        "height": 2.593
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Coque bleu",
+          "materialOverrides": {
+            "ct_rouge": {
+              "color": "#2c5a8e"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Coque vert",
+          "materialOverrides": {
+            "ct_rouge": {
+              "color": "#3f6e48"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Coque gris",
+          "materialOverrides": {
+            "ct_rouge": {
+              "color": "#9a9fa3"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Coque orange",
+          "materialOverrides": {
+            "ct_rouge": {
+              "color": "#c96b2c"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Coque blanc",
+          "materialOverrides": {
+            "ct_rouge": {
+              "color": "#dcdcd6"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Coque jaune",
+          "materialOverrides": {
+            "ct_rouge": {
+              "color": "#c9a236"
+            }
+          }
+        },
+        {
+          "id": "brun",
+          "nameFr": "Coque brun",
+          "materialOverrides": {
+            "ct_rouge": {
+              "color": "#734a33"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_conteneur_40",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:conteneur",
+        "genere",
+        "longueur_pieds:40"
+      ]
+    },
+    {
+      "id": "port_conteneur_40hc",
+      "nameFr": "Conteneur 40 pieds high cube (MERIDO)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_conteneur_40hc_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 240
+        },
+        {
+          "file": "models/transport/port/port_conteneur_40hc_lod1.glb",
+          "maxDistance": 300,
+          "triangles": 16
+        },
+        {
+          "file": "models/transport/port/port_conteneur_40hc_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 10
+        }
+      ],
+      "dimensions": {
+        "width": 12.209,
+        "depth": 2.462,
+        "height": 2.898
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Coque rouge",
+          "materialOverrides": {
+            "ct_vert": {
+              "color": "#a33a2c"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Coque bleu",
+          "materialOverrides": {
+            "ct_vert": {
+              "color": "#2c5a8e"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Coque gris",
+          "materialOverrides": {
+            "ct_vert": {
+              "color": "#9a9fa3"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Coque orange",
+          "materialOverrides": {
+            "ct_vert": {
+              "color": "#c96b2c"
+            }
+          }
+        },
+        {
+          "id": "blanc",
+          "nameFr": "Coque blanc",
+          "materialOverrides": {
+            "ct_vert": {
+              "color": "#dcdcd6"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Coque jaune",
+          "materialOverrides": {
+            "ct_vert": {
+              "color": "#c9a236"
+            }
+          }
+        },
+        {
+          "id": "brun",
+          "nameFr": "Coque brun",
+          "materialOverrides": {
+            "ct_vert": {
+              "color": "#734a33"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_conteneur_40hc",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:conteneur",
+        "genere",
+        "longueur_pieds:40",
+        "high_cube"
+      ]
+    },
+    {
+      "id": "port_conteneur_frigo",
+      "nameFr": "Conteneur frigorifique 40 pieds (TAVRO)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_conteneur_frigo_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 242
+        },
+        {
+          "file": "models/transport/port/port_conteneur_frigo_lod1.glb",
+          "maxDistance": 300,
+          "triangles": 18
+        },
+        {
+          "file": "models/transport/port/port_conteneur_frigo_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 10
+        }
+      ],
+      "dimensions": {
+        "width": 12.214,
+        "depth": 2.462,
+        "height": 2.898
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Coque rouge",
+          "materialOverrides": {
+            "ct_blanc": {
+              "color": "#a33a2c"
+            }
+          }
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Coque bleu",
+          "materialOverrides": {
+            "ct_blanc": {
+              "color": "#2c5a8e"
+            }
+          }
+        },
+        {
+          "id": "vert",
+          "nameFr": "Coque vert",
+          "materialOverrides": {
+            "ct_blanc": {
+              "color": "#3f6e48"
+            }
+          }
+        },
+        {
+          "id": "gris",
+          "nameFr": "Coque gris",
+          "materialOverrides": {
+            "ct_blanc": {
+              "color": "#9a9fa3"
+            }
+          }
+        },
+        {
+          "id": "orange",
+          "nameFr": "Coque orange",
+          "materialOverrides": {
+            "ct_blanc": {
+              "color": "#c96b2c"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Coque jaune",
+          "materialOverrides": {
+            "ct_blanc": {
+              "color": "#c9a236"
+            }
+          }
+        },
+        {
+          "id": "brun",
+          "nameFr": "Coque brun",
+          "materialOverrides": {
+            "ct_blanc": {
+              "color": "#734a33"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_conteneur_frigo",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:conteneur",
+        "genere",
+        "longueur_pieds:40",
+        "high_cube",
+        "frigorifique"
+      ]
+    },
+    {
+      "id": "port_pile_conteneurs",
+      "nameFr": "Bloc de conteneurs empilés",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_pile_conteneurs_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 9720
+        },
+        {
+          "file": "models/transport/port/port_pile_conteneurs_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 536
+        },
+        {
+          "file": "models/transport/port/port_pile_conteneurs_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 180
+        }
+      ],
+      "dimensions": {
+        "width": 37.5,
+        "depth": 16.552,
+        "height": 10.366
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_pile_conteneurs",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:conteneur",
+        "genere",
+        "stockage"
+      ]
+    },
+    {
+      "id": "port_entrepot",
+      "nameFr": "Entrepôt portuaire",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_entrepot_lod0.glb",
+          "maxDistance": 250,
+          "triangles": 696
+        },
+        {
+          "file": "models/transport/port/port_entrepot_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 480
+        },
+        {
+          "file": "models/transport/port/port_entrepot_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 126
+        }
+      ],
+      "dimensions": {
+        "width": 55.3,
+        "depth": 36.3,
+        "height": 13.2
+      },
+      "footprint": {
+        "tilesX": 7,
+        "tilesZ": 5
+      },
+      "cost": 420000,
+      "upkeepPerMonth": 2600,
+      "capacity": {
+        "residents": 0,
+        "jobs": 45
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 20,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        },
+        {
+          "x": 24,
+          "z": 20,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Bardage bleu acier",
+          "materialOverrides": {
+            "bardage": {
+              "color": "#7f9db8"
+            }
+          }
+        },
+        {
+          "id": "sable",
+          "nameFr": "Bardage sable",
+          "materialOverrides": {
+            "bardage": {
+              "color": "#c9b48f"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_entrepot",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:entrepot",
+        "genere"
+      ]
+    },
+    {
+      "id": "port_capitainerie",
+      "nameFr": "Capitainerie",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_capitainerie_lod0.glb",
+          "maxDistance": 250,
+          "triangles": 698
+        },
+        {
+          "file": "models/transport/port/port_capitainerie_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 520
+        },
+        {
+          "file": "models/transport/port/port_capitainerie_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 312
+        }
+      ],
+      "dimensions": {
+        "width": 24.56,
+        "depth": 15.7,
+        "height": 33.3
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 2
+      },
+      "cost": 380000,
+      "upkeepPerMonth": 2100,
+      "capacity": {
+        "residents": 0,
+        "jobs": 25
+      },
+      "frontage": [
+        {
+          "x": -4,
+          "z": 8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_capitainerie",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:capitainerie",
+        "genere",
+        "anim:radar"
+      ]
+    },
+    {
+      "id": "port_gare_maritime",
+      "nameFr": "Gare maritime",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_gare_maritime_lod0.glb",
+          "maxDistance": 250,
+          "triangles": 722
+        },
+        {
+          "file": "models/transport/port/port_gare_maritime_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 626
+        },
+        {
+          "file": "models/transport/port/port_gare_maritime_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 574
+        }
+      ],
+      "dimensions": {
+        "width": 50,
+        "depth": 49,
+        "height": 12.8
+      },
+      "footprint": {
+        "tilesX": 7,
+        "tilesZ": 7
+      },
+      "cost": 950000,
+      "upkeepPerMonth": 5200,
+      "capacity": {
+        "residents": 0,
+        "jobs": 80
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 25,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": 12,
+          "z": 25,
+          "nx": 0,
+          "nz": 1,
+          "kind": "vehicle"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_gare_maritime",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:terminal_passagers",
+        "genere"
+      ]
+    },
+    {
+      "id": "port_porte_conteneurs",
+      "nameFr": "Porte-conteneurs (190 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_porte_conteneurs_lod0.glb",
+          "maxDistance": 500,
+          "triangles": 9456
+        },
+        {
+          "file": "models/transport/port/port_porte_conteneurs_lod1.glb",
+          "maxDistance": 1800,
+          "triangles": 6418
+        },
+        {
+          "file": "models/transport/port/port_porte_conteneurs_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1958
+        }
+      ],
+      "dimensions": {
+        "width": 30,
+        "depth": 197.465,
+        "height": 44.25
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Coque rouge",
+          "materialOverrides": {
+            "bleu_nuit": {
+              "color": "#7d2a24"
+            }
+          }
+        },
+        {
+          "id": "noir",
+          "nameFr": "Coque noire",
+          "materialOverrides": {
+            "bleu_nuit": {
+              "color": "#2b2f33"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_porte_conteneurs",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:navire",
+        "genere",
+        "origine:flottaison",
+        "tirant_eau:9.5"
+      ]
+    },
+    {
+      "id": "port_vraquier",
+      "nameFr": "Vraquier (180 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_vraquier_lod0.glb",
+          "maxDistance": 500,
+          "triangles": 4384
+        },
+        {
+          "file": "models/transport/port/port_vraquier_lod1.glb",
+          "maxDistance": 1800,
+          "triangles": 2374
+        },
+        {
+          "file": "models/transport/port/port_vraquier_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1104
+        }
+      ],
+      "dimensions": {
+        "width": 30,
+        "depth": 185.4,
+        "height": 41.95
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Coque bleue",
+          "materialOverrides": {
+            "noir": {
+              "color": "#2a4a6b"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_vraquier",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:navire",
+        "genere",
+        "origine:flottaison",
+        "tirant_eau:10.5"
+      ]
+    },
+    {
+      "id": "port_ferry",
+      "nameFr": "Ferry à passagers (152 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_ferry_lod0.glb",
+          "maxDistance": 500,
+          "triangles": 6342
+        },
+        {
+          "file": "models/transport/port/port_ferry_lod1.glb",
+          "maxDistance": 1800,
+          "triangles": 3312
+        },
+        {
+          "file": "models/transport/port/port_ferry_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1090
+        }
+      ],
+      "dimensions": {
+        "width": 26,
+        "depth": 158.4,
+        "height": 37.473
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "vert",
+          "nameFr": "Livrée verte",
+          "materialOverrides": {
+            "livree": {
+              "color": "#1f7a6b"
+            }
+          }
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Livrée rouge",
+          "materialOverrides": {
+            "livree": {
+              "color": "#b02a2a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_ferry",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:navire",
+        "genere",
+        "origine:flottaison",
+        "tirant_eau:6.2",
+        "passagers"
+      ]
+    },
+    {
+      "id": "port_remorqueur",
+      "nameFr": "Remorqueur portuaire",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_remorqueur_lod0.glb",
+          "maxDistance": 250,
+          "triangles": 4068
+        },
+        {
+          "file": "models/transport/port/port_remorqueur_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 1850
+        },
+        {
+          "file": "models/transport/port/port_remorqueur_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 810
+        }
+      ],
+      "dimensions": {
+        "width": 13.3,
+        "depth": 33.6,
+        "height": 19.45
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "bleu",
+          "nameFr": "Coque bleue",
+          "materialOverrides": {
+            "rouge": {
+              "color": "#1f4f8a"
+            }
+          }
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Coque jaune",
+          "materialOverrides": {
+            "rouge": {
+              "color": "#d9a426"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/port.ts#port_remorqueur",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:port",
+        "type:navire",
+        "genere",
+        "origine:flottaison",
+        "tirant_eau:5.2"
+      ]
+    },
+    {
+      "id": "aero_avion_moyen_courrier",
+      "nameFr": "Avion de ligne moyen-courrier (AUBE AIR)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_avion_moyen_courrier_lod0.glb",
+          "maxDistance": 250,
+          "triangles": 5616
+        },
+        {
+          "file": "models/transport/aeroport/aero_avion_moyen_courrier_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 2232
+        },
+        {
+          "file": "models/transport/aeroport/aero_avion_moyen_courrier_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 960
+        }
+      ],
+      "dimensions": {
+        "width": 36.355,
+        "depth": 37.75,
+        "height": 11.306
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "bordeaux",
+          "nameFr": "Ailettes bordeaux",
+          "materialOverrides": {
+            "livree": {
+              "color": "#7a1f3d"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_avion_moyen_courrier",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:avion",
+        "genere",
+        "passagers",
+        "places:180"
+      ]
+    },
+    {
+      "id": "aero_avion_gros_porteur",
+      "nameFr": "Avion gros porteur long-courrier (AUBE AIR)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_avion_gros_porteur_lod0.glb",
+          "maxDistance": 350,
+          "triangles": 6088
+        },
+        {
+          "file": "models/transport/aeroport/aero_avion_gros_porteur_lod1.glb",
+          "maxDistance": 1200,
+          "triangles": 2512
+        },
+        {
+          "file": "models/transport/aeroport/aero_avion_gros_porteur_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1176
+        }
+      ],
+      "dimensions": {
+        "width": 60.683,
+        "depth": 63.85,
+        "height": 16.906
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_avion_gros_porteur",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:avion",
+        "genere",
+        "passagers",
+        "places:330"
+      ]
+    },
+    {
+      "id": "aero_avion_cargo",
+      "nameFr": "Avion cargo (AUBE CARGO)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_avion_cargo_lod0.glb",
+          "maxDistance": 350,
+          "triangles": 6088
+        },
+        {
+          "file": "models/transport/aeroport/aero_avion_cargo_lod1.glb",
+          "maxDistance": 1200,
+          "triangles": 2512
+        },
+        {
+          "file": "models/transport/aeroport/aero_avion_cargo_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1176
+        }
+      ],
+      "dimensions": {
+        "width": 60.683,
+        "depth": 63.85,
+        "height": 16.906
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_avion_cargo",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:avion",
+        "genere",
+        "fret",
+        "charge_t:100"
+      ]
+    },
+    {
+      "id": "aero_aerogare_hall",
+      "nameFr": "Aérogare — hall principal (module)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_aerogare_hall_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 902
+        },
+        {
+          "file": "models/transport/aeroport/aero_aerogare_hall_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 766
+        },
+        {
+          "file": "models/transport/aeroport/aero_aerogare_hall_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 304
+        }
+      ],
+      "dimensions": {
+        "width": 64,
+        "depth": 37.5,
+        "height": 18.2
+      },
+      "footprint": {
+        "tilesX": 8,
+        "tilesZ": 5
+      },
+      "cost": 2400000,
+      "upkeepPerMonth": 14000,
+      "capacity": {
+        "residents": 0,
+        "jobs": 260
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 20,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -20,
+          "z": 20,
+          "nx": 0,
+          "nz": 1,
+          "kind": "vehicle"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_aerogare_hall",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:terminal",
+        "genere",
+        "module"
+      ]
+    },
+    {
+      "id": "aero_aerogare_jetee",
+      "nameFr": "Aérogare — jetée d’embarquement (module)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_aerogare_jetee_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 620
+        },
+        {
+          "file": "models/transport/aeroport/aero_aerogare_jetee_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 308
+        },
+        {
+          "file": "models/transport/aeroport/aero_aerogare_jetee_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 226
+        }
+      ],
+      "dimensions": {
+        "width": 48.8,
+        "depth": 20.95,
+        "height": 13.1
+      },
+      "footprint": {
+        "tilesX": 7,
+        "tilesZ": 3
+      },
+      "cost": 900000,
+      "upkeepPerMonth": 5200,
+      "capacity": {
+        "residents": 0,
+        "jobs": 60
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 9,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_aerogare_jetee",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:terminal",
+        "genere",
+        "module",
+        "portes:2"
+      ]
+    },
+    {
+      "id": "aero_tour_controle",
+      "nameFr": "Tour de contrôle",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_tour_controle_lod0.glb",
+          "maxDistance": 400,
+          "triangles": 774
+        },
+        {
+          "file": "models/transport/aeroport/aero_tour_controle_lod1.glb",
+          "maxDistance": 1400,
+          "triangles": 668
+        },
+        {
+          "file": "models/transport/aeroport/aero_tour_controle_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 332
+        }
+      ],
+      "dimensions": {
+        "width": 18.4,
+        "depth": 15.2,
+        "height": 59.3
+      },
+      "footprint": {
+        "tilesX": 3,
+        "tilesZ": 2
+      },
+      "cost": 1200000,
+      "upkeepPerMonth": 6000,
+      "capacity": {
+        "residents": 0,
+        "jobs": 40
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_tour_controle",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:tour_controle",
+        "genere"
+      ]
+    },
+    {
+      "id": "aero_hangar",
+      "nameFr": "Hangar de maintenance",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_hangar_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 636
+        },
+        {
+          "file": "models/transport/aeroport/aero_hangar_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 440
+        },
+        {
+          "file": "models/transport/aeroport/aero_hangar_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 278
+        }
+      ],
+      "dimensions": {
+        "width": 77.6,
+        "depth": 64.25,
+        "height": 24.5
+      },
+      "footprint": {
+        "tilesX": 10,
+        "tilesZ": 8
+      },
+      "cost": 1600000,
+      "upkeepPerMonth": 7000,
+      "capacity": {
+        "residents": 0,
+        "jobs": 120
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 32,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        }
+      ],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "rouge",
+          "nameFr": "Linteau rouge",
+          "materialOverrides": {
+            "bardage_bleu": {
+              "color": "#a33a2c"
+            }
+          }
+        },
+        {
+          "id": "clair",
+          "nameFr": "Bardage clair",
+          "materialOverrides": {
+            "bardage": {
+              "color": "#e6e5df"
+            },
+            "bardage_gris": {
+              "color": "#9aa0a6"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_hangar",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:hangar",
+        "genere"
+      ]
+    },
+    {
+      "id": "aero_piste_section",
+      "nameFr": "Piste — section courante (60 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_piste_section_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 268
+        },
+        {
+          "file": "models/transport/aeroport/aero_piste_section_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 156
+        },
+        {
+          "file": "models/transport/aeroport/aero_piste_section_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 76
+        }
+      ],
+      "dimensions": {
+        "width": 60,
+        "depth": 60,
+        "height": 0.83
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "route_asphalte",
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_piste_section",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:piste",
+        "genere",
+        "module",
+        "niveau:sol_y0",
+        "axe:x"
+      ]
+    },
+    {
+      "id": "aero_piste_seuil",
+      "nameFr": "Piste — seuil 09 (60 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_piste_seuil_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 1086
+        },
+        {
+          "file": "models/transport/aeroport/aero_piste_seuil_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 744
+        },
+        {
+          "file": "models/transport/aeroport/aero_piste_seuil_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 260
+        }
+      ],
+      "dimensions": {
+        "width": 60,
+        "depth": 67.2,
+        "height": 1.83
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "route_asphalte",
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_piste_seuil",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:piste",
+        "genere",
+        "module",
+        "niveau:sol_y0",
+        "axe:x",
+        "seuil"
+      ]
+    },
+    {
+      "id": "aero_piste_toucher",
+      "nameFr": "Piste — zone de toucher (60 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_piste_toucher_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 240
+        },
+        {
+          "file": "models/transport/aeroport/aero_piste_toucher_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 168
+        },
+        {
+          "file": "models/transport/aeroport/aero_piste_toucher_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 88
+        }
+      ],
+      "dimensions": {
+        "width": 60,
+        "depth": 60,
+        "height": 0.83
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "route_asphalte",
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_piste_toucher",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:piste",
+        "genere",
+        "module",
+        "niveau:sol_y0",
+        "axe:x"
+      ]
+    },
+    {
+      "id": "aero_taxiway_droit",
+      "nameFr": "Voie de circulation — droite (30 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_taxiway_droit_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 298
+        },
+        {
+          "file": "models/transport/aeroport/aero_taxiway_droit_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 196
+        },
+        {
+          "file": "models/transport/aeroport/aero_taxiway_droit_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 80
+        }
+      ],
+      "dimensions": {
+        "width": 30,
+        "depth": 30,
+        "height": 2.03
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "route_asphalte",
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_taxiway_droit",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:taxiway",
+        "genere",
+        "module",
+        "niveau:sol_y0",
+        "axe:x"
+      ]
+    },
+    {
+      "id": "aero_taxiway_virage",
+      "nameFr": "Voie de circulation — virage 90°",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_taxiway_virage_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 514
+        },
+        {
+          "file": "models/transport/aeroport/aero_taxiway_virage_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 310
+        },
+        {
+          "file": "models/transport/aeroport/aero_taxiway_virage_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 150
+        }
+      ],
+      "dimensions": {
+        "width": 30,
+        "depth": 30,
+        "height": 0.75
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "route_asphalte",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_taxiway_virage",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:taxiway",
+        "genere",
+        "module",
+        "niveau:sol_y0",
+        "axe:x"
+      ]
+    },
+    {
+      "id": "aero_aire_stationnement",
+      "nameFr": "Aire de stationnement avion (60 m)",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_aire_stationnement_lod0.glb",
+          "maxDistance": 300,
+          "triangles": 226
+        },
+        {
+          "file": "models/transport/aeroport/aero_aire_stationnement_lod1.glb",
+          "maxDistance": 1000,
+          "triangles": 186
+        },
+        {
+          "file": "models/transport/aeroport/aero_aire_stationnement_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 106
+        }
+      ],
+      "dimensions": {
+        "width": 60,
+        "depth": 60,
+        "height": 23.15
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "sol_beton_brut",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_aire_stationnement",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:aire",
+        "genere",
+        "module",
+        "niveau:sol_y0",
+        "axe:x"
+      ]
+    },
+    {
+      "id": "aero_passerelle",
+      "nameFr": "Passerelle d’embarquement",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_passerelle_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 514
+        },
+        {
+          "file": "models/transport/aeroport/aero_passerelle_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 356
+        },
+        {
+          "file": "models/transport/aeroport/aero_passerelle_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 202
+        }
+      ],
+      "dimensions": {
+        "width": 5.6,
+        "depth": 31.6,
+        "height": 8.35
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_passerelle",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:passerelle",
+        "genere",
+        "anim:tunnel",
+        "anim:tunnel_ext",
+        "anim:cabine"
+      ]
+    },
+    {
+      "id": "aero_tracteur_pushback",
+      "nameFr": "Tracteur de repoussage",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_tracteur_pushback_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 380
+        },
+        {
+          "file": "models/transport/aeroport/aero_tracteur_pushback_lod1.glb",
+          "maxDistance": 320,
+          "triangles": 242
+        },
+        {
+          "file": "models/transport/aeroport/aero_tracteur_pushback_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 182
+        }
+      ],
+      "dimensions": {
+        "width": 3,
+        "depth": 6.8,
+        "height": 2.486
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_tracteur_pushback",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:vehicule_piste",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 25,
+        "lengthM": 6.8
+      }
+    },
+    {
+      "id": "aero_avitailleur",
+      "nameFr": "Camion avitailleur",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_avitailleur_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 712
+        },
+        {
+          "file": "models/transport/aeroport/aero_avitailleur_lod1.glb",
+          "maxDistance": 320,
+          "triangles": 470
+        },
+        {
+          "file": "models/transport/aeroport/aero_avitailleur_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 302
+        }
+      ],
+      "dimensions": {
+        "width": 2.56,
+        "depth": 10.33,
+        "height": 3.587
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_avitailleur",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:vehicule_piste",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "truck",
+        "maxSpeedKmh": 40,
+        "lengthM": 10.33
+      }
+    },
+    {
+      "id": "aero_bus_piste",
+      "nameFr": "Bus de piste",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_bus_piste_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 342
+        },
+        {
+          "file": "models/transport/aeroport/aero_bus_piste_lod1.glb",
+          "maxDistance": 320,
+          "triangles": 228
+        },
+        {
+          "file": "models/transport/aeroport/aero_bus_piste_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 160
+        }
+      ],
+      "dimensions": {
+        "width": 3.08,
+        "depth": 13.66,
+        "height": 3.489
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        },
+        {
+          "id": "jaune",
+          "nameFr": "Carrosserie jaune",
+          "materialOverrides": {
+            "blanc": {
+              "color": "#e0a321"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_bus_piste",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:vehicule_piste",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "bus",
+        "maxSpeedKmh": 40,
+        "lengthM": 13.66
+      }
+    },
+    {
+      "id": "aero_train_bagages",
+      "nameFr": "Train de bagages",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_train_bagages_lod0.glb",
+          "maxDistance": 90,
+          "triangles": 1186
+        },
+        {
+          "file": "models/transport/aeroport/aero_train_bagages_lod1.glb",
+          "maxDistance": 320,
+          "triangles": 784
+        },
+        {
+          "file": "models/transport/aeroport/aero_train_bagages_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 598
+        }
+      ],
+      "dimensions": {
+        "width": 1.6,
+        "depth": 12.82,
+        "height": 2.324
+      },
+      "footprint": {
+        "tilesX": 0,
+        "tilesZ": 0
+      },
+      "cost": 0,
+      "upkeepPerMonth": 0,
+      "capacity": {
+        "residents": 0,
+        "jobs": 0
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/airport.ts#aero_train_bagages",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "groupe:aeroport",
+        "type:vehicule_piste",
+        "genere"
+      ],
+      "vehicle": {
+        "kind": "service",
+        "maxSpeedKmh": 25,
+        "lengthM": 12.82
+      }
+    },
+    {
+      "id": "hub_port",
+      "nameFr": "Port de commerce",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_grue_portique_lod0.glb",
+          "maxDistance": 350,
+          "triangles": 2554
+        },
+        {
+          "file": "models/transport/port/port_grue_portique_lod1.glb",
+          "maxDistance": 1200,
+          "triangles": 1842
+        },
+        {
+          "file": "models/transport/port/port_grue_portique_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 844
+        }
+      ],
+      "dimensions": {
+        "width": 23.73,
+        "depth": 99.4,
+        "height": 72.489
+      },
+      "footprint": {
+        "tilesX": 28,
+        "tilesZ": 12
+      },
+      "cost": 18500000,
+      "upkeepPerMonth": 85000,
+      "capacity": {
+        "residents": 0,
+        "jobs": 380
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/catalog.ts#hub_port",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "hub",
+        "hub:port_commerce",
+        "groupe:port",
+        "modele:port_grue_portique",
+        "description:quais, grues portiques animées, parc à conteneurs, entrepôt ; sur le littoral ou un cours d'eau navigable"
+      ]
+    },
+    {
+      "id": "hub_port_passagers",
+      "nameFr": "Port de commerce et de passagers",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/port/port_gare_maritime_lod0.glb",
+          "maxDistance": 250,
+          "triangles": 722
+        },
+        {
+          "file": "models/transport/port/port_gare_maritime_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 626
+        },
+        {
+          "file": "models/transport/port/port_gare_maritime_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 574
+        }
+      ],
+      "dimensions": {
+        "width": 50,
+        "depth": 49,
+        "height": 12.8
+      },
+      "footprint": {
+        "tilesX": 48,
+        "tilesZ": 12
+      },
+      "cost": 29000000,
+      "upkeepPerMonth": 120000,
+      "capacity": {
+        "residents": 0,
+        "jobs": 520
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "transport_atlas",
+        "transport_peinture",
+        "transport_tole"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/catalog.ts#hub_port_passagers",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "hub",
+        "hub:port_passagers",
+        "groupe:port",
+        "modele:port_gare_maritime",
+        "description:quais, grues, conteneurs, entrepôt, gare maritime et rampe roulière ; sur le littoral ou un cours d'eau navigable"
+      ]
+    },
+    {
+      "id": "hub_aeroport",
+      "nameFr": "Aéroport",
+      "category": "transport",
+      "lods": [
+        {
+          "file": "models/transport/aeroport/aero_tour_controle_lod0.glb",
+          "maxDistance": 400,
+          "triangles": 774
+        },
+        {
+          "file": "models/transport/aeroport/aero_tour_controle_lod1.glb",
+          "maxDistance": 1400,
+          "triangles": 668
+        },
+        {
+          "file": "models/transport/aeroport/aero_tour_controle_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 332
+        }
+      ],
+      "dimensions": {
+        "width": 18.4,
+        "depth": 15.2,
+        "height": 59.3
+      },
+      "footprint": {
+        "tilesX": 120,
+        "tilesZ": 40
+      },
+      "cost": 64000000,
+      "upkeepPerMonth": 240000,
+      "capacity": {
+        "residents": 0,
+        "jobs": 650
+      },
+      "frontage": [],
+      "variants": [
+        {
+          "id": "origine",
+          "nameFr": "Teintes d’origine"
+        }
+      ],
+      "textureSets": [
+        "beton_facade",
+        "transport_atlas",
+        "transport_peinture"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/catalog.ts#hub_aeroport",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      },
+      "tags": [
+        "transport",
+        "categorie:transport",
+        "hub",
+        "hub:aeroport",
+        "groupe:aeroport",
+        "modele:aero_tour_controle",
+        "description:piste orientable de 900 m, aérogare, tour, hangar ; terrain plat ; servitudes de hauteur dans l'axe"
+      ]
     }
   ],
   "textureSets": [
@@ -20959,6 +23868,45 @@
         "spdx": "CC0-1.0",
         "source": "tools/vehicles/textures.ts#writeVehicleTextures",
         "author": "Projet Aube Urbaine (générateur procédural, CC0)"
+      }
+    },
+    {
+      "id": "transport_atlas",
+      "nameFr": "Transport — atlas de détails (vitrages, livrées, logos, marquages, feux, découpes)",
+      "albedo": "models/transport/textures/transport_atlas_albedo.webp",
+      "normal": "models/transport/textures/transport_atlas_normal.webp",
+      "arm": "models/transport/textures/transport_atlas_arm.webp",
+      "tileSizeM": 1,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/textures.ts#writeTransportTextures",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      }
+    },
+    {
+      "id": "transport_peinture",
+      "nameFr": "Transport — acier peint (teinté par matériau)",
+      "albedo": "models/transport/textures/transport_peinture_albedo.webp",
+      "normal": "models/transport/textures/transport_peinture_normal.webp",
+      "arm": "models/transport/textures/transport_peinture_arm.webp",
+      "tileSizeM": 1.5,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/textures.ts#writeTransportTextures",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
+      }
+    },
+    {
+      "id": "transport_tole",
+      "nameFr": "Transport — tôle nervurée (conteneurs, bardages)",
+      "albedo": "models/transport/textures/transport_tole_albedo.webp",
+      "normal": "models/transport/textures/transport_tole_normal.webp",
+      "arm": "models/transport/textures/transport_tole_arm.webp",
+      "tileSizeM": 1.12,
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/transport/textures.ts#writeTransportTextures",
+        "author": "Projet Aube Urbaine (générateur procédural, œuvre originale CC0)"
       }
     }
   ],

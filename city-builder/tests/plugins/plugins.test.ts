@@ -32,11 +32,13 @@ const SIM_ONLY: readonly string[] = ['municipal'];
  * Modules de phase 2B/2C intégrés après l'électricité, dans l'ordre d'enregistrement (rendu, panneau, section de
  * sauvegarde ; testés dans leur dossier). Ils figurent aussi dans PHASE2_MODULES.
  */
-const LATE_MODULES: readonly string[] = ['dechets'];
+const LATE_MODULES: readonly string[] = ['dechets', 'hubs'];
+/** Parmi eux, ceux qui agissent dès une partie neuve (charges `ext`) : exclus du contrôle « module vide = aucun effet ». */
+const LATE_ACTIVE: readonly string[] = ['dechets'];
 /** Modules de phase 2A (PHASE2_MODULES sans les modules intégrés plus tard). */
 const BASE_MODULES: readonly string[] = PHASE2_MODULES.filter((id) => !LATE_MODULES.includes(id));
 /** Modules d'atmosphère (phase 2C) exclus aussi : leur absence d'effet sur la base est testée dans tests/weather. */
-const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id) && !LATE_MODULES.includes(p.id));
+const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id) && !LATE_ACTIVE.includes(p.id));
 
 function town(plugins?: readonly SimPlugin[]): Simulation {
   const s = plugins ? new Simulation(plugins) : new Simulation();

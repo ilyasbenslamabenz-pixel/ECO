@@ -10,6 +10,7 @@ import { electriciteSaveSection } from './electricite';
 import { pietonsSaveSection } from './pietons';
 import { municipalSaveSection } from './municipal';
 import { dechetsSaveSection } from './dechets';
+import { hubsSaveSection } from './hubs';
 import type { SaveSectionSpec } from './types';
 
 export type { SaveSectionSpec } from './types';
@@ -23,4 +24,5 @@ export const SAVE_SECTIONS: readonly SaveSectionSpec<unknown>[] = [
   municipalSaveSection,
   electriciteSaveSection,
   dechetsSaveSection,
+  hubsSaveSection,
 ];

@@ -10,6 +10,7 @@ import { pietonsPanel } from './pietons';
 import { chantiersPanel } from './chantiers';
 import { electricitePanel } from './electricite';
 import { dechetsPanel } from './dechets';
+import { transportsPanel } from './transports';
 import type { UiPanel } from './types';
 
 export type { UiPanel, UiPanelApi } from './types';
@@ -21,4 +22,5 @@ export const UI_PANELS: readonly UiPanel[] = [
   chantiersPanel,
   electricitePanel,
   dechetsPanel,
+  transportsPanel,
 ];
