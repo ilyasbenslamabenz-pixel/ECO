@@ -3,20 +3,20 @@
     {
       "id": "port_quai_droit",
       "nameFr": "Quai — module droit (32 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_quai_droit_lod0.glb",
+          "file": "models/transport/_src/port/port_quai_droit_lod0.glb",
           "maxDistance": 220,
           "triangles": 1560
         },
         {
-          "file": "models/transport/port/port_quai_droit_lod1.glb",
+          "file": "models/transport/_src/port/port_quai_droit_lod1.glb",
           "maxDistance": 700,
           "triangles": 496
         },
         {
-          "file": "models/transport/port/port_quai_droit_lod2.glb",
+          "file": "models/transport/_src/port/port_quai_droit_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 194
         }
@@ -57,6 +57,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:quai",
         "genere",
@@ -68,20 +69,20 @@
     {
       "id": "port_quai_angle",
       "nameFr": "Quai — module d’angle",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_quai_angle_lod0.glb",
+          "file": "models/transport/_src/port/port_quai_angle_lod0.glb",
           "maxDistance": 220,
           "triangles": 1228
         },
         {
-          "file": "models/transport/port/port_quai_angle_lod1.glb",
+          "file": "models/transport/_src/port/port_quai_angle_lod1.glb",
           "maxDistance": 700,
           "triangles": 692
         },
         {
-          "file": "models/transport/port/port_quai_angle_lod2.glb",
+          "file": "models/transport/_src/port/port_quai_angle_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 208
         }
@@ -122,6 +123,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:quai",
         "genere",
@@ -132,20 +134,20 @@
     {
       "id": "port_quai_rampe",
       "nameFr": "Quai — rampe ro-ro (ferries)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_quai_rampe_lod0.glb",
+          "file": "models/transport/_src/port/port_quai_rampe_lod0.glb",
           "maxDistance": 220,
           "triangles": 1190
         },
         {
-          "file": "models/transport/port/port_quai_rampe_lod1.glb",
+          "file": "models/transport/_src/port/port_quai_rampe_lod1.glb",
           "maxDistance": 700,
           "triangles": 650
         },
         {
-          "file": "models/transport/port/port_quai_rampe_lod2.glb",
+          "file": "models/transport/_src/port/port_quai_rampe_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 342
         }
@@ -187,6 +189,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:quai",
         "genere",
@@ -199,20 +202,20 @@
     {
       "id": "port_grue_portique",
       "nameFr": "Portique à conteneurs",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_grue_portique_lod0.glb",
+          "file": "models/transport/_src/port/port_grue_portique_lod0.glb",
           "maxDistance": 350,
           "triangles": 2554
         },
         {
-          "file": "models/transport/port/port_grue_portique_lod1.glb",
+          "file": "models/transport/_src/port/port_grue_portique_lod1.glb",
           "maxDistance": 1200,
           "triangles": 1842
         },
         {
-          "file": "models/transport/port/port_grue_portique_lod2.glb",
+          "file": "models/transport/_src/port/port_grue_portique_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 844
         }
@@ -282,6 +285,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:grue",
         "genere",
@@ -295,20 +299,20 @@
     {
       "id": "port_grue_mobile",
       "nameFr": "Grue mobile portuaire",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_grue_mobile_lod0.glb",
+          "file": "models/transport/_src/port/port_grue_mobile_lod0.glb",
           "maxDistance": 250,
           "triangles": 3204
         },
         {
-          "file": "models/transport/port/port_grue_mobile_lod1.glb",
+          "file": "models/transport/_src/port/port_grue_mobile_lod1.glb",
           "maxDistance": 900,
           "triangles": 1524
         },
         {
-          "file": "models/transport/port/port_grue_mobile_lod2.glb",
+          "file": "models/transport/_src/port/port_grue_mobile_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 780
         }
@@ -365,6 +369,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:grue",
         "genere",
@@ -375,20 +380,20 @@
     {
       "id": "port_conteneur_20",
       "nameFr": "Conteneur 20 pieds (NORDA)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_conteneur_20_lod0.glb",
+          "file": "models/transport/_src/port/port_conteneur_20_lod0.glb",
           "maxDistance": 90,
           "triangles": 240
         },
         {
-          "file": "models/transport/port/port_conteneur_20_lod1.glb",
+          "file": "models/transport/_src/port/port_conteneur_20_lod1.glb",
           "maxDistance": 300,
           "triangles": 16
         },
         {
-          "file": "models/transport/port/port_conteneur_20_lod2.glb",
+          "file": "models/transport/_src/port/port_conteneur_20_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 10
         }
@@ -491,6 +496,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:conteneur",
         "genere",
@@ -500,20 +506,20 @@
     {
       "id": "port_conteneur_40",
       "nameFr": "Conteneur 40 pieds (KALIX)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_conteneur_40_lod0.glb",
+          "file": "models/transport/_src/port/port_conteneur_40_lod0.glb",
           "maxDistance": 90,
           "triangles": 240
         },
         {
-          "file": "models/transport/port/port_conteneur_40_lod1.glb",
+          "file": "models/transport/_src/port/port_conteneur_40_lod1.glb",
           "maxDistance": 300,
           "triangles": 16
         },
         {
-          "file": "models/transport/port/port_conteneur_40_lod2.glb",
+          "file": "models/transport/_src/port/port_conteneur_40_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 10
         }
@@ -616,6 +622,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:conteneur",
         "genere",
@@ -625,20 +632,20 @@
     {
       "id": "port_conteneur_40hc",
       "nameFr": "Conteneur 40 pieds high cube (MERIDO)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_conteneur_40hc_lod0.glb",
+          "file": "models/transport/_src/port/port_conteneur_40hc_lod0.glb",
           "maxDistance": 90,
           "triangles": 240
         },
         {
-          "file": "models/transport/port/port_conteneur_40hc_lod1.glb",
+          "file": "models/transport/_src/port/port_conteneur_40hc_lod1.glb",
           "maxDistance": 300,
           "triangles": 16
         },
         {
-          "file": "models/transport/port/port_conteneur_40hc_lod2.glb",
+          "file": "models/transport/_src/port/port_conteneur_40hc_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 10
         }
@@ -741,6 +748,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:conteneur",
         "genere",
@@ -751,20 +759,20 @@
     {
       "id": "port_conteneur_frigo",
       "nameFr": "Conteneur frigorifique 40 pieds (TAVRO)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_conteneur_frigo_lod0.glb",
+          "file": "models/transport/_src/port/port_conteneur_frigo_lod0.glb",
           "maxDistance": 90,
           "triangles": 242
         },
         {
-          "file": "models/transport/port/port_conteneur_frigo_lod1.glb",
+          "file": "models/transport/_src/port/port_conteneur_frigo_lod1.glb",
           "maxDistance": 300,
           "triangles": 18
         },
         {
-          "file": "models/transport/port/port_conteneur_frigo_lod2.glb",
+          "file": "models/transport/_src/port/port_conteneur_frigo_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 10
         }
@@ -867,6 +875,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:conteneur",
         "genere",
@@ -878,20 +887,20 @@
     {
       "id": "port_pile_conteneurs",
       "nameFr": "Bloc de conteneurs empilés",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_pile_conteneurs_lod0.glb",
+          "file": "models/transport/_src/port/port_pile_conteneurs_lod0.glb",
           "maxDistance": 200,
           "triangles": 9720
         },
         {
-          "file": "models/transport/port/port_pile_conteneurs_lod1.glb",
+          "file": "models/transport/_src/port/port_pile_conteneurs_lod1.glb",
           "maxDistance": 700,
           "triangles": 536
         },
         {
-          "file": "models/transport/port/port_pile_conteneurs_lod2.glb",
+          "file": "models/transport/_src/port/port_pile_conteneurs_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 180
         }
@@ -931,6 +940,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:conteneur",
         "genere",
@@ -940,20 +950,20 @@
     {
       "id": "port_entrepot",
       "nameFr": "Entrepôt portuaire",
-      "category": "transport",
+      "category": "industrial",
       "lods": [
         {
-          "file": "models/transport/port/port_entrepot_lod0.glb",
+          "file": "models/transport/_src/port/port_entrepot_lod0.glb",
           "maxDistance": 250,
           "triangles": 696
         },
         {
-          "file": "models/transport/port/port_entrepot_lod1.glb",
+          "file": "models/transport/_src/port/port_entrepot_lod1.glb",
           "maxDistance": 900,
           "triangles": 480
         },
         {
-          "file": "models/transport/port/port_entrepot_lod2.glb",
+          "file": "models/transport/_src/port/port_entrepot_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 126
         }
@@ -1028,6 +1038,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:entrepot",
         "genere"
@@ -1036,20 +1047,20 @@
     {
       "id": "port_capitainerie",
       "nameFr": "Capitainerie",
-      "category": "transport",
+      "category": "public",
       "lods": [
         {
-          "file": "models/transport/port/port_capitainerie_lod0.glb",
+          "file": "models/transport/_src/port/port_capitainerie_lod0.glb",
           "maxDistance": 250,
           "triangles": 698
         },
         {
-          "file": "models/transport/port/port_capitainerie_lod1.glb",
+          "file": "models/transport/_src/port/port_capitainerie_lod1.glb",
           "maxDistance": 900,
           "triangles": 520
         },
         {
-          "file": "models/transport/port/port_capitainerie_lod2.glb",
+          "file": "models/transport/_src/port/port_capitainerie_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 312
         }
@@ -1097,6 +1108,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:capitainerie",
         "genere",
@@ -1106,20 +1118,20 @@
     {
       "id": "port_gare_maritime",
       "nameFr": "Gare maritime",
-      "category": "transport",
+      "category": "public",
       "lods": [
         {
-          "file": "models/transport/port/port_gare_maritime_lod0.glb",
+          "file": "models/transport/_src/port/port_gare_maritime_lod0.glb",
           "maxDistance": 250,
           "triangles": 722
         },
         {
-          "file": "models/transport/port/port_gare_maritime_lod1.glb",
+          "file": "models/transport/_src/port/port_gare_maritime_lod1.glb",
           "maxDistance": 900,
           "triangles": 626
         },
         {
-          "file": "models/transport/port/port_gare_maritime_lod2.glb",
+          "file": "models/transport/_src/port/port_gare_maritime_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 574
         }
@@ -1175,6 +1187,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:terminal_passagers",
         "genere"
@@ -1183,20 +1196,20 @@
     {
       "id": "port_porte_conteneurs",
       "nameFr": "Porte-conteneurs (190 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_porte_conteneurs_lod0.glb",
+          "file": "models/transport/_src/port/port_porte_conteneurs_lod0.glb",
           "maxDistance": 500,
           "triangles": 9456
         },
         {
-          "file": "models/transport/port/port_porte_conteneurs_lod1.glb",
+          "file": "models/transport/_src/port/port_porte_conteneurs_lod1.glb",
           "maxDistance": 1800,
           "triangles": 6418
         },
         {
-          "file": "models/transport/port/port_porte_conteneurs_lod2.glb",
+          "file": "models/transport/_src/port/port_porte_conteneurs_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 1958
         }
@@ -1254,6 +1267,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:navire",
         "genere",
@@ -1264,20 +1278,20 @@
     {
       "id": "port_vraquier",
       "nameFr": "Vraquier (180 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_vraquier_lod0.glb",
+          "file": "models/transport/_src/port/port_vraquier_lod0.glb",
           "maxDistance": 500,
           "triangles": 4384
         },
         {
-          "file": "models/transport/port/port_vraquier_lod1.glb",
+          "file": "models/transport/_src/port/port_vraquier_lod1.glb",
           "maxDistance": 1800,
           "triangles": 2374
         },
         {
-          "file": "models/transport/port/port_vraquier_lod2.glb",
+          "file": "models/transport/_src/port/port_vraquier_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 1104
         }
@@ -1325,6 +1339,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:navire",
         "genere",
@@ -1335,20 +1350,20 @@
     {
       "id": "port_ferry",
       "nameFr": "Ferry à passagers (152 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_ferry_lod0.glb",
+          "file": "models/transport/_src/port/port_ferry_lod0.glb",
           "maxDistance": 500,
           "triangles": 6342
         },
         {
-          "file": "models/transport/port/port_ferry_lod1.glb",
+          "file": "models/transport/_src/port/port_ferry_lod1.glb",
           "maxDistance": 1800,
           "triangles": 3312
         },
         {
-          "file": "models/transport/port/port_ferry_lod2.glb",
+          "file": "models/transport/_src/port/port_ferry_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 1090
         }
@@ -1405,6 +1420,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:navire",
         "genere",
@@ -1416,20 +1432,20 @@
     {
       "id": "port_remorqueur",
       "nameFr": "Remorqueur portuaire",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/port/port_remorqueur_lod0.glb",
+          "file": "models/transport/_src/port/port_remorqueur_lod0.glb",
           "maxDistance": 250,
           "triangles": 4068
         },
         {
-          "file": "models/transport/port/port_remorqueur_lod1.glb",
+          "file": "models/transport/_src/port/port_remorqueur_lod1.glb",
           "maxDistance": 900,
           "triangles": 1850
         },
         {
-          "file": "models/transport/port/port_remorqueur_lod2.glb",
+          "file": "models/transport/_src/port/port_remorqueur_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 810
         }
@@ -1486,6 +1502,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:port",
         "type:navire",
         "genere",
@@ -1496,20 +1513,20 @@
     {
       "id": "aero_avion_moyen_courrier",
       "nameFr": "Avion de ligne moyen-courrier (AUBE AIR)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_avion_moyen_courrier_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_moyen_courrier_lod0.glb",
           "maxDistance": 250,
           "triangles": 5616
         },
         {
-          "file": "models/transport/aeroport/aero_avion_moyen_courrier_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_moyen_courrier_lod1.glb",
           "maxDistance": 900,
           "triangles": 2232
         },
         {
-          "file": "models/transport/aeroport/aero_avion_moyen_courrier_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_moyen_courrier_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 960
         }
@@ -1557,6 +1574,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:avion",
         "genere",
@@ -1567,20 +1585,20 @@
     {
       "id": "aero_avion_gros_porteur",
       "nameFr": "Avion gros porteur long-courrier (AUBE AIR)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_avion_gros_porteur_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_gros_porteur_lod0.glb",
           "maxDistance": 350,
           "triangles": 6088
         },
         {
-          "file": "models/transport/aeroport/aero_avion_gros_porteur_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_gros_porteur_lod1.glb",
           "maxDistance": 1200,
           "triangles": 2512
         },
         {
-          "file": "models/transport/aeroport/aero_avion_gros_porteur_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_gros_porteur_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 1176
         }
@@ -1619,6 +1637,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:avion",
         "genere",
@@ -1629,20 +1648,20 @@
     {
       "id": "aero_avion_cargo",
       "nameFr": "Avion cargo (AUBE CARGO)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_avion_cargo_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_cargo_lod0.glb",
           "maxDistance": 350,
           "triangles": 6088
         },
         {
-          "file": "models/transport/aeroport/aero_avion_cargo_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_cargo_lod1.glb",
           "maxDistance": 1200,
           "triangles": 2512
         },
         {
-          "file": "models/transport/aeroport/aero_avion_cargo_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_avion_cargo_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 1176
         }
@@ -1681,6 +1700,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:avion",
         "genere",
@@ -1691,20 +1711,20 @@
     {
       "id": "aero_aerogare_hall",
       "nameFr": "Aérogare — hall principal (module)",
-      "category": "transport",
+      "category": "public",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_aerogare_hall_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_aerogare_hall_lod0.glb",
           "maxDistance": 300,
           "triangles": 902
         },
         {
-          "file": "models/transport/aeroport/aero_aerogare_hall_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_aerogare_hall_lod1.glb",
           "maxDistance": 1000,
           "triangles": 766
         },
         {
-          "file": "models/transport/aeroport/aero_aerogare_hall_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_aerogare_hall_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 304
         }
@@ -1760,6 +1780,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:terminal",
         "genere",
@@ -1769,20 +1790,20 @@
     {
       "id": "aero_aerogare_jetee",
       "nameFr": "Aérogare — jetée d’embarquement (module)",
-      "category": "transport",
+      "category": "public",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_aerogare_jetee_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_aerogare_jetee_lod0.glb",
           "maxDistance": 300,
           "triangles": 620
         },
         {
-          "file": "models/transport/aeroport/aero_aerogare_jetee_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_aerogare_jetee_lod1.glb",
           "maxDistance": 1000,
           "triangles": 308
         },
         {
-          "file": "models/transport/aeroport/aero_aerogare_jetee_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_aerogare_jetee_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 226
         }
@@ -1831,6 +1852,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:terminal",
         "genere",
@@ -1841,20 +1863,20 @@
     {
       "id": "aero_tour_controle",
       "nameFr": "Tour de contrôle",
-      "category": "transport",
+      "category": "public",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_tour_controle_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_tour_controle_lod0.glb",
           "maxDistance": 400,
           "triangles": 774
         },
         {
-          "file": "models/transport/aeroport/aero_tour_controle_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_tour_controle_lod1.glb",
           "maxDistance": 1400,
           "triangles": 668
         },
         {
-          "file": "models/transport/aeroport/aero_tour_controle_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_tour_controle_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 332
         }
@@ -1902,6 +1924,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:tour_controle",
         "genere"
@@ -1910,20 +1933,20 @@
     {
       "id": "aero_hangar",
       "nameFr": "Hangar de maintenance",
-      "category": "transport",
+      "category": "industrial",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_hangar_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_hangar_lod0.glb",
           "maxDistance": 300,
           "triangles": 636
         },
         {
-          "file": "models/transport/aeroport/aero_hangar_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_hangar_lod1.glb",
           "maxDistance": 1000,
           "triangles": 440
         },
         {
-          "file": "models/transport/aeroport/aero_hangar_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_hangar_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 278
         }
@@ -1993,6 +2016,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:hangar",
         "genere"
@@ -2001,20 +2025,20 @@
     {
       "id": "aero_piste_section",
       "nameFr": "Piste — section courante (60 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_piste_section_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_section_lod0.glb",
           "maxDistance": 300,
           "triangles": 268
         },
         {
-          "file": "models/transport/aeroport/aero_piste_section_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_section_lod1.glb",
           "maxDistance": 1000,
           "triangles": 156
         },
         {
-          "file": "models/transport/aeroport/aero_piste_section_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_section_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 76
         }
@@ -2055,6 +2079,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:piste",
         "genere",
@@ -2066,20 +2091,20 @@
     {
       "id": "aero_piste_seuil",
       "nameFr": "Piste — seuil 09 (60 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_piste_seuil_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_seuil_lod0.glb",
           "maxDistance": 300,
           "triangles": 1086
         },
         {
-          "file": "models/transport/aeroport/aero_piste_seuil_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_seuil_lod1.glb",
           "maxDistance": 1000,
           "triangles": 744
         },
         {
-          "file": "models/transport/aeroport/aero_piste_seuil_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_seuil_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 260
         }
@@ -2120,6 +2145,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:piste",
         "genere",
@@ -2132,20 +2158,20 @@
     {
       "id": "aero_piste_toucher",
       "nameFr": "Piste — zone de toucher (60 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_piste_toucher_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_toucher_lod0.glb",
           "maxDistance": 300,
           "triangles": 240
         },
         {
-          "file": "models/transport/aeroport/aero_piste_toucher_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_toucher_lod1.glb",
           "maxDistance": 1000,
           "triangles": 168
         },
         {
-          "file": "models/transport/aeroport/aero_piste_toucher_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_piste_toucher_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 88
         }
@@ -2186,6 +2212,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:piste",
         "genere",
@@ -2197,20 +2224,20 @@
     {
       "id": "aero_taxiway_droit",
       "nameFr": "Voie de circulation — droite (30 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_taxiway_droit_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_taxiway_droit_lod0.glb",
           "maxDistance": 300,
           "triangles": 298
         },
         {
-          "file": "models/transport/aeroport/aero_taxiway_droit_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_taxiway_droit_lod1.glb",
           "maxDistance": 1000,
           "triangles": 196
         },
         {
-          "file": "models/transport/aeroport/aero_taxiway_droit_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_taxiway_droit_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 80
         }
@@ -2251,6 +2278,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:taxiway",
         "genere",
@@ -2262,20 +2290,20 @@
     {
       "id": "aero_taxiway_virage",
       "nameFr": "Voie de circulation — virage 90°",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_taxiway_virage_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_taxiway_virage_lod0.glb",
           "maxDistance": 300,
           "triangles": 514
         },
         {
-          "file": "models/transport/aeroport/aero_taxiway_virage_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_taxiway_virage_lod1.glb",
           "maxDistance": 1000,
           "triangles": 310
         },
         {
-          "file": "models/transport/aeroport/aero_taxiway_virage_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_taxiway_virage_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 150
         }
@@ -2315,6 +2343,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:taxiway",
         "genere",
@@ -2326,20 +2355,20 @@
     {
       "id": "aero_aire_stationnement",
       "nameFr": "Aire de stationnement avion (60 m)",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_aire_stationnement_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_aire_stationnement_lod0.glb",
           "maxDistance": 300,
           "triangles": 226
         },
         {
-          "file": "models/transport/aeroport/aero_aire_stationnement_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_aire_stationnement_lod1.glb",
           "maxDistance": 1000,
           "triangles": 186
         },
         {
-          "file": "models/transport/aeroport/aero_aire_stationnement_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_aire_stationnement_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 106
         }
@@ -2379,6 +2408,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:aire",
         "genere",
@@ -2390,20 +2420,20 @@
     {
       "id": "aero_passerelle",
       "nameFr": "Passerelle d’embarquement",
-      "category": "transport",
+      "category": "prop",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_passerelle_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_passerelle_lod0.glb",
           "maxDistance": 200,
           "triangles": 514
         },
         {
-          "file": "models/transport/aeroport/aero_passerelle_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_passerelle_lod1.glb",
           "maxDistance": 700,
           "triangles": 356
         },
         {
-          "file": "models/transport/aeroport/aero_passerelle_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_passerelle_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 202
         }
@@ -2442,6 +2472,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:passerelle",
         "genere",
@@ -2453,20 +2484,20 @@
     {
       "id": "aero_tracteur_pushback",
       "nameFr": "Tracteur de repoussage",
-      "category": "transport",
+      "category": "vehicle",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_tracteur_pushback_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_tracteur_pushback_lod0.glb",
           "maxDistance": 90,
           "triangles": 380
         },
         {
-          "file": "models/transport/aeroport/aero_tracteur_pushback_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_tracteur_pushback_lod1.glb",
           "maxDistance": 320,
           "triangles": 242
         },
         {
-          "file": "models/transport/aeroport/aero_tracteur_pushback_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_tracteur_pushback_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 182
         }
@@ -2505,6 +2536,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:vehicule_piste",
         "genere"
@@ -2518,20 +2550,20 @@
     {
       "id": "aero_avitailleur",
       "nameFr": "Camion avitailleur",
-      "category": "transport",
+      "category": "vehicle",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_avitailleur_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_avitailleur_lod0.glb",
           "maxDistance": 90,
           "triangles": 712
         },
         {
-          "file": "models/transport/aeroport/aero_avitailleur_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_avitailleur_lod1.glb",
           "maxDistance": 320,
           "triangles": 470
         },
         {
-          "file": "models/transport/aeroport/aero_avitailleur_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_avitailleur_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 302
         }
@@ -2570,6 +2602,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:vehicule_piste",
         "genere"
@@ -2583,20 +2616,20 @@
     {
       "id": "aero_bus_piste",
       "nameFr": "Bus de piste",
-      "category": "transport",
+      "category": "vehicle",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_bus_piste_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_bus_piste_lod0.glb",
           "maxDistance": 90,
           "triangles": 342
         },
         {
-          "file": "models/transport/aeroport/aero_bus_piste_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_bus_piste_lod1.glb",
           "maxDistance": 320,
           "triangles": 228
         },
         {
-          "file": "models/transport/aeroport/aero_bus_piste_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_bus_piste_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 160
         }
@@ -2644,6 +2677,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:vehicule_piste",
         "genere"
@@ -2657,20 +2691,20 @@
     {
       "id": "aero_train_bagages",
       "nameFr": "Train de bagages",
-      "category": "transport",
+      "category": "vehicle",
       "lods": [
         {
-          "file": "models/transport/aeroport/aero_train_bagages_lod0.glb",
+          "file": "models/transport/_src/aeroport/aero_train_bagages_lod0.glb",
           "maxDistance": 90,
           "triangles": 1186
         },
         {
-          "file": "models/transport/aeroport/aero_train_bagages_lod1.glb",
+          "file": "models/transport/_src/aeroport/aero_train_bagages_lod1.glb",
           "maxDistance": 320,
           "triangles": 784
         },
         {
-          "file": "models/transport/aeroport/aero_train_bagages_lod2.glb",
+          "file": "models/transport/_src/aeroport/aero_train_bagages_lod2.glb",
           "maxDistance": 1000000000,
           "triangles": 598
         }
@@ -2709,6 +2743,7 @@
       "tags": [
         "transport",
         "categorie:transport",
+        "unused",
         "groupe:aeroport",
         "type:vehicule_piste",
         "genere"
@@ -2724,9 +2759,9 @@
     {
       "id": "transport_atlas",
       "nameFr": "Transport — atlas de détails (vitrages, livrées, logos, marquages, feux, découpes)",
-      "albedo": "models/transport/textures/transport_atlas_albedo.webp",
-      "normal": "models/transport/textures/transport_atlas_normal.webp",
-      "arm": "models/transport/textures/transport_atlas_arm.webp",
+      "albedo": "models/transport/_src/textures/transport_atlas_albedo.webp",
+      "normal": "models/transport/_src/textures/transport_atlas_normal.webp",
+      "arm": "models/transport/_src/textures/transport_atlas_arm.webp",
       "tileSizeM": 1,
       "license": {
         "spdx": "CC0-1.0",
@@ -2737,9 +2772,9 @@
     {
       "id": "transport_peinture",
       "nameFr": "Transport — acier peint (teinté par matériau)",
-      "albedo": "models/transport/textures/transport_peinture_albedo.webp",
-      "normal": "models/transport/textures/transport_peinture_normal.webp",
-      "arm": "models/transport/textures/transport_peinture_arm.webp",
+      "albedo": "models/transport/_src/textures/transport_peinture_albedo.webp",
+      "normal": "models/transport/_src/textures/transport_peinture_normal.webp",
+      "arm": "models/transport/_src/textures/transport_peinture_arm.webp",
       "tileSizeM": 1.5,
       "license": {
         "spdx": "CC0-1.0",
@@ -2750,9 +2785,9 @@
     {
       "id": "transport_tole",
       "nameFr": "Transport — tôle nervurée (conteneurs, bardages)",
-      "albedo": "models/transport/textures/transport_tole_albedo.webp",
-      "normal": "models/transport/textures/transport_tole_normal.webp",
-      "arm": "models/transport/textures/transport_tole_arm.webp",
+      "albedo": "models/transport/_src/textures/transport_tole_albedo.webp",
+      "normal": "models/transport/_src/textures/transport_tole_normal.webp",
+      "arm": "models/transport/_src/textures/transport_tole_arm.webp",
       "tileSizeM": 1.12,
       "license": {
         "spdx": "CC0-1.0",

@@ -53,8 +53,6 @@ const DISTRICT_OVERRIDE: Record<string, District> = {
   public_hotel_de_ville: 'centre', public_musee_bibliotheque: 'centre', public_commissariat: 'centre',
   commerce_supermarche: 'collectif', commerce_station_service: 'activites', public_gare: 'activites',
   commerce_boulangerie: 'pavillons', public_ecole: 'pavillons', public_eglise: 'pavillons',
-  // Installations du module déchets : grandes emprises, zone d'activités (laisse la place aux pavillons).
-  dechets_depot_camions: 'activites', dechets_centre_tri: 'activites', dechets_incinerateur: 'activites', dechets_decharge: 'activites',
 };
 /** Poids de répétition par catégorie (nombre de copies dans la file du quartier, variantes en rotation). */
 const REPEAT: Record<string, number> = {
@@ -155,14 +153,11 @@ export function buildCity(sim: Simulation, opts: CityPlanOptions): CityBuildResu
     return 'collectif';
   };
   const frontages: Frontage[] = [];
-  /** Façades vers l'extérieur des rues de bordure : réserve de la passe A' (modèles qui n'ont pas trouvé de place). */
-  const outerFrontages: Frontage[] = [];
   for (const r of rows) {
     for (const side of [1, -1] as const) {
-      const f: Frontage = { roadZ: r.z, side, x0: cx - halfX, x1: cx + halfX, kind: r.kind, district: (x) => districtAt(x, r.z + side * 20) };
-      // Pas de façade vers l'extérieur de la ville sur les rues de bordure (sauf rattrapage, passe A').
-      if ((r.z >= cz + halfZ - 1 && side > 0) || (r.z <= cz - halfZ + 1 && side < 0)) { outerFrontages.push(f); continue; }
-      frontages.push(f);
+      // Pas de façade vers l'extérieur de la ville sur les rues de bordure.
+      if ((r.z >= cz + halfZ - 1 && side > 0) || (r.z <= cz - halfZ + 1 && side < 0)) continue;
+      frontages.push({ roadZ: r.z, side, x0: cx - halfX, x1: cx + halfX, kind: r.kind, district: (x) => districtAt(x, r.z + side * 20) });
     }
   }
   // Square du centre : parcelle réservée au nord du boulevard, à l'est de l'avenue centrale.
@@ -222,9 +217,9 @@ export function buildCity(sim: Simulation, opts: CityPlanOptions): CityBuildResu
   };
   // Passe A : chaque modèle une fois (les plus grandes emprises d'abord), dans son quartier si possible,
   // à partir d'une position pseudo-aléatoire le long des rues (évite de tout regrouper en bout de rue).
-  const placeOnce = (a: CatalogAsset, wantDistrict: District | null, pool: readonly Frontage[] = frontages): boolean => {
+  const placeOnce = (a: CatalogAsset, wantDistrict: District | null): boolean => {
     const w = a.footprint.tilesX * TILE_SIZE;
-    const list = pool.filter((f) => wantDistrict === null || f.district((f.x0 + f.x1) / 2) === wantDistrict || f.district(f.x0 + 10) === wantDistrict || f.district(f.x1 - 10) === wantDistrict);
+    const list = frontages.filter((f) => wantDistrict === null || f.district((f.x0 + f.x1) / 2) === wantDistrict || f.district(f.x0 + 10) === wantDistrict || f.district(f.x1 - 10) === wantDistrict);
     const off = Math.floor(hash(a.id.length * 131 + a.cost) * list.length);
     for (let k = 0; k < list.length; k++) {
       const f = list[(k + off) % list.length]!;
@@ -250,12 +245,6 @@ export function buildCity(sim: Simulation, opts: CityPlanOptions): CityBuildResu
   // Passe B : remplissage des rues par les files de quartier (répétitions avec variantes).
   for (const f of frontages) fill(f, (d) => queues[d][qIndex[d] % queues[d].length] ?? null, false);
   const missingNow = (): CatalogAsset[] => buildingsCat.filter((a) => !placed.has(a.id));
-  // Passe A' : les modèles encore absents (quartiers pleins, le catalogue grandit avec les modules) sont posés
-  // une fois le long des façades extérieures des rues de bordure — sans remplissage, la ville reste aussi dense.
-  for (const a of missingNow()) {
-    if (res.buildings >= maxBuildings) break;
-    placeOnce(a, null, outerFrontages);
-  }
   res.missing = missingNow().map((a) => a.id);
   res.distinctBuildings = placed.size;
 

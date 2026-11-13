@@ -26,7 +26,7 @@ import type { ConstructionTools } from '../client/tools/machine';
 import type { CameraController } from '../input/camera';
 import type { ToolController, ToolUiHooks } from '../input/tools';
 import { BuildBar } from './buildbar';
-import { $, chfText, el, fmt, money, moneyShort, scrollHints, signedShort } from './dom';
+import { $, chfText, el, fmt, money, moneyShort, signedShort } from './dom';
 import { FinanceHistory } from './finance';
 import { MONTHS_SHORT } from './charts';
 import { toast as showToast } from './notify';
@@ -110,8 +110,6 @@ export function initUI(h: UIHandlers): UIHandle {
   const menu = $('main-menu');
   const hud = $('hud');
   const toolbar = $('toolbar');
-  // Barres à défilement horizontal : bord fondu tant qu'il reste du contenu caché (iPhone).
-  for (const id of ['toolbar', 'drawer-tabs', 'drawer-body']) scrollHints($(id));
   const btnContinue = $<HTMLButtonElement>('btn-continue');
   const screens = Array.from(menu.querySelectorAll<HTMLElement>('.menu-screen'));
   let inGameFlag = false;

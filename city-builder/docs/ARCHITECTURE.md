@@ -144,8 +144,7 @@ le terrain et le PRNG sont déterministes) ; (3) implémenter les interfaces de 
   de démonstration). L'ancien rendu de fondation (`terrain.ts`, `water.ts`, `environment.ts`, `buildings.ts`,
   `vehicles.ts`) n'est plus utilisé par le jeu (conservé pour l'historique ; à supprimer).
 - **Build** : les GLB de `dist/assets` sont compressés `EXT_meshopt_compression` (`scripts/optimize-glb.mjs`, cache
-  `.cache/glb-opt`) : 44 → 26 Mo, textures partagées conservées par URI. Depuis : prune/dedup, images intégrées plafonnées (1024/512 px) et enveloppe gzip des GLB et HDRI
-  (même nom, décodée par `src/render/gzip-assets.ts`) : dist 59,2 → 39,1 Mo (`docs/COMPRESSION.md`). `AssetLibrary` enregistre `MeshoptDecoder`
+  `.cache/glb-opt`) : 44 → 26 Mo, textures partagées conservées par URI. `AssetLibrary` enregistre `MeshoptDecoder`
   et convertit en float32 les attributs géométriques quantifiés (les UV restent quantifiées : le rendu des
   bâtiments applique sa plage `uvq`).
 - **Tests en rendu logiciel** : `?norender` empêche la boucle d'affichage de démarrer ; les tests rendent les images à la

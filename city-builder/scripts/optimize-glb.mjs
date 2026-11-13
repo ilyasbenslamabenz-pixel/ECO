@@ -1,11 +1,6 @@
 /**
- * Compression des GLB distribués (appelée par scripts/build.mjs sur dist/assets), dans l'ordre :
- *  1. `prune` + `dedup` (conservateurs : attributs, extras, nœuds vides et noms uniques gardés) ;
- *  2. images INTÉGRÉES plafonnées à 1024 px (512 px pour les LOD1/LOD2), réencodées en WebP seulement si
- *     elles dépassent (cartes de normales en qualité 95) ; les textures partagées (URI) ne sont pas touchées ;
- *  3. EXT_meshopt_compression (+ quantification KHR_mesh_quantization faite par gltf-transform `meshopt()`) ;
- *  4. enveloppe gzip du fichier entier si elle gagne au moins 10 % (JSON + flux meshopt se compressent ~2×) :
- *     même nom de fichier, reconnu côté client par son en-tête (src/render/gzip-assets.ts). Voir docs/COMPRESSION.md.
+ * Compression des GLB distribués (appelée par scripts/build.mjs sur dist/assets) :
+ * EXT_meshopt_compression (+ quantification KHR_mesh_quantization faite par gltf-transform `meshopt()`).
  * Les sources (assets/**) restent intactes : les tests des modules et le validateur du pipeline les lisent.
  *
  * Point délicat : les bâtiments et véhicules référencent des textures PARTAGÉES par URI relative
@@ -20,48 +15,12 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { gzipSync } from 'node:zlib';
 import { NodeIO } from '@gltf-transform/core';
-import { ALL_EXTENSIONS, EXTTextureWebP } from '@gltf-transform/extensions';
-import { dedup, meshopt, prune } from '@gltf-transform/functions';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import { meshopt } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
-import sharp from 'sharp';
 
-const VERSION = 'v2';
-/** Côté max des images intégrées : LOD0 (ou sans LOD) / LOD1 et plus. */
-const IMAGE_CAP_LOD0 = 1024;
-const IMAGE_CAP_LOD = 512;
-/** Gain minimal pour garder l'enveloppe gzip (sinon le fichier reste brut : rien à décompresser). */
-const GZIP_MIN_GAIN = 0.1;
-
-/** Enveloppe gzip (niveau 9) si elle gagne au moins GZIP_MIN_GAIN ; sinon renvoie le tampon tel quel. */
-export function gzipIfWorth(buf) {
-  const gz = gzipSync(buf, { level: 9 });
-  return gz.byteLength <= buf.byteLength * (1 - GZIP_MIN_GAIN) ? gz : buf;
-}
-
-/** Plafonne les images intégrées (côté max `cap`), réencodage WebP uniquement pour celles qui dépassent. */
-async function capEmbeddedImages(doc, cap) {
-  const root = doc.getRoot();
-  const normals = new Set(root.listMaterials().map((m) => m.getNormalTexture()).filter(Boolean));
-  let changed = 0;
-  for (const tex of root.listTextures()) {
-    const img = tex.getImage();
-    if (!img || (tex.getURI() && !tex.getURI().startsWith('data:') && tex.getURI().includes('/'))) continue;
-    const meta = await sharp(img).metadata();
-    if (!meta.width || !meta.height || Math.max(meta.width, meta.height) <= cap) continue;
-    const isNormal = normals.has(tex);
-    const out = await sharp(img)
-      .resize(cap, cap, { fit: 'inside', kernel: 'lanczos3', withoutEnlargement: true })
-      .webp(isNormal ? { quality: 95, alphaQuality: 100, effort: 6 } : { quality: 90, alphaQuality: 100, effort: 6 })
-      .toBuffer();
-    tex.setImage(new Uint8Array(out)).setMimeType('image/webp');
-    if (tex.getURI()) tex.setURI(tex.getURI().replace(/\.(png|jpe?g)$/i, '.webp'));
-    changed++;
-  }
-  if (changed) doc.createExtension(EXTTextureWebP);
-  return changed;
-}
+const VERSION = 'v1';
 
 function walk(dir, out = []) {
   for (const n of readdirSync(dir)) {
@@ -94,12 +53,6 @@ async function compressOne(io, path) {
   const doc = await io.read(path);
   const textures = doc.getRoot().listTextures();
   const external = textures.some((t) => !!t.getURI() && !t.getURI().startsWith('data:') && t.getURI().includes('/'));
-  await doc.transform(
-    prune({ keepAttributes: true, keepIndices: true, keepLeaves: true, keepSolidTextures: true, keepExtras: true }),
-    dedup({ keepUniqueNames: true }),
-  );
-  const lod = Number(/_lod(\d+)\.glb$/.exec(path)?.[1] ?? 0);
-  if (!external) await capEmbeddedImages(doc, lod > 0 ? IMAGE_CAP_LOD : IMAGE_CAP_LOD0);
   await doc.transform(meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   if (!external) return Buffer.from(await io.writeBinary(doc));
   const { json, resources } = await io.writeJSON(doc, { format: 'GLTF' });
@@ -154,7 +107,6 @@ export async function optimizeGlbDir(dir, cacheDir) {
         out = await compressOne(io, f);
         // Ne garde la version compressée que si elle est plus petite.
         if (out.byteLength >= src.byteLength) out = src;
-        out = gzipIfWorth(out);
       } catch (e) {
         console.warn(`optimize-glb : ${f} laissé tel quel (${e instanceof Error ? e.message : e})`);
         out = src;
@@ -166,25 +118,4 @@ export async function optimizeGlbDir(dir, cacheDir) {
     after += out.byteLength;
   }
   return { files: files.length, fresh, before, after };
-}
-
-/**
- * Enveloppe gzip des fichiers d'un dossier dont l'extension est listée (HDRI .hdr), en place, même nom.
- * Renvoie { files, before, after }.
- */
-export function gzipFilesIn(dir, exts) {
-  const out = { files: 0, before: 0, after: 0 };
-  const rec = (d) => {
-    for (const n of readdirSync(d)) {
-      const p = join(d, n);
-      if (statSync(p).isDirectory()) { rec(p); continue; }
-      if (!exts.some((e) => p.endsWith(e))) continue;
-      const src = readFileSync(p);
-      const res = gzipIfWorth(src);
-      if (res !== src) writeFileSync(p, res);
-      out.files++; out.before += src.byteLength; out.after += res.byteLength;
-    }
-  };
-  rec(dir);
-  return out;
 }

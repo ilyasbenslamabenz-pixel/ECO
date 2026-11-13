@@ -459,9 +459,7 @@ export class VegetationSystem {
       const dz = this.pz[i]! - cz;
       const lx = dx * c + dz * s;
       const lz = -dx * s + dz * c;
-      // Houppier compris : un arbre dont la couronne recouvre le bâtiment le traverserait.
-      const m = margin + this.crown(i);
-      if (Math.abs(lx) <= halfW + m && Math.abs(lz) <= halfD + m) { this.alive[i] = 0; r++; }
+      if (Math.abs(lx) <= halfW + margin && Math.abs(lz) <= halfD + margin) { this.alive[i] = 0; r++; }
     }
     if (r) this.dirty = true;
     return r;
@@ -480,34 +478,10 @@ export class VegetationSystem {
       const t = Math.max(0, Math.min(1, (px * dx + pz * dz) / l2));
       const ex = px - dx * t;
       const ez = pz - dz * t;
-      // Houppier compris : un tronc au bord du trottoir étalait sa couronne sur la chaussée.
-      const w = halfWidth + this.crown(i);
-      if (ex * ex + ez * ez <= w * w) { this.alive[i] = 0; r++; }
+      if (ex * ex + ez * ez <= halfWidth * halfWidth) { this.alive[i] = 0; r++; }
     }
     if (r) this.dirty = true;
     return r;
-  }
-
-  /**
-   * Rayon (m) de la partie de l'élément qui ne doit pas déborder sur une route ou un bâtiment : 70 % du houppier
-   * pour les arbres (un léger surplomb du trottoir reste naturel), la moitié de l'emprise pour le reste.
-   */
-  private crown(i: number): number {
-    const sp = this.species[this.spc[i]!];
-    if (!sp) return 0;
-    const half = (Math.max(sp.asset.dimensions.width, sp.asset.dimensions.depth) / 2) * this.scl[i]!;
-    return sp.impostor ? half * 0.7 : half * 0.5;
-  }
-
-  /** Éléments vivants dont l'emprise (houppier compris) recouvre une zone (diagnostic e2e). */
-  overlapping(test: (x: number, z: number, r: number) => boolean): { x: number; z: number; r: number; assetId: string }[] {
-    const out: { x: number; z: number; r: number; assetId: string }[] = [];
-    for (let i = 0; i < this.n; i++) {
-      if (!this.alive[i]) continue;
-      const r = this.crown(i);
-      if (test(this.px[i]!, this.pz[i]!, r)) out.push({ x: this.px[i]!, z: this.pz[i]!, r, assetId: this.species[this.spc[i]!]!.asset.id });
-    }
-    return out;
   }
 
   /** Nombre d'éléments vivants. */

@@ -30,8 +30,6 @@ export interface RenderPluginContext {
   heightAt(x: number, z: number): number;
   /** Facteur de nuit courant (0 jour .. 1 nuit), mis à jour avec l'heure simulée. */
   nightFactor(): number;
-  /** Végétation du terrain : dégagement d'une emprise (rectangle orienté, angle en radians). Facultatif. */
-  vegetation?: { removeInFootprint(cx: number, cz: number, halfW: number, halfD: number, angle: number, margin?: number): number };
 }
 
 export interface RenderPlugin {

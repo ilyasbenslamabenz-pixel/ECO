@@ -37,9 +37,7 @@ export async function validateTransport(assetsDir = join(root, 'assets')): Promi
   const checkedImg = new Set<string>();
   for (const a of frag.assets) {
     if (a.license.spdx !== 'CC0-1.0' || !/^tools\/transport\//.test(a.license.source) || !a.license.author) err(a.id, 'licence/source/auteur non conformes');
-    // Assets branchés au jeu par le module hubs (phase 2C) : tag `unused` retiré, catégorie `transport`.
-    if (a.tags.includes('unused')) err(a.id, 'tag « unused » présent alors que l\'asset est branché (module hubs)');
-    if (a.category !== 'transport') err(a.id, `catégorie ${a.category} (transport attendue)`);
+    if (!a.tags.includes('unused')) err(a.id, 'tag « unused » manquant (asset non branché au jeu)');
     if (a.lods.length !== 3) err(a.id, `${a.lods.length} LOD (3 attendus)`);
     const tris: number[] = [], kb: number[] = [];
     let bbox: { min: number[]; max: number[] } | null = null;

@@ -23,7 +23,6 @@ type PlannedDrawer = 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
 interface Tab { id: string; label: string; cats: AssetCategory[]; placeable: boolean; icon: string; color: string; filter?: (a: CatalogAsset) => boolean }
 
 const isTransport = (a: CatalogAsset): boolean => a.tags.includes('transport');
-const isHub = (a: CatalogAsset): boolean => a.tags.includes('hub');
 const isGreen = (a: CatalogAsset): boolean => a.tags.includes('espace_vert') || a.tags.includes('parc');
 
 export const DRAWER_TABS: Record<CatalogDrawer, Tab[]> = {
@@ -37,11 +36,7 @@ export const DRAWER_TABS: Record<CatalogDrawer, Tab[]> = {
     { id: 'industrial', label: 'Industrie', cats: ['industrial'], placeable: true, icon: 'factory', color: '#ffcf4a' },
   ],
   services: [{ id: 'public', label: 'Services publics', cats: ['public'], placeable: true, icon: 'services', color: '#ff7a7a', filter: (a) => !isTransport(a) && !isGreen(a) }],
-  transport: [
-    { id: 'station', label: 'Gares', cats: ['public'], placeable: true, icon: 'station', color: '#4fd1e8', filter: isTransport },
-    // Pôles de transport (module hubs) : seules les entrées `hub` du catalogue (Port, Aéroport), pas leurs pièces.
-    { id: 'hubs', label: 'Port et aéroport', cats: ['transport'], placeable: true, icon: 'anchor', color: '#4aa8ff', filter: isHub },
-  ],
+  transport: [{ id: 'station', label: 'Gares', cats: ['public'], placeable: true, icon: 'station', color: '#4fd1e8', filter: isTransport }],
   environment: [
     { id: 'park', label: 'Parcs', cats: ['public'], placeable: true, icon: 'park', color: '#5fd38a', filter: isGreen },
     { id: 'tree', label: 'Arbres', cats: ['tree'], placeable: false, icon: 'tree', color: '#46c46e' },
@@ -90,6 +85,8 @@ export const PLANNED: Record<PlannedDrawer | 'transport', { label: string; icon:
   transport: [
     { label: 'Arrêt de bus', icon: 'busstop', color: '#ffb14a', phase: '2C', tip: 'Lignes de bus' },
     { label: 'Tramway', icon: 'tram', color: '#4fd1e8', phase: '2C', tip: 'Réseau de tramway' },
+    { label: 'Port', icon: 'anchor', color: '#4aa8ff', phase: '2C', tip: 'Port de commerce' },
+    { label: 'Aéroport', icon: 'airport', color: '#c7ccd4', phase: '2C', tip: 'Aéroport' },
   ],
 };
 
@@ -113,11 +110,10 @@ export const CATEGORY_FR: Record<AssetCategory, string> = {
   house: 'Maison individuelle', townhouse: 'Maisons mitoyennes', apartment_low: 'Petit immeuble', apartment_mid: 'Immeuble moyen',
   apartment_high: 'Haute densité', skyscraper: 'Gratte-ciel', commercial: 'Commerce / bureaux', industrial: 'Industrie', public: 'Service public',
   vehicle: 'Véhicule', tree: 'Arbre', vegetation: 'Végétation', street_furniture: 'Mobilier urbain', prop: 'Décor',
-  transport: 'Transport (port, aéroport)',
 };
 
 export function assetsForTab(cat: AssetCatalog, tab: Tab): CatalogAsset[] {
-  return cat.assets.filter((a) => tab.cats.includes(a.category) && (a.category !== 'transport' || isHub(a)) && (!tab.filter || tab.filter(a))).sort((a, b) => a.cost - b.cost);
+  return cat.assets.filter((a) => tab.cats.includes(a.category) && (!tab.filter || tab.filter(a))).sort((a, b) => a.cost - b.cost);
 }
 
 /** Coupe en travers d'un type de route (SVG), dessinée d'après le profil de la simulation. */
@@ -202,7 +198,7 @@ export class BuildBar {
     const tips: Record<string, string> = {
       road: 'Routes : 6 types (rue, avenue, boulevard, sens unique, piétonne, autoroute), droites ou courbes', building: 'Bâtiments : maisons, immeubles, tours, commerces, industrie',
       services: 'Services publics : mairie, école, hôpital, pompiers, police…', environment: 'Nature : parcs (constructibles) ; arbres, végétation, mobilier (phase 2C)',
-      transport: 'Transports : gare de voyageurs, port et aéroport ; bus, tramway (phase 2C)',
+      transport: 'Transports : gare de voyageurs ; bus, tramway, port, aéroport (phase 2C)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
       zones: 'Zones (résidentiel, commercial, industriel, bureaux, agricole) : aperçu — phase 2B', energy: 'Énergie : aperçu des équipements — phase 2B',
       water: 'Eau et assainissement : aperçu — phase 2B', waste: 'Déchets : aperçu — phase 2B', terrain: 'Terraformation : aperçu — phase 2B',
@@ -391,7 +387,6 @@ export class BuildBar {
   private buildingCat(): string {
     const a = this.d.machine.asset;
     if (!a) return 'building';
-    if (a.category === 'transport') return 'transport';
     if (a.category !== 'public') return 'building';
     return isTransport(a) ? 'transport' : isGreen(a) ? 'environment' : 'services';
   }

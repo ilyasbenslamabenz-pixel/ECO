@@ -13,7 +13,8 @@
  * Le rendu ne modifie jamais l'état du jeu.
  */
 import * as THREE from 'three';
-import { createGltfLoader } from '../gzip-assets';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import {
   PIETON_IDLE_BIT, PIETON_META_STRIDE, PIETON_POS_STRIDE, type PietonsFrame,
 } from '../../shared/protocol-ext/pietons';
@@ -135,7 +136,7 @@ export class PedestrianCrowdRenderer {
       top.set(pal.colors[2] ?? '#808080'); bot.set(pal.colors[3] ?? '#808080');
       this.impostorRgb.set([top.r, top.g, top.b, (bot.r + bot.g + bot.b) / 3], r * 4);
     });
-    const loader = createGltfLoader();
+    const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
     this.models = await Promise.all(manifest.models.map(async (info) => {
       const gltfs = await Promise.all(info.lods.map((l) => loader.loadAsync(url(PED_MODELS_DIR + l.file))));
       const g0 = gltfs[0]!;

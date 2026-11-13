@@ -7,7 +7,7 @@
  * N'impose rien à scene.ts : on lui passe les objets existants (renderer, scène, soleil, hémisphère).
  */
 import * as THREE from 'three';
-import { loadHdrTexture } from '../gzip-assets';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import type { AssetCatalog } from '../../shared/catalog';
 import { createSkyDome, prepareHdri, type HdriSource } from './sky-dome';
 
@@ -185,7 +185,8 @@ export class SkySystem {
       if (!h) throw new Error(`HDRI absent du catalogue : ${id}`);
       return new URL(h.file, o.assetsBase).href;
     };
-    const [d, k] = await Promise.all([loadHdrTexture(find('ciel_jour'), THREE.FloatType), loadHdrTexture(find('ciel_crepuscule'), THREE.FloatType)]);
+    const loader = new HDRLoader().setDataType(THREE.FloatType);
+    const [d, k] = await Promise.all([loader.loadAsync(find('ciel_jour')), loader.loadAsync(find('ciel_crepuscule'))]);
     const prep = (t: THREE.DataTexture): HdriSource => {
       const img = t.image as { width: number; height: number; data: Float32Array };
       const r = prepareHdri(img, false);

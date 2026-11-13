@@ -10,10 +10,6 @@ import { pietonsPlugin } from './pietons';
 import { chantiersPlugin } from './chantiers';
 import { weatherPlugin } from './weather';
 import { municipalPlugin } from '../municipal/plugin';
-import { electricitePlugin } from './electricite';
-import { dechetsPlugin } from './dechets';
-import { hubsPlugin } from './hubs';
-import { eauPlugin } from './eau';
 import type { SimPlugin } from './types';
 
 export type { PluginCommandResult, PluginContext, PluginSaveField, PluginSaveSection, SimPlugin } from './types';
@@ -26,8 +22,4 @@ export const SIM_PLUGINS: readonly SimPlugin[] = [
   chantiersPlugin,
   weatherPlugin,
   municipalPlugin,
-  electricitePlugin,
-  dechetsPlugin,
-  hubsPlugin,
-  eauPlugin,
 ];

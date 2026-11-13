@@ -6,7 +6,7 @@
  * Vues : aerien, carrefour, dessus, rue, rue_avenue, nuit, densite. API : window.__vd.
  */
 import * as THREE from 'three';
-import { loadHdrTexture } from '../../gzip-assets';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import type { AssetCatalog, CatalogAsset, TextureSet } from '../../../shared/catalog';
 import { AssetLibrary } from '../../assets';
 import { InstancedBuildingRenderer } from '../../buildings/renderer';
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.3, 4000);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const hdrFile = (id: string): string => new URL(main.hdris.find((h) => h.id === id)!.file, base).href;
-  const [dayHdr, duskHdr] = await Promise.all([loadHdrTexture(hdrFile('ciel_jour')), loadHdrTexture(hdrFile('ciel_crepuscule'))]);
+  const [dayHdr, duskHdr] = await Promise.all([new HDRLoader().loadAsync(hdrFile('ciel_jour')), new HDRLoader().loadAsync(hdrFile('ciel_crepuscule'))]);
   dayHdr.mapping = duskHdr.mapping = THREE.EquirectangularReflectionMapping;
   const envDay = pmrem.fromEquirectangular(dayHdr).texture, envDusk = pmrem.fromEquirectangular(duskHdr).texture;
   const sun = new THREE.DirectionalLight(0xfff0dc, 2.4);

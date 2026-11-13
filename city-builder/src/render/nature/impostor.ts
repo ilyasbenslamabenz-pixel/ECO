@@ -266,11 +266,9 @@ varying vec3 vWorldPos;
 varying vec3 vViewDir;
 void main() {
   vec4 a = texture2D(tAlb, vUv);
-  // Alpha « net » malgré les mipmaps (préserve la couverture du feuillage au loin), transformé en COUVERTURE
-  // partielle (alpha-to-coverage, canevas multiéchantillonné) : un seuil tout-ou-rien rendait les arbres lointains
-  // granuleux, crénelés et scintillants en vue haute, surtout sur iPhone (rapport de pixels réduit).
-  float al = clamp((a.a - 0.3) / max(fwidth(a.a) * 1.4, 0.0001) + 0.5, 0.0, 1.0);
-  if (al < 0.04) discard;
+  // Alpha « net » malgré les mipmaps (préserve la couverture du feuillage au loin).
+  float al = (a.a - 0.3) / max(fwidth(a.a), 0.0001) + 0.5;
+  if (al < 0.5) discard;
   // Pas de division par l'alpha : l'atlas n'est pas prémultiplié et son fond est déjà vert feuillage.
   a.rgb = sRGBTransferEOTF(vec4(a.rgb, 1.0)).rgb; // atlas stocké encodé en sRGB (cible RGBA8)
   vec3 n = texture2D(tNor, vUv).xyz * 2.0 - 1.0;
@@ -285,7 +283,7 @@ void main() {
   // Reflet spéculaire du ciel et du soleil, comme en reçoit le matériau PBR du modèle (uSpec = intensité spéculaire
   // de son feuillage) : sans lui, une essence à albédo sombre (épicéa) sort presque noire alors que le modèle est gris-bleu.
   vec3 col = alb * (uSunColor * (ndl + wrap) * 0.95 + amb) + (amb + uSunColor * ndl * 0.5) * (0.09 * uSpec);
-  gl_FragColor = vec4(col, al);
+  gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
   #include <fog_fragment>
@@ -310,7 +308,5 @@ export function makeImpostorMaterial(atlas: ImpostorAtlas, lights: ImpostorMater
     uSpec: { value: atlas.specular },
     ...lights,
   };
-  // alphaToCoverage : bords du feuillage lissés par le multiéchantillonnage du canevas (antialias: true), sans tri
-  // ni mélange ; sans multiéchantillonnage, l'alpha est ignoré (canevas opaque) et le rendu reste celui d'un seuil.
-  return new THREE.ShaderMaterial({ name: 'imposteur_arbre', uniforms, vertexShader: IMP_VERT, fragmentShader: IMP_FRAG, fog: true, side: THREE.DoubleSide, alphaToCoverage: true });
+  return new THREE.ShaderMaterial({ name: 'imposteur_arbre', uniforms, vertexShader: IMP_VERT, fragmentShader: IMP_FRAG, fog: true, side: THREE.DoubleSide });
 }

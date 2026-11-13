@@ -47,13 +47,6 @@ export function newOutput(): BuildOutput {
 
 /* Constantes de profil en travers. */
 const SKIRT_DEPTH = 1.4;      // jupe sous la rive (m)
-/**
- * Talus de rive : la jupe descend d'abord en pente douce (SHOULDER_W m vers l'extérieur pour SHOULDER_DY m) puis
- * plonge sous le terrain. Une jupe presque verticale laissait voir, partout où la route domine le sol (plage, bord de
- * l'eau, remblai), un mur brun de 30 à 50 cm : la route paraissait une dalle posée sur le sol.
- */
-const SHOULDER_W = 1.8;
-const SHOULDER_DY = -0.55;
 const PAINT_LIFT = 0.012;
 const DECK_THICK = 0.9;
 const PARAPET_H = 0.55;
@@ -294,9 +287,7 @@ function crossSection(out: BuildOutput, k: RoadKindDef, st: Station[]): void {
     if (!bridge) {
       // Jupe de rive : masque le raccord au terrain non nivelé.
       for (const side of [1, -1] as const) {
-        const face = side > 0 ? 'left' : 'right';
-        strip(L.get('skirt')!, st, side * ht, topY, side * (ht + SHOULDER_W), SHOULDER_DY, face, from, to);
-        strip(L.get('skirt')!, st, side * (ht + SHOULDER_W), SHOULDER_DY, side * (ht + SHOULDER_W + 0.5), -SKIRT_DEPTH, face, from, to);
+        strip(L.get('skirt')!, st, side * ht, topY, side * (ht + 0.6), -SKIRT_DEPTH, side > 0 ? 'left' : 'right', from, to);
       }
       if (k.id === 'highway') {
         // Glissières de sécurité (poteaux + lisse) sur les accotements.
@@ -683,11 +674,7 @@ function deadEnd(out: BuildOutput, k: RoadKindDef, s: Station, dir: number): voi
       orientedQuad(b, A[i]!, A[i + 1]!, B[i + 1]!, B[i]!, want, s.x, s.y, s.z);
     }
   };
-  const skirt = (top: number): void => {
-    band(L.get('skirt')!, ht, top, ht + SHOULDER_W, SHOULDER_DY, 2);
-    band(L.get('skirt')!, ht + SHOULDER_W, SHOULDER_DY, ht + SHOULDER_W + 0.5, -SKIRT_DEPTH, 2);
-  };
-  if (k.surface === 'pavers') { fan(L.get('pavers')!, 0.04, ht); skirt(0.04); return; }
+  if (k.surface === 'pavers') { fan(L.get('pavers')!, 0.04, ht); band(L.get('skirt')!, ht, 0.04, ht + 0.6, -SKIRT_DEPTH, 2); return; }
   const asphalt = L.get(k.surface === 'asphalt_worn' ? 'asphaltWorn' : 'asphalt')!;
   fan(asphalt, 0, hc);
   if (k.sidewalk > 0) {
@@ -695,7 +682,7 @@ function deadEnd(out: BuildOutput, k: RoadKindDef, s: Station, dir: number): voi
     band(L.get('curb')!, hc, curb, hc + 0.2, curb, 1);
     band(L.get('sidewalk')!, hc + 0.2, curb, ht, curb, 1);
   }
-  skirt(k.sidewalk > 0 ? curb : 0);
+  band(L.get('skirt')!, ht, k.sidewalk > 0 ? curb : 0, ht + 0.6, -SKIRT_DEPTH, 2);
 }
 
 /** Triangle orienté vers le haut (want=1) ou le bas (-1). */
@@ -839,14 +826,10 @@ export function buildJunction(out: BuildOutput, ctx: BuildContext, nodeId: numbe
       const o0 = outer[q]!, o1 = outer[q + 1]!;
       const ex0 = o0[0] - node.x, ez0 = o0[2] - node.z, l0 = Math.hypot(ex0, ez0) || 1;
       const ex1 = o1[0] - node.x, ez1 = o1[2] - node.z, l1 = Math.hypot(ex1, ez1) || 1;
-      // Talus doux puis plongée sous le terrain (comme le long des tronçons).
-      const top = cr.hasWalk ? curbH : 0;
-      const at = (o: [number, number, number], ex: number, ez: number, l: number, out: number, dy: number): number => sk.v(o[0] + (ex / l) * out, o[1] - top + dy, o[2] + (ez / l) * out);
       const a = sk.v(o0[0], o0[1], o0[2]), b = sk.v(o1[0], o1[1], o1[2]);
-      const m1 = at(o1, ex1, ez1, l1, SHOULDER_W, SHOULDER_DY), m0 = at(o0, ex0, ez0, l0, SHOULDER_W, SHOULDER_DY);
-      orientedQuad(sk, a, b, m1, m0, 2, node.x, node.y, node.z);
-      const d1 = at(o1, ex1, ez1, l1, SHOULDER_W + 0.5, -SKIRT_DEPTH), d0 = at(o0, ex0, ez0, l0, SHOULDER_W + 0.5, -SKIRT_DEPTH);
-      orientedQuad(sk, m0, m1, d1, d0, 2, node.x, node.y, node.z);
+      const cc = sk.v(o1[0] + (ex1 / l1) * 0.6, o1[1] - SKIRT_DEPTH - curbH, o1[2] + (ez1 / l1) * 0.6);
+      const d = sk.v(o0[0] + (ex0 / l0) * 0.6, o0[1] - SKIRT_DEPTH - curbH, o0[2] + (ez0 / l0) * 0.6);
+      orientedQuad(sk, a, b, cc, d, 2, node.x, node.y, node.z);
     }
   }
   void CORNER_RADIUS;
