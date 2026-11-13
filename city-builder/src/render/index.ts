@@ -88,6 +88,7 @@ export async function initRender(
   // Mode allégé : toute texture d'image plus grande est réduite par three avant l'envoi au GPU (resizeImage).
   // Fixé AVANT tout envoi ; la carte d'ombre a déjà lu la vraie limite à la création du rendu.
   if (Number.isFinite(profile.gpuTextureCap)) ctx.renderer.capabilities.maxTextureSize = Math.min(ctx.renderer.capabilities.maxTextureSize, profile.gpuTextureCap);
+  const cycleJourNuit = (() => { try { const q = new URLSearchParams(globalThis.location?.search ?? ''); return q.get('nuit') === '1' || q.has('h'); } catch { return false; } })();
   const sky = await SkySystem.create({
     renderer: ctx.renderer, scene: ctx.scene, sun: ctx.sun, hemi: ctx.hemi, catalog, assetsBase,
     shadowMapSize: profile.lite ? profile.shadowSize : Math.min(window.innerWidth, window.innerHeight) * (window.devicePixelRatio || 1) > 1100 ? 4096 : 2048,
@@ -149,6 +150,9 @@ export async function initRender(
     disposePlugins() { plugins.dispose(); },
     rebuildGpu() { sky.rebuildEnvironment(); veg.rebakeImpostors(ctx.renderer); buildings.invalidate(); },
     setTimeOfDay(hour) {
+      // Toujours de jour (demande du propriétaire, allège le rendu) : lumière fixe de début d'après-midi.
+      // Le cycle jour/nuit reste disponible avec ?nuit=1 (ou une heure imposée ?h=, captures) ; l'horloge de la simulation n'est pas touchée.
+      if (!cycleJourNuit) hour = 14;
       if (Math.abs(hour - lastHour) < 1 / 120) return;
       lastHour = hour;
       sky.setTimeOfDay(hour);
