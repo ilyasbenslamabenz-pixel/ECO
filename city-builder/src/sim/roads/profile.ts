@@ -35,6 +35,14 @@ export const PROFILE_STEP = 4;
 export const MAX_BRIDGE_LENGTH = 600;
 /** Espacement cible des piles de pont (m). */
 export const PIER_SPACING = 32;
+/** Pas des hauteurs imposées pendant le tracé (boutons ▲ / ▼), en m. */
+export const ELEVATION_STEP = 4;
+/** Hauteur imposée maximale (en valeur absolue), m. */
+export const MAX_ELEVATION = 40;
+/** Couverture minimale (terrain naturel au-dessus de la chaussée) pour passer en TUNNEL (m) : gabarit + dalle. */
+export const TUNNEL_MIN_COVER = 6.5;
+/** Longueur de tunnel maximale (m). */
+export const MAX_TUNNEL_LENGTH = 800;
 
 export interface RoadProfile {
   /** Longueur du tronçon (m). */
@@ -48,6 +56,10 @@ export interface RoadProfile {
   ground: Float32Array;
   /** 1 si l'échantillon est sur un pont. */
   bridge: Uint8Array;
+  /** 1 si l'échantillon est en tunnel (jamais en même temps qu'un pont). */
+  tunnel: Uint8Array;
+  /** Longueur de la plus longue section continue en tunnel (m). */
+  longestTunnel: number;
   /** Pente maximale atteinte (valeur absolue). */
   maxGrade: number;
   /** Longueur totale en pont (m). */
@@ -58,13 +70,23 @@ export interface RoadProfile {
   piers: number[];
   /** Vrai si un échantillon hors pont est sous l'eau (ne devrait pas arriver). */
   wet: boolean;
+  /**
+   * Murs de soutènement à gauche / à droite (1 par échantillon) : remblai trop haut ou au bord de l'eau, déblai
+   * profond. Ailleurs, talus naturel. Calculés par `computeSides` (sides.ts) sur le terrain NATUREL.
+   */
+  wallL?: Uint8Array;
+  wallR?: Uint8Array;
 }
 
 /**
  * Calcule le profil d'un tronçon de courbe `curve`, extrémités fixées aux hauteurs hA et hB.
  * `maxGrade` : pente maximale du type de route.
+ * `elevation` (m, multiple de ELEVATION_STEP) : hauteur imposée pendant le tracé. 0 = la route épouse le terrain.
+ * > 0 : la route passe au-dessus du terrain lissé (ou de la corde entre ses extrémités si elle est plus haute :
+ * viaduc rectiligne au-dessus d'un creux) ; < 0 : en dessous (ou sous la corde : tunnel rectiligne sous une colline).
+ * Les rampes vers les extrémités respectent la pente maximale.
  */
-export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: number, maxGrade: number, env: ProfileEnv): RoadProfile {
+export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: number, maxGrade: number, env: ProfileEnv, elevation = 0): RoadProfile {
   const length = arc.length;
   const count = Math.max(2, Math.ceil(length / PROFILE_STEP) + 1);
   const step = length / (count - 1);
@@ -77,7 +99,7 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
     wl[i] = localWaterLevel(env, p[0]!, p[1]!);
   }
   // 1) Lissage du terrain (moyenne glissante pondérée sur ~±16 m) : la route n'épouse pas chaque bosse.
-  const radius = Math.max(1, Math.round(16 / step));
+  const radius = Math.max(1, Math.round((elevation === 0 ? 16 : 40) / step));
   const smooth = new Float64Array(count);
   for (let i = 0; i < count; i++) {
     let s = 0, w = 0;
@@ -96,7 +118,14 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
   for (let i = count - 2; i >= 0; i--) lower[i] = Math.max(lower[i]!, lower[i + 1]! - g);
   // Hors eau, la chaussée ne descend pas sous l'eau.
   const h = new Float64Array(count);
-  for (let i = 0; i < count; i++) h[i] = Math.max(smooth[i]!, lower[i]!, env.waterLevel + 0.6);
+  for (let i = 0; i < count; i++) {
+    let target = smooth[i]!;
+    if (elevation !== 0) {
+      const chord = hA + ((hB - hA) * i) / (count - 1);
+      target = elevation > 0 ? Math.max(smooth[i]! + elevation, chord) : Math.min(smooth[i]! + elevation, chord);
+    }
+    h[i] = Math.max(target, lower[i]!, env.waterLevel + 0.6);
+  }
   // 3) Extrémités fixées puis raccord progressif sur ~24 m.
   h[0] = hA; h[count - 1] = hB;
   const blend = Math.max(1, Math.round(24 / step));
@@ -122,13 +151,17 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
   }
   const heights = new Float32Array(count);
   const bridge = new Uint8Array(count);
+  const tunnel = new Uint8Array(count);
   let maxG = 0, wet = false;
   for (let i = 0; i < count; i++) {
     heights[i] = h[i]!;
     if (i > 0) maxG = Math.max(maxG, Math.abs(h[i]! - h[i - 1]!) / step);
     const gi = ground[i]!;
     if (gi < wl[i]! + 0.4 || h[i]! - gi > BRIDGE_MIN_HEIGHT) bridge[i] = 1;
+    // Tunnel seulement pour une route volontairement abaissée (▼) : un tracé au niveau du terrain garde ses déblais.
+    else if (elevation < 0 && gi - h[i]! >= TUNNEL_MIN_COVER) tunnel[i] = 1;
   }
+  cleanTunnel(tunnel, bridge);
   // Pont : on comble les trous d'un échantillon et on supprime les ponts d'un seul échantillon (remblai).
   for (let i = 1; i < count - 1; i++) if (!bridge[i] && bridge[i - 1] && bridge[i + 1]) bridge[i] = 1;
   for (let i = 0; i < count; i++) {
@@ -136,7 +169,27 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
     if (!bridge[i] && ground[i]! < wl[i]! + 0.4) wet = true;
   }
   const { bridgeLength, longest, piers } = spans(bridge, step, length);
-  return { length, count, step, heights, ground, bridge, maxGrade: maxG, bridgeLength, longestBridge: longest, piers, wet };
+  return { length, count, step, heights, ground, bridge, tunnel, longestTunnel: spans(tunnel, step, length).longest, maxGrade: maxG, bridgeLength, longestBridge: longest, piers, wet };
+}
+
+/** Tunnel : trous d'un échantillon comblés, sections de moins de 3 échantillons supprimées (tranchée couverte inutile). */
+function cleanTunnel(tunnel: Uint8Array, bridge: Uint8Array): void {
+  const n = tunnel.length;
+  for (let i = 1; i < n - 1; i++) if (!tunnel[i] && !bridge[i] && tunnel[i - 1] && tunnel[i + 1]) tunnel[i] = 1;
+  let start = -1;
+  for (let i = 0; i <= n; i++) {
+    const on = i < n && tunnel[i] === 1;
+    if (on && start < 0) start = i;
+    if (!on && start >= 0) { if (i - start < 3) tunnel.fill(0, start, i); start = -1; }
+  }
+  // Jamais de portail sur une extrémité (carrefour) : la première et la dernière station restent à l'air libre.
+  if (n > 2) { tunnel[0] = 0; tunnel[n - 1] = 0; }
+}
+
+/** Vrai si l'abscisse s est en tunnel. */
+export function profileIsTunnel(p: RoadProfile, s: number): boolean {
+  const i = Math.min(p.count - 1, Math.max(0, Math.round(s / p.step)));
+  return p.tunnel[i] === 1;
 }
 
 /** Hauteur interpolée du profil à l'abscisse s. */
@@ -184,23 +237,29 @@ function spans(bridge: Uint8Array, step: number, length: number): { bridgeLength
   return { bridgeLength, longest, piers };
 }
 
-/** Plages de pont [début, fin[ (index d'échantillons) d'un profil : forme compacte pour les messages. */
-export function bridgeRuns(p: RoadProfile): number[] {
+/** Plages [début, fin[ (index d'échantillons) des drapeaux à 1 : forme compacte pour les messages. */
+export function flagRuns(flags: Uint8Array): number[] {
   const out: number[] = [];
   let start = -1;
-  for (let i = 0; i <= p.count; i++) {
-    const on = i < p.count && p.bridge[i] === 1;
+  for (let i = 0; i <= flags.length; i++) {
+    const on = i < flags.length && flags[i] === 1;
     if (on && start < 0) start = i;
     if (!on && start >= 0) { out.push(start, i); start = -1; }
   }
   return out;
 }
 
+/** Plages de pont [début, fin[ (index d'échantillons) d'un profil : forme compacte pour les messages. */
+export function bridgeRuns(p: RoadProfile): number[] { return flagRuns(p.bridge); }
+
+/** Plages de tunnel [début, fin[ (index d'échantillons). */
+export function tunnelRuns(p: RoadProfile): number[] { return flagRuns(p.tunnel); }
+
 /**
  * Reconstruit un profil à partir des hauteurs calculées ailleurs (la simulation) : le rendu affiche
  * exactement la chaussée validée, même si le terrain qu'il connaît a été nivelé depuis.
  */
-export function profileFromHeights(curve: Cubic, arc: ArcTable, heights: readonly number[], runs: readonly number[], env: ProfileEnv): RoadProfile {
+export function profileFromHeights(curve: Cubic, arc: ArcTable, heights: readonly number[], runs: readonly number[], env: ProfileEnv, tRuns: readonly number[] = []): RoadProfile {
   const length = arc.length;
   const count = Math.max(2, heights.length);
   const step = length / (count - 1);
@@ -214,8 +273,10 @@ export function profileFromHeights(curve: Cubic, arc: ArcTable, heights: readonl
     ground[i] = env.heightAt(p[0]!, p[1]!);
   }
   for (let k = 0; k + 1 < runs.length; k += 2) for (let i = Math.max(0, runs[k]!); i < Math.min(count, runs[k + 1]!); i++) bridge[i] = 1;
+  const tunnel = new Uint8Array(count);
+  for (let k = 0; k + 1 < tRuns.length; k += 2) for (let i = Math.max(0, tRuns[k]!); i < Math.min(count, tRuns[k + 1]!); i++) if (!bridge[i]) tunnel[i] = 1;
   let maxG = 0;
   for (let i = 1; i < count; i++) maxG = Math.max(maxG, Math.abs(h[i]! - h[i - 1]!) / step);
   const { bridgeLength, longest, piers } = spans(bridge, step, length);
-  return { length, count, step, heights: h, ground, bridge, maxGrade: maxG, bridgeLength, longestBridge: longest, piers, wet: false };
+  return { length, count, step, heights: h, ground, bridge, tunnel, longestTunnel: spans(tunnel, step, length).longest, maxGrade: maxG, bridgeLength, longestBridge: longest, piers, wet: false };
 }

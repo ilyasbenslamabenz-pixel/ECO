@@ -254,7 +254,8 @@ export class TrafficGraph {
         const ranks = inc.map((e) => this.edgeRank[e]!);
         const maxR = Math.max(...ranks), minR = Math.min(...ranks);
         // feux : croisement de deux axes à plusieurs voies, ou carrefour à 4 branches touchant un axe principal
-        if (big >= 3 || (d >= 4 && maxR >= 1)) control = Control.Signal;
+        if (maxR >= 4) control = Control.Yield; // giratoire (rang 4, adapters.ts) : cédez-le-passage aux entrées
+        else if (big >= 3 || (d >= 4 && maxR >= 1)) control = Control.Signal;
         else if (maxR > minR) control = Control.Yield;
         else control = Control.Priority;
       }

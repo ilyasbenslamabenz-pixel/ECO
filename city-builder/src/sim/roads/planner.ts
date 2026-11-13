@@ -6,7 +6,7 @@
  */
 import { ArcTable, derivCubic, evalCubic, intersectCubics, minRadius, quadraticToCubic, splitCubic, straightCubic, type Cubic } from './bezier';
 import type { RoadNetwork } from './network';
-import { MAX_BRIDGE_LENGTH, computeProfile, localWaterLevel, profileHeightAt, profileIsBridge, type RoadProfile } from './profile';
+import { MAX_BRIDGE_LENGTH, MAX_ELEVATION, MAX_TUNNEL_LENGTH, computeProfile, localWaterLevel, profileHeightAt, profileIsBridge, profileIsTunnel, type RoadProfile } from './profile';
 import { ROAD_KINDS, halfWidth, type RoadKindId } from './types';
 
 export interface Point2 { x: number; z: number }
@@ -19,6 +19,11 @@ export interface RoadRequest {
   control?: Point2;
   /** Rayon d'accrochage (m) ; défaut : max(4, demi-largeur). */
   snapRadius?: number;
+  /** Hauteur imposée (m, multiple de 4, ▲ / ▼ de l'outil Routes) : viaduc au-dessus, tunnel en dessous. */
+  elevation?: number;
+  /** Extrémités LIBRES posées à la hauteur imposée (sinon au niveau du terrain : la route y redescend). */
+  startElevated?: boolean;
+  endElevated?: boolean;
 }
 
 export type PlanErrorCode = 'INVALID_ARGS' | 'OUT_OF_BOUNDS' | 'COLLISION' | 'TOO_STEEP' | 'UNDER_WATER' | 'NOT_IMPLEMENTED';
@@ -44,7 +49,21 @@ export interface RoadPlan {
   /** Profils calculés des futurs tronçons (pour l'aperçu). */
   pieceProfiles: RoadProfile[];
   networkVersion: number;
+  /** Hauteur imposée du tracé (m). */
+  elevation: number;
+  /** Hauteurs des extrémités du tracé (nœuds libres créés à ces hauteurs). */
+  startY: number;
+  endY: number;
+  /** Croisements dénivelés (passage supérieur ou inférieur, sans carrefour). */
+  passes: { segId: number; x: number; z: number; above: boolean }[];
+  /** Longueur totale en tunnel (m). */
+  tunnelLength: number;
 }
+
+/** Dénivelé minimal entre deux chaussées qui se croisent sans carrefour (gabarit 4,8 m + tablier). */
+export const GRADE_SEPARATION = 6;
+/** Facteur de coût d'un mètre de tunnel (par rapport au mètre de route). */
+export const TUNNEL_COST_FACTOR = 6;
 
 export interface PlanOptions {
   bounds?: { minX: number; minZ: number; maxX: number; maxZ: number };
@@ -99,15 +118,19 @@ function norm(x: number, z: number): [number, number] {
   return [x / l, z / l];
 }
 
-function snapHeight(net: RoadNetwork, s: Snap): number {
+function snapHeight(net: RoadNetwork, s: Snap, elevation = 0): number {
   if (s.type === 'node') return net.nodePos(s.nodeId).y;
   if (s.type === 'segment') return profileHeightAt(net.profile(s.segId), net.arc(s.segId).sAt(s.t));
-  return net.env.heightAt(s.x, s.z);
+  const g = net.env.heightAt(s.x, s.z);
+  return elevation === 0 ? g : Math.max(g + elevation, net.env.waterLevel + 0.6);
 }
 
 export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions = {}): PlanResult {
   const kind = ROAD_KINDS[req.kind];
   if (!kind) return err('INVALID_ARGS', 'Type de route inconnu');
+  const elevation = req.elevation ?? 0;
+  if (!Number.isFinite(elevation) || Math.abs(elevation) > MAX_ELEVATION) return err('INVALID_ARGS', `Hauteur imposée hors limites (±${MAX_ELEVATION} m)`);
+  if (elevation !== 0 && !kind.vehicles && elevation < 0) return err('INVALID_ARGS', 'Une rue piétonne ne passe pas en tunnel');
   const hw = halfWidth(req.kind);
   const radius = req.snapRadius ?? Math.max(4, hw);
   let start = snapPoint(net, req.start, radius);
@@ -208,6 +231,32 @@ export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions =
     });
   }
 
+  // Croisements dénivelés : la nouvelle route passe au-dessus (pont) ou en dessous (tunnel) d'une route existante,
+  // ou sous un pont / au-dessus d'un tunnel existant : pas de carrefour. Profil provisoire du tracé entier.
+  const startY = snapHeight(net, start, req.startElevated ? elevation : 0);
+  const endY = snapHeight(net, end, req.endElevated ? elevation : 0);
+  const passes: RoadPlan['passes'] = [];
+  {
+    const prov = computeProfile(curve, arc, startY, endY, kind.maxGrade, net.env, elevation);
+    const keep: Crossing[] = [];
+    for (const c of crossings) {
+      const sN = arc.sAt(c.tNew);
+      const hNew = profileHeightAt(prov, sN);
+      const oProf = net.profile(c.segId), sO = net.arc(c.segId).sAt(c.tExisting);
+      const hOld = c.nodeId >= 0 ? net.nodePos(c.nodeId).y : profileHeightAt(oProf, sO);
+      const dh = hNew - hOld;
+      if (Math.abs(dh) < 1.5) { keep.push(c); continue; }
+      const above = dh > 0;
+      const structural = above ? profileIsBridge(prov, sN) || profileIsTunnel(oProf, sO) : profileIsTunnel(prov, sN) || profileIsBridge(oProf, sO);
+      if (Math.abs(dh) >= GRADE_SEPARATION && structural) { passes.push({ segId: c.segId, x: c.x, z: c.z, above }); continue; }
+      if (elevation === 0 && !profileIsBridge(oProf, sO) && !profileIsTunnel(oProf, sO)) { keep.push(c); continue; }
+      return err('COLLISION', above
+        ? `Passage au-dessus d'une route : ${Math.round(Math.abs(dh) * 10) / 10} m de dénivelé, ${GRADE_SEPARATION} m minimum (montez le tracé avec ▲)`
+        : `Passage sous une route : ${Math.round(Math.abs(dh) * 10) / 10} m de dénivelé, ${GRADE_SEPARATION} m minimum en tunnel (descendez le tracé avec ▼)`);
+    }
+    crossings = keep;
+  }
+
   // Règles des croisements : à niveau autorisé, angle suffisant, pas sur un pont.
   const dNew = new Float64Array(2), dOld = new Float64Array(2);
   for (const c of crossings) {
@@ -220,6 +269,9 @@ export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions =
     if (lineAngle(dNew[0]!, dNew[1]!, dOld[0]!, dOld[1]!) < MIN_CROSS_ANGLE) return err('COLLISION', 'Croisement trop rasant avec une route existante');
     if (c.nodeId < 0 && profileIsBridge(net.profile(c.segId), net.arc(c.segId).sAt(c.tExisting))) {
       return err('COLLISION', 'Impossible de créer un carrefour sur un pont');
+    }
+    if (c.nodeId < 0 && profileIsTunnel(net.profile(c.segId), net.arc(c.segId).sAt(c.tExisting))) {
+      return err('COLLISION', 'Impossible de créer un carrefour dans un tunnel');
     }
   }
   // Raccord aux extrémités : type compatible et angle avec les branches existantes.
@@ -244,17 +296,20 @@ export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions =
       if (snap.type === 'segment' && profileIsBridge(net.profile(sid), net.arc(sid).sAt(snap.t))) {
         return err('COLLISION', 'Impossible de se raccorder sur un pont');
       }
+      if (snap.type === 'segment' && profileIsTunnel(net.profile(sid), net.arc(sid).sAt(snap.t))) {
+        return err('COLLISION', 'Impossible de se raccorder dans un tunnel');
+      }
     }
     if (snap.type === 'node' && net.incident(snap.nodeId).length >= 6) return err('COLLISION', 'Trop de branches sur ce carrefour (6 maximum)');
   }
 
   // Points de découpe du nouveau tracé : départ, croisements, arrivée.
-  const cuts: { t: number; x: number; z: number; h: number }[] = [{ t: 0, x: start.x, z: start.z, h: snapHeight(net, start) }];
+  const cuts: { t: number; x: number; z: number; h: number }[] = [{ t: 0, x: start.x, z: start.z, h: startY }];
   for (const c of crossings) {
     const h = c.nodeId >= 0 ? net.nodePos(c.nodeId).y : profileHeightAt(net.profile(c.segId), net.arc(c.segId).sAt(c.tExisting));
     cuts.push({ t: c.tNew, x: c.x, z: c.z, h });
   }
-  cuts.push({ t: 1, x: end.x, z: end.z, h: snapHeight(net, end) });
+  cuts.push({ t: 1, x: end.x, z: end.z, h: endY });
   for (let i = 1; i < cuts.length; i++) {
     if (arc.sAt(cuts[i]!.t) - arc.sAt(cuts[i - 1]!.t) < MIN_PIECE_LENGTH) return err('COLLISION', 'Trop près d\'un carrefour existant');
   }
@@ -276,6 +331,7 @@ export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions =
         const ohw = otherHw(sid);
         const clear = (hw + ohw) * 1.7 + 4;
         if (cuts.some((c) => Math.hypot(c.x - px, c.z - pz) < clear)) continue;
+        if (passes.some((c) => c.segId === sid || Math.hypot(c.x - px, c.z - pz) < clear)) continue;
         const hit = net.segmentNear(px, pz, hw + ohw - 0.5, (id) => id !== sid);
         if (hit) return err('COLLISION', 'Le tracé chevauche une route existante');
       }
@@ -284,7 +340,8 @@ export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions =
 
   // Profils en long des futurs tronçons : pente, ponts.
   const pieceProfiles: RoadProfile[] = [];
-  let bridgeLength = 0;
+  let bridgeLength = 0, tunnelLength = 0;
+  const pieceRanges: [number, number][] = [];
   let rest = curve, tDone = 0;
   for (let i = 1; i < cuts.length; i++) {
     const tA = cuts[i - 1]!.t, tB = cuts[i]!.t;
@@ -295,9 +352,11 @@ export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions =
       const [l, rr] = splitCubic(rest, local);
       piece = l; rest = rr; tDone = tB;
     }
-    void tA;
     const parc = new ArcTable(piece);
-    const prof = computeProfile(piece, parc, cuts[i - 1]!.h, cuts[i]!.h, kind.maxGrade, net.env);
+    const prof = computeProfile(piece, parc, cuts[i - 1]!.h, cuts[i]!.h, kind.maxGrade, net.env, elevation);
+    if (prof.longestTunnel > MAX_TUNNEL_LENGTH) return err('COLLISION', `Tunnel trop long (${Math.round(prof.longestTunnel)} m, maximum ${MAX_TUNNEL_LENGTH} m)`);
+    for (let k = 0; k < prof.count; k++) if (prof.tunnel[k]) tunnelLength += prof.step;
+    pieceRanges.push([arc.sAt(tA), arc.sAt(tB)]);
     if (prof.maxGrade > kind.maxGrade * 1.05) return err('TOO_STEEP', `Pente trop forte : ${Math.round(prof.maxGrade * 100)} % (maximum ${Math.round(kind.maxGrade * 100)} %)`);
     if (prof.longestBridge > MAX_BRIDGE_LENGTH) return err('UNDER_WATER', `Pont trop long (${Math.round(prof.longestBridge)} m, maximum ${MAX_BRIDGE_LENGTH} m)`);
     if (prof.wet) return err('UNDER_WATER', 'Le tracé passe sous le niveau de l\'eau');
@@ -310,13 +369,31 @@ export function planRoad(net: RoadNetwork, req: RoadRequest, opts: PlanOptions =
     pieceProfiles.push(prof);
   }
 
+  // Les passages dénivelés restent valides sur les profils définitifs (morceaux entre carrefours).
+  for (const ps of passes) {
+    const hit = intersectCubics(curve, net.curve(ps.segId))[0];
+    if (!hit) continue;
+    const sN = arc.sAt(hit.ta);
+    const k = pieceRanges.findIndex(([a, b]) => sN >= a - 1e-6 && sN <= b + 1e-6);
+    const prof = pieceProfiles[k];
+    if (!prof) continue;
+    const sl = sN - pieceRanges[k]![0];
+    const oProf = net.profile(ps.segId), sO = net.arc(ps.segId).sAt(hit.tb);
+    const dh = profileHeightAt(prof, sl) - profileHeightAt(oProf, sO);
+    const okStruct = ps.above ? profileIsBridge(prof, sl) || profileIsTunnel(oProf, sO) : profileIsTunnel(prof, sl) || profileIsBridge(oProf, sO);
+    if ((ps.above ? dh : -dh) < GRADE_SEPARATION - 0.05 || !okStruct) {
+      return err('COLLISION', `Dénivelé insuffisant au croisement (${Math.round(Math.abs(dh) * 10) / 10} m, ${GRADE_SEPARATION} m minimum) : ${ps.above ? 'montez' : 'descendez'} davantage le tracé`);
+    }
+  }
+
   if (opts.blocked) {
     const msg = opts.blocked(curve, hw);
     if (msg) return err('COLLISION', msg);
   }
 
-  const cost = Math.round(arc.length * kind.costPerMeter + bridgeLength * kind.costPerMeter * (kind.bridgeCostFactor - 1));
-  return { ok: true, plan: { kind: req.kind, curve, length: arc.length, bridgeLength, cost, start, end, crossings, pieceProfiles, networkVersion: net.version } };
+  const cost = Math.round(arc.length * kind.costPerMeter + bridgeLength * kind.costPerMeter * (kind.bridgeCostFactor - 1)
+    + tunnelLength * kind.costPerMeter * (TUNNEL_COST_FACTOR - 1));
+  return { ok: true, plan: { kind: req.kind, curve, length: arc.length, bridgeLength, cost, start, end, crossings, pieceProfiles, networkVersion: net.version, elevation, startY, endY, passes, tunnelLength } };
 }
 
 export interface CommitResult {
@@ -359,7 +436,7 @@ export function commitRoadPlan(net: RoadNetwork, plan: RoadPlan): CommitResult {
   const nodeOf = (snap: Snap, key: number): number => {
     if (snap.type === 'node') return snap.nodeId;
     if (snap.type === 'segment') return nodeFor.get(key)!;
-    return net.addNode(snap.x, snap.z);
+    return net.addNode(snap.x, snap.z, key === KEY_START ? plan.startY : plan.endY);
   };
   const nodes: number[] = [nodeOf(plan.start, KEY_START)];
   plan.crossings.forEach((_, i) => nodes.push(nodeFor.get(i)!));
@@ -379,7 +456,23 @@ export function commitRoadPlan(net: RoadNetwork, plan: RoadPlan): CommitResult {
     if (a === b) continue;
     // Pas de doublon exact (même paire de nœuds, même type).
     if (net.incident(a).some((s) => { const [p, q] = net.endpoints(s); return ((p === a && q === b) || (p === b && q === a)) && net.length(s) < new ArcTable(piece).length * 1.05; })) continue;
-    segmentIds.push(net.addSegment(a, b, plan.kind, piece));
+    segmentIds.push(net.addSegment(a, b, plan.kind, piece, undefined, plan.elevation));
   }
   return { segmentIds, nodeIds: nodes };
+}
+
+/**
+ * Aperçu 3D d'un plan (outil Routes, hauteur imposée) : quadruplets x, y, z, état (0 sol, 1 pont, 2 tunnel) au pas
+ * du profil, sur le tracé entier (les carrefours intermédiaires ne changent l'aperçu qu'à la marge).
+ */
+export function roadPreviewPath(net: RoadNetwork, plan: RoadPlan): number[] {
+  const arc = new ArcTable(plan.curve);
+  const prof = computeProfile(plan.curve, arc, plan.startY, plan.endY, ROAD_KINDS[plan.kind].maxGrade, net.env, plan.elevation);
+  const out: number[] = [];
+  const p = new Float64Array(2);
+  for (let i = 0; i < prof.count; i++) {
+    evalCubic(plan.curve, arc.tAt(i * prof.step), p);
+    out.push(Math.round(p[0]! * 100) / 100, Math.round(prof.heights[i]! * 100) / 100, Math.round(p[1]! * 100) / 100, prof.bridge[i] ? 1 : prof.tunnel[i] ? 2 : 0);
+  }
+  return out;
 }

@@ -18,7 +18,7 @@ export interface RoadNetworkJson {
   /** [id, x, y, z] */
   nodes: [number, number, number, number][];
   /** id, a, b, type, points de contrôle c1 (x, z) et c2 (x, z) */
-  segments: { id: number; a: number; b: number; kind: RoadKindId; c1: [number, number]; c2: [number, number] }[];
+  segments: { id: number; a: number; b: number; kind: RoadKindId; c1: [number, number]; c2: [number, number]; elev?: number; ring?: [number, number, number] }[];
 }
 
 const r3 = (v: number): number => Math.round(v * 1000) / 1000;
@@ -30,7 +30,12 @@ export function serializeNetwork(net: RoadNetwork): RoadNetworkJson {
   for (let i = 0; i < net.segCount; i++) {
     const id = net.segId[i]!;
     const c = net.curve(id);
-    segments.push({ id, a: net.segA[i]!, b: net.segB[i]!, kind: net.kindOf(id), c1: [r3(c[2]!), r3(c[3]!)], c2: [r3(c[4]!), r3(c[5]!)] });
+    const seg: RoadNetworkJson['segments'][number] = { id, a: net.segA[i]!, b: net.segB[i]!, kind: net.kindOf(id), c1: [r3(c[2]!), r3(c[3]!)], c2: [r3(c[4]!), r3(c[5]!)] };
+    const elev = net.elevationOf(id);
+    if (elev !== 0) seg.elev = elev;
+    const ring = net.ringOf(id);
+    if (ring) seg.ring = [r3(ring[0]), r3(ring[1]), r3(ring[2])];
+    segments.push(seg);
   }
   nodes.sort((p, q) => p[0] - q[0]);
   segments.sort((p, q) => p.id - q.id);
@@ -60,7 +65,9 @@ export function deserializeNetwork(data: unknown, env: ProfileEnv): DeserializeR
     if (net.hasSegment(s.id)) return fail(`Tronçon ${s.id} en double`);
     if (!Array.isArray(s.c1) || !Array.isArray(s.c2) || ![...s.c1, ...s.c2].every(fin)) return fail(`Tronçon ${s.id} : courbe invalide`);
     const a = net.nodePos(s.a), b = net.nodePos(s.b);
-    net.addSegment(s.a, s.b, s.kind, cubic(a.x, a.z, s.c1[0], s.c1[1], s.c2[0], s.c2[1], b.x, b.z), s.id);
+    if (s.elev !== undefined && !fin(s.elev)) return fail(`Tronçon ${s.id} : hauteur invalide`);
+    net.addSegment(s.a, s.b, s.kind, cubic(a.x, a.z, s.c1[0], s.c1[1], s.c2[0], s.c2[1], b.x, b.z), s.id, s.elev ?? 0);
+    if (Array.isArray(s.ring) && s.ring.length === 3 && s.ring.every(fin)) net.setRing(s.id, s.ring);
   }
   for (const id of net.nodeIds()) if (net.incident(id).length === 0) return fail(`Nœud ${id} isolé`);
   net.nextNodeId = Math.max(net.nextNodeId, d.nextIds.node);

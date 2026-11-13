@@ -39,8 +39,14 @@ export interface CommandMap {
       kind?: RoadKindId;
       /** Point de contrôle d'une courbe (quadratique) quand `points` contient exactement 2 points. */
       control?: [number, number];
+      /**
+       * Hauteur imposée (m, multiple de 4, |h| ≤ 40) : > 0 viaduc / passage supérieur, < 0 tranchée puis tunnel.
+       * Les extrémités libres du tracé restent au niveau du terrain (rampes), les points intermédiaires sont surélevés.
+       */
+      elevation?: number;
     };
-    result: { edgeIds: number[]; cost: number };
+    /** `path` (dryRun seulement) : aperçu 3D du tracé, quadruplets x, y, z, état (0 sol, 1 pont, 2 tunnel) tous les ~4 m. */
+    result: { edgeIds: number[]; cost: number; path?: number[] };
   };
   removeRoad: { args: { edgeId: number }; result: { refund: number } };
   placeBuilding: {
@@ -249,6 +255,7 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
         const c = a.control;
         if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum) || p.length !== 4) return bad('Point de contrôle de courbe invalide');
       }
+      if (a.elevation !== undefined && (!isNum(a.elevation) || Math.abs(a.elevation) > 40)) return bad('Hauteur de route invalide (±40 m)');
       return null;
     }
     case 'removeRoad':

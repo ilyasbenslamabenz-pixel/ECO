@@ -1,0 +1,120 @@
+{
+  "seed": 7,
+  "views": [
+    {
+      "name": "plage",
+      "file": "avant-plage.jpg",
+      "x": 256,
+      "z": 272,
+      "dist": 95,
+      "pitch": 0.42,
+      "yaw": -2.641592653589793
+    },
+    {
+      "name": "riviere",
+      "file": "avant-riviere.jpg",
+      "x": 276,
+      "z": -256,
+      "dist": 120,
+      "pitch": 0.5,
+      "yaw": 0.6
+    },
+    {
+      "name": "colline",
+      "file": "avant-colline.jpg",
+      "x": -656,
+      "z": -224,
+      "dist": 100,
+      "pitch": 0.38,
+      "yaw": 1.8897290008848722
+    }
+  ],
+  "builds": [
+    {
+      "label": "plage : rue le long du rivage",
+      "points": [
+        320,
+        272,
+        192,
+        272
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          1
+        ],
+        "cost": 7680
+      }
+    },
+    {
+      "label": "rivière : rue sur la berge",
+      "points": [
+        186,
+        -242,
+        326,
+        -242
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          2
+        ],
+        "cost": 8400
+      }
+    },
+    {
+      "label": "rivière : rue qui traverse (pont)",
+      "points": [
+        296,
+        -190,
+        296,
+        -322
+      ],
+      "extra": {},
+      "ok": false,
+      "message": "Une route ne peut pas commencer ou finir dans l'eau"
+    },
+    {
+      "label": "colline : rue à flanc de coteau",
+      "points": [
+        -668.6055687182125,
+        -155.14435653274,
+        -643.3944312817875,
+        -292.85564346726
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          3
+        ],
+        "cost": 8400
+      }
+    }
+  ],
+  "plage": {
+    "x": 256,
+    "z": 272,
+    "dx": 0,
+    "dz": 1,
+    "score": 0.024558258056640803
+  },
+  "riviere": {
+    "cx": 256,
+    "cz": -256,
+    "ux": 1,
+    "uz": 0,
+    "off": 6
+  },
+  "colline": {
+    "x": -656,
+    "z": -224,
+    "gx": -0.24579274654388428,
+    "gz": -0.04499787092208862,
+    "score": 0.00012226461505801534,
+    "h": 25.10980796813965
+  },
+  "errors": []
+}

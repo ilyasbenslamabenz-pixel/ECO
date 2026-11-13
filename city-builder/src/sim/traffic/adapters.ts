@@ -16,6 +16,8 @@ import { carriagewayWidth } from '../roads/types';
 import type { TrafficEdgeInput, TrafficNetworkInput } from './network';
 import type { TrafficBuilding } from './system';
 
+/** Anneau de giratoire (module routes) : prioritaire, les entrées cèdent le passage. */
+export const RING_RANK = 4;
 const RANK: Record<string, number> = { street: 0, oneway: 0, pedestrian: 0, avenue: 1, boulevard: 2, highway: 3 };
 
 export function inputFromRoadGraph(g: RoadGraph): TrafficNetworkInput {
@@ -75,7 +77,7 @@ export function inputFromRoadNetwork(net: RoadNetwork, step = 6): TrafficNetwork
     const edge: TrafficEdgeInput = {
       id, a: net.segA[k]!, b: net.segB[k]!, points: pts,
       lanesForward: kind.lanesForward, lanesBackward: kind.lanesBackward, laneWidth: kind.laneWidth, median: kind.medianWidth,
-      speedKmh: kind.speedKmh, rank: RANK[kindId] ?? 0, crossHalf: carriagewayWidth(kind) / 2,
+      speedKmh: kind.speedKmh, rank: net.ringOf(id) ? RING_RANK : RANK[kindId] ?? 0, crossHalf: carriagewayWidth(kind) / 2,
     };
     const tr = segmentTrims(net, id, junctions);
     const L = arc.length;
