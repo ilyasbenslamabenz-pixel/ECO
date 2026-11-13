@@ -543,6 +543,8 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .panel { left: max(4px, var(--safe-l)); right: max(4px, var(--safe-r)); width: auto; top: calc(var(--hud-h) + 6px); bottom: calc(var(--tb-h) + 6px); max-height: none;
     border-radius: 20px; animation: sheet-in .26s cubic-bezier(.2,.8,.2,1); }
   .panel.folded { bottom: auto; }
+  /* Fiche d'un objet : à hauteur de son contenu, posée au-dessus des outils ; l'objet sélectionné reste visible. */
+  #info-panel:not(.folded) { top: auto; max-height: calc(100dvh - var(--hud-h) - var(--tb-h) - 12px); }
   .panel-head { padding: 10px 8px 8px 12px; }
   .panel-head h3 { font-size: 16px; }
   .panel-head::before { content: ''; position: absolute; left: 50%; top: 5px; width: 38px; height: 4px; margin-left: -19px; border-radius: 2px; background: rgba(255,255,255,.22); }
