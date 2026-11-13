@@ -1,7 +1,6 @@
 # Feuille de route — Phase 2 (organisation validée par le propriétaire)
 
-Statut : **préparée, non démarrée.** Aucune modification de phase 2 avant la validation complète
-de la phase 1 (intégration terminée, `npm run check`, `npm run validate:visual` et QA verts).
+Statut : **phase 1 close le 2026-11-13** (voir PROJECT_STATUS.md) ; phase 2 : préparation §0 puis 2A.
 
 Principes imposés :
 - Priorité absolue à la qualité et à la stabilité, pas à la vitesse.

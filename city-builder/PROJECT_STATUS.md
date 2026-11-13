@@ -1,4 +1,14 @@
-# État du projet — Aube Urbaine
+# État du projet — Aube Urbaine (affiché : Meknes City lors de la refonte)
+
+## Phase 1 : CLOSE (2026-11-13)
+
+Recette QA n° 3 : 7,4/10, un seul problème majeur (boutons de vitesse < 40 px sur iPhone portrait) — corrigé
+(barre supérieure en grille sur téléphone). Recette n° 4 (MacBook Air M1, GPU Metal) : 15/15 (typecheck, test,
+e2e, e2e:gate, validate:visual, e2e:signals, e2e:game, e2e:play, qa2-fixes, iphone-layout, qa3-recette ×4,
+qa3-chargement-rendu). Performances réelles : `docs/PERFORMANCE_MAC.md`. Version publiée : artifact claude.ai.
+Défauts mineurs reportés en phase 2 : berges en escalier ; imposteurs d'arbres vus du dessus ; plaques
+d'immatriculation identiques ; lampadaire collé au mât de feu ; vue rue par défaut de la démo ; ~3 s de
+chargement des modèles après rechargement ; 25–39 FPS sur M1 (≈ 3 000 appels de rendu : phase 2C).
 
 ## Phase actuelle : 1 (première ville jouable) — corrections après la recette QA n° 2 (2026-11-13)
 
