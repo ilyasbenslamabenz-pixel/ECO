@@ -27,7 +27,7 @@ async function openDemo(h) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const errors = collectErrors(page);
-  await page.goto(`${base}/index.html?demo&norender&h=${h}&atmo=${QUALITY}`, { timeout: 600000, waitUntil: 'domcontentloaded' });
+  await page.goto(`${base}/index.html?demo&norender&meteo=1&h=${h}&atmo=${QUALITY}`, { timeout: 600000, waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__aube?.demoReady === true || (window.__aube?.errors?.length ?? 0) > 0, null, { timeout: 1800000, polling: 1000 });
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
   await page.waitForTimeout(800);

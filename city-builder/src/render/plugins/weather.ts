@@ -19,12 +19,22 @@ export interface AtmosphereDebug {
 
 let system: AtmosphereSystem | null = null;
 
+/**
+ * Effets météo visuels (pluie, neige, nuages, éclairs) désactivés par défaut pour alléger le jeu,
+ * à la demande du propriétaire. Réactivables avec `?meteo=1` dans l'adresse. La simulation météo
+ * (module du Worker) et ses sauvegardes restent intactes.
+ */
+function meteoActive(): boolean {
+  try { return new URLSearchParams(globalThis.location?.search ?? '').get('meteo') === '1'; } catch { return false; }
+}
+
 /** Système d'atmosphère courant (null avant l'initialisation du rendu). */
 export function getAtmosphere(): AtmosphereSystem | null { return system; }
 
 export const weatherRenderPlugin: RenderPlugin = {
   id: 'weather',
   init(ctx) {
+    if (!meteoActive()) return;
     system = new AtmosphereSystem({ scene: ctx.scene, camera: ctx.camera, catalog: ctx.catalog, nightFactor: ctx.nightFactor });
     const dbg: AtmosphereDebug = {
       quality: () => system?.currentQuality ?? 'off',
