@@ -139,3 +139,18 @@ export const MODELS: ModelSpec[] = [
   { id: 'sac_poubelle', ph: 'trashbag', nameFr: 'Sac poubelle', category: 'prop', lod0Triangles: 2000, textureSize: 512, lodDistances: PROP_LODS, tags: ['propreté', 'ruelle'] },
   { id: 'voiture_bachee', ph: 'covered_car', nameFr: 'Voiture sous bâche (décor)', category: 'prop', lod0Triangles: 6000, textureSize: 1024, lodDistances: FURN_LODS, tags: ['stationnement', 'garage'] },
 ];
+
+// ---------------------------------------------------------------------------
+// Phase 2C — mobilier urbain européen (Poly Haven, CC0 ; licence vérifiée asset par asset :
+// docs/ASSET_LICENSES_STUDY.md). Construits aussi par `npx tsx tools/props/build.ts`.
+// ---------------------------------------------------------------------------
+export const P2C_STREET_FURNITURE_PH: ModelSpec[] = [
+  { id: 'banc_modulaire', ph: 'modular_street_seating', nodes: /^(crossbar|legs_double|legs_single|suspended_support_01|back_support_r|back_support_l|arm_rest_01|seat|seat_back)$/, nameFr: 'Banc urbain à dossier (bois et acier)', category: 'street_furniture', lod0Triangles: 6000, textureSize: 512, lodDistances: PROP_LODS, cost: 80, tags: ['assise', 'place', 'trottoir'] },
+  { id: 'jardiniere_bac_bois', ph: 'planter_box_02', nameFr: 'Jardinière longue en bois', category: 'street_furniture', lod0Triangles: 5000, textureSize: 256, lodDistances: PROP_LODS, cost: 45, tags: ['jardinière', 'terrasse', 'rue piétonne'] },
+  { id: 'jardiniere_haute_bois', ph: 'planter_box_03', nameFr: 'Jardinière haute en bois', category: 'street_furniture', lod0Triangles: 5000, textureSize: 256, lodDistances: PROP_LODS, cost: 55, tags: ['jardinière', 'terrasse', 'rue piétonne'] },
+  { id: 'plaque_egout', ph: 'water_manhole_cover', nameFr: 'Plaque d’égout en fonte', category: 'street_furniture', lod0Triangles: 2500, textureSize: 256, lodDistances: [30, 80], cost: 0, tags: ['réseau', 'chaussée', 'trottoir', 'au sol'] },
+  { id: 'separateur_beton_bas', ph: 'concrete_road_barrier_02', nameFr: 'Bloc béton de protection (bas)', category: 'street_furniture', lod0Triangles: 3000, textureSize: 256, lodDistances: PROP_LODS, cost: 50, tags: ['chantier', 'voirie', 'sécurité'] },
+];
+// Écarté : modular_chainlink_fence (grillage) — l'opacité du grillage est une carte séparée non fusionnée par
+// le pipeline (rendu opaque) ; à reprendre si models.ts gère un jour les cartes alpha séparées.
+MODELS.push(...P2C_STREET_FURNITURE_PH);

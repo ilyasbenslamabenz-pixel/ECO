@@ -1,0 +1,11 @@
+# Reprise — mobilier urbain phase 2C (branche claude/p2c-mobilier)
+- Fait : 24 éléments street_furniture (19 générés par tools/props, 5 Poly Haven CC0) avec 3 LOD, entrées catalogue, LICENSES.md régénéré, planches LOD0 et LOD regardées.
+- Fait : docs/ASSET_LICENSES_STUDY.md (CC0 strict ; Kenney vérifié en ligne ; ambientCG, Quaternius et Sketchfab non vérifiés : réseau bloqué).
+- Fait : docs/requests/mobilier.md (règles de placement des 24 éléments + demandes hors zone) ; tests/props (6 tests verts).
+- Mesures : build 46,18 Mo (+1,94 Mo, budget lot 4 Mo) ; typecheck, npm test, validate:assets verts.
+- Reste (hors zone) : ajouter `props` à la regex des sources dans tools/assets/validate.ts (seule erreur restante, sur nos 19 entrées).
+- Reste (hors zone) : ajouter tests/props au script test de package.json ; enregistrer tools/props dans tools/generators/index.ts.
+- Reste (zone routes) : brancher le placement selon docs/requests/mobilier.md.
+- Décision : cloture_chantier (Poly Haven) écarté, son alpha est dans une carte séparée non gérée par le pipeline (rendu opaque).
+- Décision : Kenney et Quaternius non retenus (style low-poly) ; textures du lot dans un atlas partagé de 512 px.
+- Reconstruire : npx tsx tools/props/build.ts ; vitrine : tools/assets/showcase/run.ts --lods --only=<ids>.
