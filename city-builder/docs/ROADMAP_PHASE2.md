@@ -119,3 +119,31 @@ Banc `?bench` pour mesurer sur l'appareil réel du joueur.
   Les artifacts ne servent ni `.glb` ni `.hdr` : l'étape de publication convertit les GLB en glTF
   JSON (buffer embarqué) et embarque les HDRI dans `catalog.json` (script à intégrer :
   `scripts/pack-artifact.mjs`, après la phase 1).
+
+## 7. Ajouts du propriétaire (2026-11-13) : exportations, port, aéroport
+
+**Exportations de ressources (phase 2B, après l'économie et la fiscalité)**
+- Chaînes de production réelles : agriculture (céréales, fruits, élevage), industrie (matériaux,
+  biens manufacturés), énergie (surplus électrique, déjà prévu), éventuellement extraction selon le terrain.
+- Stocks par entreprise/entrepôt, demande et **prix des marchés extérieurs** fluctuant avec les cycles
+  économiques ; contrats d'exportation (volume, durée, prix) proposés au maire.
+- Les biens partent **physiquement** : camions dans le trafic jusqu'aux sorties de carte, puis par le
+  port et l'aéroport quand ils existent (capacité, coût et délai différents). Recettes : taxes
+  d'exportation et impôts des entreprises exportatrices ; effets : emplois, pollution, trafic poids lourds.
+- Tableau de bord Commerce : production, stocks, exportations/importations, balance commerciale, prix.
+
+**Port (phase 2C, transports)**
+- Constructible uniquement sur le littoral ou un cours d'eau navigable (validation par la simulation).
+- Port de commerce (quais, grues portuaires animées, conteneurs, entrepôts) : capacité d'export/import
+  par bateau, navires visibles en mer ; option port de passagers (ferries, tourisme).
+- Effets : emplois, trafic de camions autour du port, pollution de l'eau et de l'air, bruit.
+
+**Aéroport (phase 2C, transports)**
+- Terrain plat et grand, piste orientée, interdiction de hauteur des bâtiments dans l'axe des pistes.
+- Aérogare, pistes, tour de contrôle, avions qui décollent/atterrissent ; fret aérien (rapide, cher,
+  petits volumes de biens à forte valeur) et passagers (tourisme, attractivité des bureaux).
+- Effets : bruit fort sur les quartiers voisins (baisse de valeur foncière et de satisfaction), emplois.
+
+Tous les modèles 3D (grues, navires, avions, terminaux) sont des GLB détaillés générés par nos outils
+ou issus de sources à licence vérifiée ; aucun primitif. Tests d'effet obligatoires (ex. : un port
+augmente la capacité d'export ; un aéroport fait baisser la satisfaction des quartiers sous les pistes).
