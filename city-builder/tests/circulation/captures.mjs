@@ -69,6 +69,10 @@ try {
     const fx = Math.sin(lc.h), fz = Math.cos(lc.h);
     await page.evaluate(([x, z, lx, lz]) => window.__aube.streetLook(x, z, lx, lz), [lc.x - fx * 13, lc.z - fz * 13, lc.x + fx * 10, lc.z + fz * 10]);
     await shoot('circ-voies.png');
+    // clignotants (≈ 1,5 Hz) : seconde image décalée d'une demi-période
+    await page.waitForTimeout(330);
+    await page.evaluate(() => window.__aube.renderNow(1, 0.01));
+    await page.screenshot({ path: join(out, 'circ-voies-b.png'), timeout: 900000 });
     await page.evaluate(([x, z, yaw]) => window.__aube.lookAt(x, z, 45, 0.9, yaw), [lc.x, lc.z, lc.h + Math.PI]);
     await shoot('circ-voies-aerien.png');
   }

@@ -1000,7 +1000,7 @@ export class TrafficSystem {
       // latéral résiduel : négatif = vient de la gauche, donc se rabat à droite) ou à moins de 35 m d'un virage
       let blink = 0;
       const lo = this.latOff[v]!;
-      if (lo < -0.35) blink = 4; else if (lo > 0.35) blink = 2;
+      if (lo < -0.1) blink = 4; else if (lo > 0.1) blink = 2;
       else if (g.linkKind[l] === 0 && g.linkLen[l]! - s < 35) {
         const nx = this.nextLink[v]!;
         if (nx >= nl) { const tr = g.connTurn[nx - nl]!; blink = tr === Turn.Right ? 4 : tr === Turn.Left || tr === Turn.UTurn ? 2 : 0; }
