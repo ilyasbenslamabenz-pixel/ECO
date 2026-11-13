@@ -513,6 +513,8 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .tile { width: 92px; min-height: 88px; }
   #tool-options { border-radius: 14px; flex-wrap: wrap; justify-content: center; padding: 6px; }
   .tool-hint { flex-basis: 100%; text-align: center; white-space: normal; }
+  /* Outil Terrain : outils + réglages (jusqu'à 8 boutons) sur plusieurs lignes. */
+  .tool-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: center; row-gap: 4px; }
   #objectives { display: none !important; }
 
   /* Panneaux : feuille glissante pleine largeur entre la barre du haut et les outils. */
