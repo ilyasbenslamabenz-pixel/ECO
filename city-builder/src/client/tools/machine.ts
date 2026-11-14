@@ -21,7 +21,7 @@
 import { normRot } from '../../shared/footprint';
 import type { CatalogAsset } from '../../shared/catalog';
 import { isBuildingCategory } from '../../shared/catalog';
-import type { CommandError, RoadKindId, ToolId } from '../../shared/contracts';
+import type { CommandError, RoadEdgeRecord, RoadKindId, ToolId } from '../../shared/contracts';
 import { legacyRoadType } from '../../sim/roads/index';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage } from '../../shared/protocol';
 import type { Ray } from './geometry';
@@ -383,6 +383,34 @@ export class ConstructionTools {
     return { kind: t };
   }
 
+  /**
+   * Rue entière autour d'un tronçon : on suit les tronçons du même type tant que le nœud n'est qu'un simple coude
+   * (deux tronçons), jusqu'aux carrefours ou aux extrémités. Ordre : du tronçon désigné vers l'extérieur.
+   */
+  streetChain(e: RoadEdgeView): RoadEdgeView[] {
+    const byNode = new Map<number, RoadEdgeRecord[]>();
+    for (const r of this.mirror.edges.values()) {
+      for (const n of [r.a, r.b]) { const l = byNode.get(n); if (l) l.push(r); else byNode.set(n, [r]); }
+    }
+    const kindOf = (r: RoadEdgeRecord): string => r.kind ?? r.type;
+    const seen = new Set<number>([e.id]);
+    const out: RoadEdgeView[] = [e];
+    for (const start of [e.a, e.b]) {
+      let node = start, prev: RoadEdgeRecord = e;
+      for (let guard = 0; guard < 200; guard++) {
+        const inc = byNode.get(node) ?? [];
+        if (inc.length !== 2) break;
+        const next = inc[0]!.id === prev.id ? inc[1]! : inc[0]!;
+        if (seen.has(next.id) || kindOf(next) !== kindOf(e)) break;
+        const v = this.mirror.edgeView(next);
+        if (!v) break;
+        seen.add(next.id); out.push(v);
+        node = next.a === node ? next.b : next.a; prev = next;
+      }
+    }
+    return out;
+  }
+
   private refreshUpgrade(g: { x: number; z: number } | null): boolean {
     let target: RoadEdgeView | null = null;
     const hit = this.lastRay ? this.mirror.pick(this.lastRay, g) : null;
@@ -404,13 +432,18 @@ export class ConstructionTools {
     const toKind = args.kind ?? target.kindId;
     this.preview = { kind: 'upgrade', target, toKind, reverse: !!args.reverse, validity: 'pending', cost: 0, refund: 0, message: '' };
     const seq = ++this.previewSeq;
-    const edgeId = target.id;
+    const chain = this.streetChain(target);
     this.dry.run(async () => {
       if (seq !== this.previewSeq) return;
       let validity: Validity; let message = ''; let cost = 0; let refund = 0;
       try {
-        const r = await this.sim.send('upgradeRoad', { edgeId, ...args, dryRun: true });
-        validity = 'ok'; cost = r.cost; refund = r.refund;
+        // Rue entière : somme des devis de chaque tronçon (refus du premier tronçon impossible).
+        for (const c of chain) {
+          const r = await this.sim.send('upgradeRoad', { edgeId: c.id, ...args, dryRun: true });
+          cost += r.cost; refund += r.refund;
+        }
+        validity = 'ok';
+        if (chain.length > 1) message = `Rue entière : ${chain.length} tronçons`;
       } catch (e) { validity = 'error'; message = errorOf(e).message; }
       const cur = this.preview;
       if (cur.kind === 'upgrade' && this.upgradeKey === key) {
@@ -612,19 +645,28 @@ export class ConstructionTools {
     const e = p.target;
     const args = this.upgradeArgs(e);
     if (typeof args === 'string') { this.notify(args, 'error'); return; }
-    try {
-      const r = await this.sim.send('upgradeRoad', { edgeId: e.id, ...args });
-      this.applied++;
-      this.undo.renameEdge(e.id, r.edgeId);
-      const from = roadDef(e.kindId)?.nameFr ?? e.kindId;
-      const to = roadDef(r.kind)?.nameFr ?? r.kind;
-      this.undo.push({ label: args.kind && args.kind !== e.kindId ? `Modification : ${from} → ${to}` : 'Inversion du sens', steps: [{ kind: 'upgradeRoad', edgeId: r.edgeId, toKind: e.kindId, reverse: !!args.reverse && e.kindId === 'oneway' }] });
-      const money = r.cost > 0 ? ` (−${fmt(r.cost)} ¢)` : r.refund > 0 ? ` (+${fmt(r.refund)} ¢)` : '';
-      const what = args.kind && args.kind !== e.kindId ? `${from} → ${to}` : 'sens de circulation inversé';
-      this.notify(`Tronçon modifié : ${what}${args.kind && args.kind !== e.kindId && args.reverse ? ', sens inversé' : ''}${money}`, 'ok');
-    } catch (err) {
-      this.notify(`Modification refusée : ${errorOf(err).message}`, 'error');
+    const chain = this.streetChain(e);
+    const steps: UndoStep[] = [];
+    let cost = 0, refund = 0, kindTo: RoadKindId = e.kindId;
+    let failed = '';
+    for (const c of chain) {
+      try {
+        const r = await this.sim.send('upgradeRoad', { edgeId: c.id, ...args });
+        this.undo.renameEdge(c.id, r.edgeId);
+        steps.push({ kind: 'upgradeRoad', edgeId: r.edgeId, toKind: c.kindId, reverse: !!args.reverse && c.kindId === 'oneway' });
+        cost += r.cost; refund += r.refund; kindTo = r.kind;
+      } catch (err) { failed = errorOf(err).message; break; }
     }
+    if (steps.length) {
+      this.applied++;
+      const from = roadDef(e.kindId)?.nameFr ?? e.kindId;
+      const to = roadDef(kindTo)?.nameFr ?? kindTo;
+      this.undo.push({ label: args.kind && args.kind !== e.kindId ? `Modification : ${from} → ${to}` : 'Inversion du sens', steps });
+      const money = cost > 0 ? ` (−${fmt(cost)} ¢)` : refund > 0 ? ` (+${fmt(refund)} ¢)` : '';
+      const what = args.kind && args.kind !== e.kindId ? `${from} → ${to}` : 'sens de circulation inversé';
+      const n = steps.length > 1 ? `Rue modifiée (${steps.length} tronçons)` : 'Tronçon modifié';
+      this.notify(`${n} : ${what}${args.kind && args.kind !== e.kindId && args.reverse ? ', sens inversé' : ''}${money}${failed ? ` — arrêt : ${failed}` : ''}`, failed ? 'error' : 'ok');
+    } else this.notify(`Modification refusée : ${failed}`, 'error');
     this.upgradeKey = '';
     this.refresh();
   }
