@@ -43,6 +43,7 @@ import { TrafficSystem, inputFromRoadNetwork, buildingsFromStore } from './traff
 import {
   ROAD_KINDS, RoadNetwork, commitRoadPlan, cubic, cubicBounds, gradeTerrainForRoads, halfWidth, isRoadKind,
   networkRecords, planRoad, polyline, SLOPE_WIDTH, type ProfileEnv, type RoadKindId, type RoadRequest,
+  planRoundabout, commitRoundabout, roadPreviewPath,
 } from './roads';
 import { commitUpgrade, planUpgrade, type UpgradeBlocker } from './roads/upgrade';
 import { NO_WATER, extractPatch, generateWorld, type WorldTerrain } from './terrain';
@@ -548,15 +549,21 @@ export class Simulation {
   /** Découpe la commande en requêtes du planificateur (2 points + contrôle = courbe ; polyligne = tronçons droits). */
   private roadRequests(a: CommandArgs<'buildRoad'>, kind: RoadKindId): RoadRequest[] {
     const pts = a.points;
+    // Hauteur imposée (▲ / ▼, pas de 4 m) : extrémités du tracé au sol, points intermédiaires surélevés.
+    const elevation = a.elevation ? Math.round(a.elevation / 4) * 4 : 0;
     if (pts.length === 4) {
       const req: RoadRequest = { kind, start: { x: pts[0]!, z: pts[1]! }, end: { x: pts[2]!, z: pts[3]! } };
       if (a.control) req.control = { x: a.control[0], z: a.control[1] };
+      if (elevation) req.elevation = elevation;
       return [req];
     }
     const out: RoadRequest[] = [];
+    const last = pts.length - 4;
     for (let k = 0; k + 3 < pts.length; k += 2) {
       if (dist2(pts[k]!, pts[k + 1]!, pts[k + 2]!, pts[k + 3]!) < 1) continue;
-      out.push({ kind, start: { x: pts[k]!, z: pts[k + 1]! }, end: { x: pts[k + 2]!, z: pts[k + 3]! } });
+      const req: RoadRequest = { kind, start: { x: pts[k]!, z: pts[k + 1]! }, end: { x: pts[k + 2]!, z: pts[k + 3]! } };
+      if (elevation) { req.elevation = elevation; req.startElevated = k > 0; req.endElevated = k < last; }
+      out.push(req);
     }
     return out;
   }
@@ -569,14 +576,16 @@ export class Simulation {
     const opts = this.planOptions();
     // 1) Validation de chaque morceau sur le réseau actuel (dryRun : rien n'est modifié).
     let cost = 0;
+    const path: number[] = [];
     for (const r of reqs) {
       const p = planRoad(this.net, r, opts);
       if (!p.ok) return fail(p.error.code, p.error.message, p.error.phase);
       cost += p.plan.cost;
+      if (a.dryRun && a.elevation) path.push(...roadPreviewPath(this.net, p.plan));
     }
     if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
     if (!this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
-    if (a.dryRun) return { ok: true, data: { edgeIds: [], cost } };
+    if (a.dryRun) return { ok: true, data: path.length ? { edgeIds: [], cost, path } : { edgeIds: [], cost } };
     // 2) Construction : chaque morceau est re-planifié sur le réseau modifié par le précédent.
     const edgeIds: number[] = [];
     let spent = 0;
@@ -1032,6 +1041,19 @@ export class Simulation {
           this.trafficBuildingsDirty = true;
           return ok({ population: this.demo.population, households: this.demo.households.count });
         }
+        case 'buildRoundabout': {
+          const a = args as ExtCommandArgs<'buildRoundabout'>;
+          if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
+          const p = planRoundabout(this.net, { x: a.x, z: a.z, size: a.size }, this.planOptions());
+          if (!p.ok) return fail(p.error.code, p.error.message);
+          if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues');
+          if (!this.economy.canAfford(p.plan.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${p.plan.cost} crédits requis)`);
+          if (a.dryRun) return ok({ edgeIds: [], cost: p.plan.cost });
+          const c = commitRoundabout(this.net, p.plan);
+          this.economy.spend(p.plan.cost);
+          this.applyNetworkChanges(true);
+          return ok({ edgeIds: c.segmentIds, cost: p.plan.cost });
+        }
         case 'buildCity': {
           const a = args as ExtCommandArgs<'buildCity'>;
           const r = buildCity(this, a.maxBuildings === undefined ? { preset: a.preset } : { preset: a.preset, maxBuildings: a.maxBuildings });
@@ -1119,7 +1141,13 @@ export class Simulation {
       const c1 = e.c1 ?? [a.x + (b.x - a.x) / 3, a.z + (b.z - a.z) / 3];
       const c2 = e.c2 ?? [a.x + ((b.x - a.x) * 2) / 3, a.z + ((b.z - a.z) * 2) / 3];
       if (![...c1, ...c2].every(Number.isFinite)) return { code: 'BAD_SAVE', message: `Tronçon ${e.id} : courbe invalide` };
-      this.net.addSegment(e.a, e.b, kind, cubic(a.x, a.z, c1[0], c1[1], c2[0], c2[1], b.x, b.z), e.id);
+      // Champs du module routes (hauteur imposée, giratoire) : absents des sauvegardes antérieures = route ordinaire.
+      const ex = e as { elev?: unknown; ring?: unknown };
+      const elev = typeof ex.elev === 'number' && Number.isFinite(ex.elev) ? Math.max(-40, Math.min(40, ex.elev)) : 0;
+      this.net.addSegment(e.a, e.b, kind, cubic(a.x, a.z, c1[0], c1[1], c2[0], c2[1], b.x, b.z), e.id, elev);
+      if (Array.isArray(ex.ring) && ex.ring.length === 3 && ex.ring.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+        this.net.setRing(e.id, ex.ring as [number, number, number]);
+      }
     }
     for (const id of this.net.nodeIds()) if (this.net.incident(id).length === 0) return { code: 'BAD_SAVE', message: `Nœud routier ${id} isolé` };
     this.net.nextNodeId = Math.max(this.net.nextNodeId, s.nextIds.roadNode);

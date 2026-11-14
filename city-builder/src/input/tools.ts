@@ -351,7 +351,7 @@ export class ToolController implements IToolController, PointerToolSink {
         break;
       }
       case 'road': {
-        this.road.show({ points: p.points, width: roadWidth(p.type), validity: p.points ? p.validity : 'ok', start: p.start, control: p.control, hover: p.hover, arrows: p.type === 'oneway' });
+        this.road.show({ points: p.points, width: roadWidth(p.type), validity: p.points ? p.validity : 'ok', start: p.start, control: p.control, hover: p.hover, arrows: p.type === 'oneway', ...(p.path ? { path: p.path } : {}) });
         const head = `${fmt(p.length)} m${p.angle ? ` · ${p.angle}` : ''}`;
         if (!p.points) tag(p.message ? `${p.message}${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}${p.chained ? `\n${p.chained} tronçon${p.chained > 1 ? 's' : ''} · Terminer pour arrêter` : ''}` : null, 'info');
         else if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');

@@ -1,0 +1,384 @@
+{
+  "seed": 7,
+  "views": [
+    {
+      "name": "plage",
+      "file": "apres-plage.jpg",
+      "x": 256,
+      "z": 272,
+      "dist": 95,
+      "pitch": 0.42,
+      "yaw": -2.641592653589793
+    },
+    {
+      "name": "plage-quai",
+      "file": "apres-plage-quai.jpg",
+      "x": 256,
+      "z": 272,
+      "dist": 60,
+      "pitch": 0.32,
+      "yaw": -2.441592653589793
+    },
+    {
+      "name": "riviere",
+      "file": "apres-riviere.jpg",
+      "x": 286,
+      "z": -256,
+      "dist": 130,
+      "pitch": 0.5,
+      "yaw": 0.6
+    },
+    {
+      "name": "colline",
+      "file": "apres-colline.jpg",
+      "x": -656,
+      "z": -224,
+      "dist": 100,
+      "pitch": 0.38,
+      "yaw": 1.8897290008848722
+    },
+    {
+      "name": "viaduc",
+      "file": "apres-viaduc.jpg",
+      "x": -128,
+      "z": 0,
+      "dist": 110,
+      "pitch": 0.42,
+      "yaw": 0.7
+    },
+    {
+      "name": "pont",
+      "file": "apres-pont.jpg",
+      "x": 112,
+      "z": 112,
+      "dist": 80,
+      "pitch": 0.32,
+      "yaw": 3.741592653589793
+    },
+    {
+      "name": "pont-culee",
+      "file": "apres-pont-culee.jpg",
+      "x": 82,
+      "z": 112,
+      "dist": 40,
+      "pitch": 0.22,
+      "yaw": 4.0415926535897935
+    },
+    {
+      "name": "tunnel",
+      "file": "apres-tunnel.jpg",
+      "x": -752,
+      "z": -821,
+      "dist": 75,
+      "pitch": 0.35,
+      "yaw": 3.641592653589793
+    },
+    {
+      "name": "tunnel-sortie",
+      "file": "apres-tunnel-sortie.jpg",
+      "x": -752,
+      "z": -651,
+      "dist": 75,
+      "pitch": 0.35,
+      "yaw": 0.5
+    },
+    {
+      "name": "rondpoint",
+      "file": "apres-rondpoint.jpg",
+      "x": -80,
+      "z": 288,
+      "dist": 95,
+      "pitch": 0.75,
+      "yaw": 0.4
+    }
+  ],
+  "builds": [
+    {
+      "label": "plage : rue le long du rivage",
+      "points": [
+        320,
+        272,
+        192,
+        272
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          1
+        ],
+        "cost": 7680
+      }
+    },
+    {
+      "label": "rivière : rue sur la berge",
+      "points": [
+        186,
+        -242,
+        326,
+        -242
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          2
+        ],
+        "cost": 8400
+      }
+    },
+    {
+      "label": "colline : rue à flanc de coteau",
+      "points": [
+        -668.6055687182125,
+        -155.14435653274,
+        -643.3944312817875,
+        -292.85564346726
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          3
+        ],
+        "cost": 8400
+      }
+    },
+    {
+      "label": "viaduc : rue au sol",
+      "points": [
+        -218,
+        0,
+        -38,
+        0
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          4
+        ],
+        "cost": 10800
+      }
+    },
+    {
+      "label": "viaduc : rue +8 m au-dessus",
+      "points": [
+        -128,
+        -110,
+        -128,
+        110
+      ],
+      "extra": {
+        "elevation": 8
+      },
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          5
+        ],
+        "cost": 37800
+      }
+    },
+    {
+      "label": "pont : rue qui traverse la rivière (128 m)",
+      "points": [
+        48,
+        112,
+        176,
+        112
+      ],
+      "extra": {},
+      "ok": false,
+      "message": "Une route ne peut pas commencer ou finir dans l'eau"
+    },
+    {
+      "label": "pont : rue qui traverse la rivière (176 m)",
+      "points": [
+        24,
+        112,
+        200,
+        112
+      ],
+      "extra": {},
+      "ok": false,
+      "message": "Une route ne peut pas commencer ou finir dans l'eau"
+    },
+    {
+      "label": "pont : rue qui traverse la rivière (224 m)",
+      "points": [
+        0,
+        112,
+        224,
+        112
+      ],
+      "extra": {},
+      "ok": false,
+      "message": "Une route ne peut pas commencer ou finir dans l'eau"
+    },
+    {
+      "label": "pont : rue qui traverse la rivière (272 m)",
+      "points": [
+        -24,
+        112,
+        248,
+        112
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          6
+        ],
+        "cost": 40920
+      }
+    },
+    {
+      "label": "tunnel : rue −16 m sous la colline",
+      "points": [
+        -752,
+        -846,
+        -752,
+        -626
+      ],
+      "extra": {
+        "elevation": -16
+      },
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          7
+        ],
+        "cost": 60000
+      }
+    },
+    {
+      "label": "rond-point : rue est-ouest",
+      "points": [
+        -170,
+        288,
+        10,
+        288
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          8
+        ],
+        "cost": 10800
+      }
+    },
+    {
+      "label": "rond-point : rue nord-sud",
+      "points": [
+        -80,
+        198,
+        -80,
+        378
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          11,
+          12
+        ],
+        "cost": 10800
+      }
+    },
+    {
+      "label": "rond-point",
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28
+        ],
+        "cost": 7917
+      }
+    }
+  ],
+  "plage": {
+    "x": 256,
+    "z": 272,
+    "dx": 0,
+    "dz": 1,
+    "score": 0.024558258056640803
+  },
+  "pont": {
+    "x": 112,
+    "z": 112,
+    "dx": 1,
+    "dz": 0,
+    "wet": 2
+  },
+  "riviere": {
+    "cx": 256,
+    "cz": -256,
+    "ux": 1,
+    "uz": 0,
+    "off": 6,
+    "off2": 6
+  },
+  "colline": {
+    "x": -656,
+    "z": -224,
+    "gx": -0.24579274654388428,
+    "gz": -0.04499787092208862,
+    "score": 0.00012226461505801534,
+    "h": 25.10980796813965
+  },
+  "viaduc": {
+    "x": -128,
+    "z": 0,
+    "v": 0.27266359329223633
+  },
+  "ui": {
+    "hint": "Rue (2 voies) · +8 m · départ puis arrivée — le tracé continue depuis l’extrémité",
+    "label": "DroiteCourbeQuadrillageAméliorer48 m64 m96 mGuides▼+8 m▲GiratoireTerminer",
+    "preview": {
+      "kind": "road",
+      "type": "street",
+      "mode": "straight",
+      "validity": "ok",
+      "message": "",
+      "length": 0,
+      "cost": 0,
+      "angle": "",
+      "chained": 0,
+      "drawing": true,
+      "guide": "diagonale 45° · 3 m"
+    }
+  },
+  "tunnel": {
+    "x": -752,
+    "z": -736,
+    "dx": 0,
+    "dz": 1,
+    "prom": 32.146873474121094,
+    "score": 32.10981750488281
+  },
+  "tunnelEdges": [
+    {
+      "id": 7,
+      "runs": [
+        5,
+        44
+      ],
+      "n": 56
+    }
+  ],
+  "rondpoint": {
+    "x": -80,
+    "z": 288,
+    "v": 1.9692373275756836
+  },
+  "errors": []
+}

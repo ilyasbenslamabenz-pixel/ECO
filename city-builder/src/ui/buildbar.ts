@@ -433,11 +433,12 @@ export class BuildBar {
       const v = m.variant >= 0 ? m.asset.variants[m.variant] : undefined;
       return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m`;
     }
+    if (m.tool === 'road' && m.draft.mode === 'roundabout') return `${m.draft.roundaboutSize === 'large' ? 'Grand giratoire' : 'Giratoire'} — cliquez sur un carrefour ou sur une route`;
     if (m.tool === 'road') {
       if (m.roadSub === 'grid') return `Quadrillage · ${ROAD_KINDS[m.roadType].nameFr} · îlots de ${m.gridBlock} m — premier coin, puis coin opposé (coût affiché avant validation)`;
       if (m.roadSub === 'upgrade') return `Améliorer · ${UPGRADE_LABELS[m.upgradeTarget as keyof typeof UPGRADE_LABELS] ?? ROAD_KINDS[m.upgradeTarget as RoadKindId]?.nameFr ?? ''} — désignez une route (coût de la différence)`;
       const chain = m.draft.chained > 0 ? ` · ${m.draft.chained} tronçon${m.draft.chained > 1 ? 's' : ''} — le tracé continue, « Terminer » pour arrêter` : ' — le tracé continue depuis l’extrémité';
-      return `${ROAD_KINDS[m.roadType].nameFr} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'départ puis arrivée'}${chain}`;
+      return `${ROAD_KINDS[m.roadType].nameFr}${m.draft.elevation ? ` · ${m.draft.elevation > 0 ? '+' : ''}${m.draft.elevation} m` : ''} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'départ puis arrivée'}${chain}`;
     }
     if (m.tool === 'bulldoze') return 'Démolir : cliquez un bâtiment ou un tronçon de route (remboursement 25 %)';
     return '';
@@ -494,6 +495,17 @@ export class BuildBar {
       if (sub === 'draw') act('Guides', `Lignes guides parallèles aux routes, à ${m.gridBlock} m (avec l’aimantation)`, () => m.setGuides(!m.guides), m.guides && m.magnet);
       if (sub === 'upgrade') {
         for (const [id, label] of Object.entries(UPGRADE_LABELS) as [UpgradeTarget, string][]) act(label, UPGRADE_TIPS[id as keyof typeof UPGRADE_TIPS] ?? label, () => m.setUpgradeTarget(id), m.upgradeTarget === id);
+      }
+      if (sub === 'draw') {
+        // Hauteur du tracé (pas de 4 m) : viaduc / passage supérieur au-dessus, tranchée / tunnel en dessous.
+        const h = m.draft.elevation;
+        act('▼', 'Descendre le tracé de 4 m (tranchée, tunnel)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(-1); });
+        act(h === 0 ? '0 m' : `${h > 0 ? '+' : ''}${h} m`, 'Hauteur du tracé par rapport au terrain', () => { while (m.draft.elevation !== 0) m.setRoadElevation(m.draft.elevation > 0 ? -1 : 1); }, h !== 0);
+        act('▲', 'Monter le tracé de 4 m (viaduc, passage supérieur)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(1); });
+        // Giratoire : un bouton à trois états (petit Ø 36 m → grand Ø 56 m → retour au tracé droit).
+        const rb = m.draft.mode === 'roundabout' ? m.draft.roundaboutSize : null;
+        act(rb === 'large' ? 'Grand giratoire' : 'Giratoire', 'Giratoire posé d\'un clic sur un carrefour ou une route (cliquer à nouveau : grand modèle, puis tracé droit)',
+          () => { if (rb === null) m.setRoundaboutSize('small'); else if (rb === 'small') m.setRoundaboutSize('large'); else m.setRoadMode('straight'); }, rb !== null);
       }
     }
     this.hint.textContent = this.hintText();

@@ -18,7 +18,7 @@ import type { IRoadRenderer, RoadEdgeRecord, RoadNodeRecord } from '../../shared
 import { RoadNetwork, cubic, isRoadKind, type RoadEdgeRecordEx, type RoadKindId } from '../../sim/roads';
 import type { AssetLibrary } from '../assets';
 import { MaterialLibrary } from '../materials';
-import { LAYERS, buildJunction, buildSegment, newOutput, type BuildContext, type DecorItem, type DecorKind, type LayerId } from './builder';
+import { LAYERS, buildJunction, buildRoundaboutIsland, buildSegment, newOutput, type BuildContext, type DecorItem, type DecorKind, type LayerId } from './builder';
 
 export interface RoadRendererDeps {
   /** Bibliothèque d'assets (GLB du décor ; sert aussi à créer la MaterialLibrary si absente). */
@@ -69,6 +69,7 @@ interface Chunk {
 const FALLBACK: Record<LayerId, number> = {
   asphalt: 0x34363a, asphaltWorn: 0x45474a, sidewalk: 0x9a958c, curb: 0x8c8a86, pavers: 0x8a7f72,
   grass: 0x4b6a2e, concrete: 0xa29f98, metal: 0xb8bcc0, paint: 0xe8e8e2, skirt: 0x6e6559,
+  talus: 0x6f7f45, sand: 0xc9b48a, tunnel: 0x1b1c1e,
 };
 
 /** Marqueur : « ce LOD est un imposteur » (la vraie géométrie, avec sa teinte par instance, est créée par lot). */
@@ -148,6 +149,10 @@ export class RoadNetworkRenderer implements IRoadRenderer {
     pick('grass', 'terrain_herbe', 'worldXZ', { color: '#a3b884' });
     pick('concrete', 'sol_beton_brut', 'box', { tileSizeM: 3 });
     pick('skirt', 'terrain_terre', 'box', { tileSizeM: 2.5 });
+    // Talus : mêmes textures que le terrain (herbe, sable au bord de l'eau) pour un raccord sans couture visible.
+    pick('talus', 'terrain_herbe', 'worldXZ', { color: '#9aae6c' });
+    pick('sand', 'terrain_sable', 'worldXZ');
+    this.materials.set('tunnel', new THREE.MeshStandardMaterial({ name: 'tunnel_interieur', color: 0x1d1e20, roughness: 0.95, metalness: 0 }));
     // Peinture routière (rétroréfléchissante mate) et métal galvanisé : matériaux propres au module.
     this.materials.set('paint', new THREE.MeshStandardMaterial({
       name: 'peinture_route', color: 0xeeeee6, roughness: 0.62, metalness: 0,
@@ -228,9 +233,10 @@ export class RoadNetworkRenderer implements IRoadRenderer {
         const a = this.net.nodePos(e.a), b = this.net.nodePos(e.b);
         curve = cubic(a.x, a.z, e.c1[0], e.c1[1], e.c2[0], e.c2[1], b.x, b.z);
       }
-      this.net.addSegment(e.a, e.b, kind, curve, e.id);
+      this.net.addSegment(e.a, e.b, kind, curve, e.id, e.elev ?? 0);
+      if (e.ring) this.net.setRing(e.id, e.ring);
       // Profil validé par la simulation (prioritaire sur un recalcul à partir du terrain, peut-être nivelé).
-      if (e.profile && e.profile.length >= 2) this.net.setProfile(e.id, e.profile, e.bridgeRuns ?? []);
+      if (e.profile && e.profile.length >= 2) this.net.setProfile(e.id, e.profile, e.bridgeRuns ?? [], e.tunnelRuns ?? [], e.walls ?? []);
       touched.push(e.id);
     }
     this.orphanPos.clear();
@@ -272,6 +278,17 @@ export class RoadNetworkRenderer implements IRoadRenderer {
     this.refresh();
   }
 
+  /**
+   * Le terrain a changé dans la zone (patch de nivellement) : les talus et murs des tronçons proches suivent le
+   * nouveau relief (ils sont raccordés au terrain RENDU).
+   */
+  terrainChanged(minX: number, minZ: number, maxX: number, maxZ: number): void {
+    const ids = this.net.segmentsIn(minX - 24, minZ - 24, maxX + 24, maxZ + 24, []);
+    if (ids.length === 0) return;
+    this.markSegments(ids);
+    this.flush();
+  }
+
   /** Remaille les tronçons donnés (et leurs voisins), ou tout le réseau. */
   refresh(segIds?: readonly number[]): void {
     if (!segIds) {
@@ -306,7 +323,9 @@ export class RoadNetworkRenderer implements IRoadRenderer {
   private assignSeg(id: number): void {
     if (this.segChunk.has(id)) return;
     const c = this.net.curve(id);
-    const mx = (c[0]! + 3 * c[2]! + 3 * c[4]! + c[6]!) / 8, mz = (c[1]! + 3 * c[3]! + 3 * c[5]! + c[7]!) / 8;
+    const ring = this.net.ringOf(id);
+    // Anneau de giratoire : tous ses tronçons dans le chunk du centre (l'îlot est remaillé avec eux).
+    const mx = ring ? ring[0] : (c[0]! + 3 * c[2]! + 3 * c[4]! + c[6]!) / 8, mz = ring ? ring[1] : (c[1]! + 3 * c[3]! + 3 * c[5]! + c[7]!) / 8;
     const key = this.chunkKey(mx, mz);
     this.getChunk(key).segs.add(id);
     this.segChunk.set(id, key);
@@ -407,6 +426,13 @@ export class RoadNetworkRenderer implements IRoadRenderer {
     const out = newOutput();
     for (const s of c.segs) if (this.net.hasSegment(s)) buildSegment(out, ctx, s);
     for (const n of c.nodes) if (this.net.hasNode(n)) buildJunction(out, ctx, n);
+    // Îlots centraux des giratoires dont le centre est dans ce chunk.
+    const rings = new Map<string, readonly [number, number, number]>();
+    for (const sid of c.segs) {
+      const r = this.net.hasSegment(sid) ? this.net.ringOf(sid) : null;
+      if (r && this.chunkKey(r[0], r[1]) === c.key) rings.set(`${r[0].toFixed(2)},${r[1].toFixed(2)}`, r);
+    }
+    for (const r of rings.values()) buildRoundaboutIsland(out, ctx, r[0], r[1], r[2]);
     for (const layer of LAYERS) {
       const b = out.layers.get(layer)!;
       if (b.idx.length === 0) continue;

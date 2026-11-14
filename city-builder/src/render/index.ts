@@ -191,6 +191,9 @@ export async function initRender(
         const p = d.terrainPatch as TerrainPatch;
         terrain.applyPatch(p);
         water.applyPatch(p);
+        // Talus et murs des routes voisines raccordés au nouveau relief.
+        const td = terrain.terrain;
+        if (td) roads.terrainChanged(td.originX + p.i0 * td.spacing, td.originZ + p.j0 * td.spacing, td.originX + p.i1 * td.spacing, td.originZ + p.j1 * td.spacing);
       }
       if (d.roadEdgesRemoved.length) roads.removeRoadEdges(d.roadEdgesRemoved);
       if (d.roadNodesAdded.length || d.roadEdgesAdded.length) {

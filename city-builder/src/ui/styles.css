@@ -543,6 +543,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .tile { width: 92px; min-height: 88px; }
   .zn-tile { width: 80px; min-height: 80px; }
   #tool-options { border-radius: 14px; flex-wrap: wrap; justify-content: center; padding: 6px; }
+  .tool-actions { flex-wrap: wrap; justify-content: center; max-width: 100%; }
   .tool-hint { flex-basis: 100%; text-align: center; white-space: normal; }
   .tool-actions .ta-break { flex-basis: 100%; height: 0; width: auto; margin: 0; background: none; }
   .tool-actions button { padding: 4px 9px; }

@@ -71,6 +71,11 @@ export interface ExtCommandMap {
    * (src/sim/city-builder.ts). Suivi d'un instantané complet.
    */
   buildCity: { args: { preset: 'demo' | 'stress'; maxBuildings?: number; settleWaves?: number; vehicles?: number }; result: CityBuildResult & { vehicles: number } };
+  /**
+   * Giratoire posé sur un carrefour ou une route (module routes, src/sim/roads/roundabout.ts) : `size` petit (Ø 36 m)
+   * ou grand (Ø 56 m). dryRun : valide et chiffre sans construire.
+   */
+  buildRoundabout: { args: { x: number; z: number; size: 'small' | 'large'; dryRun?: boolean }; result: { edgeIds: number[]; cost: number } };
 }
 
 export type ExtCommandName = keyof ExtCommandMap;
@@ -81,7 +86,7 @@ export type ExtCommandMessage = { [K in ExtCommandName]: { kind: 'cmd'; reqId: n
 /** Delta enrichi : `report` présent environ une fois par seconde. */
 export type DeltaMessageExt = DeltaMessage & { report?: SimReport };
 
-export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity'];
+export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout'];
 
 export function isExtCommandName(name: unknown): name is ExtCommandName {
   return typeof name === 'string' && (EXT_COMMANDS as readonly string[]).includes(name);
@@ -121,5 +126,8 @@ export function validateExtCommand(msg: unknown): CommandError | null {
       if (a.vehicles !== undefined && (!isNum(a.vehicles) || a.vehicles < 0 || a.vehicles > 5000)) return bad('Nombre de véhicules invalide (0..5000)');
       if (a.settleWaves !== undefined && (!isNum(a.settleWaves) || a.settleWaves < 0 || a.settleWaves > 200)) return bad('Nombre de vagues invalide (0..200)');
       return null;
+    case 'buildRoundabout':
+      if (!isNum(a.x) || !isNum(a.z)) return bad('Position de giratoire invalide');
+      return a.size === 'small' || a.size === 'large' ? null : bad('Taille de giratoire inconnue');
   }
 }

@@ -73,7 +73,7 @@ export type ToolPreview =
   | { kind: 'none' }
   | { kind: 'select'; hover: PickResult | null }
   | { kind: 'building'; asset: CatalogAsset; proposal: PlacementProposal; variant: number; validity: Validity; cost: number; message: string }
-  | { kind: 'road'; type: RoadKindId; mode: RoadMode; points: number[] | null; start: SnapPoint | null; control: SnapPoint | null; hover: SnapPoint | null; validity: Validity; cost: number; length: number; message: string; angle: string; chained: number }
+  | { kind: 'road'; type: RoadKindId; mode: RoadMode; points: number[] | null; start: SnapPoint | null; control: SnapPoint | null; hover: SnapPoint | null; validity: Validity; cost: number; length: number; message: string; angle: string; chained: number; elevation?: number; path?: number[] }
   | { kind: 'grid'; type: RoadKindId; start: { x: number; z: number } | null; hover: { x: number; z: number } | null; layout: GridLayout | null; validity: Validity; cost: number; message: string }
   | { kind: 'upgrade'; target: RoadEdgeView | null; toKind: RoadKindId | null; reverse: boolean; validity: Validity; cost: number; refund: number; message: string }
   | { kind: 'bulldoze'; target: PickResult | null; refund: number };
@@ -178,6 +178,7 @@ export class ConstructionTools {
   setRoadMode(m: RoadMode): void {
     this.draft.mode = m;
     if (this.draft.phase === 'control') this.draft.back();
+    if (m === 'roundabout') this.draft.reset();
     if (this.roadSub !== 'draw') this.setRoadSub('draw');
     else this.refresh();
   }
@@ -209,6 +210,9 @@ export class ConstructionTools {
     this.refresh();
     return true;
   }
+  /** ▲ / ▼ de l'outil Routes : hauteur imposée du tracé par pas de 4 m (aperçu 3D renvoyé par la simulation). */
+  setRoadElevation(dir: 1 | -1): void { this.draft.raise(dir); this.refresh(); }
+  setRoundaboutSize(size: 'small' | 'large'): void { this.draft.roundaboutSize = size; this.setRoadMode('roundabout'); }
 
   rotate(dir = 1): void {
     if (this.tool !== 'building') return;
@@ -285,6 +289,11 @@ export class ConstructionTools {
           message: d.phase === 'idle' ? 'Placez le départ' : d.mode === 'curve' && d.phase === 'start' ? 'Placez le point de courbure' : '',
           angle: points && d.start && d.hover ? angleLabel(this.mirror, d.start, d.hover) : '', chained: d.chained,
         };
+        if (d.mode === 'roundabout') {
+          this.preview = { ...this.preview, message: 'Cliquez sur un carrefour ou sur une route pour poser le giratoire' };
+          break;
+        }
+        if (d.elevation) this.preview = { ...this.preview, elevation: d.elevation };
         if (points) this.validateRoad(points);
         break;
       }
@@ -431,16 +440,16 @@ export class ConstructionTools {
     const type = this.roadType;
     this.dry.run(async () => {
       if (seq !== this.previewSeq) return;
-      let validity: Validity; let message = ''; let cost = 0;
+      let validity: Validity; let message = ''; let cost = 0; let path: number[] | undefined;
       try {
         const cmd = this.draft.command();
         if (!cmd) throw new Error('Tracé trop court');
         const r = await this.sim.send('buildRoad', { type: legacyRoadType(type), kind: type, ...cmd, dryRun: true });
-        validity = 'ok'; cost = r.cost;
+        validity = 'ok'; cost = r.cost; path = r.path;
       } catch (e) { validity = 'error'; message = errorOf(e).message; }
       const cur = this.preview;
       if (cur.kind === 'road' && cur.points && cur.type === type && sameNumbers(cur.points, points)) {
-        this.preview = { ...cur, validity, message, cost: validity === 'ok' ? cost : cur.cost };
+        this.preview = { ...cur, validity, message, cost: validity === 'ok' ? cost : cur.cost, ...(path ? { path } : {}) };
         this.emit();
       }
     });
@@ -517,6 +526,17 @@ export class ConstructionTools {
   private async roadClick(): Promise<void> {
     const d = this.draft;
     if (!d.hover) return;
+    if (d.mode === 'roundabout') {
+      // Giratoire (commande étendue du module routes, même canal que les commandes de base).
+      try {
+        const send = this.sim.send as unknown as (n: string, a: unknown) => Promise<{ edgeIds: number[]; cost: number }>;
+        const r = await send.call(this.sim, 'buildRoundabout', { x: d.hover.x, z: d.hover.z, size: d.roundaboutSize });
+        this.applied++;
+        this.notify(`Giratoire construit (−${fmt(r.cost)} ¢)`, 'ok');
+      } catch (e) { this.notify(`Giratoire refusé : ${errorOf(e).message}`, 'error'); }
+      this.refresh();
+      return;
+    }
     if (d.click(d.hover) !== 'build') { this.refresh(); return; }
     const points = d.points();
     if (!points) { this.refresh(); return; }
