@@ -131,7 +131,7 @@ async function boot(): Promise<void> {
   // Journal du lancement précédent : affiché si la page a été fermée par un plantage (chargement ou partie).
   const prevTrace = previousTrace();
   const crashReport = prevTrace && (crashedBefore || prevTrace.playing) && prevTrace.steps.length
-    ? `Arrêt précédent (${prevTrace.playing ? 'après le chargement' : 'au chargement'}) après : ${prevTrace.steps.slice(-3).join(' › ')}` : null;
+    ? `Arrêt précédent (${prevTrace.playing ? 'après le chargement' : 'au chargement'}) après : ${prevTrace.steps.slice(-5).join(' › ')}` : null;
   traceStart();
   tracePlaying(false);
   const enteredSafeMode = crashedBefore && !isSafeMode();

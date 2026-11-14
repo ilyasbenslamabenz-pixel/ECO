@@ -86,6 +86,8 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
     if (!p) {
       p = this.slot().then(() => { traceStep(`modèle ${l.file.split('/').pop()}`); return this.loader.loadAsync(this.url(l.file)); }).then((gltf) => {
         const root = gltf.scene;
+        const short = l.file.split('/').pop()?.replace('.glb', '') ?? l.file;
+        traceStep(`${short} chargé`);
         // Mode allégé : images réduites dès le chargement, originaux libérés (arbres : plafond plus haut).
         capModelTextures(root, a.category === 'tree' ? imageLimits.treeTextureCap : imageLimits.textureCap);
         root.name = `${assetId}_lod${lod}`;
@@ -95,6 +97,10 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
         });
         this.loaded.add(key);
         this.release();
+        // Journal de plantage : étape franchie quand une image a été dessinée après ce modèle (affichage,
+        // compilation des shaders) — distingue un arrêt au chargement d'un arrêt au rendu.
+        traceStep(`${short} prêt`);
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(() => traceStep(`${short} affiché`)));
         return root;
       }, (e: unknown) => { this.release(); throw e; });
       p.catch(() => this.cache.delete(key));
