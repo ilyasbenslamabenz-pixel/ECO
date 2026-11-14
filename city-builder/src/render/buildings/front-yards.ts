@@ -60,7 +60,7 @@ const _v = new THREE.Vector3();
 
 interface Piece { kind: 'hedge' | 'path'; m: Float32Array }
 
-/** Haies et allées des jardinets de maisons (catégorie `house`). */
+/** Haies et allées des jardinets (pavillons, maisons de ville) ; parvis pavés des immeubles et commerces. */
 export class FrontYardLayer {
   readonly group = new THREE.Group();
   private readonly pieces = new Map<number, Piece[]>();
@@ -79,7 +79,9 @@ export class FrontYardLayer {
 
   add(id: number, a: CatalogAsset, x: number, y: number, z: number, rot: number): void {
     this.pieces.delete(id);
-    if (a.category !== 'house' || a.footprint.tilesX <= 0) return;
+    const cat = a.category;
+    const paved = cat === 'apartment_low' || cat === 'apartment_mid' || cat === 'apartment_high' || cat === 'skyscraper' || cat === 'commercial';
+    if ((cat !== 'house' && cat !== 'townhouse' && !paved) || a.footprint.tilesX <= 0) return;
     const d = depths(a);
     const [lx, lz] = facadeAxis(a);
     // Repère local : « avant » = axe de façade, « côté » = perpendiculaire. Limite avant de la parcelle à lot/2.
@@ -101,6 +103,13 @@ export class FrontYardLayer {
       _s.set(w, h, depth);
       out.push({ kind, m: _m.compose(_p, _q, _s).toArray(new Float32Array(16)) as Float32Array });
     };
+    if (paved) {
+      // Immeubles et commerces : parvis pavé sur toute la largeur, du trottoir à la façade (pas de bande d'herbe).
+      if (front - facade > 0.1) put('path', 0, (front + 0.6 + facade) / 2, d.width - 0.4, front + 0.6 - facade, 0.04);
+      this.pieces.set(id, out);
+      this.dirty = true;
+      return;
+    }
     for (const fp of a.frontage) {
       const s = side(fp.x, fp.z);
       const w = fp.kind === 'vehicle' ? 3 : 1.4;
@@ -115,7 +124,9 @@ export class FrontYardLayer {
     const segs: [number, number][] = [];
     for (const [g0, g1] of gaps) { if (g0 > cur + 0.3) segs.push([cur, Math.min(g0, half)]); cur = Math.max(cur, g1); }
     if (half > cur + 0.3) segs.push([cur, half]);
-    for (const [s0, s1] of segs) put('hedge', (s0 + s1) / 2, front - 0.3, s1 - s0, 0.5, 0.75);
+    // Maison de ville : haie plus basse (0,45 m) ; pavillon : 0,75 m.
+    const hh = cat === 'townhouse' ? 0.45 : 0.75;
+    for (const [s0, s1] of segs) put('hedge', (s0 + s1) / 2, front - 0.3, s1 - s0, cat === 'townhouse' ? 0.35 : 0.5, hh);
     this.pieces.set(id, out);
     this.dirty = true;
   }
