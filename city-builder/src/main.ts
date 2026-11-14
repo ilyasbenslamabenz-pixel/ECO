@@ -168,8 +168,9 @@ async function boot(): Promise<void> {
     onLoadSlot: (slot) => { void loadSlot(slot); },
     onSaveSlot: (slot) => saveSlot(slot),
     onDemo: () => { void startDemo(); },
-    // « Nouvelle partie (ville de départ) » retirée pour l'instant : seul point commun de tous les plantages
-    // Safari iPhone du 13/11 (démo + sauvegarde automatique d'une grande ville). startDemo(true) reste disponible.
+    // « Nouvelle partie (ville de départ) » : remise le 14/11 après les corrections mémoire du mode allégé (images
+    // partagées, textures 256 px, qualité Basse sur téléphone) ; retirée le 13/11 après des plantages Safari iPhone.
+    onDemoGame: () => { void startDemo(true); },
     onQuit: () => {
       void autoTriggers?.saveAndFlush();
       autosaver?.stop();
