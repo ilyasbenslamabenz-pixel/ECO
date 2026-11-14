@@ -83,6 +83,9 @@ const FULL: DeviceProfile = {
 /** Profil effectif d'un réglage de qualité (« auto » : allégé si l'appareil le demande). */
 export function deviceProfile(quality: QualitySetting = 'auto', lite = isLiteDevice()): DeviceProfile {
   if (isSafeMode() && quality === 'auto') quality = 'basse';
+  // Téléphone en « auto » : niveau Basse. Mesure réelle sur iPhone 17 Pro (14/11) : l'allégé à 1,5× et LOD
+  // plus détaillés faisait fermer la page à la pose de certaines maisons ; en Basse, la partie tient.
+  if (quality === 'auto' && lite) quality = 'basse';
   if (quality === 'haute' || ((quality === 'moyenne') && !lite) || (quality === 'auto' && !lite)) return { ...FULL };
   // Allégé (auto sur téléphone, basse, ou moyenne sur téléphone : textures et ombres réduites quand même).
   const basse = quality === 'basse';
