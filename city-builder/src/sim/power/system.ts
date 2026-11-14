@@ -37,6 +37,11 @@ import type { PluginContext } from '../plugins/types';
 export interface LineState { id: number; a: number; b: number; lengthM: number; failedUntil: number; builtAt: number }
 export interface FacilityState { failedUntil: number; failures: number }
 
+/** Distance maximale d'un bâtiment / d'une installation à la route pour être raccordé (m). */
+const ROAD_ATTACH_M = 80;
+/** Repli sans route : installation et bâtiment voisins (m). */
+const LOCAL_FALLBACK_M = 80;
+
 export interface PowerState {
   settings: ElectriciteSettings;
   lines: LineState[];
@@ -255,6 +260,43 @@ export class PowerSystem {
 
   lineLength(a: Facility, b: Facility): number { return Math.hypot(a.x - b.x, a.z - b.z); }
 
+  /* ----------------------- Réseau de distribution par les routes ----------------------- */
+
+  /**
+   * Distribution basse / moyenne tension LE LONG DES ROUTES (comme l'eau) : un bâtiment est raccordé à une
+   * installation (centrale ou poste) reliée à lui par le réseau routier. Composantes connexes des routes,
+   * recalculées quand la voirie change.
+   */
+  private compVersion = -1;
+  private nodeComp = new Map<number, number>();
+  /** Composante routière de chaque installation (-1 : à plus de 80 m d'une route). */
+  private facComp = new Map<number, number>();
+
+  private refreshRoadComponents(ctx: PluginContext): void {
+    const roads = ctx.roads;
+    if (roads.version === this.compVersion) return;
+    this.compVersion = roads.version;
+    const parent = new Map<number, number>();
+    const find = (a: number): number => { let r = a; while (parent.get(r)! !== r) r = parent.get(r)!; let x = a; while (parent.get(x)! !== r) { const n = parent.get(x)!; parent.set(x, r); x = n; } return r; };
+    for (const id of roads.nodeIds()) parent.set(id, id);
+    for (const s of roads.segmentIds()) {
+      const [a, b] = roads.endpoints(s);
+      if (!parent.has(a) || !parent.has(b)) continue;
+      const ra = find(a), rb = find(b);
+      if (ra !== rb) parent.set(Math.max(ra, rb), Math.min(ra, rb));
+    }
+    this.nodeComp.clear();
+    for (const id of parent.keys()) this.nodeComp.set(id, find(id));
+  }
+
+  /** Composante routière d'un point (tronçon le plus proche dans `reach` m), -1 sinon. */
+  private compAt(ctx: PluginContext, x: number, z: number, reach: number): number {
+    const s = ctx.roads.segmentNear(x, z, reach);
+    if (!s) return -1;
+    const [a] = ctx.roads.endpoints(s.segId);
+    return this.nodeComp.get(a) ?? -1;
+  }
+
   /**
    * Raccordements locaux automatiques (réseau moyenne tension) : deux installations distantes de moins que le plus
    * petit de leurs rayons de distribution sont reliées sans ligne HT (capacité limitée, pertes plus fortes).
@@ -266,7 +308,9 @@ export class PowerSystem {
       for (let j = i + 1; j < facs.length; j++) {
         const a = facs[i]!, b = facs[j]!;
         const d = this.lineLength(a, b);
-        if (d <= Math.min(a.radius, b.radius)) out.push([a.id, b.id, d]);
+        // Même réseau routier (distribution le long des routes) ; repli : très proches l'une de l'autre.
+        const ca = this.facComp.get(a.id) ?? -1, cb = this.facComp.get(b.id) ?? -1;
+        if ((ca >= 0 && ca === cb) || d <= LOCAL_FALLBACK_M) out.push([a.id, b.id, d]);
       }
     }
     return out;
@@ -528,8 +572,12 @@ export class PowerSystem {
     const avail = new Map<number, number>();
     for (const f of this.facilities.values()) avail.set(f.id, this.availableKw(ctx, f, wind.ms, sun));
 
-    // 2. Consommateurs (demande horaire) et rattachement à l'installation de distribution la plus proche.
+    // 2. Consommateurs (demande horaire) et rattachement : installation la plus proche RELIÉE PAR LA ROUTE
+    //    (réseau de distribution le long des routes) ; repli : installation à moins de 80 m (sans route).
     const facs = [...this.facilities.values()].sort((a, b) => a.id - b.id);
+    this.refreshRoadComponents(ctx);
+    this.facComp.clear();
+    for (const f of facs) this.facComp.set(f.id, this.compAt(ctx, f.x, f.z, ROAD_ATTACH_M));
     const geom = m?.grids.defaultGeometry;
     const consumers: Consumer[] = [];
     const st = ctx.buildings.store;
@@ -545,9 +593,11 @@ export class PowerSystem {
       const demand = baseDemandKw(cls, tiles, residents, workers, a.capacity.jobs) * hourlyFactor(cls, hourOfDay) * seasonF;
       const x = st.x[i]!, z = st.z[i]!;
       let hub = -1, best = Infinity;
+      const comp = this.compAt(ctx, x, z, ROAD_ATTACH_M);
       for (const f of facs) {
         const d = Math.hypot(f.x - x, f.z - z);
-        if (d <= f.radius && d < best) { best = d; hub = f.id; }
+        const linked = (comp >= 0 && this.facComp.get(f.id) === comp) || d <= LOCAL_FALLBACK_M;
+        if (linked && d < best) { best = d; hub = f.id; }
       }
       let cell = -1;
       if (geom) {

@@ -21,6 +21,11 @@ Demandes au superviseur : `docs/requests/electricite.md`.
 
 ## 1. Installations
 
+**Distribution (14/11)** : le courant suit les ROUTES, comme l'eau. Un bâtiment est raccordé à l'installation la
+plus proche reliée à lui par le réseau routier (bâtiment et installation à moins de 80 m d'une route) ; deux
+installations du même réseau routier sont reliées sans ligne. Les lignes HT relient des réseaux routiers séparés
+(centrale éloignée, hameau). Les rayons du tableau ne servent plus à la desserte.
+
 Les centrales et postes sont des **bâtiments du catalogue** (onglet Industrie de la barre de construction), reconnus
 par leurs étiquettes : `elec:centrale:thermique|eolien|solaire|hydro`, `elec:poste`, puissance facultative
 `elec:kw:N`. Coût de construction, entretien mensuel et emplois sont ceux du catalogue (appliqués par la simulation de

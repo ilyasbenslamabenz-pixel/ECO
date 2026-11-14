@@ -201,3 +201,18 @@ test('effet réel : sans courant, un bâtiment n\'offre plus ses emplois ; sans 
   assert.ok(unpowered > 0, 'des bâtiments délestés');
   assert.ok(jobsOf() < before, `emplois offerts en baisse (${before} -> ${jobsOf()})`);
 });
+
+test('distribution le long des routes : rue non reliée = non raccordée même à 100 m ; reliée par une route = alimentée', () => {
+  const { sim, elec } = powerTown({ days: 1 });
+  placeFacilities(sim, 160, -100, 100, ['centrale_gaz']);
+  // Rue isolée à ~100 m de la centrale, sans liaison routière.
+  const iso = buildStreet(sim, 260, 120, 260, ['maison', 'maison']);
+  advanceHours(sim, 2);
+  for (const id of iso) assert.equal(elec.system.powerFactor(id), 0, 'rue isolée non alimentée');
+  assert.ok(elec.system.summary()!.unlinked >= 2, 'comptée non raccordée');
+  // Liaison routière avec la rue des installations : courant rétabli.
+  const r = sim.buildRoad({ type: 'street', points: [100, 160, 120, 260] });
+  assert.ok(r.ok, !r.ok ? r.error.message : '');
+  advanceHours(sim, 2);
+  for (const id of iso) assert.equal(elec.system.powerFactor(id), 1, 'rue reliée alimentée');
+});

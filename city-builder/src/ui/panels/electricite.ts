@@ -134,7 +134,7 @@ function renderNetwork(st: ElectriciteDelta): string {
   const opts = facs.map((f) => `<option value="${f.id}">${esc(KIND_FR[f.kind])} n° ${f.id}</option>`).join('');
   return `<h4>Installations</h4><table>${fRows}</table>
   <h4>Lignes haute tension</h4>
-  ${lines.length ? `<table>${lRows}</table>` : '<p class="muted">Aucune ligne : chaque installation ne dessert que ses abords (rayon de distribution) et ses voisines proches.</p>'}
+  ${lines.length ? `<table>${lRows}</table>` : '<p class="muted">Aucune ligne : le courant suit les routes ; une ligne haute tension relie une installation à un réseau routier séparé (centrale éloignée, hameau).</p>'}
   <div class="row"><select id="elec-a">${opts}</select><select id="elec-b">${opts}</select></div>
   <div class="row"><button data-act="quote">Devis</button><button class="primary" data-act="build">Construire la ligne</button><span id="elec-quote" class="muted"></span></div>`;
 }

@@ -307,12 +307,14 @@ export class PowerRenderer {
       this.overlayMesh.frustumCulled = false;
       this.group.add(this.overlayMesh);
     }
-    // Rayons de distribution des installations (cercle vert si alimentée, rouge sinon).
+    // Repère de chaque installation : petit cercle de 30 m (vert si alimentée, rouge sinon). La distribution suit
+    // les routes (plus de rayon de desserte) : la couverture se lit sur les cases du calque.
     const rp: number[] = [], rc: number[] = [];
     const cOk = new THREE.Color(0x2fd06a), cKo = new THREE.Color(0xff2a2a);
-    for (const f of this.facilities()) {
+    for (const f0 of this.facilities()) {
+      const f = { ...f0, radius: 30 };
       const c = f.energized && f.failedUntil === 0 ? cOk : cKo;
-      const N = 48;
+      const N = 32;
       for (let k = 0; k < N; k++) {
         const a0 = (k / N) * Math.PI * 2, a1 = ((k + 1) / N) * Math.PI * 2;
         const x0 = f.x + Math.cos(a0) * f.radius, z0 = f.z + Math.sin(a0) * f.radius;

@@ -42,13 +42,26 @@ export function powerTown(opts: { seed?: number; days?: number; plugins?: (e: El
   sim.setCatalog(powerCatalog());
   sim.newGame({ seed: opts.seed ?? 1234, mapChunks: 4, startMoney: 80_000_000, cityName: 'Bourg-Volt', terrain: { hydrology: 'aucune', rivers: 0 } });
   buildTown(sim);
+  // Distribution le long des routes : les deux rues du bourg sont reliées (comme dans une vraie partie).
+  const link = sim.buildRoad({ type: 'street', points: [-220, 0, -220, 80] });
+  if (!link.ok) throw new Error(`liaison du bourg : ${link.error.message}`);
   if (opts.days) advanceHours(sim, opts.days * 24);
   return { sim, elec };
 }
 
 /** Pose des installations le long d'une rue en z = roadZ (côté nord). */
-export function placeFacilities(sim: Simulation, roadZ: number, x0: number, x1: number, ids: string[]): number[] {
-  return buildStreet(sim, roadZ, x0, x1, ids);
+export function placeFacilities(sim: Simulation, roadZ: number, x0: number, x1: number, ids: string[], connect = true): number[] {
+  const out = buildStreet(sim, roadZ, x0, x1, ids);
+  // Rue des installations reliée au bourg (rue z = 80) par une rue nord-sud à son extrémité ouest.
+  if (connect && roadZ > 80) {
+    // Jusqu'à la rue z = 80, ou jusqu'à la rue d'installations précédente si une liaison existe déjà.
+    const r = sim.buildRoad({ type: 'street', points: [x0, 80, x0, roadZ] });
+    if (!r.ok) {
+      const r2 = sim.buildRoad({ type: 'street', points: [x0, roadZ - 70, x0, roadZ] });
+      if (!r2.ok) throw new Error(`liaison des installations : ${r.error.message} / ${r2.error.message}`);
+    }
+  }
+  return out;
 }
 
 /** Avance de `hours` heures de jeu par pas de 10 minutes. */

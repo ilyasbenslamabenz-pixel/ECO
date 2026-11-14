@@ -142,8 +142,11 @@ try {
   void angleA;
 
   // 5. Panneau Énergie.
-  check(await page.isVisible('#elec-launcher'), 'bouton « ⚡ Énergie » visible');
-  await page.click('#elec-launcher');
+  // Panneau ouvert depuis le tiroir Énergie de la barre de construction (bouton flottant retiré le 14/11).
+  await page.click('#toolbar button[data-cat=energy]');
+  await page.waitForTimeout(400);
+  check(await page.isVisible('[data-dashboard=energy]'), 'bouton « Tableau de bord et lignes » visible dans le tiroir Énergie');
+  await page.click('[data-dashboard=energy]');
   await page.waitForSelector('#elec-panel:not(.hidden) [data-k="production"]', { timeout: 30000 });
   await page.waitForTimeout(800);
   const st2 = (await elec('state')).data;
