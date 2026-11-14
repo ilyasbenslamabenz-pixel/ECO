@@ -137,6 +137,25 @@ export class ToolController implements IToolController, PointerToolSink {
     return !!this.deps && (t === 'building' || t === 'road' || t === 'bulldoze' || t === 'terraform');
   }
 
+  /**
+   * Au doigt, l'outil Bâtiment ne prend le geste que s'il commence près du bâtiment à poser (ou de l'endroit où
+   * le doigt le tenait) ; ailleurs, la caméra se déplace et un simple tap y amène le bâtiment.
+   */
+  capturesAt(sx: number, sy: number, type: string): boolean {
+    if (this.override) return true;
+    const d = this.deps;
+    if (!d || type !== 'touch' || this.activeTool !== 'building') return true;
+    const pv = d.machine.preview;
+    if (pv.kind !== 'building') return true; // premier geste : placer le bâtiment
+    // Position actuelle du bâtiment à l'écran (la carte a pu bouger depuis le dernier geste).
+    const s = d.camera.worldToScreen(pv.proposal.x, this.lastGroundY ?? 0, pv.proposal.z);
+    const gx = s ? s.x : this.lastScreen.x, gy = s ? s.y : this.lastScreen.y;
+    const near = Math.hypot(sx - gx, sy - gy) < 110 || Math.hypot(sx - gx, sy - (gy + TOUCH_LIFT_PX)) < 110;
+    return near;
+  }
+
+  private lastGroundY: number | undefined;
+
   private feed(sx: number, sy: number, type: string): void {
     const d = this.deps;
     if (!d) return;
@@ -147,6 +166,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.lastScreen.x = sx; this.lastScreen.y = sy - lift;
     const ray = d.camera.screenRay(sx, sy - lift);
     const g = d.camera.groundAt(sx, sy - lift);
+    if (g) this.lastGroundY = g.y;
     d.machine.snapRadius = Math.max(5, Math.min(40, d.camera.getPose().distance * 0.035));
     d.machine.hover(g ? { x: g.x, z: g.z } : null, ray);
   }

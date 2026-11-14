@@ -44,6 +44,11 @@ export interface PointerToolSink {
   cancel(): void;
   /** Clic droit sans glisser. */
   secondary(): void;
+  /**
+   * Facultatif : vrai si l'outil veut CE geste (au doigt, l'outil Bâtiment ne prend un doigt que près du bâtiment
+   * à poser ; ailleurs, le doigt déplace la carte et un simple tap y déplace le bâtiment).
+   */
+  capturesAt?(sx: number, sy: number, pointerType: string): boolean;
 }
 
 export const EYE_HEIGHT = 1.7;
@@ -166,6 +171,16 @@ export class CameraController implements ICameraController {
   }
 
   /** Pose courante (contrat neutre). `pitch` = inclinaison effective. */
+  /** Point du monde -> pixels dans l'élément (null s'il est derrière la caméra). */
+  worldToScreen(x: number, y: number, z: number): { x: number; y: number } | null {
+    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    if (v.z > 1) return null;
+    return { x: (v.x + 1) / 2 * (this.dom.clientWidth || 1), y: (1 - v.y) / 2 * (this.dom.clientHeight || 1) };
+  }
+
+  /** Distance visée (diagnostic e2e : la pose courante n'avance qu'avec la boucle de rendu). */
+  goalDistance(): number { return this.goal.dist; }
+
   getPose(): CameraPose {
     const c = this.cur;
     return { targetX: c.tx, targetY: c.ty, targetZ: c.tz, distance: c.dist, yaw: c.yaw, pitch: this.pitchOf(c) };
@@ -282,14 +297,27 @@ export class CameraController implements ICameraController {
       if (this.mode === 'street') { this.gesture = 'look'; return; }
       if (e.pointerType === 'mouse' && (e.button === 2 || e.button === 1)) { this.gesture = e.button === 2 ? 'orbit-pending' : 'orbit'; return; }
       if (e.pointerType === 'mouse' && e.shiftKey && !this.toolSink?.capturesPrimary('mouse')) { this.gesture = 'orbit'; return; }
-      if (this.toolSink?.capturesPrimary(e.pointerType)) { this.gesture = 'tool'; this.toolSink.down(sx, sy, e.pointerType); return; }
+      this.flingV = null;
+      // Deuxième tap rapide au même endroit : réservé au double tap (zoom), même pendant un outil.
+      const secondTap = e.pointerType === 'touch' && performance.now() - this.lastTap.t < 320 && Math.hypot(sx - this.lastTap.x, sy - this.lastTap.y) < 40;
+      if (!secondTap && this.toolSink?.capturesPrimary(e.pointerType) && (this.toolSink.capturesAt?.(sx, sy, e.pointerType) ?? true)) { this.gesture = 'tool'; this.toolSink.down(sx, sy, e.pointerType); return; }
       this.gesture = 'pan-pending';
     } else if (this.pointers.size === 2) {
       if (this.gesture === 'tool') this.toolSink?.cancel();
       this.gesture = 'pinch';
+      this.pinchStart = performance.now();
+      this.pinchTravel = 0;
       this.resetPinch();
     }
   }
+
+  /* -------- Gestes tactiles d'appoint : double tap (zoom), tap à deux doigts (dézoom), élan du glissé -------- */
+  private lastTap = { t: 0, x: 0, y: 0 };
+  private pinchStart = 0;
+  private pinchTravel = 0;
+  /** Vitesse du glissé à un doigt (px/ms) mesurée sur les derniers mouvements ; élan appliqué au relâcher. */
+  private panVel = { vx: 0, vy: 0, t: 0 };
+  private flingV: { vx: number; vy: number; x: number; y: number } | null = null;
 
   private resetPinch(): void {
     const [a, b] = [...this.pointers.values()];
@@ -333,9 +361,14 @@ export class CameraController implements ICameraController {
         if (this.gesture === 'pan-pending') { if (!moved) break; this.gesture = 'pan'; }
         const r = this.dom.getBoundingClientRect();
         this.panGrab(psx - r.left, psy - r.top, sx, sy, h);
+        if (e.pointerType === 'touch') {
+          const now = performance.now(), dtm = Math.max(1, now - this.panVel.t);
+          const k = Math.min(1, dtm / 60); // moyenne glissante (~60 ms)
+          this.panVel = { vx: this.panVel.vx * (1 - k) + (dx / dtm) * k, vy: this.panVel.vy * (1 - k) + (dy / dtm) * k, t: now };
+        }
         break;
       }
-      case 'pinch': this.pinchDirty = true; break; // traité une fois par image (les doigts bougent l'un après l'autre)
+      case 'pinch': this.pinchDirty = true; this.pinchTravel += Math.hypot(dx, dy); break; // traité une fois par image (les doigts bougent l'un après l'autre)
       default: break;
     }
   }
@@ -389,11 +422,35 @@ export class CameraController implements ICameraController {
     if (this.gesture === 'pinch' && this.pinchDirty && this.pointers.size === 2) { this.pinchDirty = false; this.pinchMove(); }
     this.pointers.delete(e.pointerId);
     if (this.pointers.size === 0) {
+      const touch = e.pointerType === 'touch' && this.mode === 'aerial';
+      if (touch && this.gesture === 'pan' && !cancelled && performance.now() - this.panVel.t < 80 && Math.hypot(this.panVel.vx, this.panVel.vy) > 0.35) {
+        // Élan : la carte continue un peu dans le sens du glissé, puis ralentit.
+        this.flingV = { vx: this.panVel.vx, vy: this.panVel.vy, x: sx, y: sy };
+      }
+      this.panVel = { vx: 0, vy: 0, t: 0 };
+      if (touch && this.gesture === 'pan-pending' && tap) {
+        const now = performance.now();
+        if (now - this.lastTap.t < 320 && Math.hypot(sx - this.lastTap.x, sy - this.lastTap.y) < 40) {
+          // Double tap : zoom avant centré sur le point touché (comme dans Plans).
+          this.zoomAt(sx, sy, 0.5);
+          this.lastTap.t = 0;
+          this.gesture = 'none';
+          return;
+        }
+        this.lastTap = { t: now, x: sx, y: sy };
+      }
+      if (touch && this.gesture === 'tool' && tap) this.lastTap = { t: performance.now(), x: sx, y: sy };
       if (this.gesture === 'tool') { if (cancelled) this.toolSink?.cancel(); else this.toolSink?.up(sx, sy, e.pointerType, tap); }
       else if (this.gesture === 'pan-pending' && tap) this.toolSink?.up(sx, sy, e.pointerType, true);
       else if (this.gesture === 'orbit-pending' && tap) this.toolSink?.secondary();
       this.gesture = 'none';
     } else if (this.pointers.size === 1) {
+      // Tap à deux doigts (rapide, presque sans mouvement) : zoom arrière.
+      if (this.gesture === 'pinch' && e.pointerType === 'touch' && this.mode === 'aerial' && performance.now() - this.pinchStart < 260 && this.pinchTravel < 24) {
+        const o = [...this.pointers.values()][0]!;
+        const r = this.dom.getBoundingClientRect();
+        this.zoomAt((o.x + p.x) / 2 - r.left, (o.y + p.y) / 2 - r.top, 2);
+      }
       // Fin du pincement : on ne reprend pas de geste avec le doigt restant (évite les sauts).
       this.gesture = 'none';
     } else if (this.pointers.size === 2) this.resetPinch();
@@ -483,6 +540,17 @@ export class CameraController implements ICameraController {
 
   update(dt: number): void {
     if (this.pinchDirty && this.gesture === 'pinch') { this.pinchDirty = false; this.pinchMove(); }
+    // Élan du glissé : déplacement décroissant (≈ 0,4 s), interrompu par tout nouveau geste.
+    const fv = this.flingV;
+    if (fv && this.mode === 'aerial' && this.pointers.size === 0) {
+      const ms = Math.min(50, dt * 1000);
+      // Glissé appliqué autour du centre de l'écran (point toujours sur le sol).
+      const h0 = this.dom.clientHeight || 800, w0 = this.dom.clientWidth || 400;
+      this.panGrab(w0 / 2, h0 / 2, w0 / 2 + fv.vx * ms, h0 / 2 + fv.vy * ms, h0);
+      const decay = Math.pow(0.9, ms / 16);
+      fv.vx *= decay; fv.vy *= decay;
+      if (Math.hypot(fv.vx, fv.vy) < 0.02) this.flingV = null;
+    }
     const k = this.keys;
     const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);

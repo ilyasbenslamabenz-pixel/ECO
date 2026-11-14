@@ -283,6 +283,7 @@ async function boot(): Promise<void> {
   ui.attachWorld({ heightAt: (x, z) => render.terrain.heightAt(x, z) });
   input.camera.setModeListener((m) => { state.cameraMode = m; ui.setCameraMode(m); });
   debug.cameraPose = () => input.camera.getPose();
+  (debug as unknown as Record<string, unknown>).cameraGoalDistance = () => input.camera.goalDistance();
   debug.signals = () => render.signals.debug();
   debug.roadDecor = () => render.roads.decorItems();
   debug.heightAt = (x, z) => render.terrain.heightAt(x, z);

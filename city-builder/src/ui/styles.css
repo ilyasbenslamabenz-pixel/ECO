@@ -647,3 +647,16 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   body.tool-opts #hud .speed { flex: 0 0 auto !important; width: auto !important; order: 3; }
   body.tool-opts #hud .speed button { min-width: 40px; }
 }
+/* Téléphone, mode construction : la mini-carte reste masquée, mais zoom avant / arrière restent à portée
+   (colonne à droite, au-dessus de la barre d'outils). */
+@media (max-width: 760px) {
+  body.tool-opts:not(.drawer-open):not(.confirming) #minimap {
+    display: flex !important; position: fixed; right: calc(8px + env(safe-area-inset-right, 0px)); left: auto;
+    bottom: calc(290px + env(safe-area-inset-bottom, 0px)); top: auto; width: auto; height: auto;
+    background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; z-index: 21;
+  }
+  body.tool-opts:not(.drawer-open):not(.confirming) #minimap .mm-map { display: none !important; }
+  body.tool-opts:not(.drawer-open):not(.confirming) #minimap .mm-ctrl { display: flex; flex-direction: column; gap: 6px; }
+  body.tool-opts:not(.drawer-open):not(.confirming) #minimap .mm-ctrl > button:not(#mm-zoom-in):not(#mm-zoom-out) { display: none !important; }
+  body.tool-opts:not(.drawer-open):not(.confirming) #minimap .mm-ctrl > button { width: 44px; height: 44px; }
+}
