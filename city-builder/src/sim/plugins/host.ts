@@ -43,6 +43,8 @@ export class PluginHost {
   /** Sections de sauvegarde de modules inconnus (ou trop récentes) : réécrites telles quelles à la prochaine sauvegarde. */
   private foreign: Record<string, PluginSaveSection> = {};
   private initialized = false;
+  /** Service publié par un module (`ctx.provide`), ou undefined. */
+  service<T>(name: string): T | undefined { return this.services.get(name) as T | undefined; }
   private readonly notified = new Set<string>();
   /** Erreurs attrapées (une entrée par module + crochet, compteur d'occurrences). */
   readonly errors: PluginErrorRecord[] = [];

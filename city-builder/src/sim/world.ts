@@ -194,6 +194,16 @@ export class Simulation {
     if (this.demography) this.demography.setContext(ctx);
     else { this.demography = new DemographySystem(ctx); this.demography.setContext(ctx); }
     this.plugins.init();
+    // Effets réels des réseaux (dès que le joueur a construit une installation ; avant : aucun effet) :
+    // sans courant, un bâtiment n'embauche plus et n'accueille plus de ménages ; sans eau suffisante, plus de ménages.
+    type Elec = { powerFactor(id: number): number; hasNetwork?(): boolean };
+    type Eau = { growthAllowed(id: number): boolean };
+    const elec = (): Elec | undefined => this.plugins.service<Elec>('electricite');
+    this.demography.activity = (id) => { const e = elec(); return e && e.hasNetwork?.() ? e.powerFactor(id) : 1; };
+    this.demography.growthGates = [
+      (id) => { const e = elec(); return !e || !e.hasNetwork?.() || e.powerFactor(id) >= 1; },
+      (id) => this.plugins.service<Eau>('eau')?.growthAllowed(id) ?? true,
+    ];
   }
 
   getAsset(id: string): CatalogAsset | undefined {

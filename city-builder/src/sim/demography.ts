@@ -381,9 +381,20 @@ export class DemographySystem {
 
   /* ------------------------------- Logement ------------------------------- */
 
+  /**
+   * Activité d'un bâtiment (1 = actif) branchée par la simulation sur les services des modules : un bâtiment
+   * privé de courant n'embauche pas et ses emplois ne sont pas offerts. 1 tant qu'aucun réseau n'existe.
+   */
+  activity: (buildingId: number) => number = () => 1;
+  /** Filtres de croissance des modules (eau, électricité) : faux = le bâtiment n'accueille pas de nouveaux ménages. */
+  growthGates: ((buildingId: number) => boolean)[] = [];
+
+  private active(bi: number): boolean { return this.activity(this.ctx.buildings.id[bi]!) >= 1; }
+
   private freeHousingAt(bi: number): number {
     const m = this.metaOfIndex(bi);
     if (!m || m.resCap <= 0 || !this.ctx.buildings.roadAccess[bi]) return 0;
+    if (this.growthGates.length) { const id = this.ctx.buildings.id[bi]!; for (const g of this.growthGates) if (!g(id)) return 0; }
     return Math.max(0, m.resCap - this.ctx.buildings.residents[bi]!);
   }
 
@@ -545,7 +556,7 @@ export class DemographySystem {
             const j = b.indexOf(cell[k]!);
             if (j < 0 || !b.roadAccess[j]) continue;
             const m = this.metaOfIndex(j);
-            if (!m || m.jobCap - b.workers[j]! <= 0) continue;
+            if (!m || m.jobCap - b.workers[j]! <= 0 || !this.active(j)) continue;
             const dx = b.x[j]! - hx, dz = b.z[j]! - hz;
             const d = Math.sqrt(dx * dx + dz * dz);
             if (d > MAX_COMMUTE_M) continue;
@@ -634,7 +645,7 @@ export class DemographySystem {
     let freeJobs = 0;
     for (let k = 0; k < b.count; k++) {
       const m = this.metaOfIndex(k);
-      if (m && b.roadAccess[k]) freeJobs += Math.max(0, m.jobCap - b.workers[k]!);
+      if (m && b.roadAccess[k] && this.active(k)) freeJobs += Math.max(0, m.jobCap - b.workers[k]!);
     }
 
     // 1) Décès (parcours à rebours : suppression par permutation sûre).
@@ -1008,7 +1019,7 @@ export class DemographySystem {
     for (let i = 0; i < b.count; i++) {
       const m = this.metaOfIndex(i);
       if (!m) continue;
-      if (b.roadAccess[i]) jobsTotal += m.jobCap;
+      if (b.roadAccess[i] && this.active(i)) jobsTotal += m.jobCap;
       jobsFilled += b.workers[i]!;
       if (b.roadAccess[i]) attractSum += m.attract;
     }
@@ -1080,7 +1091,7 @@ export class DemographySystem {
       const m = this.metaOfIndex(i);
       if (!m) continue;
       if (b.roadAccess[i]) {
-        jobsTotal += m.jobCap;
+        if (this.active(i)) jobsTotal += m.jobCap;
         housingCapacity += m.resCap;
         housingFree += Math.max(0, m.resCap - b.residents[i]!);
         if (m.sector === Sector.Commercial) commercialJobs += m.jobCap;

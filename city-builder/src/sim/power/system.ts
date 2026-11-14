@@ -59,6 +59,8 @@ export interface PowerState {
   investments: number;
   /** Dernière heure traitée (minutes de jeu). */
   lastHourAt: number;
+  /** Bâtiments sans courant au dernier calcul (rechargement identique : la démographie les consulte). */
+  unpowered?: number[];
 }
 
 export function emptyPowerState(): PowerState {
@@ -157,11 +159,15 @@ export class PowerSystem {
     this.rooftopSet = new Set(s.rooftopIds);
     this.penaltyGrid = s.penalty && s.penaltyCells > 0 ? decodeFloat32(s.penalty, s.penaltyCells) : null;
     this.eventsSent = s.events.length;
+    for (const id of s.unpowered ?? []) this.served.set(id, 0);
   }
 
   toJSON(): PowerState {
     const s = this.state;
     s.rooftopIds = [...this.rooftopSet].sort((a, b) => a - b);
+    const off: number[] = [];
+    for (const [id, f] of this.served) if (f < 1) off.push(id);
+    if (off.length) s.unpowered = off.sort((a, b) => a - b); else delete s.unpowered;
     if (this.penaltyGrid) { s.penalty = encodeFloat32(this.penaltyGrid); s.penaltyCells = this.penaltyGrid.length; } else { s.penalty = ''; s.penaltyCells = 0; }
     return s;
   }
@@ -177,6 +183,8 @@ export class PowerSystem {
   /* --------------------------------- Lecture --------------------------------- */
 
   powerFactor(id: number): number { return this.served.get(id) ?? 1; }
+  /** Installations connues (état sauvegardé : identique avant et après un rechargement). */
+  facilityCount(): number { return Math.max(this.facilities.size, Object.keys(this.state.facilities).length); }
   summary(): ElectriciteSummary | undefined { return this.summaryCache; }
   exportableKw(): number { return this.summaryCache?.exportableKw ?? 0; }
 

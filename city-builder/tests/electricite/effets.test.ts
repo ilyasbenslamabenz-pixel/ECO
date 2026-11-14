@@ -187,3 +187,17 @@ test('partie sans installation électrique : aucun delta, aucune section, aucun 
   assert.equal(elec.system.summary(), undefined);
   assert.equal(elec.municipal()!.isEmpty, true);
 });
+
+test('effet réel : sans courant, un bâtiment n\'offre plus ses emplois ; sans réseau construit, aucun effet', () => {
+  const { sim, elec } = powerTown({ days: 2 });
+  const jobsOf = (): number => (sim as unknown as { demography: { report(t: number, r: number): { jobsTotal: number } } }).demography.report(sim.clock.totalMinutes, 0.1).jobsTotal;
+  const before = jobsOf();
+  assert.ok(before > 0, 'emplois offerts avant tout réseau');
+  // Une petite centrale ne suffit pas à toute la demande : une partie des bâtiments est délestée.
+  placeFacilities(sim, 160, -100, 100, ['petite_centrale']);
+  advanceToHour(sim, 12);
+  advanceHours(sim, 2);
+  const unpowered = sim.buildings.count > 0 ? Array.from(sim.buildings.id.subarray(0, sim.buildings.count)).filter((id) => elec.system.powerFactor(id) < 1).length : 0;
+  assert.ok(unpowered > 0, 'des bâtiments délestés');
+  assert.ok(jobsOf() < before, `emplois offerts en baisse (${before} -> ${jobsOf()})`);
+});

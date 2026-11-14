@@ -46,6 +46,7 @@ export function createElectricitePlugin(): ElectricitePlugin {
   const service: ElectriciteService = {
     powerFactor: (id) => system.powerFactor(id),
     isPowered: (id) => system.powerFactor(id) >= 1,
+    hasNetwork: () => system.facilityCount() > 0,
     exportableKw: () => system.exportableKw(),
     summary: () => system.summary(),
   };

@@ -242,6 +242,8 @@ export interface ElectriciteCommands {
 
 /** API publiée aux autres modules de simulation (service `electricite`). */
 export interface ElectriciteService {
+  /** Vrai dès qu'au moins une installation (centrale, poste) existe : sans réseau, aucune coupure appliquée. */
+  hasNetwork?(): boolean;
   /** Part de la demande servie pour un bâtiment (1 alimenté, 0 coupé ou non raccordé ; 1 si inconnu). */
   powerFactor(buildingId: number): number;
   /** Vrai si le bâtiment est alimenté (ou non consommateur). */
