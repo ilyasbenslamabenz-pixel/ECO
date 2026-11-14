@@ -700,6 +700,15 @@ function markings(out: BuildOutput, ctx: BuildContext, k: RoadKindDef, sm: SegSa
     const edgeOff = hc - k.shoulder - 0.1;
     solid(edgeOff, 0.15); solid(-edgeOff, 0.15);
   }
+  // Sens unique : flèches régulières le long du tronçon (pas seulement aux carrefours), une par voie.
+  if (nB === 0 && s1 - s0 > 34) {
+    const span = s1 - s0 - 28;
+    const n = Math.max(1, Math.floor(span / 40) + 1);
+    for (let q = 0; q < n; q++) {
+      const sc = s0 + 14 + (n === 1 ? span / 2 : (span * q) / (n - 1));
+      for (let r = 0; r < nF; r++) arrow(P, sm, sc, (nF * lw) / 2 - (r + 0.5) * lw, true, 'straight');
+    }
+  }
   // Abords de carrefour : passages piétons, lignes d'arrêt, flèches.
   const ends: { j: JunctionInfo; atStart: boolean }[] = [{ j: startJ, atStart: true }, { j: endJ, atStart: false }];
   for (const { j, atStart } of ends) {
