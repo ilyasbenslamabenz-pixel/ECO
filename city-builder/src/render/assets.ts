@@ -43,10 +43,12 @@ export function dequantizeGeometry(g: THREE.BufferGeometry): void {
   }
 }
 
-/** Gestionnaire de chargement : en mode allégé, textures communes servies en 256 px (voir liteTextureUrl). */
+/** Gestionnaire de chargement : adresses normalisées ; en mode allégé, textures communes en 256 px (liteTextureUrl). */
 function liteManager(): THREE.LoadingManager {
   const m = new THREE.LoadingManager();
-  m.setURLModifier((u) => liteTextureUrl(u));
+  // Adresse normalisée (« …/residential/../../textures/x.webp » -> « …/textures/x.webp ») : sinon le cache
+  // d'images de three ne reconnaît pas une texture commune et la redécode pour chaque modèle (×12 mesuré).
+  m.setURLModifier((u) => { let n = u; try { n = new URL(u, globalThis.location?.href).href; } catch { /* adresse non standard */ } return liteTextureUrl(n); });
   return m;
 }
 

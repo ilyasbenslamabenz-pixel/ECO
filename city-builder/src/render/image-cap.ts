@@ -92,7 +92,7 @@ export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | Ima
   return out;
 }
 
-const sharedSources = new WeakMap<ImageData, Source<unknown>>();
+const sharedSources = new WeakMap<object, Source<unknown>>();
 
 /** Réduit en place les images des textures d'un modèle chargé (une fois par texture). */
 export function capModelTextures(root: THREE.Object3D, cap = imageLimits.textureCap): void {
@@ -111,8 +111,10 @@ export function capModelTextures(root: THREE.Object3D, cap = imageLimits.texture
         if (out !== img) { t.image = out; t.needsUpdate = true; }
         // Même image réduite (texture commune à plusieurs modèles) = une seule copie sur le GPU : three
         // partage la texture WebGL entre textures de même Source (et mêmes réglages).
-        if (typeof ImageData !== 'undefined' && t.image instanceof ImageData) {
-          const key = t.image as ImageData;
+        // Toute image partagée (ImageBitmap du cache, version 256 px ou réduite) : sans cela, chaque modèle
+        // renvoyait sa propre copie au GPU (mesure : 310 envois d'images 256 px pour une petite ville).
+        if (t.image && typeof t.image === 'object') {
+          const key = t.image as object;
           const own = t.source as unknown as Source<unknown>;
           const src = sharedSources.get(key);
           if (!src) sharedSources.set(key, own);

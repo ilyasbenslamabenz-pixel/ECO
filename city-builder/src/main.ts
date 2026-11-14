@@ -234,6 +234,24 @@ async function boot(): Promise<void> {
     render.ctx.scene.traverse((o) => { objects++; if ((o as THREE.InstancedMesh).isInstancedMesh) instanced++; else if ((o as THREE.Mesh).isMesh) meshes++; });
     return { geometries: r.info.memory.geometries, textures: r.info.memory.textures, programs: r.info.programs?.length ?? 0, objects, instanced, meshes, dom: document.getElementsByTagName('*').length };
   };
+  // Diagnostic (e2e mémoire) : textures de la scène regroupées par origine.
+  (debug as unknown as Record<string, unknown>).textureReport = () => {
+    const tex = new Set<THREE.Texture>();
+    render.ctx.scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (!m) return;
+      for (const mat of Array.isArray(m) ? m : [m]) for (const v of Object.values(mat)) if ((v as THREE.Texture | null)?.isTexture) tex.add(v as THREE.Texture);
+    });
+    const imgs = new Set<unknown>(), srcs = new Set<unknown>();
+    const by: Record<string, number> = {};
+    for (const t of tex) {
+      imgs.add(t.image); srcs.add(t.source);
+      const im = t.image as { width?: number; height?: number; constructor?: { name: string } } | null;
+      const k = `${im?.constructor?.name ?? '?'} ${im?.width ?? 0}x${im?.height ?? 0} ${t.name ? t.name.split('/').slice(-2, -1)[0] ?? t.name : '(sans nom)'}`;
+      by[k] = (by[k] ?? 0) + 1;
+    }
+    return { textures: tex.size, images: imgs.size, sources: srcs.size, top: Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 25) };
+  };
   const props = new PropLayer(render.ctx.scene, lib);
   debug.sceneCheck = () => ({
     buildings: render.buildings.count, buildingErrors: render.buildings.errors.slice(0, 20), buildingsLoading: render.buildings.loading,
