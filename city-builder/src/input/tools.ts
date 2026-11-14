@@ -221,6 +221,7 @@ export class ToolController implements IToolController, PointerToolSink {
     if (m.tool === 'building') return 'Construire';
     if (m.tool === 'bulldoze') return 'Démolir';
     if (m.tool === 'terraform') return terrainLabel(m.terrain.mode);
+    if (p.kind === 'powerline') return !p.a ? 'Choisir le départ' : p.validity === 'error' ? 'Ligne refusée' : p.b ? `Construire la ligne · ${fmt(p.cost)} ¢` : 'Choisir l’arrivée';
     if (p.kind === 'grid') return p.validity === 'error' ? 'Îlot refusé' : `Construire l’îlot · ${fmt(p.cost)} ¢`;
     if (p.kind === 'upgrade') return p.validity === 'error' ? 'Modification refusée' : p.refund > 0 ? `Modifier · +${fmt(p.refund)} ¢` : `Modifier · ${fmt(p.cost)} ¢`;
     if (p.kind === 'road') return p.validity === 'error' ? 'Tracé refusé' : `Tracer · ${fmt(p.cost)} ¢`;
@@ -403,6 +404,14 @@ export class ToolController implements IToolController, PointerToolSink {
           tag(`Démolir : ${name}\nRemboursement +${fmt(p.refund)} ¢`, 'error');
         } else tag(null, 'info');
         break;
+      case 'powerline': {
+        this.road?.show({ points: p.points, width: 1.6, validity: p.points ? (p.b ? p.validity : 'pending') : 'ok', start: p.a, control: null, hover: p.b ? { x: p.b.x, z: p.b.z, snap: 'node' } : null });
+        if (!p.points) tag(p.message, 'info');
+        else if (!p.b) tag(`Ligne haute tension\n${p.message}`, 'info');
+        else if (p.validity === 'error') tag(`Ligne ${p.a?.name ?? ''} → ${p.b.name}\n${p.message}`, 'error');
+        else tag(`Ligne ${p.a?.name ?? ''} → ${p.b.name}\n${p.validity === 'ok' ? `${fmt(p.cost)} ¢ · ${p.message}` : 'Calcul du coût…'}`, p.validity === 'ok' ? 'ok' : 'pending');
+        break;
+      }
       case 'terrain': {
         this.terrainPrev?.show(p);
         const head = terrainLabel(p.mode);

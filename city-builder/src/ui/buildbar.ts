@@ -321,6 +321,12 @@ export class BuildBar {
         }
       }
       if (id === 'energy' || id === 'water' || id === 'waste') this.tabsEl.append(this.dashboardChip(id));
+      if (id === 'energy') {
+        const ln = el('button', { cls: 'chip-tab', attrs: { type: 'button', 'data-powerline': '1' } }, iconEl('pylon'), el('span', { text: 'Ligne haute tension' }));
+        ln.dataset['tip'] = 'Relier une centrale éloignée (ou un hameau) au réseau de la ville : touchez une installation, puis une autre ; coût affiché avant de construire';
+        ln.addEventListener('click', () => { this.closeDrawer(); this.d.tools.setTool('powerline'); });
+        this.tabsEl.append(ln);
+      }
       for (const a of assetsForTab(this.d.catalog, current)) this.body.append(this.card(a, current.placeable, current.color));
     }
     if (id === 'transport') for (const p of PLANNED.transport) this.body.append(this.plannedTile(p));
@@ -432,6 +438,7 @@ export class BuildBar {
       const v = m.variant >= 0 ? m.asset.variants[m.variant] : undefined;
       return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m`;
     }
+    if (m.tool === 'powerline') return 'Ligne haute tension — touchez une centrale ou un poste, puis l’installation d’arrivée (coût affiché) ; le courant suit ensuite les routes';
     if (m.tool === 'road' && m.draft.mode === 'roundabout') return `${m.draft.roundaboutSize === 'large' ? 'Grand giratoire' : 'Giratoire'} — cliquez sur un carrefour ou sur une route`;
     if (m.tool === 'road') {
       if (m.roadSub === 'grid') return `Quadrillage · ${ROAD_KINDS[m.roadType].nameFr} · îlots de ${m.gridBlock} m — premier coin, puis coin opposé (coût affiché avant validation)`;

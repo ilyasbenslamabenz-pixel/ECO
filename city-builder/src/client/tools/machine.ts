@@ -61,6 +61,7 @@ export const TOOL_PHASE: Record<ToolId, number | null> = {
   building: null,
   bulldoze: null,
   terraform: null,
+  powerline: null,
 };
 
 /** Remboursement à la démolition appliqué par la simulation (src/sim/world.ts). Affichage indicatif. */
@@ -76,6 +77,8 @@ export type UpgradeTarget = 'next' | 'prev' | 'reverse' | RoadKindId;
 export type ToolPreview =
   | { kind: 'none' }
   | { kind: 'select'; hover: PickResult | null }
+  /** Ligne haute tension : installation de départ, installation visée, segment, devis de la simulation. */
+  | { kind: 'powerline'; a: { id: number; x: number; z: number; name: string } | null; b: { id: number; x: number; z: number; name: string } | null; points: number[] | null; validity: Validity; cost: number; length: number; message: string }
   | { kind: 'building'; asset: CatalogAsset; proposal: PlacementProposal; variant: number; validity: Validity; cost: number; message: string }
   | { kind: 'road'; type: RoadKindId; mode: RoadMode; points: number[] | null; start: SnapPoint | null; control: SnapPoint | null; hover: SnapPoint | null; validity: Validity; cost: number; length: number; message: string; angle: string; chained: number; elevation?: number; path?: number[] }
   | { kind: 'grid'; type: RoadKindId; start: { x: number; z: number } | null; hover: { x: number; z: number } | null; layout: GridLayout | null; validity: Validity; cost: number; message: string }
@@ -179,6 +182,7 @@ export class ConstructionTools {
     }
     if (opts?.roadType && roadDef(opts.roadType)) this.roadType = opts.roadType;
     this.tool = t;
+    this.lineA = null;
     this.draft.reset();
     this.gridStart = null;
     this.draft.type = this.roadType;
@@ -310,6 +314,7 @@ export class ConstructionTools {
         if (points) this.validateRoad(points);
         break;
       }
+      case 'powerline': this.refreshPowerLine(g); return;
       case 'terraform':
         this.terrain.angleSnap = this.angleSnap;
         this.terrain.setHover(g);
@@ -322,6 +327,69 @@ export class ConstructionTools {
   }
 
   private validatedVersion = -1;
+
+  /* ------------------------------ Ligne haute tension ------------------------------ */
+
+  private lineA: { id: number; x: number; z: number; name: string } | null = null;
+  private lineKey = '';
+
+  /** Installation électrique (centrale, éolienne, poste…) sous le curseur, ou null. */
+  private facilityAt(g: { x: number; z: number } | null): { id: number; x: number; z: number; name: string } | null {
+    const hit = this.lastRay ? this.mirror.pick(this.lastRay, g) : null;
+    if (hit?.kind === 'building' && hit.asset && hit.asset.id.startsWith('elec_')) return { id: hit.id, x: hit.record.x, z: hit.record.z, name: hit.asset.nameFr };
+    return null;
+  }
+
+  private refreshPowerLine(g: { x: number; z: number } | null): void {
+    const b = this.facilityAt(g);
+    const a = this.lineA;
+    if (!a) {
+      this.lineKey = '';
+      this.preview = { kind: 'powerline', a: null, b, points: null, validity: b ? 'ok' : 'ok', cost: 0, length: 0, message: b ? `Départ : ${b.name}` : 'Touchez une centrale ou un poste de départ' };
+      this.emit();
+      return;
+    }
+    if (!b || b.id === a.id) {
+      this.lineKey = '';
+      const pts = g ? [a.x, a.z, g.x, g.z] : null;
+      this.preview = { kind: 'powerline', a, b: null, points: pts, validity: 'ok', cost: 0, length: pts ? Math.hypot(pts[2]! - a.x, pts[3]! - a.z) : 0, message: 'Touchez l\'installation d\'arrivée (poste de transformation dans un quartier)' };
+      this.emit();
+      return;
+    }
+    const key = `${a.id}-${b.id}-${this.mirror.version}`;
+    if (key === this.lineKey && this.preview.kind === 'powerline') { this.emit(); return; }
+    this.lineKey = key;
+    this.preview = { kind: 'powerline', a, b, points: [a.x, a.z, b.x, b.z], validity: 'pending', cost: 0, length: Math.hypot(b.x - a.x, b.z - a.z), message: '' };
+    this.emit();
+    const seq = ++this.previewSeq;
+    this.dry.run(async () => {
+      if (seq !== this.previewSeq) return;
+      let validity: Validity = 'ok', cost = 0, length = 0, message = '';
+      try {
+        const r = await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'quoteLine', payload: { a: a.id, b: b.id } });
+        const d = r.data as { lengthM: number; cost: number; upkeepPerMonth: number };
+        cost = d.cost; length = d.lengthM;
+        message = `${fmt(length)} m · entretien ${fmt(d.upkeepPerMonth)} ¢/mois`;
+      } catch (e) { validity = 'error'; message = errorOf(e).message; }
+      const cur = this.preview;
+      if (cur.kind === 'powerline' && this.lineKey === key) { this.preview = { ...cur, validity, cost, length: length || cur.length, message }; this.emit(); }
+    });
+  }
+
+  private async powerLineClick(): Promise<void> {
+    const p = this.preview;
+    if (p.kind !== 'powerline') return;
+    if (!this.lineA) { if (p.b) { this.lineA = p.b; this.refresh(); } else this.notify('Touchez une centrale, une éolienne ou un poste', 'info'); return; }
+    if (!p.b || p.validity === 'error') { if (p.validity === 'error') this.notify(`Ligne refusée : ${p.message}`, 'error'); return; }
+    try {
+      await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'buildLine', payload: { a: this.lineA.id, b: p.b.id } });
+      this.applied++;
+      this.notify(`Ligne haute tension construite : ${this.lineA.name} → ${p.b.name} (−${fmt(p.cost)} ¢)`, 'ok');
+      this.lineA = p.b; // enchaîner depuis l'arrivée
+    } catch (e) { this.notify(`Ligne refusée : ${errorOf(e).message}`, 'error'); }
+    this.lineKey = '';
+    this.refresh();
+  }
 
   /** Aperçu du quadrillage. Renvoie true si l'aperçu précédent (même disposition, validation en cours ou faite) est conservé. */
   private refreshGrid(g: { x: number; z: number } | null): boolean {
@@ -531,6 +599,7 @@ export class ConstructionTools {
           break;
         case 'bulldoze': await this.bulldozeCurrent(); break;
         case 'terraform': if (await this.terrain.click()) this.applied++; break;
+        case 'powerline': await this.powerLineClick(); break;
         default: break;
       }
     } finally { this.busy = false; }
@@ -716,6 +785,7 @@ export class ConstructionTools {
     if (this.tool === 'road' && this.gridStart) { this.gridStart = null; this.gridKey = ''; this.refresh(); return true; }
     if (this.tool === 'road' && this.draft.back()) { this.refresh(); return true; }
     if (this.tool === 'terraform' && this.terrain.back()) return true;
+    if (this.tool === 'powerline' && this.lineA) { this.lineA = null; this.refresh(); return true; }
     if (this.tool !== 'select') { this.setTool('select'); return true; }
     return false;
   }

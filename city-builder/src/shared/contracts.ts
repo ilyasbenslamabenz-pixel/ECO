@@ -218,7 +218,7 @@ export interface ICameraController {
   dispose(): void;
 }
 
-export type ToolId = 'select' | 'road' | 'building' | 'bulldoze' | 'terraform';
+export type ToolId = 'select' | 'road' | 'building' | 'bulldoze' | 'terraform' | 'powerline';
 
 export interface IToolController {
   readonly activeTool: ToolId;
