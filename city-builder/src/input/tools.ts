@@ -179,10 +179,55 @@ export class ToolController implements IToolController, PointerToolSink {
   }
   private pendingHover: { x: number; y: number; type: string } | null = null;
 
+  /** Pinceau de terrain glissé : minuterie des passes, dernière passe (temps, position). */
+  private paint: { timer: ReturnType<typeof setInterval>; t0: number; lastT: number; lastX: number; lastZ: number } | null = null;
+
+  private startPaint(): void {
+    const m = this.deps!.machine;
+    m.terrain.beginStroke();
+    const now = performance.now();
+    this.paint = { t0: now, lastT: 0, lastX: NaN, lastZ: NaN, timer: setInterval(() => this.paintTick(false), 60) };
+  }
+
+  /** Une passe si le doigt a assez bougé (moitié du rayon) ou est resté appuyé (≈ 0,3 s). */
+  private paintTick(force: boolean): void {
+    const p = this.paint, d = this.deps;
+    if (!p || !d) return;
+    const t = d.machine.terrain;
+    if (this.pendingHover) { const h = this.pendingHover; this.pendingHover = null; this.feed(h.x, h.y, h.type); }
+    const g = t.hoverPoint;
+    if (!g) return;
+    const now = performance.now();
+    // Délai initial : un deuxième doigt (pincer, déplacer la carte) annule le geste avant toute passe.
+    if (!force && now - p.t0 < 140) return;
+    const moved = Number.isFinite(p.lastX) ? Math.hypot(g.x - p.lastX, g.z - p.lastZ) : Infinity;
+    if (!force && moved < t.radius * 0.5 && now - p.lastT < 320) return;
+    if (force && Number.isFinite(p.lastX)) return;
+    p.lastT = now; p.lastX = g.x; p.lastZ = g.z;
+    void t.dab().then((ok) => { if (ok) d.machine.applied++; });
+  }
+
+  private stopPaint(apply: boolean): void {
+    const p = this.paint;
+    if (!p) return;
+    if (apply) this.paintTick(true); // simple appui : au moins une passe
+    clearInterval(p.timer);
+    this.paint = null;
+    void this.deps?.machine.terrain.endStroke().then(() => this.deps?.machine.refresh());
+  }
+
   down(sx: number, sy: number, type: string): void {
     if (this.override) { this.override.down(sx, sy, type); return; }
     const d = this.deps;
     if (!d) return;
+    // Élever, Abaisser, Niveler, Défricher : un doigt (ou la souris) appuyé modèle le terrain en glissant.
+    if (d.machine.tool === 'terraform' && isBrushMode(d.machine.terrain.mode)) {
+      this.hooks?.touchConfirm(null);
+      this.pendingTouchConfirm = false;
+      this.feed(sx, sy, type);
+      this.startPaint();
+      return;
+    }
     this.hooks?.touchConfirm(null);
     this.pendingTouchConfirm = false;
     this.pendingHover = null;
@@ -208,6 +253,7 @@ export class ToolController implements IToolController, PointerToolSink {
     if (this.override) { this.override.up(sx, sy, type, tap); return; }
     const d = this.deps;
     if (!d) return;
+    if (this.paint) { this.pendingHover = { x: sx, y: sy, type }; this.stopPaint(true); return; }
     this.pendingHover = null;
     this.feed(sx, sy, type);
     const m = d.machine;
@@ -255,6 +301,7 @@ export class ToolController implements IToolController, PointerToolSink {
 
   cancel(): void {
     if (this.override) { this.override.cancel(); return; }
+    this.stopPaint(false);
     this.pendingTouchConfirm = false;
     this.hooks?.touchConfirm(null);
   }

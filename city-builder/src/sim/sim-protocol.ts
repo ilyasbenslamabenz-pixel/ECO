@@ -24,6 +24,8 @@ export interface TerrainEditResult {
   wallLength: number;
   /** Contour de la zone touchée (x, z alternés, fermé) pour l'aperçu. */
   outline: number[];
+  /** Niveler : hauteur cible retenue (reprise par les passes suivantes d'un même geste). */
+  h?: number;
 }
 
 export interface SimNotice {

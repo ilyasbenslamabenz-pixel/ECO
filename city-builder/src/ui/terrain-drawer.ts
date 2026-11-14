@@ -58,10 +58,10 @@ export function terrainToolActions(machine: ConstructionTools, act: (label: stri
 /** Texte d'aide de l'outil Terrain. */
 export function terrainHint(machine: ConstructionTools): string {
   const t = machine.terrain;
-  if (t.mode === 'clear') return `Défricher : cliquez sur une zone boisée (pinceau de ${t.radius * 2} m)`;
-  if (t.mode === 'raise') return `Élever : cliquez pour monter le terrain de ${t.step} m (pinceau de ${t.radius * 2} m, bord adouci)`;
-  if (t.mode === 'lower') return `Abaisser : cliquez pour creuser de ${t.step} m (pinceau de ${t.radius * 2} m, bord adouci)`;
-  if (t.mode === 'flatten') return `Niveler : cliquez au centre de la zone à aplanir (pinceau de ${t.radius * 2} m)`;
+  if (t.mode === 'clear') return `Défricher : touchez ou glissez sur une zone boisée (pinceau de ${t.radius * 2} m) — deux doigts : déplacer la carte`;
+  if (t.mode === 'raise') return `Élever : appuyez et glissez, +${t.step} m par passe (pinceau de ${t.radius * 2} m) — deux doigts : déplacer la carte`;
+  if (t.mode === 'lower') return `Abaisser : appuyez et glissez, −${t.step} m par passe (pinceau de ${t.radius * 2} m) — deux doigts : déplacer la carte`;
+  if (t.mode === 'flatten') return `Niveler : appuyez sur la hauteur voulue puis glissez pour étendre le plat (pinceau de ${t.radius * 2} m) — deux doigts : déplacer la carte`;
   if (t.mode === 'river') return t.riverPoints === 0 ? `Rivière : touchez la source, puis chaque point de passage (largeur ${t.riverWidth} m)` : t.riverPoints === 1 ? 'Rivière : touchez le point de passage suivant' : `Rivière : ${t.riverPoints} points — continuez, ou « Terminer » (ou touchez le dernier point)`;
   if (t.mode === 'quay') return t.hasStart ? 'Quai : cliquez la fin de la ligne (Maj : angle magnétique) — clic droit : annuler' : 'Quai / remblai : tracez une ligne droite dans l\'eau, parallèle à la rive (ou en travers d\'une rivière pour la combler)';
   return t.hasStart ? `Creuser : cliquez la fin du canal (largeur ${t.width} m) — clic droit : annuler` : `Creuser : clic départ, clic arrivée (bassin ou canal de ${t.width} m)`;

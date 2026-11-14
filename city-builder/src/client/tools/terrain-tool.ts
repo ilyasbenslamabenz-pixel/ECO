@@ -24,9 +24,9 @@ export const TERRAIN_MODES: readonly { id: TerrainToolMode; nameFr: string; tip:
   { id: 'quay', nameFr: 'Quai / remblai', tip: 'Quai / remblai : tracez une ligne droite dans l\'eau le long de la rive ; l\'eau côté terre est remblayée jusqu\'à un quai droit. Une ligne en travers d\'une rivière la comble.' },
   { id: 'dig', nameFr: 'Creuser', tip: 'Creuser : bassin ou canal droit (clic départ, clic arrivée), mis en eau au niveau de l\'eau voisine' },
   { id: 'river', nameFr: 'Rivière', tip: 'Rivière : un clic par point de passage (tracé courbe), puis « Terminer » ; lit creusé, berges en pente, eau raccordée aux lacs, rivières ou à la mer touchés' },
-  { id: 'raise', nameFr: 'Élever', tip: 'Élever : monte le terrain sous le pinceau (bord adouci), un clic par palier' },
-  { id: 'lower', nameFr: 'Abaisser', tip: 'Abaisser : creuse le terrain sous le pinceau (bord adouci) ; l\'eau ne s\'étend pas' },
-  { id: 'flatten', nameFr: 'Niveler', tip: 'Niveler : aplanit le disque à la hauteur de son centre (pour bâtir sur une pente)' },
+  { id: 'raise', nameFr: 'Élever', tip: 'Élever : monte le terrain sous le pinceau (bord adouci) ; appuyez et glissez pour modeler, une passe par palier' },
+  { id: 'lower', nameFr: 'Abaisser', tip: 'Abaisser : creuse le terrain sous le pinceau (bord adouci) ; appuyez et glissez ; l\'eau ne s\'étend pas' },
+  { id: 'flatten', nameFr: 'Niveler', tip: 'Niveler : aplanit à la hauteur du premier point touché ; glissez pour étendre le plat (pour bâtir sur une pente)' },
 ];
 
 /** Rayons du pinceau Défricher et largeurs de canal proposés (m). */
@@ -95,6 +95,51 @@ export class TerrainTool {
   get hasStart(): boolean { return this.start !== null || this.pts.length > 0; }
   /** Rivière : nombre de points posés. */
   get riverPoints(): number { return this.pts.length / 2; }
+  /** Point survolé (aimanté) ; null hors carte. */
+  get hoverPoint(): { x: number; z: number } | null { return this.hover; }
+
+  /** Geste « pinceau » en cours (glisser) : passes appliquées, coût cumulé, première erreur, hauteur de nivellement. */
+  private stroke: { n: number; cost: number; err: string | null; h?: number; label: string } | null = null;
+  get painting(): boolean { return this.stroke !== null; }
+
+  /** Début d'un geste pinceau : les passes suivent le doigt (ou la souris) jusqu'à endStroke(). */
+  beginStroke(): void { this.stroke = { n: 0, cost: 0, err: null, label: '' }; }
+
+  /** Une passe du pinceau au point survolé ; faux si rien n'a été appliqué (occupé, refus). */
+  async dab(): Promise<boolean> {
+    const st = this.stroke;
+    if (!st || this.busy || !isBrushMode(this.mode)) return false;
+    let e = this.edit();
+    if (!e) return false;
+    if (e.k === 'flatten' && st.h !== undefined) e = { ...e, h: st.h };
+    st.label = label(e);
+    this.busy = true;
+    try {
+      const r = await this.port.terrainEdit({ edit: e });
+      st.n++;
+      st.cost += r.cost;
+      if (st.h === undefined && r.h !== undefined) st.h = r.h;
+      return true;
+    } catch (err) {
+      if (!st.err) st.err = errMessage(err);
+      return false;
+    } finally {
+      this.busy = false;
+      this.result = null;
+      this.changed();
+    }
+  }
+
+  /** Fin du geste : un seul message (passes et coût total, ou la raison du refus). */
+  async endStroke(): Promise<number> {
+    const st = this.stroke;
+    if (!st) return 0;
+    while (this.busy) await new Promise((r) => setTimeout(r, 20));
+    this.stroke = null;
+    if (st.n > 0) this.notify(`${st.label} : ${st.n} passe${st.n > 1 ? 's' : ''} · ${fmt(st.cost)} CHF`, 'ok');
+    else if (st.err) this.notify(`${st.label || 'Terrain'} impossible : ${st.err}`, 'error');
+    return st.n;
+  }
 
   /** Survol : point au sol. */
   setHover(g: { x: number; z: number } | null): void {

@@ -1156,6 +1156,7 @@ export class Simulation {
       if (hit) return fail('COLLISION', hit);
     }
     const data: TerrainEditResult = { cost: plan.cost, volume: plan.volume, forestM2: plan.forestM2, wallLength: plan.wallLength, outline: plan.outline };
+    if (plan.edit.k === 'flatten' && plan.edit.h !== undefined) data.h = plan.edit.h;
     if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : travaux suspendus jusqu\'au retour d\'une trésorerie positive');
     if (!this.economy.canAfford(plan.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${plan.cost} crédits requis)`);
     if (a.dryRun) return { ok: true, data };
