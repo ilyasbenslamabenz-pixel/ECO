@@ -254,6 +254,14 @@ async function boot(): Promise<void> {
     }
     return out;
   };
+  // Diagnostic (e2e) : visibilité et étendue d'un calque de la scène.
+  (debug as unknown as Record<string, unknown>).layerInfo = (name: string) => {
+    const o = render.ctx.scene.getObjectByName(name);
+    if (!o) return null;
+    const box = new THREE.Box3().setFromObject(o);
+    let shown = 0; o.traverse((c) => { if (c.visible && (c as THREE.Mesh).isMesh) shown++; });
+    return { visible: o.visible, meshes: shown, min: box.min.toArray().map(Math.round), max: box.max.toArray().map(Math.round) };
+  };
   // Diagnostic (e2e mémoire) : textures de la scène regroupées par origine.
   (debug as unknown as Record<string, unknown>).textureReport = () => {
     const tex = new Set<THREE.Texture>();

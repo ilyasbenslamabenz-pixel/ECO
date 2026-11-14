@@ -15,6 +15,7 @@
  * Sans `attach()` (amorçage de fondation), seul l'outil Sélection existe et ne fait rien.
  * Propriétaire : agent construction/caméra/UI.
  */
+import { CoverageRings, serviceOf, serviceRadius } from './coverage-rings';
 import type * as THREE from 'three';
 import type { IToolController, RoadKindId, ToolId } from '../shared/contracts';
 import { footprintGroundY } from '../client/tools/geometry';
@@ -85,6 +86,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.selMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.select);
     this.terrainPrev = new TerrainEditPreview(deps.scene, deps.heightAt, () => deps.machine.mirror.terrain);
     this.areaMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.error);
+    this.coverage = new CoverageRings(deps.scene, deps.heightAt);
     deps.camera.toolSink = this;
     deps.machine.onPreview((p) => this.render(p));
     deps.machine.onSelect = (p) => this.select(p);
@@ -179,6 +181,10 @@ export class ToolController implements IToolController, PointerToolSink {
     this.pendingHover = { x: sx, y: sy, type };
   }
   private pendingHover: { x: number; y: number; type: string } | null = null;
+  /** Rayon d'action des services pendant la pose. */
+  private coverage: CoverageRings | null = null;
+  private coverageKey = '';
+  private coverageOthers: { x: number; z: number; r: number }[] = [];
   /** Démolition par zone : contour du rectangle. */
   private areaMarker: SelectionMarker | null = null;
 
@@ -434,7 +440,7 @@ export class ToolController implements IToolController, PointerToolSink {
     const d = this.deps;
     if (!d || !this.ghost || !this.road || !this.hoverMarker) return;
     const tag = (text: string | null, kind: 'ok' | 'error' | 'pending' | 'info'): void => this.hooks?.cursorTag(text, kind, this.lastScreen.x, this.lastScreen.y);
-    if (p.kind !== 'building') this.ghost.hide();
+    if (p.kind !== 'building') { this.ghost.hide(); this.coverage?.hide(); }
     if (p.kind !== 'road' && p.kind !== 'upgrade') this.road.hide();
     if (p.kind !== 'grid') this.grid?.hide();
     // Barre de confirmation tactile ouverte : son libellé suit le coût validé par la simulation.
@@ -447,11 +453,24 @@ export class ToolController implements IToolController, PointerToolSink {
       case 'building': {
         const y = footprintGroundY(d.heightAt, p.proposal.obb, p.asset.footprint.tilesX, p.asset.footprint.tilesZ);
         this.ghost.show(p.asset, p.proposal.x, y, p.proposal.z, p.proposal.rot, p.variant, p.validity);
+        const svc = serviceOf(p.asset);
+        if (svc && this.coverage) {
+          // Équipements du même service déjà construits (liste recalculée quand la ville change).
+          const m = d.machine.mirror;
+          const okey = `${svc}:${m.buildings.size}`;
+          if (okey !== this.coverageKey) {
+            this.coverageKey = okey;
+            this.coverageOthers = [];
+            for (const b of m.buildings.values()) { const a = m.asset(b.assetId); if (a && serviceOf(a) === svc) this.coverageOthers.push({ x: b.x, z: b.z, r: serviceRadius(a) }); }
+          }
+          this.coverage.show(p.proposal.x, p.proposal.z, serviceRadius(p.asset), this.coverageOthers, okey);
+        } else this.coverage?.hide();
         const v = p.variant >= 0 ? p.asset.variants[p.variant] : undefined;
         const head = `${p.asset.nameFr}${v ? ` · ${v.nameFr}` : ''}`;
         const snap = (p.proposal.snapped ? ' · façade côté route' : '') + (p.proposal.neighbor ? ' · aligné sur le voisin' : '');
+        const svcR = serviceOf(p.asset) ? `\nRayon d’action : ${fmt(serviceRadius(p.asset))} m${this.coverageOthers.length ? ` · ${this.coverageOthers.length} déjà construit${this.coverageOthers.length > 1 ? 's' : ''} (cercles bleus)` : ''}` : '';
         if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');
-        else tag(`${head}\n${fmt(p.cost)} ¢${snap}`, p.validity === 'ok' ? 'ok' : 'pending');
+        else tag(`${head}\n${fmt(p.cost)} ¢${snap}${svcR}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
       }
       case 'road': {
