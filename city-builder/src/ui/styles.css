@@ -626,3 +626,8 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 }
 /* Panneau Énergie : les chiffres longs passent à la ligne au lieu d'être coupés. */
 #elec-panel .kpi b { white-space: normal; overflow-wrap: anywhere; }
+/* Onglets des tableaux de bord : au-delà de 4, rangée défilable (chaque onglet sur une ligne) au lieu de
+   colonnes écrasées où les textes se chevauchaient (Vue ville : 8 onglets avec les modules). */
+#dash-tabs.many { display: flex; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+#dash-tabs.many::-webkit-scrollbar { display: none; }
+#dash-tabs.many button { flex: 0 0 auto; white-space: nowrap; padding: 4px 12px; }

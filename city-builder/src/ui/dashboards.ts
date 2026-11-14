@@ -175,8 +175,9 @@ export class Dashboards {
       if (this.tabsEl.dataset['sig'] !== sig) {
         this.tabsEl.dataset['sig'] = sig;
         this.tabsEl.style.setProperty('--n', String(tabs.length));
+        this.tabsEl.classList.toggle('many', tabs.length > 4);
         this.tabsEl.replaceChildren(...tabs.map((t) => {
-          const b = el('button', { cls: t.id === cur.id ? 'active' : '', text: t.label, attrs: { role: 'tab', 'aria-selected': String(t.id === cur.id), 'data-dtab': t.id } });
+          const b = el('button', { cls: t.id === cur.id ? 'active' : '', text: t.label.replace(/\s*\(.*\)\s*$/, ''), attrs: { role: 'tab', 'aria-selected': String(t.id === cur.id), 'data-dtab': t.id } });
           b.addEventListener('click', () => { this.tab[id] = t.id; this.render(true); });
           return b;
         }));
