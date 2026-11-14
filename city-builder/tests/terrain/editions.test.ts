@@ -238,3 +238,32 @@ test('plan pur : planEdit ne modifie rien', () => {
   assert.deepEqual(t.waterSurface, ws);
   assert.deepEqual(t.forest, f);
 });
+
+test('pinceaux de relief : élever, abaisser, niveler (bord adouci, coût, sauvegarde rejouée à l\'identique)', () => {
+  const s = seaSim();
+  const cmd = (edit: TerrainEdit, dryRun = false): { ok: boolean; data?: { cost: number; volume: number } } =>
+    handleCommand(s, { kind: 'cmd', reqId: 1, name: 'terrainEdit', args: { edit, dryRun } }).result as { ok: boolean; data?: { cost: number; volume: number } };
+  const t = s.terrain!;
+  const at = (x: number, z: number): number => { const i = Math.round((x - t.originX) / t.spacing), j = Math.round((z - t.originZ) / t.spacing); return t.heights[j * t.samplesX + i]!; };
+  // Zone sèche loin de la mer : on cherche un point au-dessus de l'eau.
+  let px = 0, pz = 0;
+  for (let a = 0; a < 64 && at(px, pz) <= t.waterLevel + 2; a++) { px = Math.cos(a) * 60 * (1 + (a >> 3)); pz = Math.sin(a) * 60 * (1 + (a >> 3)); }
+  const h0 = at(px, pz), edge0 = at(px + 40, pz);
+  const dry = cmd({ k: 'raise', x: px, z: pz, r: 30, d: 4 }, true);
+  assert.ok(dry.ok && dry.data!.cost > 0 && dry.data!.volume > 0, 'aperçu chiffré');
+  assert.equal(at(px, pz), h0, 'aperçu sans effet');
+  assert.ok(cmd({ k: 'raise', x: px, z: pz, r: 30, d: 4 }).ok);
+  assert.ok(Math.abs(at(px, pz) - (h0 + 4)) < 0.05, `centre +4 m (${h0} -> ${at(px, pz)})`);
+  assert.ok(Math.abs(at(px + 40, pz) - edge0) < 0.01, 'hors du pinceau : inchangé');
+  assert.ok(cmd({ k: 'lower', x: px, z: pz, r: 30, d: 2 }).ok);
+  assert.ok(Math.abs(at(px, pz) - (h0 + 2)) < 0.05, 'centre −2 m');
+  assert.ok(cmd({ k: 'flatten', x: px + 16, z: pz, r: 24 }).ok);
+  const target = at(px + 16, pz);
+  assert.ok(Math.abs(at(px + 8, pz) - target) < 0.05, 'zone nivelée à la hauteur du centre');
+  const save = JSON.parse(JSON.stringify(s.toSave()));
+  const flat = (save.terrainEdits as TerrainEdit[]).find((e) => e.k === 'flatten') as { h?: number } | undefined;
+  assert.ok(flat && typeof flat.h === 'number', 'hauteur du nivellement fixée dans la sauvegarde');
+  const s2 = new Simulation(); s2.setCatalog(townCatalog());
+  assert.equal(s2.fromSave(save), null);
+  assert.deepEqual(Array.from(s2.terrain!.heights), Array.from(t.heights), 'terrain identique après rechargement');
+});

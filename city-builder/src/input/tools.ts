@@ -23,6 +23,7 @@ import { roadWidth, type PickResult } from '../client/tools/mirror';
 import type { CameraController, PointerToolSink } from './camera';
 import { COLORS, GhostPreview, GridPreview, RoadPreview, SelectionMarker, type ModelSource } from './previews';
 import { TerrainEditPreview } from './terrain-preview';
+import { isBrushMode, type TerrainToolMode } from '../client/tools/terrain-tool';
 
 export { TOOL_PHASE };
 
@@ -172,7 +173,7 @@ export class ToolController implements IToolController, PointerToolSink {
       void d.machine.primary();
     }
     // Quai / Creuser à la souris : départ posé à l'appui (clic-clic ou glisser).
-    if (type !== 'touch' && d.machine.tool === 'terraform' && d.machine.terrain.mode !== 'clear' && !d.machine.terrain.hasStart) {
+    if (type !== 'touch' && d.machine.tool === 'terraform' && !isBrushMode(d.machine.terrain.mode) && !d.machine.terrain.hasStart) {
       this.roadStartedThisGesture = true;
       void d.machine.primary();
     }
@@ -197,7 +198,7 @@ export class ToolController implements IToolController, PointerToolSink {
       if (m.tool === 'road' && m.roadSub === 'draw' && !m.draft.points()) return; // doigt relâché sur le départ
       if (m.tool === 'bulldoze' && !(m.preview.kind === 'bulldoze' && m.preview.target)) return;
       // Quai / Creuser : le départ se pose au relâcher ; l'application se confirme.
-      if (m.tool === 'terraform' && m.terrain.mode !== 'clear' && !m.terrain.hasStart) { void m.primary(); return; }
+      if (m.tool === 'terraform' && !isBrushMode(m.terrain.mode) && !m.terrain.hasStart) { void m.primary(); return; }
       this.pendingTouchConfirm = true;
       this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: m.tool === 'building' });
       return;
@@ -405,7 +406,7 @@ export class ToolController implements IToolController, PointerToolSink {
       case 'terrain': {
         this.terrainPrev?.show(p);
         const head = terrainLabel(p.mode);
-        if (p.mode !== 'clear' && !p.start) tag(`${head}\n${p.message}`, 'info');
+        if (!isBrushMode(p.mode) && !p.start) tag(`${head}\n${p.message}`, 'info');
         else if (!p.hover) tag(null, 'info');
         else if (p.validity === 'error') tag(`${head}${p.length ? ` · ${fmt(p.length)} m` : ''}\n${p.message}`, 'error');
         else tag(`${head}${p.length ? ` · ${fmt(p.length)} m` : ''}\n${p.validity === 'ok' ? p.message : 'Calcul du coût…'}`, p.validity === 'ok' ? 'ok' : 'pending');
@@ -443,8 +444,8 @@ export class ToolController implements IToolController, PointerToolSink {
   }
 }
 
-function terrainLabel(m: 'clear' | 'quay' | 'dig'): string {
-  return m === 'clear' ? 'Défricher' : m === 'quay' ? 'Quai / remblai' : 'Creuser';
+function terrainLabel(m: TerrainToolMode): string {
+  return m === 'clear' ? 'Défricher' : m === 'quay' ? 'Quai / remblai' : m === 'dig' ? 'Creuser' : m === 'raise' ? 'Élever' : m === 'lower' ? 'Abaisser' : 'Niveler';
 }
 
 function samePick(a: PickResult, b: PickResult): boolean {

@@ -33,7 +33,7 @@ export class TerrainEditPreview {
     this.ring.setColor(c);
     this.zone.setColor(c);
     const h = p.hover;
-    if (p.mode === 'clear') {
+    if (p.mode === 'clear' || p.mode === 'raise' || p.mode === 'lower' || p.mode === 'flatten') {
       this.zone.hide();
       if (h) this.ring.showPoint(h.x, h.z, p.radius); else this.ring.hide();
       return;

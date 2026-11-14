@@ -7,6 +7,8 @@
  *    est posé sur la ligne, face à l'eau, dont le pied est approfondi. Sert aussi à combler ou dévier une rivière.
  *  - `dig`   (Creuser) : bassin ou canal rectangulaire droit (largeur `w`), mis en eau au niveau de l'eau voisine
  *    (sinon bassin isolé), berges aplanies et murs de quai là où la rive est sèche.
+ *  - `raise` / `lower` / `flatten` (Élever, Abaisser, Niveler) : pinceau circulaire à bord adouci (cosinus) ;
+ *    l'eau n'est jamais créée ni étendue (un fond relevé au-dessus de l'eau devient terre ferme).
  *
  * Chaque édition est d'abord PLANIFIÉE (`planEdit`, sans rien modifier : coût, échantillons touchés, murs), puis
  * APPLIQUÉE (`commitEdit`). La simulation conserve la liste des éditions (sauvegarde) et les rejoue au chargement
@@ -23,7 +25,12 @@ import { NO_WATER, type SampleRect } from './types';
 export type TerrainEdit =
   | { k: 'clear'; x: number; z: number; r: number }
   | { k: 'quay'; ax: number; az: number; bx: number; bz: number }
-  | { k: 'dig'; ax: number; az: number; bx: number; bz: number; w: number };
+  | { k: 'dig'; ax: number; az: number; bx: number; bz: number; w: number }
+  /** Pinceaux de relief : élever / abaisser de `d` m au centre (bord adouci), niveler à la hauteur `h`. */
+  | { k: 'raise'; x: number; z: number; r: number; d: number }
+  | { k: 'lower'; x: number; z: number; r: number; d: number }
+  /** `h` absent à la pose : hauteur du centre, fixée par la simulation (rejouée telle quelle au chargement). */
+  | { k: 'flatten'; x: number; z: number; r: number; h?: number };
 
 export type TerrainEditKind = TerrainEdit['k'];
 
@@ -39,6 +46,9 @@ export const EDIT_LIMITS = {
   fillDepth: 160,
   minDigWidth: 16,
   maxDigWidth: 96,
+  /** Pas des pinceaux Élever / Abaisser (m). */
+  minStep: 0.5,
+  maxStep: 10,
   /** Nombre maximal d'éditions conservées dans une partie. */
   maxEdits: 4000,
 } as const;
@@ -100,6 +110,8 @@ export function editShapeError(e: unknown): string | null {
   if (o.k === 'clear') return fin(o.x) && fin(o.z) && fin(o.r) ? null : 'Défrichage invalide';
   if (o.k === 'quay') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) ? null : 'Tracé de quai invalide';
   if (o.k === 'dig') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) && fin(o.w) ? null : 'Tracé de bassin invalide';
+  if (o.k === 'raise' || o.k === 'lower') return fin(o.x) && fin(o.z) && fin(o.r) && fin(o.d) ? null : 'Pinceau de relief invalide';
+  if (o.k === 'flatten') return fin(o.x) && fin(o.z) && fin(o.r) && (o.h === undefined || fin(o.h)) ? null : 'Nivellement invalide';
   return 'Type d\'édition du terrain inconnu';
 }
 
@@ -111,6 +123,8 @@ export function normalizeEdit(e: TerrainEdit): TerrainEdit {
     case 'clear': return { k: 'clear', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)) };
     case 'quay': return { k: 'quay', ax: r2(e.ax), az: r2(e.az), bx: r2(e.bx), bz: r2(e.bz) };
     case 'dig': return { k: 'dig', ax: r2(e.ax), az: r2(e.az), bx: r2(e.bx), bz: r2(e.bz), w: r2(clamp(e.w, L.minDigWidth, L.maxDigWidth)) };
+    case 'raise': case 'lower': return { k: e.k, x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)), d: r2(clamp(e.d, L.minStep, L.maxStep)) };
+    case 'flatten': return e.h === undefined ? { k: 'flatten', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)) } : { k: 'flatten', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)), h: r2(e.h) };
   }
 }
 
@@ -226,6 +240,42 @@ export function planEdit(t: EditableTerrain, raw: TerrainEdit): PlanOutcome {
     for (let a = 0; a <= 32; a++) outline.push(e.x + Math.cos((a / 32) * Math.PI * 2) * e.r, e.z + Math.sin((a / 32) * Math.PI * 2) * e.r);
     const p = finish(t, e, c, ks, [], 0, outline);
     return p ? { ok: true, plan: p } : bad('Zone hors de la carte');
+  }
+
+  if (e.k === 'raise' || e.k === 'lower' || e.k === 'flatten') {
+    const rect = rectFor(t, e.x - e.r, e.z - e.r, e.x + e.r, e.z + e.r);
+    if (!rect) return bad('Zone hors de la carte');
+    let target = 0;
+    let edit: TerrainEdit = e;
+    if (e.k === 'flatten') {
+      if (e.h === undefined) {
+        const ci = clamp(Math.round((e.x - t.originX) / sp), 0, t.samplesX - 1), cj = clamp(Math.round((e.z - t.originZ) / sp), 0, t.samplesZ - 1);
+        target = Math.round(t.heights[cj * W + ci]! * 100) / 100;
+        edit = { ...e, h: target };
+      } else target = e.h;
+    }
+    const sign = e.k === 'lower' ? -1 : 1;
+    for (let j = rect.j0; j <= rect.j1; j++) for (let i = rect.i0; i <= rect.i1; i++) {
+      const dist = Math.hypot(t.originX + i * sp - e.x, t.originZ + j * sp - e.z);
+      if (dist > e.r) continue;
+      const k = j * W + i;
+      const h0 = t.heights[k]!;
+      // Bord adouci : plein effet au centre, nul au bord (nivellement : plein jusqu'à 60 % du rayon).
+      const u = e.k === 'flatten' ? clamp((dist / e.r - 0.6) / 0.4, 0, 1) : dist / e.r;
+      const w = 0.5 + 0.5 * Math.cos(Math.PI * u);
+      let h = e.k === 'flatten' ? h0 + (target - h0) * w : h0 + sign * (e as { d: number }).d * w;
+      // Jamais sous le fond de la mer : pas plus bas que le niveau de l'eau − 6 m.
+      h = Math.max(h, t.waterLevel - 6);
+      if (Math.abs(h - h0) < 0.01) continue;
+      const ws0 = t.waterSurface[k]!;
+      // L'eau ne s'étend pas : une case sèche abaissée reste sèche ; une case relevée hors de l'eau devient terre.
+      const ws = ws0 !== NO_WATER && ws0 > h + 0.05 ? ws0 : NO_WATER;
+      c.set(k, Math.round(h * 100) / 100, ws);
+    }
+    const outline: number[] = [];
+    for (let a = 0; a <= 32; a++) outline.push(e.x + Math.cos((a / 32) * Math.PI * 2) * e.r, e.z + Math.sin((a / 32) * Math.PI * 2) * e.r);
+    const p = finish(t, edit, c, [], [], 0, outline);
+    return p ? { ok: true, plan: p } : bad(e.k === 'flatten' ? 'Déjà plat ici' : 'Rien à modifier ici');
   }
 
   const L = Math.hypot(e.bx - e.ax, e.bz - e.az);
