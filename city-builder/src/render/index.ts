@@ -98,6 +98,8 @@ export async function initRender(
   });
   // Textures du sol (3 tableaux de 5 couches) : 1024 px sur ordinateur, 512 en mode allégé, 256 en mode sûr.
   const terrain = new TerrainSystem(ctx.scene, { catalog, assetsBase, textureSize: profile.lite ? (isSafeMode() ? 256 : 512) : 1024 });
+  // Téléphone : quadrillage de construction plus discret (lignes blanches envahissantes sur petit écran).
+  if (profile.lite) terrain.gridStrength = 0.45;
   const water = new WaterSystem(ctx.scene);
   const quays = new QuayRenderer(ctx.scene);
   const heightAt = (x: number, z: number): number => terrain.heightAt(x, z);

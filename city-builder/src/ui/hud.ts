@@ -455,7 +455,16 @@ export function initUI(h: UIHandlers): UIHandle {
           // Étiquette toujours entière à l'écran (centrée sous le doigt en tactile, à droite du curseur sinon).
           const w = cursorTag.offsetWidth, W = window.innerWidth;
           const centered = matchMedia('(max-width: 760px)').matches; // même règle que styles.css (étiquette centrée)
-          const x = centered ? Math.min(Math.max(sx, w / 2 + 6), W - w / 2 - 6) : Math.min(sx, W - w - 22);
+          if (centered) {
+            // Téléphone : étiquette fixée en haut, sous la barre (elle ne cache plus le bâtiment sous le doigt).
+            const hud = document.getElementById('hud');
+            const top = hud && !hud.classList.contains('hidden') ? hud.getBoundingClientRect().bottom + 6 : 8;
+            cursorTag.style.left = `${W / 2}px`;
+            cursorTag.style.top = `${Math.round(top)}px`;
+            cursorTag.classList.add('pinned');
+            return;
+          }
+          const x = Math.min(sx, W - w - 22);
           cursorTag.style.left = `${Math.max(0, x)}px`;
           cursorTag.style.top = `${sy}px`;
         },

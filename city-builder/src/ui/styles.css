@@ -631,3 +631,19 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 #dash-tabs.many { display: flex; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 #dash-tabs.many::-webkit-scrollbar { display: none; }
 #dash-tabs.many button { flex: 0 0 auto; white-space: nowrap; padding: 4px 12px; }
+
+/* Téléphone, outil de construction actif : barre du haut réduite à une ligne (argent, date, pause/lecture) pour
+   agrandir la carte ; étiquette de l'outil fixée sous la barre (au lieu de couvrir le bâtiment sous le doigt). */
+@media (max-width: 760px) {
+  body.tool-opts #hud .hud-brand, body.tool-opts #hud .hud-actions, body.tool-opts #btn-sidebar,
+  body.tool-opts #hud-pop-btn, body.tool-opts #hud-happy-btn, body.tool-opts #hud-weather,
+  body.tool-opts #hud .speed .spd-x { display: none !important; }
+  body.tool-opts #hud { row-gap: 0 !important; padding-top: calc(4px + env(safe-area-inset-top, 0px)) !important; padding-bottom: 4px !important; }
+  #cursor-tag.pinned { transform: translateX(-50%); max-width: calc(100vw - 24px); }
+}
+@media (max-width: 760px) {
+  /* Mode construction : pause / lecture compacts sur la même ligne que l'argent et la date. */
+  body.tool-opts #hud { flex-wrap: nowrap !important; }
+  body.tool-opts #hud .speed { flex: 0 0 auto !important; width: auto !important; order: 3; }
+  body.tool-opts #hud .speed button { min-width: 40px; }
+}

@@ -380,6 +380,11 @@ async function boot(): Promise<void> {
     const id = t === 'building' ? cons.machine.asset?.id ?? '' : '';
     const wantPower = t === 'powerline' || id.startsWith('elec_');
     const wantWater = id.startsWith('eau_');
+    // Téléphone : caméra rapprochée en choisissant un bâtiment si elle est très loin (maison minuscule à l'écran).
+    if (t === 'building' && render.profile.lite) {
+      const pose = input.camera.getPose();
+      if (pose.distance > 230) input.camera.flyTo({ distance: 170 });
+    }
     if (wantPower && !powerView.overlay) { powerView.setOverlay(true); autoPower = true; }
     else if (!wantPower && autoPower) { powerView.setOverlay(false); autoPower = false; }
     if (wantWater && waterView.mode === 'off') { waterView.set('desserte'); autoWater = true; }

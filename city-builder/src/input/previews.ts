@@ -12,6 +12,8 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import * as THREE from 'three';
+import { imageLimits } from '../render/image-cap';
+import { frontOffset } from '../render/buildings/front-yards';
 import type { CatalogAsset } from '../shared/catalog';
 import { TILE_SIZE } from '../shared/constants';
 import { rotateQuarter } from '../shared/math';
@@ -76,6 +78,8 @@ function overlayMaterial(opacity: number): THREE.MeshBasicMaterial {
 
 interface GhostModel { root: THREE.Group; materials: THREE.MeshStandardMaterial[]; baseColors: THREE.Color[]; matNames: string[] }
 
+const _ghostOff = new THREE.Vector3();
+
 export class GhostPreview {
   readonly group = new THREE.Group();
   private models = new Map<string, Promise<GhostModel | null>>();
@@ -84,6 +88,8 @@ export class GhostPreview {
   private plate = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.28));
   private border = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.9));
   private arrow = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.9));
+  /** Volume coloré à la taille du bâtiment, affiché tant que le modèle 3D n'est pas chargé (téléphone : lent). */
+  private box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.45, depthWrite: false }));
   private t = 0;
   /** Vrai quand le modèle demandé est chargé et visible (diagnostic e2e). */
   modelVisible = false;
@@ -91,7 +97,8 @@ export class GhostPreview {
   constructor(scene: THREE.Scene, private models_: ModelSource, private heightAt: HeightFn) {
     this.group.name = 'ghost-preview';
     this.plate.renderOrder = 10; this.border.renderOrder = 11; this.arrow.renderOrder = 11;
-    this.group.add(this.plate, this.border, this.arrow);
+    this.box.renderOrder = 9;
+    this.group.add(this.plate, this.border, this.arrow, this.box);
     this.group.visible = false;
     scene.add(this.group);
   }
@@ -99,7 +106,8 @@ export class GhostPreview {
   private loadGhost(asset: CatalogAsset): Promise<GhostModel | null> {
     let p = this.models.get(asset.id);
     if (!p) {
-      p = this.models_.load(asset.id, 0).then((src) => {
+      // Téléphone (mode allégé) : modèle intermédiaire (LOD1) pour le fantôme, plus léger que le LOD0.
+      p = this.models_.load(asset.id, imageLimits.textureCap <= 256 && asset.lods.length > 1 ? 1 : 0).then((src) => {
         const root = src.clone(true);
         const materials: THREE.MeshStandardMaterial[] = [];
         const baseColors: THREE.Color[] = [];
@@ -143,7 +151,12 @@ export class GhostPreview {
     const depth = Math.abs(lx) > 0 ? o.hx : o.hz;
     const ax = x + fx * (depth + 1.5); const az = z + fz * (depth + 1.5);
     buildGroundRibbon(this.arrow.geometry, [ax - fx * 1.2, az - fz * 1.2, ax + fx * 1.6, az + fz * 1.6], 2.4, this.heightAt, 0.2, 1);
-    for (const m of [this.plate, this.border, this.arrow]) (m.material as THREE.MeshBasicMaterial).color.copy(tint);
+    for (const m of [this.plate, this.border, this.arrow, this.box]) (m.material as THREE.MeshBasicMaterial).color.copy(tint);
+    // Volume provisoire (empreinte × hauteur du bâtiment) tant que le modèle n'est pas là.
+    this.box.visible = !this.current;
+    this.box.position.set(x, y, z);
+    this.box.rotation.set(0, rotAngle(rot), 0);
+    this.box.scale.set(Math.max(2, asset.dimensions.width * 0.9), Math.max(2, asset.dimensions.height), Math.max(2, asset.dimensions.depth * 0.9));
 
     if (this.currentId !== asset.id) {
       if (this.current) this.group.remove(this.current.root);
@@ -154,6 +167,7 @@ export class GhostPreview {
         this.current = g;
         this.group.add(g.root);
         this.modelVisible = true;
+        this.box.visible = false;
         this.applyModel(asset, this.lastX, this.lastZ, this.lastRot, this.lastVariant, this.lastValidity);
       });
     }
@@ -168,7 +182,9 @@ export class GhostPreview {
     if (!g) return;
     const v = variant >= 0 ? asset.variants[variant] : undefined;
     // Altitude : même règle que la simulation (moyenne des coins de l'empreinte).
-    g.root.position.set(x, this.lastY, z);
+    // Même avancée vers la rue que le rendu des bâtiments (jardinets, src/render/buildings/front-yards.ts).
+    frontOffset(asset, rot, _ghostOff);
+    g.root.position.set(x + _ghostOff.x, this.lastY, z + _ghostOff.z);
     g.root.rotation.set(0, rotAngle(rot), 0);
     g.root.scale.set(1, v?.heightScale ?? 1, 1);
     const tint = colorOf(validity);

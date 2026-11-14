@@ -102,7 +102,7 @@ export class TerrainSystem implements IRenderTerrain {
       if (this.disposed) { tex.dispose(); return; }
       this.textures = tex;
       this.matHandle = createTerrainMaterial(tex, this.data?.waterLevel ?? 2);
-      this.matHandle.uniforms.uGrid.value = this.gridOn ? 1 : 0;
+      this.matHandle.uniforms.uGrid.value = this.gridOn ? this.gridStrength : 0;
       for (const c of this.chunks) if (c.mesh) c.mesh.material = this.matHandle.material;
       this.group.visible = true;
     });
@@ -111,7 +111,9 @@ export class TerrainSystem implements IRenderTerrain {
   get material(): THREE.MeshStandardMaterial | null { return this.matHandle?.material ?? null; }
 
   /** Affiche la grille de construction au sol (cases de TILE_SIZE). */
-  setGrid(on: boolean): void { this.gridOn = on; if (this.matHandle) this.matHandle.uniforms.uGrid.value = on ? 1 : 0; }
+  /** Intensité du quadrillage (téléphone : plus discret, le petit écran le rendait envahissant). */
+  gridStrength = 1;
+  setGrid(on: boolean): void { this.gridOn = on; if (this.matHandle) this.matHandle.uniforms.uGrid.value = on ? this.gridStrength : 0; }
   private gridOn = false;
   get terrainTextures(): TerrainTextures | null { return this.textures; }
   get terrain(): (TerrainData & Partial<WorldTerrain>) | null { return this.data; }
