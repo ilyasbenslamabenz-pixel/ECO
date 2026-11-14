@@ -14,6 +14,8 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import { CityPanels, type ExtPort } from './city-panels';
+import { zoningView } from '../client/zoning-view';
+import { SECTOR_COLORS, SECTOR_LABELS_FR, type DemandSector } from '../shared/protocol-ext/zonage';
 import { Dashboards, ModuleHost, type ModuleBridge } from './dashboards';
 import { hydrateIcons, iconEl } from './icons';
 import { Minimap } from './minimap';
@@ -285,6 +287,7 @@ export function initUI(h: UIHandlers): UIHandle {
   for (const id of ['finance-close', 'pop-close']) $(id).addEventListener('click', () => dashboards.syncSidebar());
   $('hud-money-btn').addEventListener('click', () => { cityPanels.toggleFinance(); dashboards.syncSidebar(); });
   $('hud-pop-btn').addEventListener('click', () => { cityPanels.togglePop(); dashboards.syncSidebar(); });
+  $('hud-demand-btn').addEventListener('click', () => { if (cityPanels.popOpen) cityPanels.popPanel.classList.add('hidden'); else cityPanels.openPop('demand'); dashboards.syncSidebar(); });
   $('hud-happy-btn').addEventListener('click', () => { if (cityPanels.popOpen) cityPanels.popPanel.classList.add('hidden'); else cityPanels.openPop('overview'); dashboards.syncSidebar(); });
 
   /* ---------- Barre latérale (tiroir sur téléphone) ---------- */
@@ -369,10 +372,31 @@ export function initUI(h: UIHandlers): UIHandle {
     minimap = new Minimap({ camera: api.camera, mirror: api.mirror, heightAt });
     (window as unknown as { __aubeMinimap?: Minimap }).__aubeMinimap = minimap;
   };
+  /** Jauge de demande : zonage (demande qui fait pousser les zones) si actif, sinon demande de la démographie. */
+  const renderDemand = (r: SimReport): void => {
+    const z = zoningView.demand;
+    const dd = r.demography.demand;
+    const v: Record<DemandSector, number> = z ? { ...z } : { R: dd.residential, C: dd.commercial, I: dd.industrial, B: dd.office };
+    const box = $('hud-demand');
+    if (!box.childElementCount) for (const s of ['R', 'C', 'I', 'B'] as const) box.append(el('span', { cls: 'col', attrs: { 'data-sector': s } }, el('span', { cls: 'bar' }, el('i', { attrs: { style: `background:${SECTOR_COLORS[s]}` } })), el('b', { text: s, attrs: { style: `color:${SECTOR_COLORS[s]}` } })));
+    const parts: string[] = [];
+    for (const col of box.children) {
+      const s = (col as HTMLElement).dataset['sector'] as DemandSector;
+      const x = Math.max(-1, Math.min(1, v[s] ?? 0));
+      const i = col.querySelector('i') as HTMLElement;
+      i.style.height = `${Math.round(Math.abs(x) * 50)}%`;
+      i.style.bottom = x >= 0 ? '50%' : ''; i.style.top = x < 0 ? '50%' : '';
+      (col as HTMLElement).dataset['value'] = x.toFixed(2);
+      parts.push(`${SECTOR_LABELS_FR[s]} ${x >= 0 ? '+' : '−'}${Math.round(Math.abs(x) * 100)} %`);
+    }
+    $('hud-demand-btn').dataset['tip'] = `Demande — ${parts.join(' · ')}. Ouvrir le détail.`;
+  };
+
   /** Satisfaction et variation de population : rapport de la simulation (jamais inventées). */
   const renderReportStats = (): void => {
     const r = cityPanels.report;
     if (!r) return;
+    renderDemand(r);
     const d = r.demography;
     const net = d.month.immigrants + d.month.births - d.month.emigrants - d.month.deaths;
     elPopDelta.textContent = `${net >= 0 ? '+' : '−'}${fmt(Math.abs(net))}`;

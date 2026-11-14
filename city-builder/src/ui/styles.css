@@ -148,6 +148,13 @@ button.hud-stat:hover:not(:disabled) { background: rgba(255,255,255,.05); }
 .hud-stat .delta.pos { color: var(--ok); }
 .hud-stat .delta.neg { color: var(--danger); }
 #hud-pop-btn .stack { flex-direction: row; align-items: baseline; gap: 8px; }
+/* Jauge de demande (barre du haut) : 4 barres centrées sur zéro, lettre du secteur dessous. */
+.hud-demand { display: flex; gap: 4px; align-items: stretch; height: 34px; }
+.hud-demand .col { display: flex; flex-direction: column; align-items: center; width: 9px; gap: 1px; }
+.hud-demand .bar { position: relative; flex: 1; width: 7px; border-radius: 3px; background: rgba(255,255,255,.09); overflow: hidden; }
+.hud-demand .bar::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,255,255,.25); }
+.hud-demand .bar i { position: absolute; left: 0; right: 0; border-radius: 2px; transition: height .4s; }
+.hud-demand b { font-size: 9px !important; line-height: 9px; font-weight: 700; }
 .ic-pop { color: #dfe7ee; }
 .ic-cash { color: var(--accent); }
 .ic-happy { color: var(--accent); }
@@ -488,7 +495,13 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .brand-txt .city { max-width: 100%; font-size: 11px; }
   .hud-actions { order: 2; margin-left: 0; padding-left: 0; gap: 4px; }
   .hud-btn { width: 42px; height: 42px; }
-  #hud-pop-btn { order: 3; } #hud-happy-btn { order: 4; } #hud-money-btn { order: 5; }
+  #hud-pop-btn { order: 3; } #hud-happy-btn { order: 4; } #hud-demand-btn { order: 4; } #hud-money-btn { order: 5; }
+  #hud > #hud-demand-btn { flex: 0 0 auto; padding: 3px 7px; }
+  /* Rangée habitants / satisfaction / demande / trésorerie : tout sur une ligne. */
+  #hud > #hud-pop-btn, #hud > #hud-happy-btn { flex: 1 1 16% !important; padding: 3px 5px; gap: 4px; }
+  #hud > #hud-money-btn { flex: 2 1 32% !important; padding-right: 6px; gap: 4px; }
+  #hud-happy-btn .stack b, #hud-pop-btn .stack b { font-size: 13px; }
+  body.tool-opts #hud-demand-btn { display: none !important; }
   #hud > .hud-stat { flex: 1 1 30%; min-width: 0; border-left: 0; padding: 3px 6px; min-height: 44px; gap: 6px; border-radius: 12px; background: rgba(255,255,255,.045); justify-content: flex-start; }
   #hud-weather { display: none !important; }
   #hud > #hud-pop-btn, #hud > #hud-happy-btn { flex: 1 1 22%; }
