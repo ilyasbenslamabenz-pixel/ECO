@@ -6,15 +6,16 @@
  */
 import { batimentsPlugin } from './batiments';
 import { circulationPlugin } from './circulation';
-import { pietonsPlugin } from './pietons';
+import { createPietonsPlugin, pietonsPlugin } from './pietons';
 import { chantiersPlugin } from './chantiers';
 import { weatherPlugin } from './weather';
-import { municipalPlugin } from '../municipal/plugin';
-import { electricitePlugin } from './electricite';
-import { dechetsPlugin } from './dechets';
-import { hubsPlugin } from './hubs';
-import { eauPlugin } from './eau';
-import { zonagePlugin } from './zonage';
+import { createWeatherPlugin } from '../weather/plugin';
+import { createMunicipalPlugin, municipalPlugin } from '../municipal/plugin';
+import { createElectricitePlugin, electricitePlugin } from './electricite';
+import { createDechetsPlugin, dechetsPlugin } from './dechets';
+import { createHubsPlugin, hubsPlugin } from './hubs';
+import { createEauPlugin, eauPlugin } from './eau';
+import { createZonagePlugin, zonagePlugin } from './zonage';
 import type { SimPlugin } from './types';
 
 export type { PluginCommandResult, PluginContext, PluginSaveField, PluginSaveSection, SimPlugin } from './types';
@@ -33,3 +34,17 @@ export const SIM_PLUGINS: readonly SimPlugin[] = [
   eauPlugin,
   zonagePlugin,
 ];
+
+/**
+ * Modules NEUFS pour une simulation (même ordre que SIM_PLUGINS) : chaque `Simulation` a ses propres états de
+ * modules (budget, réseaux, grilles). Les instances de SIM_PLUGINS étaient partagées entre deux simulations d'un
+ * même processus (tests : partie et partie rechargée), ce qui faussait la comparaison dès que la démographie lit
+ * les grilles des modules.
+ */
+export function createSimPlugins(): SimPlugin[] {
+  return [
+    batimentsPlugin, circulationPlugin, createPietonsPlugin(), chantiersPlugin, createWeatherPlugin(),
+    createMunicipalPlugin(), createElectricitePlugin(), createDechetsPlugin(), createHubsPlugin(), createEauPlugin(),
+    createZonagePlugin(),
+  ];
+}

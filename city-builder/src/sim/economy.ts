@@ -414,7 +414,8 @@ export class Economy {
       construction: r2(this.monthConstruction), refunds: r2(this.monthRefunds), loansTaken: r2(this.monthLoans),
       balance: r2(balance), moneyEnd: Math.round(this.money),
       population: ctx?.population ?? 0, jobs: ctx?.jobs ?? 0,
-      unemploymentRate: ctx?.unemploymentRate ?? 0, happiness: ctx?.happiness ?? 0,
+      // Arrondis comme les autres montants du bilan (écarts flottants de l'ordre de 1e-7 sans signification).
+      unemploymentRate: ctx?.unemploymentRate ?? 0, happiness: Math.round((ctx?.happiness ?? 0) * 1e4) / 1e4,
       services: r2(this.monthServices),
     };
     this.history.push(rec);

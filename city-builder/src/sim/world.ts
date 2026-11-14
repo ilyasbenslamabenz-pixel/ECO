@@ -55,7 +55,7 @@ import { EventScheduler, SimEvent } from './scheduler';
 import { CURRENT_SAVE_VERSION, SAVE_FORMAT_ID, validateSave, type SaveFileV2 } from './save-format';
 import { buildCity } from './city-builder';
 import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimReport, TerrainEditResult } from './sim-protocol';
-import { PluginHost, SIM_PLUGINS, type PluginSaveField, type SimPlugin } from './plugins';
+import { PluginHost, createSimPlugins, type PluginSaveField, type SimPlugin } from './plugins';
 
 /** Champ facultatif de la sauvegarde : éditions du terrain du joueur (src/sim/terrain/edits.ts), dans l'ordre. */
 export interface TerrainEditsSaveField { terrainEdits?: TerrainEdit[] }
@@ -118,7 +118,7 @@ export class Simulation {
   /** Modules de phase 2 (registre src/sim/plugins/index.ts ; les tests peuvent injecter leur propre liste). */
   readonly plugins: PluginHost;
 
-  constructor(plugins: readonly SimPlugin[] = SIM_PLUGINS) {
+  constructor(plugins: readonly SimPlugin[] = createSimPlugins()) {
     this.plugins = new PluginHost(this, plugins);
   }
 
@@ -204,6 +204,15 @@ export class Simulation {
       (id) => { const e = elec(); return !e || !e.hasNetwork?.() || e.powerFactor(id) >= 1; },
       (id) => this.plugins.service<Eau>('eau')?.growthAllowed(id) ?? true,
     ];
+    // Satisfaction des services (grille municipale, base 50) : écart borné ajouté au bonheur des habitants.
+    type Muni = { grids: { get(id: string): { at(x: number, z: number): number } | undefined } };
+    this.demography.serviceSatisfaction = (id) => {
+      const g = this.plugins.service<Muni>('municipal')?.grids.get('satisfaction');
+      const i = g ? this.buildings.indexOf(id) : -1;
+      if (!g || i < 0) return 0;
+      const d = g.at(this.buildings.x[i]!, this.buildings.z[i]!) - 50;
+      return d < -40 ? -40 : d > 20 ? 20 : d;
+    };
   }
 
   getAsset(id: string): CatalogAsset | undefined {

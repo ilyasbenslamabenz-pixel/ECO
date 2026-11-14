@@ -386,6 +386,12 @@ export class DemographySystem {
    * privé de courant n'embauche pas et ses emplois ne sont pas offerts. 1 tant qu'aucun réseau n'existe.
    */
   activity: (buildingId: number) => number = () => 1;
+  /**
+   * Satisfaction apportée par les services des modules au logement (points, négatif = pénalité) : grille
+   * municipale `satisfaction` (eau non desservie, qualité, égouts, bruit du port/aéroport, nuisances des
+   * déchets…). 0 tant qu'aucun module n'y écrit.
+   */
+  serviceSatisfaction: (buildingId: number) => number = () => 0;
   /** Filtres de croissance des modules (eau, électricité) : faux = le bâtiment n'accueille pas de nouveaux ménages. */
   growthGates: ((buildingId: number) => boolean)[] = [];
 
@@ -711,6 +717,7 @@ export class DemographySystem {
         t += cov[Service.Leisure]![bi] ? 6 : -2;
         t += Math.min(8, this.attractAt[bi]! * 2);
         t -= Math.min(20, this.pollutionAt[bi]! * 6);
+        t += this.serviceSatisfaction(b.id[bi]!);
       }
       t -= Math.min(15, c.commute[i]! / 400);
       t -= taxPenalty;
