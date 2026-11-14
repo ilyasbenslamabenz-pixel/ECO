@@ -100,11 +100,13 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
   const all = [...ids, ...ATMOSPHERE_MODULES];
   // Zonage (tests/zonage) : enregistré partout, inerte sans zone, testé à part.
   const late = [...ELECTRICITE_MODULES, ...LATE_MODULES, ...ZONAGE_MODULES];
+  // Politiques et recherche (phase 2C, tests/gouvernance) : simulation, sauvegarde et panneau ; pas de rendu.
+  const gov = ['politiques', 'recherche'];
   assert.deepEqual([...PHASE2_MODULES].sort(), [...ids, ...LATE_MODULES].sort());
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late]);
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late, ...gov]);
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late]);
-  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late]);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late]);
+  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov]);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late, ...gov]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
   const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];
   for (const p of SIM_PLUGINS) {
@@ -119,7 +121,7 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late]);
+  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late, ...gov]);
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 

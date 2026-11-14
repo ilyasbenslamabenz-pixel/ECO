@@ -16,6 +16,7 @@
  *     satisfaction (pénalité réversible et bornée), registre d'effets (causes : panne, pénurie, réglage).
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { governanceModifiers } from '../../shared/governance';
 import {
   baseDemandKw, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hash32, hourlyFactor, hydroShare,
   hydroSiteCheck, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
@@ -122,6 +123,8 @@ export class PowerSystem {
   private facilities = new Map<number, Facility>();
   /** Part servie par bâtiment consommateur (absent = non consommateur, compté comme alimenté). */
   private served = new Map<number, number>();
+  /** Multiplicateur de production éolienne / solaire (recherche) ; 1 = neutre. */
+  private govRenew = 1;
   private cutList: number[] = [];
   private summaryCache: ElectriciteSummary | undefined;
   private facilityViews: FacilityView[] = [];
@@ -509,8 +512,8 @@ export class PowerSystem {
     if (this.facilityState(f.id).failedUntil > 0) return 0;
     switch (f.kind) {
       case 'thermique': return f.nominalKw;
-      case 'eolien': return f.nominalKw * windPowerShare(wind);
-      case 'solaire': return f.nominalKw * sun;
+      case 'eolien': return f.nominalKw * windPowerShare(wind) * this.govRenew;
+      case 'solaire': return f.nominalKw * sun * this.govRenew;
       case 'hydro': return f.siteOk ? f.nominalKw * hydroShare(ctx.clock.season) : 0;
       case 'poste': return 0;
     }
@@ -568,6 +571,10 @@ export class PowerSystem {
     const cloud = this.cloudNow(ctx);
     const sun = solarShare(hourOfDay, season, cloud);
 
+    // Politiques et recherche : demande d'électricité et production renouvelable.
+    const gm = governanceModifiers((n) => ctx.use(n));
+    this.govRenew = gm.renewableFactor;
+    const govDemand = gm.powerDemandFactor;
     // 1. Production disponible par installation.
     const avail = new Map<number, number>();
     for (const f of this.facilities.values()) avail.set(f.id, this.availableKw(ctx, f, wind.ms, sun));
@@ -590,7 +597,7 @@ export class PowerSystem {
       const cls = consumerClassOf(a);
       const tiles = a.footprint.tilesX * a.footprint.tilesZ;
       const residents = st.residents[i]!, workers = st.workers[i]!;
-      const demand = baseDemandKw(cls, tiles, residents, workers, a.capacity.jobs) * hourlyFactor(cls, hourOfDay) * seasonF;
+      const demand = baseDemandKw(cls, tiles, residents, workers, a.capacity.jobs) * hourlyFactor(cls, hourOfDay) * seasonF * govDemand;
       const x = st.x[i]!, z = st.z[i]!;
       let hub = -1, best = Infinity;
       const comp = this.compAt(ctx, x, z, ROAD_ATTACH_M);

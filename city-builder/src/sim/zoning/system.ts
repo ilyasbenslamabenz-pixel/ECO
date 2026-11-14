@@ -19,6 +19,7 @@
  * Les bâtiments posés par le joueur ne sont jamais démolis ni remplacés par le zonage.
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { governanceModifiers } from '../../shared/governance';
 import type { CatalogAsset } from '../../shared/catalog';
 import { TILE_SIZE } from '../../shared/constants';
 import { angleToRot, buildingGap, footprintObb, obbAabb, obbOverlap, obbToLocal, obbToWorld } from '../../shared/footprint';
@@ -217,6 +218,12 @@ export class ZoningSystem {
     try { raw = ext?.demand(inp) ?? null; } catch { raw = null; }
     const source = raw ? 'externe' : 'zonage';
     raw ??= computeDemand(inp, this.tuning);
+    // Politiques et recherche : bonus de demande par secteur (borné comme la demande calculée).
+    const gd = governanceModifiers((n) => ctx.use(n)).demand;
+    if (gd.R || gd.C || gd.I || gd.B) {
+      const cl = (v: number): number => Math.max(-1, Math.min(1, v));
+      raw = { R: cl(raw.R + gd.R), C: cl(raw.C + gd.C), I: cl(raw.I + gd.I), B: cl(raw.B + gd.B) };
+    }
     smoothDemand(this.demand, raw, this.tuning.lissage);
     this.inputs = {
       population: inp.population, workforce: Math.round(inp.workforce), jobs: inp.jobsBySector.R + inp.jobsBySector.C + inp.jobsBySector.B + inp.jobsBySector.I + inp.jobsBySector.public,

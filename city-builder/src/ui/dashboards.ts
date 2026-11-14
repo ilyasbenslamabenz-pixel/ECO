@@ -22,7 +22,7 @@ import { $, el, fmt, money, moneyShort, pct, signedMoney } from './dom';
 import { iconEl } from './icons';
 import { clearLog, markAllRead, notifyLog, onNotify, unreadCount } from './notify';
 
-export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications';
+export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications' | 'policy' | 'research';
 
 const META: Record<DashId, { title: string; icon: string; cls: string; kicker: string }> = {
   city: { title: 'Vue ville', icon: 'home', cls: 't-city', kicker: 'Tableau de bord' },
@@ -31,10 +31,12 @@ const META: Record<DashId, { title: string; icon: string; cls: string; kicker: s
   environment: { title: 'Environnement', icon: 'leaf', cls: 't-nature', kicker: 'Tableau de bord' },
   stats: { title: 'Statistiques', icon: 'stats', cls: 't-stats', kicker: 'Historique mensuel' },
   notifications: { title: 'Notifications', icon: 'bell', cls: 't-notif', kicker: 'Journal' },
+  policy: { title: 'Politiques', icon: 'policy', cls: 't-city', kicker: 'Gouvernance' },
+  research: { title: 'Recherche', icon: 'research', cls: 't-city', kicker: 'Progression' },
 };
 
 /** Tableau de bord hôte de chaque module de phase 2. */
-const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', batiments: 'city', chantiers: 'city' };
+const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research' };
 
 export interface ModuleBridge { pluginCommand(plugin: string, name: string, payload?: unknown): Promise<unknown> }
 
@@ -217,6 +219,7 @@ export class Dashboards {
       environment: [{ id: 'env', label: 'Qualité' }],
       stats: [{ id: 'pop', label: 'Habitants' }, { id: 'money', label: 'Trésorerie' }, { id: 'happy', label: 'Satisfaction' }, { id: 'jobs', label: 'Emploi' }],
       notifications: [{ id: 'log', label: 'Journal' }],
+      policy: [], research: [],
     };
     const mods = UI_PANELS.filter((p) => typeof p.mount === 'function' && (MODULE_DASH[p.id] ?? 'city') === id).map((p) => ({ id: `mod:${p.id}`, label: p.title, module: p }));
     return [...base[id], ...mods];
@@ -243,6 +246,7 @@ export class Dashboards {
       case 'environment': return this.buildEnvironment(r, m);
       case 'stats': return this.buildStats(r, tab);
       case 'notifications': return this.buildNotifications();
+      case 'policy': case 'research': return []; // contenu : panneau du module (politiques / recherche)
     }
   }
 

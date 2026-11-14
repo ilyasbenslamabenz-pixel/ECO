@@ -55,6 +55,7 @@ import { EventScheduler, SimEvent } from './scheduler';
 import { CURRENT_SAVE_VERSION, SAVE_FORMAT_ID, validateSave, type SaveFileV2 } from './save-format';
 import { buildCity } from './city-builder';
 import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimReport, TerrainEditResult } from './sim-protocol';
+import { NEUTRAL_MODIFIERS, governanceModifiers, type Modifiers } from '../shared/governance';
 import { PluginHost, createSimPlugins, type PluginSaveField, type SimPlugin } from './plugins';
 
 /** Champ facultatif de la sauvegarde : éditions du terrain du joueur (src/sim/terrain/edits.ts), dans l'ordre. */
@@ -209,9 +210,9 @@ export class Simulation {
     this.demography.serviceSatisfaction = (id) => {
       const g = this.plugins.service<Muni>('municipal')?.grids.get('satisfaction');
       const i = g ? this.buildings.indexOf(id) : -1;
-      if (!g || i < 0) return 0;
+      if (!g || i < 0) return this.govMods.happiness;
       const d = g.at(this.buildings.x[i]!, this.buildings.z[i]!) - 50;
-      return d < -40 ? -40 : d > 20 ? 20 : d;
+      return (d < -40 ? -40 : d > 20 ? 20 : d) + this.govMods.happiness;
     };
   }
 
@@ -838,8 +839,19 @@ export class Simulation {
    * Un pas de simulation. `minutes` (minutes de jeu du pas) vaut GAME_MINUTES_PER_TICK en jeu ; les tests
    * l'augmentent pour faire défiler des journées entières rapidement (même logique, moins de pas).
    */
+  /** Effets combinés des politiques et de la recherche (modules `politiques`, `recherche`), relus à chaque tick. */
+  govMods: Modifiers = NEUTRAL_MODIFIERS;
+  private applyGovernance(): void {
+    const m = governanceModifiers((n) => this.plugins.service(n));
+    this.govMods = m;
+    this.economy.roadUpkeepFactor = m.roadUpkeepFactor;
+    this.economy.buildingUpkeepFactor = m.buildingUpkeepFactor;
+    if (this.demography) this.demography.pollutionFactor = m.pollutionFactor;
+  }
+
   tick(minutes: number = GAME_MINUTES_PER_TICK): void {
     if (!this.terrain) return;
+    this.applyGovernance();
     const h0 = Math.floor(this.clock.totalMinutes / 60);
     this.clock.advance(minutes);
     const now = this.clock.totalMinutes;

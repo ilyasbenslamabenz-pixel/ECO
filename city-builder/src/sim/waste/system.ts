@@ -13,6 +13,7 @@
  *    budgétaires municipales ; registre d'effets (réglages du joueur, décharge pleine, non-collecte).
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { governanceModifiers } from '../../shared/governance';
 import {
   COLLECTION_DAYS, DEFAULT_FACILITY_CAPACITY, DEFAULT_WASTE_SETTINGS, WASTE_FACILITY_FR, WASTE_PARAMS as P, clampSetting,
   facilityKindOfTags, tagNumber, type WasteDayStats, type WasteFacilityInfo, type WasteFacilityKind, type WasteSettings,
@@ -493,7 +494,7 @@ export class WasteSystem {
       f.stock -= p; f.processed = p;
       const recovered = p * P.sortRecoveryRate;
       day.recycledKg += recovered; this.totals.recycledKg += recovered;
-      const income = (recovered / 1000) * P.recyclePricePerTonne;
+      const income = (recovered / 1000) * P.recyclePricePerTonne * governanceModifiers((n) => ctx.use(n)).recyclingFactor;
       this.month.recycling += income; this.totals.incomeRecycling += income;
       const refuse = p - recovered;
       const inc = [...this.facilities.values()].find((x) => x.kind === 'incinerateur' && x.connected);

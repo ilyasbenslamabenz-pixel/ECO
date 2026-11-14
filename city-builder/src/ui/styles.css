@@ -660,3 +660,19 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   body.tool-opts:not(.drawer-open):not(.confirming) #minimap .mm-ctrl > button:not(#mm-zoom-in):not(#mm-zoom-out) { display: none !important; }
   body.tool-opts:not(.drawer-open):not(.confirming) #minimap .mm-ctrl > button { width: 44px; height: 44px; }
 }
+
+/* Politiques et recherche (tableaux de bord). */
+.gov-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.gov-card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: rgba(255,255,255,.03); }
+.gov-card.on { border-color: rgba(61,220,132,.55); background: rgba(61,220,132,.08); }
+.gov-card.locked { opacity: .6; }
+.gov-card p { margin: 4px 0; }
+.gov-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.gov-btn { min-height: 34px; padding: 4px 12px; border-radius: 9px; border: 1px solid var(--line-2); background: rgba(255,255,255,.06); color: inherit; font-weight: 600; white-space: nowrap; }
+.gov-btn.on { background: rgba(255,90,90,.14); border-color: rgba(255,90,90,.45); }
+.gov-budgets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; }
+.gov-chip { min-height: 32px; padding: 4px 10px; border-radius: 16px; border: 1px solid var(--line-2); background: transparent; color: inherit; }
+.gov-chip.on { background: rgba(61,220,132,.25); border-color: rgba(61,220,132,.6); }
+.gov-progress { margin: 6px 0; }
+.gov-bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 4px; }
+.gov-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #3ddc84, #22b864); }

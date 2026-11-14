@@ -186,6 +186,11 @@ export class Economy {
 
   /** Entretien mensuel courant (bâtiments + routes). */
   get monthlyUpkeep(): number { return this.buildingUpkeep + this.roadUpkeep; }
+  /** Multiplicateurs d'entretien (recherche municipale : bitume recyclé, isolation) ; 1 = neutre. */
+  roadUpkeepFactor = 1;
+  buildingUpkeepFactor = 1;
+  private get effBuildings(): number { return this.buildingUpkeep * this.buildingUpkeepFactor; }
+  private get effRoads(): number { return this.roadUpkeep * this.roadUpkeepFactor; }
   set monthlyUpkeep(v: number) { this.buildingUpkeep = v; this.roadUpkeep = 0; }
 
   /** Recettes fiscales prévues ce mois-ci. */
@@ -244,7 +249,7 @@ export class Economy {
 
   private expenses(): ExpenseBreakdown {
     const due = this.loanDue();
-    return { buildings: this.buildingUpkeep, roads: this.roadUpkeep, salaries: this.salaries(), loanInterest: due.interest, loanPrincipal: due.principal };
+    return { buildings: this.effBuildings, roads: this.effRoads, salaries: this.salaries(), loanInterest: due.interest, loanPrincipal: due.principal };
   }
 
   private forecastBalance(): number {
@@ -351,8 +356,8 @@ export class Economy {
     const f = hours / HOURS_PER_MONTH;
     const sal = this.salaries();
     for (const k of TAX_SECTORS) this.acc.income[k] += this.taxIncome(k) * f;
-    this.acc.buildings += this.buildingUpkeep * f; this.acc.roads += this.roadUpkeep * f; this.acc.salaries += sal * f;
-    const op = this.monthlyIncome - (this.buildingUpkeep + this.roadUpkeep + sal);
+    this.acc.buildings += this.effBuildings * f; this.acc.roads += this.effRoads * f; this.acc.salaries += sal * f;
+    const op = this.monthlyIncome - (this.effBuildings + this.effRoads + sal);
     const delta = op * f;
     this.money += delta;
     this.monthOperating += delta;
@@ -364,7 +369,7 @@ export class Economy {
   get hourlyBalance(): number {
     // Services municipaux : moyenne horaire du mois en cours (ou du dernier mois clos en début de mois).
     const svc = this.monthHours > 0 ? this.monthServices / this.monthHours : this.lastServices / HOURS_PER_MONTH;
-    return (this.monthlyIncome - (this.buildingUpkeep + this.roadUpkeep + this.salaries())) / HOURS_PER_MONTH + svc;
+    return (this.monthlyIncome - (this.effBuildings + this.effRoads + this.salaries())) / HOURS_PER_MONTH + svc;
   }
 
   /**
@@ -377,7 +382,7 @@ export class Economy {
     let totalIncome = 0;
     for (const s of TAX_SECTORS) { const v = hourly ? this.acc.income[s] : this.taxIncome(s); income[s] = r2(v); totalIncome += v; }
     const salaries = hourly ? this.acc.salaries : this.salaries();
-    const upB = hourly ? this.acc.buildings : this.buildingUpkeep, upR = hourly ? this.acc.roads : this.roadUpkeep;
+    const upB = hourly ? this.acc.buildings : this.effBuildings, upR = hourly ? this.acc.roads : this.effRoads;
     let interest = 0, principal = 0;
     for (const l of this.loans) {
       const i = l.remaining * (l.annualRate / 12);

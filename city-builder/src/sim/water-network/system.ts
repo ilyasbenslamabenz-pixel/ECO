@@ -23,6 +23,7 @@
  * Dormant (aucune grille, aucun réseau, aucune sauvegarde) tant qu'aucune installation n'a été posée.
  * Déterministe (aucun tirage aléatoire). TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { governanceModifiers } from '../../shared/governance';
 import type { IndicatorId } from '../../shared/municipal/types';
 import {
   DEFAULT_WATER_SETTINGS, facilityKindOf, SETTINGS_BOUNDS, WATER_FACILITIES,
@@ -467,11 +468,12 @@ export class WaterSystem {
     const nodeDemand = new Float64Array(nRoad);
     const demand = new Float64Array(this.consumers.length);
     let totalDemand = 0;
+    const govWater = governanceModifiers((n) => ctx.use(n)).waterDemandFactor; // politique « restrictions d'eau »
     for (let i = 0; i < this.consumers.length; i++) {
       const c = this.consumers[i]!;
       const bi = ctx.buildings.indexOf(c.id);
       const res = bi >= 0 ? st.residents[bi]! : 0, wk = bi >= 0 ? st.workers[bi]! : 0;
-      const d = buildingDemand(c.category, res, wk, hour, s);
+      const d = buildingDemand(c.category, res, wk, hour, s) * govWater;
       demand[i] = d;
       totalDemand += d;
       if (c.road >= 0) nodeDemand[this.roadIndex.get(c.road)!]! += d;

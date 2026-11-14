@@ -373,7 +373,7 @@ export class DemographySystem {
         const d = Math.sqrt(dx * dx + dz * dz);
         if (m.service >= 0 && d <= m.radius) this.coverage[m.service]![j] = 1;
         if (m.attract > 0 && d <= Math.max(m.radius, 800)) this.attractAt[j]! += m.attract * (1 - d / Math.max(m.radius, 800));
-        if (m.pollution > 0 && d <= 400) this.pollutionAt[j]! += m.pollution * (1 - d / 400);
+        if (m.pollution > 0 && d <= 400) this.pollutionAt[j]! += m.pollution * (1 - d / 400) * this.pollutionFactor;
         if (m.leisureVenue && j !== s && d <= 1500 && d < bestLeisure[j]!) { bestLeisure[j] = d; this.leisureTarget[j] = b.id[s]!; }
       }
     }
@@ -392,6 +392,8 @@ export class DemographySystem {
    * déchets…). 0 tant qu'aucun module n'y écrit.
    */
   serviceSatisfaction: (buildingId: number) => number = () => 0;
+  /** Multiplicateur de la pollution industrielle subie (politiques, recherche) ; 1 = neutre. */
+  pollutionFactor = 1;
   /** Filtres de croissance des modules (eau, électricité) : faux = le bâtiment n'accueille pas de nouveaux ménages. */
   growthGates: ((buildingId: number) => boolean)[] = [];
 
