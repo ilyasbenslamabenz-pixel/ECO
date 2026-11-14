@@ -53,6 +53,8 @@ export interface DeviceProfile {
   preloadAll: boolean;
   /** Modèles GLB chargés en parallèle au plus (1 = un par un : pic mémoire du chargement borné). */
   maxConcurrentModels: number;
+  /** Qualité Basse : seule la carte de couleur des bâtiments est gardée (relief et rugosité retirés, ≈ 2/3 de mémoire). */
+  colorMapsOnly: boolean;
 }
 
 /** Vrai sur un appareil tactile à petit écran, un téléphone / une tablette, ou un navigateur à faible mémoire. */
@@ -77,7 +79,7 @@ export function isLiteDevice(): boolean {
 
 const FULL: DeviceProfile = {
   lite: false, textureCap: Infinity, treeTextureCap: Infinity, gpuTextureCap: Infinity, maxPixelRatio: 2, shadowSize: 2048,
-  vegDistances: [50, 120, 240, 3800], buildingLodBias: 1, preloadAll: true, maxConcurrentModels: Infinity,
+  vegDistances: [50, 120, 240, 3800], buildingLodBias: 1, preloadAll: true, maxConcurrentModels: Infinity, colorMapsOnly: false,
 };
 
 /** Profil effectif d'un réglage de qualité (« auto » : allégé si l'appareil le demande). */
@@ -103,5 +105,6 @@ export function deviceProfile(quality: QualitySetting = 'auto', lite = isLiteDev
     buildingLodBias: basse ? 0.55 : 0.7,
     preloadAll: false,
     maxConcurrentModels: 1,
+    colorMapsOnly: basse,
   };
 }

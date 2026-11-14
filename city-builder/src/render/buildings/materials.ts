@@ -11,7 +11,7 @@
  * immeuble a son propre motif ; 2 = vitrine toujours allumée ; -1 = jamais).
  */
 import * as THREE from 'three';
-import { downscaleImage, liteTextureUrl } from '../image-cap';
+import { downscaleImage, imageLimits, liteTextureUrl } from '../image-cap';
 import type { AssetCatalog, TextureSet } from '../../shared/catalog';
 
 export interface AubeMaterialExtras { set: string | null; uv: 'meters' | 'unit'; kind: 'opaque' | 'glass' }
@@ -117,12 +117,13 @@ export class BuildingMaterials {
         name: `${role}:${setId}`,
         color: new THREE.Color(color),
         map: this.texture(set.albedo, rep, true),
-        normalMap: this.texture(set.normal, rep, false),
-        roughness: s.roughness,
+        // Qualité Basse : couleur seule (pas de chargement du relief ni de l'ARM).
+        normalMap: imageLimits.colorMapsOnly ? null : this.texture(set.normal, rep, false),
+        roughness: imageLimits.colorMapsOnly ? Math.max(s.roughness, 0.85) : s.roughness,
         metalness: s.metalness,
         side: s.side,
       });
-      if (set.arm) {
+      if (set.arm && !imageLimits.colorMapsOnly) {
         const arm = this.texture(set.arm, rep, false);
         mat.roughnessMap = arm;
         mat.metalnessMap = arm;

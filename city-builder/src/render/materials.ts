@@ -16,6 +16,7 @@
  * Propriétaire : agent pipeline d'assets. Aucun état global : une instance par rendu.
  */
 import * as THREE from 'three';
+import { liteTextureUrl } from './image-cap';
 import { loadHdrTexture } from './gzip-assets';
 import type { AssetCatalog, TextureSet } from '../shared/catalog';
 
@@ -108,7 +109,10 @@ export class MaterialLibrary {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.anisotropy = this.anisotropy;
     tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    const p = this.loader.loadAsync(new URL(file, this.base).href).then((loaded) => {
+    // Mode allégé : versions réduites générées au build (routes, trottoirs, pavés : 512 px pour rester nets ;
+    // autres matériaux : 256 px). Avant : images 1024 px envoyées telles quelles au GPU.
+    const roadLike = /(route_|trottoir_|bordure_|paves_)/.test(file);
+    const p = this.loader.loadAsync(liteTextureUrl(new URL(file, this.base).href, roadLike ? 512 : 256)).then((loaded) => {
       tex.image = loaded.image;
       tex.needsUpdate = true;
       loaded.dispose();

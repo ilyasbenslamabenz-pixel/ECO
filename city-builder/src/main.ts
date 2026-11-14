@@ -214,6 +214,7 @@ async function boot(): Promise<void> {
   imageLimits.textureCap = bootProfile.textureCap;
   imageLimits.treeTextureCap = bootProfile.treeTextureCap;
   imageLimits.maxConcurrentModels = bootProfile.maxConcurrentModels;
+  imageLimits.colorMapsOnly = bootProfile.colorMapsOnly;
   debug.liteMode = bootProfile.lite;
   const lib = new AssetLibrary(catalog, assetsBase);
 

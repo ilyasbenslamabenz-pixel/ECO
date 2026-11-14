@@ -590,8 +590,11 @@ export class WasteSystem {
     const apply = (g: IndicatorGrid | undefined, k: number, prev: Float32Array | null): Float32Array | null => {
       if (!g || g.size !== nuis.size) return prev;
       const applied = prev && prev.length === g.size ? prev : new Float32Array(g.size);
+      // Effet sur la satisfaction et la valeur foncière seulement une fois un service de déchets construit
+      // (comme l'électricité et l'eau) : une ville existante sans service n'est pas pénalisée d'un coup.
+      const live = this.facilities.size > 0;
       for (let c = 0; c < g.size; c++) {
-        const target = k * nuis.data[c]!;
+        const target = live ? k * nuis.data[c]! : 0;
         const d = target - applied[c]!;
         if (Math.abs(d) < 1e-4) continue;
         const i = c % g.cols, j = Math.floor(c / g.cols);

@@ -48,8 +48,12 @@ test('effet 1 : déchets non collectés -> pollution du sol, nuisances, satisfac
   // Satisfaction (fond 50) et valeur foncière (fond 100) en baisse là où les bacs débordent.
   const satA = meanAt(ma.grids.require('satisfaction'), HOUSES), satB = meanAt(mb.grids.require('satisfaction'), HOUSES);
   const landA = meanAt(ma.grids.require('valeur_fonciere'), HOUSES), landB = meanAt(mb.grids.require('valeur_fonciere'), HOUSES);
-  assert.ok(satA < 49 && satA < satB - 1, `satisfaction A ${satA} / B ${satB}`);
-  assert.ok(landA < 99 && landA < landB - 1, `valeur foncière A ${landA} / B ${landB}`);
+  // Sans AUCUNE installation de déchets construite, pas encore d'effet sur la satisfaction ni la valeur foncière
+  // (même règle que l'électricité et l'eau : une ville existante n'est pas pénalisée d'un coup) ; l'effet réel
+  // avec un service construit est vérifié par le test « service construit mais collecte insuffisante ».
+  assert.ok(Math.abs(satA - 50) < 0.5, `satisfaction A inchangée sans service ${satA}`);
+  assert.ok(Math.abs(landA - 100) < 0.5, `valeur foncière A inchangée sans service ${landA}`);
+  void satB; void landB;
 
   // Registre d'effets : cause « déchets non collectés » -> pollution du sol (mesurée sur la grille) et masse.
   const causes = ma.effects.topCauses(20).filter((c) => c.cause.kind === 'dechets_non_collectes');
@@ -130,4 +134,18 @@ test('effet 3 : budget réduit -> moins de camions en service -> moins de tourn�
   // Tournées des jours qui suivent la décision, rattachées à elle (au plus le total, au moins une).
   const after = c.byTarget['dechets:tournees_jour'] ?? 0;
   assert.ok(after >= 1 && after <= wl.totals.tours, `tournées rattachées ${after} / ${wl.totals.tours}`);
+});
+
+
+test('service construit mais collecte insuffisante : satisfaction et valeur foncière en baisse', () => {
+  const A = wasteSim();
+  buildTown(A.sim);
+  buildWasteZone(A.sim);
+  // Une seule collecte par semaine : les bacs débordent entre deux passages.
+  assert.ok(A.sim.plugins.command('dechets', 'reglages', { collectsPerWeek: 1 }).ok);
+  runDays(A.sim, 12, 4);
+  const ma = A.municipal.municipal;
+  const sat = meanAt(ma.grids.require('satisfaction'), HOUSES);
+  assert.ok(A.dechets.waste.totals.uncollectedKg > 0, 'débordements');
+  assert.ok(sat < 50, `satisfaction en baisse avec un service insuffisant (${sat})`);
 });

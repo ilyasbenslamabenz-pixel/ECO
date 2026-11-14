@@ -65,10 +65,12 @@ async function liteTextures(assetsDir) {
     for (const f of readdirSync(d)) {
       const p = join(d, f);
       if (statSync(p).isDirectory()) { await walk(p); continue; }
-      if (!f.endsWith('.webp') || f.endsWith('.256.webp')) continue;
-      const out = p.replace(/\.webp$/, '.256.webp');
-      await sharp(p).resize(256, 256, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toFile(out);
-      files++; bytes += statSync(out).size;
+      if (!f.endsWith('.webp') || /\.(256|512)\.webp$/.test(f)) continue;
+      for (const size of [256, 512]) {
+        const out = p.replace(/\.webp$/, `.${size}.webp`);
+        await sharp(p).resize(size, size, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toFile(out);
+        files++; bytes += statSync(out).size;
+      }
     }
   };
   for (const sub of ['textures', 'buildings']) if (existsSync(join(assetsDir, sub))) await walk(join(assetsDir, sub));

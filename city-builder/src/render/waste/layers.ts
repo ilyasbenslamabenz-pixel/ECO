@@ -141,13 +141,17 @@ export class FacilityLayer {
   constructor(private readonly ctx: RenderPluginContext) {
     this.group.name = 'dechets-installations';
     ctx.scene.add(this.group);
-    if (ctx.catalog.assets.some((a) => a.id === WASTE_MODEL_IDS.tumulus)) {
-      void ctx.lib.load(WASTE_MODEL_IDS.tumulus, 0).then((g) => { this.moundSrc = g; this.apply(this.facilities); }).catch(() => undefined);
-    }
   }
+
+  private moundRequested = false;
 
   apply(list: WasteFacilityInfo[]): void {
     this.facilities = list;
+    // Modèle du tumulus chargé à la première décharge seulement (rien en mémoire sans décharge).
+    if (!this.moundRequested && list.some((f) => f.kind === 'decharge') && this.ctx.catalog.assets.some((a) => a.id === WASTE_MODEL_IDS.tumulus)) {
+      this.moundRequested = true;
+      void this.ctx.lib.load(WASTE_MODEL_IDS.tumulus, 0).then((g) => { this.moundSrc = g; this.apply(this.facilities); }).catch(() => undefined);
+    }
     const keepM = new Set<number>(), keepS = new Set<number>();
     for (const f of list) {
       const c = Math.cos(f.rot), s = Math.sin(f.rot);
@@ -220,19 +224,23 @@ export class ContainerLayer {
   constructor(private readonly ctx: RenderPluginContext) {
     this.group.name = 'dechets-conteneurs';
     ctx.scene.add(this.group);
-    if (ctx.catalog.assets.some((a) => a.id === WASTE_MODEL_IDS.conteneurs)) {
-      void ctx.lib.load(WASTE_MODEL_IDS.conteneurs, 1).then((g) => {
+  }
+
+  private requested = false;
+
+  /** [x, z, cap] par groupe de conteneurs. */
+  apply(data: Float32Array): void {
+    this.data = data;
+    // Modèle chargé au premier groupe de conteneurs seulement.
+    if (!this.requested && data.length >= 3 && this.ctx.catalog.assets.some((a) => a.id === WASTE_MODEL_IDS.conteneurs)) {
+      this.requested = true;
+      void this.ctx.lib.load(WASTE_MODEL_IDS.conteneurs, 1).then((g) => {
         const r = instanced(g, 256);
         this.parts = r.meshes;
         this.group.add(r.group);
         this.apply(this.data);
       }).catch(() => undefined);
     }
-  }
-
-  /** [x, z, cap] par groupe de conteneurs. */
-  apply(data: Float32Array): void {
-    this.data = data;
     if (!this.parts.length) return;
     const n = Math.min(256, Math.floor(data.length / 3));
     for (let i = 0; i < n; i++) {

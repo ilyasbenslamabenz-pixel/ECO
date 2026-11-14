@@ -43,12 +43,23 @@ export function dequantizeGeometry(g: THREE.BufferGeometry): void {
   }
 }
 
+/** Catégories chargées en priorité sur téléphone (ce que le joueur pose et regarde). */
+const BUILDING_CATS = new Set(['house', 'townhouse', 'apartment_low', 'apartment_mid', 'apartment_high', 'skyscraper', 'commercial', 'industrial', 'public', 'transport']);
+
+/** Image 1×1 (remplace les cartes retirées en qualité Basse : une seule entrée de cache pour toutes). */
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
 /** Gestionnaire de chargement : adresses normalisées ; en mode allégé, textures communes en 256 px (liteTextureUrl). */
 function liteManager(): THREE.LoadingManager {
   const m = new THREE.LoadingManager();
   // Adresse normalisée (« …/residential/../../textures/x.webp » -> « …/textures/x.webp ») : sinon le cache
   // d'images de three ne reconnaît pas une texture commune et la redécode pour chaque modèle (×12 mesuré).
-  m.setURLModifier((u) => { let n = u; try { n = new URL(u, globalThis.location?.href).href; } catch { /* adresse non standard */ } return liteTextureUrl(n); });
+  m.setURLModifier((u) => {
+    let n = u; try { n = new URL(u, globalThis.location?.href).href; } catch { /* adresse non standard */ }
+    // Qualité Basse : relief et ARM jamais téléchargés ni décodés (retirés des matériaux ensuite).
+    if (imageLimits.colorMapsOnly && /(^|\/)assets\/(textures|buildings)\/.*_(normal|arm)\.webp(\?|$)/.test(n)) return TINY_PNG;
+    return liteTextureUrl(n);
+  });
   return m;
 }
 
@@ -59,13 +70,17 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
   private byId: Map<string, CatalogAsset>;
   /** File des chargements GLB (mode allégé : un modèle à la fois, pic mémoire borné). */
   private active = 0;
-  private readonly waiting: (() => void)[] = [];
-  private async slot(): Promise<void> {
+  /** File d'attente : priorité 0 (bâtiments) avant 1 (décors, mobilier, véhicules), puis ordre d'arrivée. */
+  private readonly waiting: { p: number; r: () => void }[] = [];
+  private async slot(priority = 1): Promise<void> {
     if (this.active < imageLimits.maxConcurrentModels) { this.active++; return; }
-    await new Promise<void>((r) => this.waiting.push(r));
+    await new Promise<void>((r) => {
+      const i = this.waiting.findIndex((w) => w.p > priority);
+      if (i < 0) this.waiting.push({ p: priority, r }); else this.waiting.splice(i, 0, { p: priority, r });
+    });
     this.active++;
   }
-  private release(): void { this.active--; this.waiting.shift()?.(); }
+  private release(): void { this.active--; this.waiting.shift()?.r(); }
 
   constructor(readonly catalog: AssetCatalog, private readonly base: URL) {
     this.byId = new Map(catalog.assets.map((a) => [a.id, a]));
@@ -84,8 +99,22 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
     const key = l.file;
     let p = this.cache.get(key);
     if (!p) {
-      p = this.slot().then(() => { traceStep(`modèle ${l.file.split('/').pop()}`); return this.loader.loadAsync(this.url(l.file)); }).then((gltf) => {
+      let released = false;
+      const free = (): void => { if (!released) { released = true; this.release(); } };
+      const prio = BUILDING_CATS.has(a.category) ? 0 : 1;
+      p = this.slot(prio).then(() => { traceStep(`modèle ${l.file.split('/').pop()}`); return this.loader.loadAsync(this.url(l.file)); }).then((gltf) => {
+        // Libère toujours la place dans la file (une erreur ici bloquait tous les chargements suivants).
+        try { return this.finishModel(gltf, a, assetId, lod, l.file, key); } finally { free(); }
+      }, (e: unknown) => { free(); throw e; });
+      p.catch(() => this.cache.delete(key));
+      this.cache.set(key, p);
+    }
+    return p;
+  }
+
+  private finishModel(gltf: { scene: THREE.Group }, a: CatalogAsset, assetId: string, lod: number, file: string, key: string): THREE.Group {
         const root = gltf.scene;
+        const l = { file };
         const short = l.file.split('/').pop()?.replace('.glb', '') ?? l.file;
         traceStep(`${short} chargé`);
         // Mode allégé : images réduites dès le chargement, originaux libérés (arbres : plafond plus haut).
@@ -96,17 +125,11 @@ export class AssetLibrary implements IAssetLibrary<THREE.Group> {
           if (m.isMesh) { dequantizeGeometry(m.geometry); m.castShadow = true; m.receiveShadow = true; }
         });
         this.loaded.add(key);
-        this.release();
         // Journal de plantage : étape franchie quand une image a été dessinée après ce modèle (affichage,
         // compilation des shaders) — distingue un arrêt au chargement d'un arrêt au rendu.
         traceStep(`${short} prêt`);
         if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => requestAnimationFrame(() => traceStep(`${short} affiché`)));
         return root;
-      }, (e: unknown) => { this.release(); throw e; });
-      p.catch(() => this.cache.delete(key));
-      this.cache.set(key, p);
-    }
-    return p;
   }
 
   isLoaded(assetId: string, lod = 0): boolean {

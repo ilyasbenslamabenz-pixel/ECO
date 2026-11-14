@@ -14,6 +14,8 @@ export const imageLimits = {
   treeTextureCap: Infinity,
   /** Nombre maximal de modèles GLB chargés en même temps. */
   maxConcurrentModels: Infinity,
+  /** Bâtiments : carte de couleur seule (qualité Basse). */
+  colorMapsOnly: false,
 };
 
 /**
@@ -22,10 +24,11 @@ export const imageLimits = {
  * coup (~110 Mo décodés) avant leur réduction, et Safari iPhone fermait la page à l'ouverture de l'outil
  * Bâtiments. Seules les textures communes (assets/textures, assets/buildings) ont une version réduite.
  */
-export function liteTextureUrl(url: string): string {
+export function liteTextureUrl(url: string, size: 256 | 512 = 256): string {
   if (imageLimits.textureCap > 256) return url;
-  if (!/\/assets\/(textures|buildings)\/.*\.webp(\?|$)/.test(url) || /\.256\.webp/.test(url)) return url;
-  return url.replace(/\.webp(?=\?|$)/, '.256.webp');
+  // Adresse absolue (…/assets/…) ou relative (assets/… : matériaux des bâtiments procéduraux).
+  if (!/(^|\/)assets\/(textures|buildings)\/.*\.webp(\?|$)/.test(url) || /\.(256|512)\.webp/.test(url)) return url;
+  return url.replace(/\.webp(?=\?|$)/, `.${size}.webp`);
 }
 
 type Img = HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas;
@@ -94,6 +97,21 @@ export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | Ima
 
 const sharedSources = new WeakMap<object, Source<unknown>>();
 
+/**
+ * Qualité Basse : retire relief (normal) et rugosité / métal / occlusion (ARM) d'un matériau standard, en gardant
+ * l'aspect moyen (rugosité 0,85, non métallique). Les images retirées ne sont jamais envoyées au GPU.
+ */
+export function stripDetailMaps(mat: THREE.MeshStandardMaterial): void {
+  if (!mat || !('normalMap' in mat)) return;
+  const hadArm = !!(mat.roughnessMap || mat.metalnessMap);
+  mat.normalMap = null;
+  mat.roughnessMap = null;
+  mat.metalnessMap = null;
+  mat.aoMap = null;
+  if (hadArm) { mat.roughness = Math.max(mat.roughness, 0.85); mat.metalness = Math.min(mat.metalness, 0.1); }
+  mat.needsUpdate = true;
+}
+
 /** Réduit en place les images des textures d'un modèle chargé (une fois par texture). */
 export function capModelTextures(root: THREE.Object3D, cap = imageLimits.textureCap): void {
   if (!Number.isFinite(cap)) return;
@@ -102,6 +120,7 @@ export function capModelTextures(root: THREE.Object3D, cap = imageLimits.texture
     const m = (o as THREE.Mesh).material;
     if (!m) return;
     for (const mat of Array.isArray(m) ? m : [m]) {
+      if (imageLimits.colorMapsOnly) stripDetailMaps(mat as THREE.MeshStandardMaterial);
       for (const v of Object.values(mat)) {
         const t = v as THREE.Texture | null;
         if (!t || !t.isTexture || seen.has(t)) continue;
