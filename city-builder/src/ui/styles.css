@@ -631,6 +631,8 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 #dash-tabs.many { display: flex; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 #dash-tabs.many::-webkit-scrollbar { display: none; }
 #dash-tabs.many button { flex: 0 0 auto; white-space: nowrap; padding: 4px 12px; }
+/* Téléphone : les onglets passent à la ligne (tous visibles) au lieu d'une rangée coupée sans indice de défilement. */
+@media (max-width: 760px) { #dash-tabs.many { flex-wrap: wrap; overflow: visible; row-gap: 5px; } #dash-tabs.many button { padding: 4px 10px; } }
 
 /* Téléphone, outil de construction actif : barre du haut réduite à une ligne (argent, date, pause/lecture) pour
    agrandir la carte ; étiquette de l'outil fixée sous la barre (au lieu de couvrir le bâtiment sous le doigt). */
