@@ -1,0 +1,938 @@
+<title>Meknes City</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Meknes City — city-builder 3D">
+<meta name="theme-color" content="#0b0f13">
+<style>
+/* =====================================================================================
+   Meknes City — interface (thème sombre translucide, accent vert, icônes SVG originales)
+   Ordre : jetons · base · menu · barre supérieure · barre latérale · bas d'écran (mini-carte,
+   sous-barre, outils, objectifs) · panneaux · éléments communs · téléphone portrait · paysage.
+   ===================================================================================== */
+:root {
+  --bg: #0b0f13;
+  --glass: rgba(13, 18, 24, 0.78);
+  --glass-2: rgba(18, 24, 31, 0.9);
+  --panel: rgba(13, 18, 24, 0.86);
+  --panel-solid: #121920;
+  --panel-2: rgba(255, 255, 255, 0.045);
+  --line: rgba(255, 255, 255, 0.085);
+  --line-2: rgba(255, 255, 255, 0.16);
+  --text: #eaf0f5;
+  --muted: #92a1b1;
+  --accent: #3ddc84;
+  --accent-2: #7cc4ff;
+  --accent-strong: #22b864;
+  --accent-ink: #052414;
+  --accent-soft: rgba(61, 220, 132, 0.15);
+  --accent-glow: 0 0 0 1px rgba(61, 220, 132, 0.55), 0 0 18px rgba(61, 220, 132, 0.22);
+  --danger: #ff6b6b;
+  --ok: #3ddc84;
+  --warn: #ffc857;
+  --radius: 14px;
+  --tap: 44px;
+  --hud-h: 64px;
+  --tb-h: 90px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+  --blur: blur(16px) saturate(140%);
+  --font: "Inter", "SF Pro Text", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+  font: 14px/1.4 var(--font); letter-spacing: 0.005em; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, select, textarea { -webkit-user-select: text; user-select: text; }
+#scene { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; touch-action: none; }
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; margin: 0; }
+.sr { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.neg { color: var(--danger); }
+.pos { color: var(--ok); }
+
+/* Icônes : trait = couleur courante, formes `.f` remplies en transparence (duotone). */
+svg.ic { width: 20px; height: 20px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; display: block; }
+svg.ic .f { fill: currentColor; fill-opacity: 0.22; }
+
+button { font: inherit; color: var(--text); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 12px; cursor: pointer; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+  transition: background .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .08s ease, opacity .16s ease; }
+button:hover:not(:disabled) { background: rgba(255,255,255,0.11); border-color: var(--line-2); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .42; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+button.primary { background: linear-gradient(180deg, #4ce892, #25bf69); color: var(--accent-ink); border-color: transparent; font-weight: 650; }
+button.primary:hover:not(:disabled) { background: linear-gradient(180deg, #62f0a2, #2fcf76); }
+button.active { border-color: rgba(61,220,132,.6); color: #c9f7dc; background: var(--accent-soft); }
+button.danger { border-color: rgba(255,107,107,.45); color: #ffb3b3; }
+button.danger:hover:not(:disabled) { background: rgba(255,107,107,.14); }
+.icon-btn { min-width: 36px; padding: 6px; }
+.phase { font-size: 10px; line-height: 1.5; color: #c7d1db; background: rgba(255,255,255,.07); border: 1px solid var(--line-2); border-radius: 6px;
+  padding: 0 5px; margin-left: 2px; font-weight: 600; white-space: nowrap; letter-spacing: .02em; }
+
+/* ---------- Superpositions : chargement, menu ---------- */
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: max(16px, var(--safe-t)) max(16px, var(--safe-r)) max(16px, var(--safe-b)) max(16px, var(--safe-l));
+  background: radial-gradient(ellipse at 50% 30%, rgba(14,24,20,.5), rgba(6,9,12,.92)); z-index: 40; overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: .01em; font-size: 28px; margin: 0; color: #f3f7fa; }
+.brand-logo { width: 42px; height: 42px; color: var(--accent); stroke-width: 1.7; }
+.brand span { background: linear-gradient(90deg, #ffffff, #c9f7dc 55%, var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.loading-card, .menu-card { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 28px;
+  width: min(440px, 100%); display: flex; flex-direction: column; gap: 12px; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); }
+.menu-screen { display: flex; flex-direction: column; gap: 10px; }
+.menu-card h1 { font-size: 34px; }
+.menu-card h2 { margin: 0 0 6px; font-size: 20px; font-weight: 650; }
+.tagline { margin: 0 0 8px; color: var(--muted); }
+.menu-screen > button { width: 100%; min-height: 48px; justify-content: flex-start; padding: 10px 16px; font-size: 15px; gap: 12px; }
+.menu-screen > button svg.ic { color: var(--accent); }
+.menu-screen > button.primary svg.ic { color: var(--accent-ink); }
+.menu-foot { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.progress { height: 6px; background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden; }
+#loading-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-strong), var(--accent), #b6f5d2); transition: width .2s; }
+#loading-text { color: var(--muted); font-size: 13px; }
+
+.form { display: flex; flex-direction: column; gap: 12px; }
+.form label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--muted); }
+.form input, .form select { font: inherit; font-size: 15px; color: var(--text); background: rgba(0,0,0,.28); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; min-height: var(--tap); width: 100%; }
+.form input[type=range] { padding: 0; accent-color: var(--accent); background: none; border: 0; }
+.form .inline { display: flex; gap: 8px; }
+.form .inline input { flex: 1; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.form-actions button { min-height: var(--tap); }
+.inline-form { flex-direction: row; }
+.inline-form input { flex: 1; }
+.hint { margin: 0; font-size: 12px; color: var(--muted); }
+output { color: var(--text); font-variant-numeric: tabular-nums; }
+
+.slot-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.slot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
+.slot .meta { flex: 1; min-width: 0; }
+.slot .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot .sub { font-size: 12px; color: var(--muted); }
+.slot button { min-height: 40px; }
+.slot-empty { color: var(--muted); padding: 12px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; }
+
+/* =========================== Barre supérieure =========================== */
+#hud { position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: flex; align-items: center; gap: 4px;
+  padding: max(6px, var(--safe-t)) max(10px, var(--safe-r)) 6px max(10px, var(--safe-l)); min-height: 60px;
+  background: linear-gradient(180deg, rgba(9,13,17,.92), rgba(11,16,21,.8)); border-bottom: 1px solid var(--line);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: 0 6px 24px rgba(0,0,0,.25); animation: fade .35s ease-out; }
+#hud > * { flex: 0 0 auto; }
+#hud > * + *:not(.hud-actions):not(#btn-sidebar) { position: relative; }
+#hud > .hud-time, #hud > .hud-stat { border-left: 1px solid var(--line); border-radius: 0; }
+.hud-btn { width: 42px; height: 42px; min-height: 42px; padding: 0; border-radius: 12px; background: rgba(255,255,255,.05); position: relative; }
+.hud-btn svg.ic { width: 22px; height: 22px; }
+#btn-sidebar { display: none; }
+.hud-brand { display: flex; align-items: center; gap: 9px; padding: 0 14px 0 2px; min-width: 0; }
+.hud-brand .logo { width: 34px; height: 34px; color: var(--accent); stroke-width: 1.7; }
+.brand-txt { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
+.brand-txt .game { font-weight: 800; font-size: 16px; letter-spacing: .02em; white-space: nowrap; }
+.brand-txt .city { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: rgba(0,0,0,.18); }
+.seg button { border: 0; border-radius: 0; min-width: 36px; min-height: 36px; padding: 4px 8px; font-size: 12.5px; background: transparent; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.active { background: linear-gradient(180deg, rgba(61,220,132,.32), rgba(61,220,132,.16)); color: #e9fff2; }
+.seg button svg.ic { width: 16px; height: 16px; }
+.seg button.spd-x { font-weight: 700; font-variant-numeric: tabular-nums; }
+#hud .speed { margin: 0 10px; }
+.hud-time { display: flex; align-items: baseline; gap: 10px; padding: 0 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hud-time .day { font-size: 14px; font-weight: 600; }
+.hud-time .clock { font-size: 15px; font-weight: 700; color: #ffffff; }
+.hud-stat { display: inline-flex; align-items: center; gap: 9px; padding: 2px 14px; min-height: 44px; background: transparent; border: 0; text-align: left; white-space: nowrap; }
+button.hud-stat:hover:not(:disabled) { background: rgba(255,255,255,.05); }
+.hud-stat svg.ic { width: 26px; height: 26px; }
+.hud-stat .stack { display: flex; flex-direction: column; line-height: 1.15; }
+.hud-stat .lbl { font-size: 11px; color: var(--muted); font-weight: 500; }
+.hud-stat b { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hud-stat .mrow { display: flex; align-items: baseline; gap: 8px; }
+.hud-stat .delta { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+.hud-stat .delta.pos { color: var(--ok); }
+.hud-stat .delta.neg { color: var(--danger); }
+#hud-pop-btn .stack { flex-direction: row; align-items: baseline; gap: 8px; }
+.ic-pop { color: #dfe7ee; }
+.ic-cash { color: var(--accent); }
+.ic-happy { color: var(--accent); }
+#hud-happy-btn[data-level=mid] .ic-happy { color: var(--warn); }
+#hud-happy-btn[data-level=bad] .ic-happy { color: var(--danger); }
+#hud-happy-btn[data-level=""] .ic-happy, #hud-happy-btn:not([data-level]) .ic-happy { color: var(--muted); }
+.hud-stat.soon { opacity: .55; cursor: default; }
+.hud-stat.soon .ic-weather { color: #ffd23f; }
+.hud-stat.soon .v { font-weight: 600; color: var(--muted); }
+.hud-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; padding-left: 10px; }
+.badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #ff4d4f; color: #fff;
+  font-size: 10.5px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px #0d1217; font-variant-numeric: tabular-nums; animation: pop .25s ease-out; }
+.hud-btn.active { color: #c9f7dc; }
+
+/* =========================== Barre latérale (tableaux de bord) =========================== */
+#sidebar { position: fixed; z-index: 15; left: max(10px, var(--safe-l)); top: calc(var(--hud-h) + 10px); width: 96px;
+  max-height: calc(100dvh - var(--hud-h) - 252px); overflow-y: auto; scrollbar-width: none;
+  display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: fade .35s ease-out; }
+#sidebar::-webkit-scrollbar { display: none; }
+#sidebar button { flex-direction: column; gap: 3px; min-height: 49px; padding: 5px 2px; border: 1px solid transparent; background: transparent; border-radius: 12px; position: relative; flex: 0 0 auto; }
+#sidebar button .tl { font-size: 11px; line-height: 1.15; text-align: center; color: #dbe3ea; white-space: nowrap; }
+#sidebar button svg.ic { width: 22px; height: 22px; color: #f1f5f8; }
+#sidebar button:hover:not(:disabled) { background: rgba(255,255,255,.07); }
+#sidebar button.active { background: linear-gradient(180deg, rgba(61,220,132,.3), rgba(34,184,100,.18)); border-color: rgba(61,220,132,.55); box-shadow: 0 0 16px rgba(61,220,132,.18); }
+#sidebar button.active svg.ic, #sidebar button.active .tl { color: #ffffff; }
+#sidebar button:disabled { opacity: .45; }
+#sidebar button .phase { position: absolute; top: 3px; right: 3px; font-size: 8.5px; padding: 0 3px; margin: 0; }
+#sidebar-scrim { display: none; }
+
+/* =========================== Bas d'écran =========================== */
+#bottom { position: fixed; z-index: 14; left: max(10px, var(--safe-l)); right: max(10px, var(--safe-r)); bottom: max(10px, var(--safe-b));
+  display: flex; align-items: flex-end; gap: 12px; pointer-events: none; }
+#bottom > * { pointer-events: auto; }
+
+/* Mini-carte */
+#minimap { flex: 0 0 auto; display: flex; gap: 6px; padding: 6px; background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: fade .35s ease-out; }
+.mm-map { position: relative; width: 196px; height: 196px; border-radius: 12px; overflow: hidden; background: #1c2a22; cursor: crosshair; touch-action: none;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.mm-map canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.mm-ctrl { display: flex; flex-direction: column; gap: 4px; justify-content: flex-start; }
+.mm-ctrl button { width: 36px; height: 30px; min-height: 30px; padding: 0; border-radius: 10px; background: rgba(255,255,255,.05); }
+.mm-ctrl button svg.ic { width: 18px; height: 18px; }
+.mm-ctrl button.active { color: #c9f7dc; }
+#mm-compass { transition: transform .2s ease-out; }
+#minimap.map-off .mm-map { display: none; }
+
+/* Colonne centrale : sous-barre, options d'outil, barre d'outils */
+#build-center { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+#build-center > * { pointer-events: auto; max-width: 100%; }
+
+#toolbar { display: flex; align-items: stretch; gap: 2px; padding: 6px; background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
+  overflow-x: auto; scrollbar-width: none; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: fade .35s ease-out; }
+#toolbar::-webkit-scrollbar { display: none; }
+#toolbar button { flex: 0 0 auto; position: relative; flex-direction: column; gap: 4px; width: 62px; min-height: 58px; padding: 7px 2px 6px; font-size: 11.5px; font-weight: 550;
+  border: 1px solid transparent; background: transparent; border-radius: 13px; white-space: nowrap; }
+#toolbar button svg.ic { width: 24px; height: 24px; color: var(--ic, #e9eef3); }
+#toolbar button .tl { line-height: 1; }
+#toolbar button:hover:not(:disabled) { background: rgba(255,255,255,.07); }
+#toolbar button.active { background: linear-gradient(180deg, rgba(61,220,132,.3), rgba(34,184,100,.16)); border-color: rgba(61,220,132,.7); box-shadow: var(--accent-glow); color: #fff; }
+#toolbar button.soon { opacity: .62; }
+#toolbar button.soon.active { opacity: 1; }
+#toolbar button.soon svg.ic { filter: saturate(.55); }
+#toolbar .phase { position: absolute; top: 2px; right: 3px; font-size: 8.5px; padding: 0 3px; margin: 0; line-height: 1.4; }
+.tb-sep { flex: 0 0 1px; align-self: stretch; margin: 8px 4px; background: var(--line-2); }
+
+.t-select { --ic: #e9eef3; } .t-zones { --ic: #4fd16f; } .t-road { --ic: #a9bdd1; } .t-building { --ic: #f2b45a; }
+.t-services { --ic: #ff7a7a; } .t-energy { --ic: #ffd23f; } .t-water { --ic: #4aa8ff; } .t-waste { --ic: #c4a874; }
+.t-transport { --ic: #4fd1e8; } .t-nature { --ic: #5fd38a; } .t-terrain { --ic: #d9b77a; } .t-demolish { --ic: #ff8f6b; } .t-undo { --ic: #c7ccd4; }
+.t-fin { --ic: #3ddc84; } .t-pop { --ic: #7cc4ff; } .t-city { --ic: #3ddc84; } .t-stats { --ic: #b49bff; } .t-notif { --ic: #ffd166; }
+
+/* Sous-barre contextuelle */
+#build-drawer { width: min(1040px, 100%); background: var(--glass-2); border: 1px solid var(--line); border-radius: 18px; display: flex; flex-direction: column;
+  max-height: 46vh; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: rise .22s ease-out; }
+.drawer-head { display: flex; align-items: center; gap: 10px; padding: 8px 8px 0 12px; min-width: 0; }
+.drawer-title { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13.5px; white-space: nowrap; }
+.drawer-title svg.ic { color: var(--ic); width: 20px; height: 20px; }
+.tabs { display: flex; gap: 5px; overflow-x: auto; flex: 1; scrollbar-width: none; min-width: 0; align-items: center; }
+.tabs::-webkit-scrollbar { display: none; }
+.chip-tab { white-space: nowrap; font-size: 12.5px; border-radius: 999px; padding: 4px 11px 4px 8px; min-height: 34px; gap: 6px; flex: 0 0 auto; }
+.chip-tab svg.ic { color: var(--ic); width: 18px; height: 18px; }
+.chip-tab .n { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip-tab.active { box-shadow: var(--accent-glow); }
+.drawer-note { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.drawer-body { display: flex; gap: 10px; padding: 10px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; }
+.card { flex: 0 0 auto; width: 140px; display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden; border-radius: 13px; text-align: left;
+  scroll-snap-align: start; background: rgba(255,255,255,.04); border-color: var(--line); }
+.card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ic, #3ddc84) 60%, transparent); }
+.card .thumb { width: 100%; aspect-ratio: 4 / 3; background: radial-gradient(ellipse at 50% 30%, #2a3644, #141a21); display: grid; place-items: center; color: var(--muted); font-size: 11px; position: relative; }
+.card .thumb::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--ic, transparent); opacity: .85; }
+.card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card .thumb .spin { width: 18px; height: 18px; border: 2px solid var(--line-2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; }
+.card .cap { padding: 7px 9px 8px; display: flex; flex-direction: column; gap: 2px; }
+.card .nm { font-size: 12px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 30px; }
+.card .ct { font-size: 12px; color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 600; }
+.card .sz { font-size: 11px; color: var(--muted); }
+.card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.card .badge { position: absolute; top: 6px; right: 6px; background: none; box-shadow: none; animation: none; min-width: 0; height: auto; padding: 0; line-height: 1; }
+.road-card { width: 168px; }
+.road-card .thumb { aspect-ratio: auto; height: 70px; }
+.road-svg { width: 100%; height: 100%; }
+.drawer-opts { display: flex; flex-direction: column; gap: 8px; padding-left: 6px; justify-content: center; flex: 0 0 auto; }
+.tile { flex: 0 0 auto; width: 104px; min-height: 96px; flex-direction: column; gap: 6px; padding: 10px 6px 8px; border-radius: 14px; background: rgba(255,255,255,.04); border-color: var(--line); position: relative; }
+.tile .tile-ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--ic) 45%, transparent), color-mix(in srgb, var(--ic) 14%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ic) 40%, transparent); }
+.tile .tile-ico svg.ic { width: 28px; height: 28px; color: var(--ic); }
+.tile .nm { font-size: 12px; font-weight: 600; text-align: center; line-height: 1.2; }
+.tile .phase { position: absolute; top: 5px; right: 5px; font-size: 9px; }
+.tile.soon:disabled { opacity: .62; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#tool-options { display: flex; gap: 10px; align-items: center; padding: 6px 8px 6px 14px; background: var(--glass-2); border: 1px solid var(--line); border-radius: 999px;
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: rise .2s ease-out; }
+body.drawer-open #tool-options, body.confirming #tool-options { display: none; }
+.tool-hint { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tool-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+.tool-actions button { min-height: 32px; padding: 4px 11px; font-size: 12px; border-radius: 999px; }
+
+/* Objectifs (phase 2C : panneau discret repliable) */
+#objectives { position: fixed; z-index: 13; right: max(10px, var(--safe-r)); bottom: calc(max(10px, var(--safe-b)) + 86px); width: 250px;
+  background: var(--glass); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); overflow: hidden; }
+#obj-toggle { width: 100%; justify-content: flex-start; gap: 8px; border: 0; background: transparent; min-height: 42px; padding: 8px 12px; border-radius: 0; }
+#obj-toggle svg.ic { color: var(--warn); }
+#obj-toggle .obj-t { font-weight: 700; flex: 1; text-align: left; }
+#obj-toggle .chev { color: var(--muted); width: 16px; height: 16px; transition: transform .2s; transform: rotate(-90deg); }
+#objectives.open #obj-toggle .chev { transform: none; }
+.obj-body { padding: 0 14px 12px; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+@media (min-width: 1400px) {
+  #bottom { right: calc(max(10px, var(--safe-r)) + 262px); }
+  #objectives { bottom: max(10px, var(--safe-b)); }
+}
+
+/* =========================== Panneaux (à droite) =========================== */
+.panel { position: fixed; z-index: 16; right: max(10px, var(--safe-r)); top: calc(var(--hud-h) + 10px); width: min(380px, calc(100vw - 24px));
+  max-height: calc(100dvh - var(--hud-h) - 108px); display: flex; flex-direction: column; overflow: hidden;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); animation: panel-in .24s cubic-bezier(.2,.8,.2,1); }
+.panel-head { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 10px 10px 14px; }
+.ph-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ph-ico { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: 0 0 auto;
+  background: color-mix(in srgb, var(--ic, #3ddc84) 18%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ic, #3ddc84) 35%, transparent); }
+.ph-ico svg.ic { color: var(--ic, #3ddc84); width: 21px; height: 21px; }
+.panel-head h3 { margin: 1px 0 0; font-size: 17px; font-weight: 700; line-height: 1.2; letter-spacing: .005em; }
+.kicker { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+.panel-btns { display: flex; gap: 4px; flex: 0 0 auto; }
+.panel-btns .icon-btn { background: transparent; border-color: transparent; }
+.panel-btns .icon-btn svg.ic { width: 18px; height: 18px; }
+.fold svg.ic { transition: transform .2s; }
+.panel.folded .fold svg.ic { transform: rotate(-90deg); }
+.panel-body { flex: 1 1 auto; min-height: 0; padding: 10px 14px 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; }
+.panel.folded .panel-body, .panel.folded .ptabs { display: none; }
+/* Onglets : grille à colonnes égales, libellés jamais tronqués (retour à la ligne si besoin). */
+.ptabs { display: grid; grid-template-columns: repeat(var(--n, 4), minmax(0, 1fr)); gap: 3px; margin: 0 12px; padding: 3px; border-radius: 12px; background: rgba(0,0,0,.25); border: 1px solid var(--line); }
+.ptabs button { min-height: 34px; padding: 4px 4px; font-size: 13px; font-weight: 600; border: 0; background: transparent; border-radius: 9px; white-space: normal; line-height: 1.15; text-align: center; color: #c5d0da; }
+.ptabs button.active { background: linear-gradient(180deg, rgba(61,220,132,.34), rgba(34,184,100,.2)); color: #fff; box-shadow: inset 0 0 0 1px rgba(61,220,132,.55); }
+#dash-tabs { --n: 2; }
+.info-thumb { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 12px; background: #161b22; }
+.rows { display: grid; grid-template-columns: 1fr auto; gap: 7px 12px; margin: 0; font-size: 13px; }
+.rows dt { color: var(--muted); }
+.rows dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.panel-actions button { flex: 1; min-height: 40px; }
+.fpage { display: flex; flex-direction: column; gap: 10px; }
+.chart-title .muted { display: block; font-size: 11px; }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpis3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kpi { display: flex; flex-direction: column; gap: 1px; padding: 7px 11px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--line); min-width: 0; }
+.kpi .lbl { font-size: 11px; color: var(--muted); }
+.kpi b { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi.neg b { color: var(--danger); }
+/* Grand livre recettes / dépenses */
+.ledger { display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: rgba(0,0,0,.14); }
+.lg-head { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-weight: 700; font-size: 13.5px; }
+.lg-head b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.lg-head svg.ic { width: 18px; height: 18px; }
+.lg-head.inc { background: linear-gradient(90deg, rgba(61,220,132,.24), rgba(61,220,132,.08)); color: #d6fbe6; }
+.lg-head.inc svg.ic, .lg-head.inc b { color: var(--accent); }
+.lg-head.exp { background: linear-gradient(90deg, rgba(255,107,107,.24), rgba(255,107,107,.07)); color: #ffe0e0; }
+.lg-head.exp svg.ic, .lg-head.exp b { color: #ff8a8a; }
+.lg-rows { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; margin: 0; padding: 4px 12px 6px; font-size: 12.5px; }
+.lg-rows dt { display: flex; align-items: center; gap: 8px; color: #d2dbe3; padding: 3px 0; min-width: 0; }
+.lg-rows dt svg.ic { width: 16px; height: 16px; color: var(--muted); }
+.lg-rows dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; padding: 3px 0; white-space: nowrap; }
+.lg-total { display: flex; align-items: center; padding: 10px 12px; font-weight: 700; border-top: 1px solid var(--line); background: rgba(61,220,132,.1); }
+.lg-total b { margin-left: auto; color: var(--accent); font-size: 15px; font-variant-numeric: tabular-nums; }
+.lg-total.neg { background: rgba(255,107,107,.1); }
+.lg-total.neg b { color: var(--danger); }
+.chart-wrap { position: relative; border: 1px solid var(--line); border-radius: 14px; padding: 10px; background: rgba(0,0,0,.18); }
+.chart-title { font-size: 12.5px; font-weight: 600; margin-bottom: 6px; }
+.chart-title .muted { font-weight: 400; }
+canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
+#fin-month-chart { height: 150px; }
+#stats-chart { height: 200px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: var(--muted); margin-top: 6px; }
+.legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.legend .lg-bar::before { background: var(--accent); }
+.legend .lg-line::before { height: 3px; vertical-align: 2px; background: var(--accent-2); }
+.chart-tip { position: absolute; pointer-events: none; background: var(--panel-solid); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 8px; font-size: 12px; white-space: nowrap; transform: translate(-50%, -110%); }
+.lastmonth .rows { margin-top: 6px; }
+.city-hero { display: flex; flex-direction: column; gap: 2px; }
+.city-hero b { font-size: 20px; font-weight: 750; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { min-height: 36px; padding: 6px 11px; border-radius: 999px; font-size: 12.5px; gap: 6px; }
+.chip svg.ic { width: 17px; height: 17px; color: var(--accent); }
+.mod-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.mod-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; opacity: .8; }
+.notif-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.notif-list li { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.035); border: 1px solid var(--line); font-size: 12.5px; }
+.notif-list .nico svg.ic { width: 18px; height: 18px; color: var(--accent-2); }
+.notif-list li.error .nico svg.ic { color: var(--danger); }
+.notif-list li.ok .nico svg.ic { color: var(--ok); }
+.notif-list .ntime { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* Finances : impôts, emprunts ; barres */
+.sec-title { font-size: 12.5px; font-weight: 650; color: var(--text); }
+.sec-title .muted { font-weight: 400; }
+.tax-grid { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; font-size: 13px; }
+.tax-grid input[type=range] { width: 100%; accent-color: var(--accent); min-height: 28px; }
+.tax-grid .rate { font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: right; font-weight: 600; }
+.tax-grid .inc { grid-column: 2 / 4; color: var(--muted); font-size: 11.5px; margin-top: -6px; text-align: right; }
+.loan-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12.5px; }
+.loan-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
+.loan-form input, .loan-form select { min-height: 38px; font: inherit; color: var(--text); background: rgba(0,0,0,.28); border: 1px solid var(--line-2); border-radius: 9px; padding: 6px 9px; width: 100%; }
+.loan-offer { grid-column: 1 / 3; font-size: 12px; }
+.loan-form button { grid-column: 1 / 3; min-height: 40px; }
+.loan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+.loan-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 9px; }
+.loan-list li button { min-height: 32px; font-size: 12px; }
+.demand-bars, .act-bars, .age-bars { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.bar-row { display: grid; grid-template-columns: minmax(96px, 42%) 1fr auto; gap: 8px; align-items: center; }
+.bar-row .k { overflow-wrap: anywhere; }
+.bar-row .track { position: relative; height: 8px; border-radius: 4px; background: rgba(255,255,255,.07); overflow: hidden; }
+.bar-row .fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg, var(--accent-strong), var(--accent)); transition: width .3s ease, left .3s ease; }
+.bar-row .fill.neg { background: var(--danger); }
+.bar-row .fill.pos { background: var(--ok); }
+.bar-row .track.center::after { content: ''; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--line-2); }
+.bar-row .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
+
+/* ---------- Tactile, étiquettes, infobulles, notifications ---------- */
+#touch-confirm { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tb-h) + 10px); z-index: 21; display: flex; gap: 8px;
+  padding: 8px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 18px; box-shadow: var(--shadow); }
+#touch-confirm button { min-height: 52px; min-width: 52px; font-size: 16px; border-radius: 14px; }
+#touch-confirm #tc-ok { font-size: 15px; padding: 0 22px; }
+#cursor-tag { position: fixed; z-index: 22; pointer-events: none; background: rgba(10,14,18,.92); border: 1px solid var(--line-2); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 5px 9px; font-size: 12px; white-space: pre; transform: translate(16px, 14px); font-variant-numeric: tabular-nums; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+#cursor-tag.ok { border-left-color: var(--ok); }
+#cursor-tag.error { border-left-color: var(--danger); color: #ffd0d0; }
+#cursor-tag.pending { border-left-color: var(--warn); }
+#cursor-tag.info { border-left-color: var(--accent-2); }
+#tooltip { position: fixed; z-index: 50; pointer-events: none; background: var(--panel-solid); border: 1px solid var(--line-2); border-radius: 9px; padding: 6px 10px;
+  font-size: 12px; max-width: 280px; box-shadow: 0 8px 24px rgba(0,0,0,.4); animation: fade .12s ease-out; }
+#toasts { position: fixed; right: max(16px, var(--safe-r)); bottom: calc(max(12px, var(--safe-b)) + 150px); display: flex; flex-direction: column; gap: 8px; z-index: 30;
+  max-width: min(360px, calc(100vw - 32px)); pointer-events: none; }
+.toast { background: var(--glass-2); border: 1px solid var(--line); border-left: 3px solid var(--accent-2); border-radius: 12px; padding: 9px 12px; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+  display: flex; gap: 9px; align-items: flex-start; animation: toast-in .2s ease-out; pointer-events: auto; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); font-size: 13px; }
+.toast .tico svg.ic { width: 18px; height: 18px; color: var(--accent-2); }
+.toast.error { border-left-color: var(--danger); }
+.toast.error .tico svg.ic { color: var(--danger); }
+.toast.ok { border-left-color: var(--ok); }
+.toast.ok .tico svg.ic { color: var(--ok); }
+.toast.out { opacity: 0; transform: translateX(12px); transition: opacity .25s, transform .25s; }
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes panel-in { from { opacity: 0; transform: translateX(14px); } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(24px); } }
+@keyframes drop-in { from { opacity: 0; transform: translateY(-10px); } }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes slide-r { from { opacity: 0; transform: translateX(-10px); } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { transform: scale(.6); } }
+
+/* Écrans de bureau étroits : légendes plus courtes. */
+@media (max-width: 1280px) and (min-width: 761px) {
+  .hud-stat { padding: 2px 9px; }
+  .hud-brand { padding-right: 8px; }
+  #hud .speed { margin: 0 6px; }
+  .hud-time { padding: 0 9px; }
+  .hud-time .day { font-size: 13px; }
+  #hud-weather { display: none; }
+  .mm-map { width: 160px; height: 160px; }
+  #toolbar button { width: 60px; font-size: 11px; }
+}
+@media (max-width: 1080px) and (min-width: 761px) {
+  .brand-txt .game { display: none; }
+  .hud-stat .lbl { display: none; }
+}
+
+/* =========================== Téléphone et tactile =========================== */
+@media (pointer: coarse) {
+  button { min-height: 40px; }
+  .seg button, .icon-btn { min-width: 40px; min-height: 40px; }
+  .tool-actions button { min-height: var(--tap); }
+  .slot button { min-height: var(--tap); }
+  .mm-ctrl button { min-height: 40px; height: 40px; width: 40px; }
+  .ptabs button { min-height: 40px; }
+  .chip { min-height: 40px; }
+}
+
+/* Téléphone portrait (et fenêtres étroites) */
+@media (max-width: 760px) {
+  #hud { flex-wrap: wrap; row-gap: 5px; column-gap: 4px; padding: max(6px, var(--safe-t)) max(8px, var(--safe-r)) 6px max(8px, var(--safe-l)); }
+  #btn-sidebar { display: inline-flex; order: 0; }
+  .hud-brand { order: 1; flex: 1 1 calc(100% - 240px); padding: 0 2px 0 4px; gap: 7px; }
+  .hud-brand .logo { width: 28px; height: 28px; }
+  .brand-txt .game { font-size: 14px; }
+  .brand-txt .city { max-width: 100%; font-size: 11px; }
+  .hud-actions { order: 2; margin-left: 0; padding-left: 0; gap: 4px; }
+  .hud-btn { width: 42px; height: 42px; }
+  #hud-pop-btn { order: 3; } #hud-happy-btn { order: 4; } #hud-money-btn { order: 5; }
+  #hud > .hud-stat { flex: 1 1 30%; min-width: 0; border-left: 0; padding: 3px 6px; min-height: 44px; gap: 6px; border-radius: 12px; background: rgba(255,255,255,.045); justify-content: flex-start; }
+  #hud-weather { display: none !important; }
+  #hud > #hud-pop-btn, #hud > #hud-happy-btn { flex: 1 1 22%; }
+  /* Trésorerie : carte plus large et marge intérieure à droite, le montant ne touche plus le bord de l'écran. */
+  #hud > #hud-money-btn { flex: 2 1 44%; padding-right: 10px; overflow: hidden; }
+  #hud-money-btn .mrow { min-width: 0; }
+  #hud-money { font-size: 13px; white-space: nowrap; }
+  .hud-stat .per { display: none; }
+  .hud-stat svg.ic { width: 22px; height: 22px; }
+  .hud-stat b { font-size: 14px; }
+  .hud-stat .lbl { display: none; }
+  #hud-pop-btn .stack { flex-direction: column; align-items: flex-start; gap: 0; }
+  .hud-stat .mrow { flex-direction: column; align-items: flex-start; gap: 0; }
+  .hud-stat .delta { font-size: 11px; }
+  #hud-date { order: 6; flex: 0 0 auto; flex-direction: column; align-items: flex-start; gap: 0; padding: 0 6px 0 2px; border-left: 0; line-height: 1.15; }
+  .hud-time .day { font-size: 12px; font-weight: 600; color: #cfd8e1; }
+  .hud-time .clock { font-size: 15px; }
+  #hud .speed { order: 7; flex: 1 1 236px; margin: 0; display: flex; }
+  #hud .speed button { flex: 1 1 0; min-width: 40px; min-height: 42px; padding: 2px; }
+
+  /* Barre latérale en tiroir */
+  #sidebar { top: var(--hud-h); left: 0; bottom: 0; max-height: none; width: min(260px, 78vw); border-radius: 0 18px 18px 0; padding: 10px 8px max(10px, var(--safe-b)) max(8px, var(--safe-l));
+    transform: translateX(-104%); visibility: hidden; transition: transform .25s cubic-bezier(.2,.8,.2,1), visibility 0s .25s; animation: none; z-index: 24; gap: 4px; }
+  body.sidebar-open #sidebar { transform: none; visibility: visible; transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+  #sidebar button { flex-direction: row; justify-content: flex-start; gap: 12px; min-height: 46px; padding: 8px 12px; }
+  #sidebar button .tl { font-size: 14px; text-align: left; }
+  #sidebar button .phase { position: static; margin-left: auto; font-size: 10px; padding: 0 5px; }
+  body.sidebar-open #sidebar-scrim { display: block; position: fixed; inset: var(--hud-h) 0 0 0; z-index: 23; background: rgba(4,7,10,.5); animation: fade .2s; }
+
+  /* Bas d'écran : outils sur 2 rangées de 7, mini-carte en rangée de commandes au-dessus. */
+  #bottom { left: max(6px, var(--safe-l)); right: max(6px, var(--safe-r)); bottom: max(6px, var(--safe-b)); flex-direction: column; align-items: stretch; gap: 6px; }
+  #build-center { order: 2; width: 100%; align-items: stretch; gap: 6px; }
+  #minimap { order: 1; align-self: flex-start; flex-direction: column; padding: 4px; gap: 4px; border-radius: 14px; }
+  .mm-ctrl { flex-direction: row; gap: 4px; }
+  .mm-ctrl button { width: 40px; height: 40px; min-height: 40px; }
+  .mm-map { width: 168px; height: 168px; }
+  body.drawer-open #minimap, body.tool-opts #minimap, body.confirming #minimap { display: none; }
+  #toolbar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; padding: 4px; border-radius: 16px; overflow: visible; }
+  #toolbar .tb-sep { display: none; }
+  #toolbar button { width: auto; min-width: 0; min-height: 50px; padding: 6px 1px 4px; font-size: 9.5px; gap: 3px; letter-spacing: -0.01em; }
+  #toolbar button svg.ic { width: 21px; height: 21px; }
+  #toolbar button .tl { max-width: 100%; overflow: hidden; text-overflow: clip; }
+  /* Libellé le plus long de la barre : resserré pour tenir entier dans sa colonne (iPhone SE compris). */
+  #toolbar button[data-cat=transport] .tl { font-size: 9px; letter-spacing: -0.045em; }
+  #toolbar .phase { font-size: 7.5px; top: 1px; right: 1px; padding: 0 2px; }
+  #build-drawer { width: 100%; max-height: 40dvh; border-radius: 16px; }
+  .drawer-head { padding: 6px 6px 0 10px; flex-wrap: wrap; row-gap: 4px; }
+  .drawer-head .tabs { order: 3; flex-basis: 100%; }
+  .drawer-title { flex: 1; }
+  .card { width: 118px; }
+  .road-card { width: 140px; }
+  .tile { width: 92px; min-height: 88px; }
+  #tool-options { border-radius: 14px; flex-wrap: wrap; justify-content: center; padding: 6px; }
+  .tool-hint { flex-basis: 100%; text-align: center; white-space: normal; }
+  #objectives { display: none !important; }
+
+  /* Panneaux : feuille glissante pleine largeur entre la barre du haut et les outils. */
+  .panel { left: max(4px, var(--safe-l)); right: max(4px, var(--safe-r)); width: auto; top: calc(var(--hud-h) + 6px); bottom: calc(var(--tb-h) + 6px); max-height: none;
+    border-radius: 20px; animation: sheet-in .26s cubic-bezier(.2,.8,.2,1); }
+  .panel.folded { bottom: auto; }
+  .panel-head { padding: 10px 8px 8px 12px; }
+  .panel-head h3 { font-size: 16px; }
+  .panel-head::before { content: ''; position: absolute; left: 50%; top: 5px; width: 38px; height: 4px; margin-left: -19px; border-radius: 2px; background: rgba(255,255,255,.22); }
+  .kpis3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row2 { grid-template-columns: 1fr; }
+  .brand { font-size: 24px; }
+  #toasts { left: 50%; right: auto; transform: translateX(-50%); width: calc(100vw - 32px); top: calc(var(--hud-h) + 8px); bottom: auto; }
+  #cursor-tag { transform: translate(-50%, 30px); }
+  #touch-confirm { bottom: calc(var(--tb-h) + 8px); }
+}
+@media (max-width: 380px) {
+  .hud-brand .logo { display: none; }
+  #toolbar button { font-size: 9px; }
+}
+
+/* Téléphone en paysage (écran bas) : barre supérieure sur une rangée, outils sur une rangée. */
+@media (max-height: 500px) and (orientation: landscape) {
+  #hud { flex-wrap: nowrap; min-height: 0; padding: max(4px, var(--safe-t)) max(6px, var(--safe-r)) 4px max(6px, var(--safe-l)); gap: 2px; }
+  #btn-sidebar { display: inline-flex; }
+  .hud-brand { padding: 0 4px; flex: 0 1 auto; min-width: 0; }
+  .hud-brand { display: none; }
+  #hud .speed { margin: 0 4px; }
+  #hud .speed button { min-width: 40px; min-height: 40px; padding: 2px 4px; }
+  .hud-time { flex-direction: column; align-items: flex-start; gap: 0; padding: 0 6px; line-height: 1.1; }
+  .hud-time .day { font-size: 11px; } .hud-time .clock { font-size: 13px; }
+  #hud-weather { display: none !important; }
+  .hud-stat { padding: 0 5px; gap: 4px; min-height: 40px; }
+  .hud-stat svg.ic { width: 20px; height: 20px; }
+  .hud-stat .lbl, .hud-stat .delta { display: none; }
+  .hud-stat b { font-size: 13px; }
+  .hud-actions { gap: 3px; padding-left: 4px; }
+  .hud-btn { width: 40px; height: 40px; min-height: 40px; }
+  #sidebar { top: var(--hud-h); left: 0; bottom: 0; max-height: none; width: 240px; border-radius: 0 16px 16px 0; transform: translateX(-104%); visibility: hidden; animation: none; z-index: 24;
+    transition: transform .25s, visibility 0s .25s; }
+  body.sidebar-open #sidebar { transform: none; visibility: visible; transition: transform .25s; }
+  #sidebar button { flex-direction: row; justify-content: flex-start; gap: 10px; min-height: 42px; padding: 6px 10px; }
+  #sidebar button .tl { font-size: 13px; }
+  #sidebar button .phase { position: static; margin-left: auto; }
+  body.sidebar-open #sidebar-scrim { display: block; position: fixed; inset: var(--hud-h) 0 0 0; z-index: 23; background: rgba(4,7,10,.45); }
+  #bottom { bottom: max(4px, var(--safe-b)); gap: 6px; }
+  #minimap { position: fixed; left: max(6px, var(--safe-l)); bottom: calc(var(--tb-h) + 6px); padding: 4px; flex-direction: column; gap: 4px; }
+  .mm-map { width: 120px; height: 120px; }
+  .mm-ctrl { flex-direction: row; }
+  .mm-ctrl button { width: 40px; height: 40px; min-height: 40px; }
+  body.drawer-open #minimap, body.tool-opts #minimap, body.confirming #minimap, body.sheet-open #minimap { display: none; }
+  #toolbar { padding: 3px; }
+  #toolbar button { width: 54px; min-height: 46px; padding: 4px 1px 3px; font-size: 9.5px; gap: 2px; }
+  #toolbar button svg.ic { width: 19px; height: 19px; }
+  #toolbar .tb-sep { margin: 6px 2px; }
+  #build-drawer { max-height: 52dvh; }
+  .card { width: 112px; }
+  #objectives { display: none !important; }
+  .panel { top: calc(var(--hud-h) + 4px); bottom: calc(var(--tb-h) + 4px); max-height: none; width: min(400px, 58vw); }
+  #toasts { bottom: auto; top: calc(var(--hud-h) + 8px); }
+  #touch-confirm { bottom: calc(var(--tb-h) + 6px); }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+<canvas id="scene" aria-label="Vue 3D de la ville"></canvas>
+
+<div id="loading" class="overlay" role="status" aria-live="polite">
+  <div class="loading-card">
+    <div class="brand"><i data-icon="logo" class="brand-logo"></i><span>Meknes City</span></div>
+    <div class="progress"><div id="loading-bar"></div></div>
+    <div id="loading-text">Initialisation…</div>
+  </div>
+</div>
+
+<div id="main-menu" class="overlay hidden">
+  <div class="menu-card">
+    <section class="menu-screen" data-screen="home">
+      <h1 class="brand"><i data-icon="logo" class="brand-logo"></i><span>Meknes City</span></h1>
+      <p class="tagline">Bâtissez la ville de vos rêves</p>
+      <button id="btn-new" class="primary"><i data-icon="star"></i>Nouvelle partie</button>
+      <button id="btn-new-demo" class="hidden"><i data-icon="logo"></i>Nouvelle partie (ville de départ)</button>
+      <button id="btn-continue"><i data-icon="play"></i>Continuer</button>
+      <button id="btn-load" class="hidden"><i data-icon="save"></i>Charger une partie</button>
+      <button id="btn-demo" disabled title="Scène de démonstration — Phase 1"><i data-icon="eye"></i>Scène de démonstration <span class="phase">Phase 1</span></button>
+      <button id="btn-options" class="hidden"><i data-icon="gear"></i>Options</button>
+      <button id="btn-quit" class="hidden"><i data-icon="close"></i>Quitter la partie</button>
+      <p class="menu-foot" id="menu-foot"></p>
+    </section>
+
+    <section class="menu-screen hidden" data-screen="new">
+      <h2>Nouvelle partie</h2>
+      <form id="form-new" class="form">
+        <label>Nom de la ville<input id="new-name" name="cityName" maxlength="40" value="Nouvelle-Aube" required autocomplete="off"></label>
+        <div class="row2">
+          <label>Taille de la carte
+            <select id="new-size" name="mapChunks">
+              <option value="4">Petite — 1 km</option>
+              <option value="8" selected>Moyenne — 2 km</option>
+              <option value="12">Grande — 3 km</option>
+              <option value="16">Immense — 4 km</option>
+            </select>
+          </label>
+          <label>Budget de départ
+            <select id="new-money" name="startMoney">
+              <option value="250000">Serré — 250 000 CHF</option>
+              <option value="500000" selected>Normal — 500 000 CHF</option>
+              <option value="2000000">Confortable — 2 000 000 CHF</option>
+              <option value="20000000">Bac à sable — 20 000 000 CHF</option>
+            </select>
+          </label>
+        </div>
+        <label>Graine du relief
+          <span class="inline"><input id="new-seed" name="seed" inputmode="numeric" pattern="-?[0-9]{1,10}" required autocomplete="off"><button type="button" id="new-seed-dice" class="icon-btn" title="Graine aléatoire" aria-label="Graine aléatoire"><i data-icon="undo"></i></button></span>
+        </label>
+        <div class="form-actions">
+          <button type="button" data-back>Retour</button>
+          <button type="submit" class="primary">Fonder la ville</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="menu-screen hidden" data-screen="load">
+      <h2>Charger une partie</h2>
+      <ul id="load-list" class="slot-list" aria-label="Sauvegardes"></ul>
+      <div class="form-actions"><button type="button" data-back>Retour</button></div>
+    </section>
+
+    <section class="menu-screen hidden" data-screen="options">
+      <h2>Options graphiques</h2>
+      <form id="form-options" class="form">
+        <label>Qualité d'image
+          <select name="quality"><option value="auto">Auto (allégée sur téléphone)</option><option value="basse">Basse (résolution réduite)</option><option value="moyenne">Moyenne</option><option value="haute">Haute (écran Retina)</option></select>
+        </label>
+        <label>Ombres
+          <select name="shadows"><option value="off">Désactivées</option><option value="low">Douces 1K</option><option value="high">Fines 2K</option><option value="ultra">Très fines 4K</option></select>
+        </label>
+        <label>Distance d'affichage <output id="opt-dist-out"></output>
+          <input type="range" name="viewDistance" min="1500" max="8000" step="250">
+        </label>
+        <p class="hint">Les réglages s'appliquent immédiatement et sont mémorisés dans ce navigateur.</p>
+        <div class="form-actions"><button type="button" data-back>Retour</button></div>
+      </form>
+    </section>
+  </div>
+</div>
+
+<!-- ======================= Barre supérieure ======================= -->
+<header id="hud" class="hidden">
+  <button id="btn-sidebar" class="hud-btn" aria-label="Tableaux de bord" aria-expanded="false" data-tip="Tableaux de bord"><i data-icon="sidebar"></i></button>
+  <div class="hud-brand">
+    <i data-icon="logo" class="logo"></i>
+    <div class="brand-txt"><span class="game">Meknes City</span><span id="hud-city" class="city"></span></div>
+  </div>
+  <div class="seg speed" role="group" aria-label="Vitesse">
+    <button data-speed="0" data-tip="Pause (Espace)" aria-label="Pause"><i data-icon="pause"></i></button>
+    <button data-speed="1" data-tip="Vitesse ×1 (touche 1)" aria-label="Vitesse 1"><i data-icon="play"></i></button>
+    <button data-speed="2" data-tip="Vitesse ×2 (touche 2)" aria-label="Vitesse 2" class="spd-x">×2</button>
+    <button data-speed="4" data-tip="Vitesse ×4 (touche 3)" aria-label="Vitesse 4" class="spd-x">×4</button>
+    <button data-speed="8" class="spd-x" data-tip="Vitesse ×8 (touche 4) — un mois de jeu en 9 min" aria-label="Vitesse 8">×8</button>
+    <button data-speed="16" class="spd-x" data-tip="Vitesse ×16 (touche 5) — un mois de jeu en 4 min 30" aria-label="Vitesse 16">×16</button>
+  </div>
+  <div id="hud-date" class="hud-time" data-tip="Date de la partie (calendrier de 30 jours par mois)"><span id="hud-day" class="day"></span><span id="hud-clock" class="clock"></span></div>
+  <div id="hud-weather" class="hud-stat soon" data-tip="Météo simulée : phase 2C (atmosphère, saisons). Aucune valeur affichée tant qu'elle n'est pas simulée." aria-disabled="true">
+    <i data-icon="sun" class="ic-weather"></i><span class="v">—</span><span class="phase">2C</span>
+  </div>
+  <button id="hud-pop-btn" class="hud-stat" data-tip="Habitants — ouvrir le tableau de bord Population (emploi, trajets, demande)" aria-label="Population">
+    <i data-icon="people" class="ic-pop"></i><span class="stack"><b id="hud-pop">—</b><small id="hud-pop-delta" class="delta"></small></span>
+  </button>
+  <button id="hud-happy-btn" class="hud-stat" data-tip="Satisfaction des habitants (bonheur moyen simulé, 0 à 100) — ouvrir Population" aria-label="Satisfaction">
+    <i data-icon="smile" class="ic-happy" id="hud-happy-ico"></i><span class="stack"><small class="lbl">Satisfaction</small><b id="hud-happy">—</b></span>
+  </button>
+  <button id="hud-money-btn" class="hud-stat" data-tip="Trésorerie et solde mensuel prévisionnel — ouvrir les finances" aria-label="Trésorerie">
+    <i data-icon="cash" class="ic-cash"></i><span class="stack"><small class="lbl">Trésorerie</small><span class="mrow"><b id="hud-money">—</b><small id="hud-balance" class="delta"></small></span></span>
+  </button>
+  <div class="hud-actions">
+    <button id="btn-stats" class="hud-btn" data-tip="Statistiques mensuelles (population, trésorerie, satisfaction, emploi)" aria-label="Statistiques"><i data-icon="stats"></i></button>
+    <button id="btn-notif" class="hud-btn" data-tip="Notifications" aria-label="Notifications"><i data-icon="bell"></i><span id="notif-badge" class="badge hidden">0</span></button>
+    <button id="btn-save" class="hud-btn" data-tip="Sauvegarder (emplacements locaux)" aria-label="Sauvegarder"><i data-icon="save"></i></button>
+    <button id="btn-menu" class="hud-btn" data-tip="Menu et réglages (Échap)" aria-label="Menu et réglages"><i data-icon="gear"></i></button>
+  </div>
+</header>
+
+<!-- ======================= Barre latérale : tableaux de bord ======================= -->
+<nav id="sidebar" class="hidden" aria-label="Tableaux de bord">
+  <button data-dash="city" data-tip="Vue ville : synthèse, caméra, modules"><i data-icon="home"></i><span class="tl">Vue ville</span></button>
+  <button id="btn-finance" data-dash="finance" data-tip="Finances municipales : recettes, dépenses, impôts, budget, dette"><i data-icon="finance"></i><span class="tl">Finances</span></button>
+  <button id="btn-population" data-dash="population" data-tip="Population : habitants, emploi, demande, âges"><i data-icon="people"></i><span class="tl">Population</span></button>
+  <button data-dash="services" data-tip="Services publics : couverture par service, équipements"><i data-icon="services"></i><span class="tl">Services</span></button>
+  <button data-dash="energy" disabled data-tip="Énergie (production, consommation, réseau) : phase 2B"><i data-icon="energy"></i><span class="tl">Énergie</span><span class="phase">2B</span></button>
+  <button data-dash="water" disabled data-tip="Eau et égouts (captage, traitement, assainissement) : phase 2B"><i data-icon="water"></i><span class="tl">Eau &amp; égouts</span><span class="phase">2B</span></button>
+  <button data-dash="waste" disabled data-tip="Déchets (collecte, tri, recyclage) : phase 2B"><i data-icon="waste"></i><span class="tl">Déchets</span><span class="phase">2B</span></button>
+  <button data-dash="transport" data-tip="Transports : trafic, réseau routier, modules circulation et piétons"><i data-icon="transport"></i><span class="tl">Transports</span></button>
+  <button data-dash="environment" data-tip="Environnement : pollution, attractivité, espaces verts"><i data-icon="leaf"></i><span class="tl">Environnement</span></button>
+  <button data-dash="policy" disabled data-tip="Politiques publiques, élections, subventions : phase 2C"><i data-icon="policy"></i><span class="tl">Politiques</span><span class="phase">2C</span></button>
+  <button data-dash="research" disabled data-tip="Recherche et progression : phase 2C"><i data-icon="research"></i><span class="tl">Recherche</span><span class="phase">2C</span></button>
+</nav>
+<div id="sidebar-scrim" class="hidden"></div>
+
+<!-- ======================= Bas d'écran : mini-carte, outils, objectifs ======================= -->
+<div id="bottom" class="hidden">
+  <div id="minimap" aria-label="Mini-carte">
+    <div id="mm-map" class="mm-map" data-tip="Mini-carte : cliquer pour centrer la caméra">
+      <canvas id="mm-canvas" width="180" height="180" aria-label="Mini-carte de la ville" role="img"></canvas>
+      <canvas id="mm-view" width="180" height="180" aria-hidden="true"></canvas>
+    </div>
+    <div class="mm-ctrl">
+      <button id="btn-camera" data-tip="Basculer vue aérienne / vue rue (touche V)" aria-label="Basculer la caméra"><i data-icon="walk"></i><span class="tl sr">Vue rue</span></button>
+      <button id="mm-zoom-in" data-tip="Zoom avant" aria-label="Zoom avant"><i data-icon="zoomIn"></i></button>
+      <button id="mm-zoom-out" data-tip="Zoom arrière" aria-label="Zoom arrière"><i data-icon="zoomOut"></i></button>
+      <button id="mm-north" data-tip="Orientation : remettre le nord en haut (touche N)" aria-label="Orientation nord"><i data-icon="compass" id="mm-compass"></i></button>
+      <button id="btn-cinematic" data-tip="Survol cinématique (touche C)" aria-pressed="false" aria-label="Survol cinématique"><i data-icon="plane"></i><span class="tl sr">Survol</span></button>
+      <button id="mm-toggle" data-tip="Afficher / masquer la mini-carte" aria-label="Mini-carte" aria-pressed="true"><i data-icon="map"></i></button>
+    </div>
+  </div>
+
+  <div id="build-center">
+    <div id="build-drawer" class="hidden" role="region" aria-label="Sous-barre de construction">
+      <div class="drawer-head">
+        <span id="drawer-title" class="drawer-title"></span>
+        <div id="drawer-tabs" class="tabs" role="tablist"></div>
+        <button id="drawer-close" class="icon-btn" aria-label="Fermer la sous-barre" data-tip="Fermer"><i data-icon="close"></i></button>
+      </div>
+      <div id="drawer-body" class="drawer-body"></div>
+    </div>
+    <div id="tool-options" class="hidden" aria-live="polite">
+      <span id="tool-hint" class="tool-hint"></span>
+      <span id="tool-actions" class="tool-actions"></span>
+    </div>
+    <nav id="toolbar" class="hidden" aria-label="Outils de construction">
+      <button data-tool="select" class="active t-select" disabled data-tip="Sélection : cliquer un bâtiment, une route ou un véhicule"><i data-icon="cursor"></i><span class="tl">Sélection</span></button>
+      <span class="tb-sep" aria-hidden="true"></span>
+      <button data-cat="zones" class="t-zones soon" disabled data-tip="Zonage résidentiel, commercial, industriel, bureaux, agricole : phase 2B"><i data-icon="zones"></i><span class="tl">Zones</span><span class="phase">2B</span></button>
+      <button data-tool="road" class="t-road" disabled data-tip="Routes"><i data-icon="road"></i><span class="tl">Routes</span></button>
+      <button data-tool="building" class="t-building" disabled data-tip="Bâtiments"><i data-icon="building"></i><span class="tl">Bâtiments</span></button>
+      <button data-cat="services" class="t-services" disabled data-tip="Services publics"><i data-icon="services"></i><span class="tl">Services</span></button>
+      <button data-cat="energy" class="t-energy soon" disabled data-tip="Énergie : phase 2B"><i data-icon="energy"></i><span class="tl">Énergie</span><span class="phase">2B</span></button>
+      <button data-cat="water" class="t-water soon" disabled data-tip="Eau et assainissement : phase 2B"><i data-icon="water"></i><span class="tl">Eau</span><span class="phase">2B</span></button>
+      <button data-cat="waste" class="t-waste soon" disabled data-tip="Déchets : phase 2B"><i data-icon="waste"></i><span class="tl">Déchets</span><span class="phase">2B</span></button>
+      <button data-cat="transport" class="t-transport" disabled data-tip="Transports"><i data-icon="transport"></i><span class="tl">Transports</span></button>
+      <button data-cat="environment" class="t-nature" disabled data-tip="Nature"><i data-icon="tree"></i><span class="tl">Nature</span></button>
+      <button data-cat="terrain" class="t-terrain soon" disabled data-tip="Terraformation : phase 2B"><i data-icon="terrain"></i><span class="tl">Terrain</span><span class="phase">2B</span></button>
+      <span class="tb-sep" aria-hidden="true"></span>
+      <button data-tool="bulldoze" class="t-demolish" disabled data-tip="Démolir"><i data-icon="demolish"></i><span class="tl">Démolir</span></button>
+      <button id="btn-undo" class="t-undo" disabled data-tip="Annuler la dernière action (Ctrl+Z)"><i data-icon="undo"></i><span class="tl">Annuler</span></button>
+    </nav>
+  </div>
+</div>
+
+<aside id="objectives" class="hidden" aria-label="Objectifs">
+  <button id="obj-toggle" aria-expanded="false" data-tip="Objectifs et missions : phase 2C"><i data-icon="flag"></i><span class="obj-t">Objectifs</span><span class="phase">2C</span><i data-icon="chevron" class="chev"></i></button>
+  <div id="obj-body" class="obj-body hidden">Les missions, objectifs et récompenses arrivent avec la phase 2C (politique et progression). Aucun objectif n'est simulé pour l'instant : rien n'est affiché à leur place.</div>
+</aside>
+
+<!-- ======================= Panneaux (à droite ; feuille glissante sur téléphone) ======================= -->
+<aside id="info-panel" class="panel hidden" aria-live="polite">
+  <div class="panel-head">
+    <div class="ph-title"><div><div id="info-kicker" class="kicker"></div><h3 id="info-title"></h3></div></div>
+    <span class="panel-btns">
+      <button id="info-fold" class="icon-btn fold" aria-label="Replier" data-tip="Replier"><i data-icon="chevron"></i></button>
+      <button id="info-close" class="icon-btn" aria-label="Fermer" data-tip="Fermer (Échap)"><i data-icon="close"></i></button>
+    </span>
+  </div>
+  <div class="panel-body">
+    <img id="info-thumb" class="info-thumb hidden" alt="">
+    <dl id="info-rows" class="rows"></dl>
+    <div id="info-actions" class="panel-actions"></div>
+  </div>
+</aside>
+
+<aside id="finance-panel" class="panel dash hidden" aria-label="Finances municipales">
+  <div class="panel-head">
+    <div class="ph-title"><span class="ph-ico t-fin"><i data-icon="finance"></i></span><div><div class="kicker">Tableau de bord</div><h3>Finances municipales</h3></div></div>
+    <span class="panel-btns">
+      <button id="finance-fold" class="icon-btn fold" aria-label="Replier" data-tip="Replier"><i data-icon="chevron"></i></button>
+      <button id="finance-close" class="icon-btn" aria-label="Fermer" data-tip="Fermer (Échap)"><i data-icon="close"></i></button>
+    </span>
+  </div>
+  <div class="ptabs" role="tablist" aria-label="Finances">
+    <button data-ftab="overview" class="active" role="tab" aria-selected="true">Aperçu</button>
+    <button id="btn-fin-tax" data-ftab="tax" role="tab" aria-selected="false" aria-expanded="false" data-tip="Régler les taux d'imposition par secteur">Impôts</button>
+    <button data-ftab="budget" role="tab" aria-selected="false" data-tip="Dépenses par poste, projection sur 12 mois, historique">Budget</button>
+    <button id="btn-fin-loan" data-ftab="debt" role="tab" aria-selected="false" aria-expanded="false" data-tip="Emprunter, rembourser par anticipation">Dette</button>
+  </div>
+  <div class="panel-body">
+    <section data-fpage="overview" class="fpage">
+      <div class="kpis">
+        <div class="kpi"><span class="lbl">Trésorerie</span><b id="fin-money">—</b></div>
+        <div class="kpi"><span class="lbl">Solde mensuel prévu</span><b id="fin-balance">—</b></div>
+      </div>
+      <div class="ledger">
+        <div class="lg-head inc"><i data-icon="trend"></i><span>Recettes</span><b id="fin-income">—</b></div>
+        <dl id="fin-inc-rows" class="lg-rows"></dl>
+        <div class="lg-head exp"><i data-icon="cash"></i><span>Dépenses</span><b id="fin-expense">—</b></div>
+        <dl id="fin-exp-rows" class="lg-rows"></dl>
+        <div class="lg-total"><span>Solde mensuel</span><b id="fin-net">—</b></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">Évolution (12 derniers mois clos)<span id="fin-mrange" class="muted"></span></div>
+        <canvas id="fin-month-chart" class="chart" height="170" role="img" aria-label="Solde mensuel et trésorerie de fin de mois"></canvas>
+        <div class="legend"><span class="lg-bar">Solde du mois (axe gauche)</span><span class="lg-line">Trésorerie fin de mois (axe droit)</span></div>
+      </div>
+    </section>
+    <section id="fin-tax-sec" data-fpage="tax" class="fpage hidden" aria-label="Impôts">
+      <div class="sec-title">Taux d'imposition <span class="muted">(0 à 25 %, effet au prochain mois ; un taux résidentiel élevé freine l'immigration)</span></div>
+      <div id="fin-tax-body" class="tax-grid"></div>
+    </section>
+    <section data-fpage="budget" class="fpage hidden" aria-label="Budget">
+      <div class="sec-title">Dépenses courantes prévues <span class="muted">(par mois)</span></div>
+      <div id="fin-budget-bars" class="act-bars"></div>
+      <dl class="rows">
+        <dt>Bâtiments · routes</dt><dd id="fin-counts">—</dd>
+        <dt>Habitants</dt><dd id="fin-pop">—</dd>
+      </dl>
+      <div id="fin-lastmonth" class="lastmonth"></div>
+      <div class="chart-wrap">
+        <div class="chart-title">Projection de la trésorerie (12 prochains mois)</div>
+        <canvas id="fin-proj-chart" class="chart" height="150" role="img" aria-label="Projection de la trésorerie"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">Trésorerie relevée chaque jour <span id="fin-range" class="muted"></span></div>
+        <canvas id="fin-chart" class="chart" height="150" role="img" aria-label="Évolution de la trésorerie"></canvas>
+        <div id="fin-tip" class="chart-tip hidden"></div>
+      </div>
+    </section>
+    <section id="fin-loan-sec" data-fpage="debt" class="fpage hidden" aria-label="Emprunts">
+      <div class="kpis">
+        <div class="kpi"><span class="lbl">Dette restante</span><b id="fin-debt">—</b></div>
+        <div class="kpi"><span class="lbl">Capacité d'emprunt</span><b id="fin-capacity">—</b></div>
+      </div>
+      <div class="sec-title">Nouvel emprunt <span id="fin-loan-cap" class="muted"></span></div>
+      <form id="form-loan" class="loan-form">
+        <label>Montant (CHF) <input id="loan-amount" type="number" min="10000" step="10000" value="100000" inputmode="numeric"></label>
+        <label>Durée <select id="loan-months"><option value="12">1 an</option><option value="36">3 ans</option><option value="60" selected>5 ans</option><option value="120">10 ans</option><option value="240">20 ans</option></select></label>
+        <div id="loan-offer" class="loan-offer muted">—</div>
+        <button id="loan-take" type="submit" class="primary">Emprunter</button>
+      </form>
+      <div class="sec-title">Emprunts en cours</div>
+      <ul id="loan-list" class="loan-list"></ul>
+    </section>
+  </div>
+</aside>
+
+<aside id="pop-panel" class="panel dash hidden" aria-label="Population">
+  <div class="panel-head">
+    <div class="ph-title"><span class="ph-ico t-pop"><i data-icon="people"></i></span><div><div class="kicker">Tableau de bord</div><h3>Population</h3></div></div>
+    <span class="panel-btns">
+      <button id="pop-fold" class="icon-btn fold" aria-label="Replier" data-tip="Replier"><i data-icon="chevron"></i></button>
+      <button id="pop-close" class="icon-btn" aria-label="Fermer" data-tip="Fermer (Échap)"><i data-icon="close"></i></button>
+    </span>
+  </div>
+  <div class="ptabs" role="tablist" aria-label="Population">
+    <button data-ptab="overview" class="active" role="tab" aria-selected="true">Aperçu</button>
+    <button data-ptab="demand" role="tab" aria-selected="false">Demande</button>
+    <button data-ptab="acts" role="tab" aria-selected="false">Activités</button>
+    <button data-ptab="ages" role="tab" aria-selected="false">Âges</button>
+  </div>
+  <div class="panel-body">
+    <section data-ppage="overview" class="fpage">
+      <div class="kpis">
+        <div class="kpi"><span class="lbl">Habitants</span><b id="pop-total">—</b></div>
+        <div class="kpi"><span class="lbl">Satisfaction</span><b id="pop-happy">—</b></div>
+      </div>
+      <p id="pop-sub" class="muted small"></p>
+      <dl class="rows" id="pop-rows"></dl>
+    </section>
+    <section data-ppage="demand" class="fpage hidden">
+      <div class="sec-title">Demande <span class="muted">(−1 à +1 : besoin de nouveaux bâtiments par secteur)</span></div>
+      <div id="pop-demand" class="demand-bars"></div>
+      <div class="sec-title">Éducation des adultes</div>
+      <div id="pop-edu" class="act-bars"></div>
+    </section>
+    <section data-ppage="acts" class="fpage hidden">
+      <div class="sec-title">Activités en ce moment <span class="muted">(habitants suivis + estimation)</span></div>
+      <div id="pop-acts" class="act-bars"></div>
+    </section>
+    <section data-ppage="ages" class="fpage hidden">
+      <div class="sec-title">Âges <span class="muted">(tranches de 10 ans)</span></div>
+      <div id="pop-ages" class="age-bars"></div>
+    </section>
+  </div>
+</aside>
+
+<aside id="dash-panel" class="panel dash hidden" aria-label="Tableau de bord">
+  <div class="panel-head">
+    <div class="ph-title"><span id="dash-ico" class="ph-ico"></span><div><div id="dash-kicker" class="kicker">Tableau de bord</div><h3 id="dash-title"></h3></div></div>
+    <span class="panel-btns">
+      <button id="dash-fold" class="icon-btn fold" aria-label="Replier" data-tip="Replier"><i data-icon="chevron"></i></button>
+      <button id="dash-close" class="icon-btn" aria-label="Fermer" data-tip="Fermer (Échap)"><i data-icon="close"></i></button>
+    </span>
+  </div>
+  <div id="dash-tabs" class="ptabs hidden" role="tablist"></div>
+  <div id="dash-body" class="panel-body"></div>
+</aside>
+
+<div id="save-panel" class="overlay hidden">
+  <div class="menu-card">
+    <h2>Sauvegarder</h2>
+    <ul id="save-list" class="slot-list" aria-label="Emplacements"></ul>
+    <form id="form-save" class="form inline-form">
+      <input id="save-name" maxlength="32" placeholder="Nom du nouvel emplacement" autocomplete="off" required>
+      <button type="submit" class="primary">Créer</button>
+    </form>
+    <div class="form-actions"><button type="button" id="save-close">Fermer</button></div>
+  </div>
+</div>
+
+<div id="touch-confirm" class="hidden" role="toolbar" aria-label="Confirmer l'action">
+  <button id="tc-cancel" aria-label="Annuler"><i data-icon="close"></i></button>
+  <button id="tc-rotate" aria-label="Pivoter"><i data-icon="undo"></i></button>
+  <button id="tc-magnet" aria-label="Aimanter" aria-pressed="true" title="Aimanter (angles droits, alignement)">🧲</button>
+  <button id="tc-ok" class="primary">Construire</button>
+</div>
+
+<div id="cursor-tag" class="hidden" aria-hidden="true"></div>
+<div id="tooltip" class="hidden" role="tooltip"></div>
+<div id="toasts" aria-live="polite"></div>
+
+<script type="module" src="./game.js"></script>

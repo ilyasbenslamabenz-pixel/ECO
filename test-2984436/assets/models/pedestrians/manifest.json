@@ -1,0 +1,1367 @@
+{
+ "schemaVersion": 1,
+ "generator": "tools/pedestrians/generate_pedestrians.py",
+ "license": {
+  "spdx": "CC0-1.0",
+  "source": "tools/pedestrians/generate_pedestrians.py",
+  "author": "Aube Urbaine"
+ },
+ "bones": [
+  "hanches",
+  "colonne",
+  "poitrine",
+  "cou",
+  "tete",
+  "bras_g",
+  "avant_bras_g",
+  "main_g",
+  "bras_d",
+  "avant_bras_d",
+  "main_d",
+  "cuisse_g",
+  "tibia_g",
+  "pied_g",
+  "cuisse_d",
+  "tibia_d",
+  "pied_d"
+ ],
+ "parts": [
+  "peau",
+  "cheveux",
+  "haut",
+  "bas",
+  "chaussures",
+  "accessoire",
+  "haut2",
+  "detail"
+ ],
+ "palettes": [
+  {
+   "id": "p00",
+   "colors": [
+    "#5a3722",
+    "#1d1815",
+    "#27364f",
+    "#3f4a5c",
+    "#3a2a20",
+    "#6b4a2e",
+    "#e9e6df",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p01",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#5a5f66",
+    "#22252b",
+    "#1f1f22",
+    "#2a2a2e",
+    "#d9dde3",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p02",
+   "colors": [
+    "#eac6aa",
+    "#8e6a40",
+    "#7a5a3c",
+    "#2c3a55",
+    "#5a3d28",
+    "#8a6a44",
+    "#efe9dc",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p03",
+   "colors": [
+    "#b98660",
+    "#5f4329",
+    "#2f4a3a",
+    "#4a4338",
+    "#3b2c22",
+    "#b08a52",
+    "#e4e0d4",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p04",
+   "colors": [
+    "#b98660",
+    "#3d2c20",
+    "#6d1f2b",
+    "#2a2c33",
+    "#241f1e",
+    "#3a3230",
+    "#e8e2da",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p05",
+   "colors": [
+    "#f2d6c1",
+    "#3d2c20",
+    "#c9b79a",
+    "#3b4a66",
+    "#6a4a30",
+    "#7a2f2f",
+    "#f3efe6",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p06",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#1f2126",
+    "#5c6068",
+    "#26221f",
+    "#8c1f2a",
+    "#cfd3d8",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p07",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#48566b",
+    "#b9a98c",
+    "#70523a",
+    "#2f3c50",
+    "#f1eee8",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p08",
+   "colors": [
+    "#e0b594",
+    "#c8a660",
+    "#8a8f96",
+    "#2e3e5c",
+    "#e8e6e1",
+    "#3d5a4a",
+    "#ffffff",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p09",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#3c3f58",
+    "#6f6a60",
+    "#2a2422",
+    "#a8743a",
+    "#dfe5ec",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p10",
+   "colors": [
+    "#eac6aa",
+    "#3d2c20",
+    "#a35a3a",
+    "#33373f",
+    "#3f2e24",
+    "#28303c",
+    "#efe8dc",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p11",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#445a4c",
+    "#1f2229",
+    "#2d2724",
+    "#c2a35a",
+    "#e6e2d6",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p12",
+   "colors": [
+    "#75492c",
+    "#3d2c20",
+    "#b4a58c",
+    "#4f4336",
+    "#5c3f2a",
+    "#394b3f",
+    "#f4f1ea",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p13",
+   "colors": [
+    "#5a3722",
+    "#3d2c20",
+    "#2b4f72",
+    "#262b36",
+    "#d9d6d0",
+    "#5a2a2a",
+    "#f0f0ee",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p14",
+   "colors": [
+    "#5a3722",
+    "#1d1815",
+    "#6a6f78",
+    "#3a4c6e",
+    "#33291f",
+    "#b3552f",
+    "#e3e7ea",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p15",
+   "colors": [
+    "#5a3722",
+    "#1d1815",
+    "#3a2f3f",
+    "#757b85",
+    "#201c1c",
+    "#6c5a3f",
+    "#e9dfd6",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p16",
+   "colors": [
+    "#d3a07c",
+    "#8e6a40",
+    "#1c2333",
+    "#1c2333",
+    "#161313",
+    "#3a2618",
+    "#f4f4f1",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p17",
+   "colors": [
+    "#b98660",
+    "#5f4329",
+    "#33363c",
+    "#33363c",
+    "#1a1716",
+    "#22201f",
+    "#e8edf3",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p18",
+   "colors": [
+    "#f2d6c1",
+    "#a5552c",
+    "#222226",
+    "#222226",
+    "#141212",
+    "#4a2f1c",
+    "#ffffff",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p19",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#2a3550",
+    "#2a3550",
+    "#3b281c",
+    "#5a3a22",
+    "#dfe8f2",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p20",
+   "colors": [
+    "#5a3722",
+    "#3d2c20",
+    "#4b4f57",
+    "#4b4f57",
+    "#221d1b",
+    "#2b1f19",
+    "#f6f2ea",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p21",
+   "colors": [
+    "#d3a07c",
+    "#5f4329",
+    "#3a2f2a",
+    "#3a2f2a",
+    "#2a1d16",
+    "#6b1f26",
+    "#f1ecdf",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p22",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#19202b",
+    "#2b303a",
+    "#1b1716",
+    "#7a1c24",
+    "#eef1f4",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p23",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#d23c3c",
+    "#2c3f66",
+    "#f0eeea",
+    "#f2b632",
+    "#ffffff",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p24",
+   "colors": [
+    "#96663f",
+    "#1d1815",
+    "#2f7fc2",
+    "#2a2d33",
+    "#e9e7e2",
+    "#e2543a",
+    "#f5f3ee",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p25",
+   "colors": [
+    "#b98660",
+    "#a5552c",
+    "#f0b429",
+    "#3c4f78",
+    "#d44a3a",
+    "#2f6f9f",
+    "#fbfaf5",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p26",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#3fa46a",
+    "#33363d",
+    "#f2f0ec",
+    "#e57a2e",
+    "#ffffff",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p27",
+   "colors": [
+    "#e0b594",
+    "#1d1815",
+    "#e9739a",
+    "#4a5a86",
+    "#f4e9e4",
+    "#7a4fb0",
+    "#fff6f2",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p28",
+   "colors": [
+    "#d3a07c",
+    "#3d2c20",
+    "#7a4fb0",
+    "#262a33",
+    "#eeeeee",
+    "#3fb0a4",
+    "#f1ecf7",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p29",
+   "colors": [
+    "#b98660",
+    "#a5552c",
+    "#ef7d2d",
+    "#3a3d45",
+    "#2b2b2f",
+    "#2f6fb0",
+    "#fbf4ea",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p30",
+   "colors": [
+    "#b98660",
+    "#6e3322",
+    "#27a3a3",
+    "#1f2733",
+    "#f6f4ef",
+    "#e84a5f",
+    "#e8f6f4",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p31",
+   "colors": [
+    "#b98660",
+    "#a5552c",
+    "#e5484d",
+    "#5d6b7e",
+    "#2a2a2e",
+    "#ffd04a",
+    "#fdf0ee",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p32",
+   "colors": [
+    "#96663f",
+    "#3d2c20",
+    "#4a7de0",
+    "#c8b48e",
+    "#f3f1ec",
+    "#e2733a",
+    "#ffffff",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p33",
+   "colors": [
+    "#e0b594",
+    "#8e6a40",
+    "#b7d04a",
+    "#34415e",
+    "#e84a3a",
+    "#2f5fa0",
+    "#fafcf0",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p34",
+   "colors": [
+    "#d3a07c",
+    "#3d2c20",
+    "#f2f0ea",
+    "#2f5f9f",
+    "#d7402f",
+    "#3a9f6a",
+    "#f2c230",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p35",
+   "colors": [
+    "#f2d6c1",
+    "#d9d6cf",
+    "#7a6a55",
+    "#4a4640",
+    "#3a2c22",
+    "#6b3d2a",
+    "#e9e3d5",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p36",
+   "colors": [
+    "#96663f",
+    "#8d8b88",
+    "#5c6470",
+    "#3a3d44",
+    "#2a2523",
+    "#8c6a3a",
+    "#dfe3e6",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p37",
+   "colors": [
+    "#96663f",
+    "#d9d6cf",
+    "#6b2d32",
+    "#55504a",
+    "#33261f",
+    "#3f4a3a",
+    "#efe9de",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p38",
+   "colors": [
+    "#eac6aa",
+    "#8d8b88",
+    "#3f5446",
+    "#5f574a",
+    "#3d2e22",
+    "#a47b45",
+    "#e8e4d6",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p39",
+   "colors": [
+    "#b98660",
+    "#d9d6cf",
+    "#8a7d6a",
+    "#2f3644",
+    "#4a3526",
+    "#5a2a2a",
+    "#f2eee4",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p40",
+   "colors": [
+    "#e0b594",
+    "#8d8b88",
+    "#49546b",
+    "#6e675b",
+    "#2c2420",
+    "#7a5a34",
+    "#e6e9ee",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p41",
+   "colors": [
+    "#96663f",
+    "#d9d6cf",
+    "#9a8f84",
+    "#40372f",
+    "#35281f",
+    "#32475a",
+    "#f4f0e8",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p42",
+   "colors": [
+    "#f2d6c1",
+    "#d9d6cf",
+    "#5a4a5f",
+    "#4c4a48",
+    "#272120",
+    "#8a6f4a",
+    "#ece4e6",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p43",
+   "colors": [
+    "#f2d6c1",
+    "#5e5b58",
+    "#a89a7c",
+    "#5a5f58",
+    "#4f3a2a",
+    "#6b2f3a",
+    "#f5f1e6",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p44",
+   "colors": [
+    "#b98660",
+    "#1d1815",
+    "#2f3d2f",
+    "#2b2e36",
+    "#2a211c",
+    "#b06a2f",
+    "#b9ad98",
+    "#30271f"
+   ]
+  },
+  {
+   "id": "p45",
+   "colors": [
+    "#eac6aa",
+    "#1d1815",
+    "#1f2a44",
+    "#3a3d45",
+    "#1f1b1a",
+    "#a32c2c",
+    "#d8d2c4",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p46",
+   "colors": [
+    "#96663f",
+    "#3d2c20",
+    "#b9a27c",
+    "#262a33",
+    "#3d2c20",
+    "#5a2630",
+    "#e9e2d2",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p47",
+   "colors": [
+    "#e0b594",
+    "#3d2c20",
+    "#5b2a30",
+    "#2e3138",
+    "#241d1b",
+    "#d1c7b0",
+    "#cfc6b4",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p48",
+   "colors": [
+    "#e0b594",
+    "#c8a660",
+    "#3a3d42",
+    "#4a556b",
+    "#2c2623",
+    "#c9a23a",
+    "#a9a59c",
+    "#1f1b19"
+   ]
+  },
+  {
+   "id": "p49",
+   "colors": [
+    "#e0b594",
+    "#c8a660",
+    "#6a7260",
+    "#3b352e",
+    "#3a2b20",
+    "#2f4f6a",
+    "#ddd6c4",
+    "#17171c"
+   ]
+  },
+  {
+   "id": "p50",
+   "colors": [
+    "#5a3722",
+    "#1d1815",
+    "#8b3a2a",
+    "#33363c",
+    "#1e1b1a",
+    "#30506a",
+    "#e4dccb",
+    "#2b231f"
+   ]
+  },
+  {
+   "id": "p51",
+   "colors": [
+    "#75492c",
+    "#1d1815",
+    "#24272e",
+    "#24272e",
+    "#191716",
+    "#7c7f86",
+    "#b54a3a",
+    "#1f1b19"
+   ]
+  }
+ ],
+ "models": [
+  {
+   "id": "pieton_homme_veste",
+   "nameFr": "Homme en veste",
+   "age": "adulte",
+   "genre": "homme",
+   "height": 1.796,
+   "radius": 0.3,
+   "walkSpeed": 1.35,
+   "strideM": 1.485,
+   "palettes": [
+    "p00",
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08",
+    "p09",
+    "p10",
+    "p11",
+    "p12",
+    "p13",
+    "p14",
+    "p15"
+   ],
+   "lods": [
+    {
+     "file": "pieton_homme_veste_lod0.glb",
+     "triangles": 4202,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_homme_veste_lod1.glb",
+     "triangles": 984,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_homme_veste_lod2.glb",
+     "triangles": 236,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.1
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_homme_costume",
+   "nameFr": "Homme d'affaires en costume",
+   "age": "adulte",
+   "genre": "homme",
+   "height": 1.85,
+   "radius": 0.36,
+   "walkSpeed": 1.62,
+   "strideM": 1.62,
+   "palettes": [
+    "p16",
+    "p17",
+    "p18",
+    "p19",
+    "p20",
+    "p21",
+    "p22"
+   ],
+   "lods": [
+    {
+     "file": "pieton_homme_costume_lod0.glb",
+     "triangles": 4378,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_homme_costume_lod1.glb",
+     "triangles": 1052,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_homme_costume_lod2.glb",
+     "triangles": 252,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.0
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_femme_manteau",
+   "nameFr": "Femme en manteau long",
+   "age": "adulte",
+   "genre": "femme",
+   "height": 1.699,
+   "radius": 0.31,
+   "walkSpeed": 1.3,
+   "strideM": 1.43,
+   "palettes": [
+    "p44",
+    "p45",
+    "p46",
+    "p47",
+    "p48",
+    "p49",
+    "p50",
+    "p51",
+    "p00",
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08",
+    "p09",
+    "p10",
+    "p11",
+    "p12",
+    "p13",
+    "p14",
+    "p15"
+   ],
+   "lods": [
+    {
+     "file": "pieton_femme_manteau_lod0.glb",
+     "triangles": 4940,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_femme_manteau_lod1.glb",
+     "triangles": 1210,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_femme_manteau_lod2.glb",
+     "triangles": 290,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.1
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_femme_robe",
+   "nameFr": "Femme en robe",
+   "age": "adulte",
+   "genre": "femme",
+   "height": 1.67,
+   "radius": 0.25,
+   "walkSpeed": 1.25,
+   "strideM": 1.375,
+   "palettes": [
+    "p23",
+    "p24",
+    "p25",
+    "p26",
+    "p27",
+    "p28",
+    "p29",
+    "p30",
+    "p31",
+    "p32",
+    "p33",
+    "p34",
+    "p00",
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08",
+    "p09",
+    "p10",
+    "p11",
+    "p12",
+    "p13",
+    "p14",
+    "p15"
+   ],
+   "lods": [
+    {
+     "file": "pieton_femme_robe_lod0.glb",
+     "triangles": 4776,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_femme_robe_lod1.glb",
+     "triangles": 1086,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_femme_robe_lod2.glb",
+     "triangles": 302,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.1
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_ado_sweat",
+   "nameFr": "Adolescent en sweat à capuche",
+   "age": "ado",
+   "genre": "homme",
+   "height": 1.645,
+   "radius": 0.3,
+   "walkSpeed": 1.3,
+   "strideM": 1.43,
+   "palettes": [
+    "p23",
+    "p24",
+    "p25",
+    "p26",
+    "p27",
+    "p28",
+    "p29",
+    "p30",
+    "p31",
+    "p32",
+    "p33",
+    "p34",
+    "p00",
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08",
+    "p09",
+    "p10",
+    "p11",
+    "p12",
+    "p13",
+    "p14",
+    "p15"
+   ],
+   "lods": [
+    {
+     "file": "pieton_ado_sweat_lod0.glb",
+     "triangles": 4598,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_ado_sweat_lod1.glb",
+     "triangles": 1112,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_ado_sweat_lod2.glb",
+     "triangles": 260,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.1
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_enfant_garcon",
+   "nameFr": "Garçon à casquette",
+   "age": "enfant",
+   "genre": "homme",
+   "height": 1.286,
+   "radius": 0.22,
+   "walkSpeed": 1.05,
+   "strideM": 1.05,
+   "palettes": [
+    "p23",
+    "p24",
+    "p25",
+    "p26",
+    "p27",
+    "p28",
+    "p29",
+    "p30",
+    "p31",
+    "p32",
+    "p33",
+    "p34"
+   ],
+   "lods": [
+    {
+     "file": "pieton_enfant_garcon_lod0.glb",
+     "triangles": 4392,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_enfant_garcon_lod1.glb",
+     "triangles": 1166,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_enfant_garcon_lod2.glb",
+     "triangles": 312,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.0
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_fillette_robe",
+   "nameFr": "Fillette en robe",
+   "age": "enfant",
+   "genre": "femme",
+   "height": 1.211,
+   "radius": 0.2,
+   "walkSpeed": 0.98,
+   "strideM": 0.98,
+   "palettes": [
+    "p23",
+    "p24",
+    "p25",
+    "p26",
+    "p27",
+    "p28",
+    "p29",
+    "p30",
+    "p31",
+    "p32",
+    "p33",
+    "p34"
+   ],
+   "lods": [
+    {
+     "file": "pieton_fillette_robe_lod0.glb",
+     "triangles": 4632,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_fillette_robe_lod1.glb",
+     "triangles": 1094,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_fillette_robe_lod2.glb",
+     "triangles": 294,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.0
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_senior_homme",
+   "nameFr": "Monsieur âgé à la canne",
+   "age": "senior",
+   "genre": "homme",
+   "height": 1.71,
+   "radius": 0.29,
+   "walkSpeed": 0.82,
+   "strideM": 1.066,
+   "palettes": [
+    "p35",
+    "p36",
+    "p37",
+    "p38",
+    "p39",
+    "p40",
+    "p41",
+    "p42",
+    "p43"
+   ],
+   "lods": [
+    {
+     "file": "pieton_senior_homme_lod0.glb",
+     "triangles": 4436,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_senior_homme_lod1.glb",
+     "triangles": 1096,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_senior_homme_lod2.glb",
+     "triangles": 266,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.3
+    },
+    "attente": {
+     "duration": 4.0
+    }
+   }
+  },
+  {
+   "id": "pieton_senior_femme",
+   "nameFr": "Dame âgée au cabas",
+   "age": "senior",
+   "genre": "femme",
+   "height": 1.594,
+   "radius": 0.31,
+   "walkSpeed": 0.85,
+   "strideM": 1.105,
+   "palettes": [
+    "p35",
+    "p36",
+    "p37",
+    "p38",
+    "p39",
+    "p40",
+    "p41",
+    "p42",
+    "p43"
+   ],
+   "lods": [
+    {
+     "file": "pieton_senior_femme_lod0.glb",
+     "triangles": 4820,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_senior_femme_lod1.glb",
+     "triangles": 1170,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_senior_femme_lod2.glb",
+     "triangles": 286,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.3
+    },
+    "attente": {
+     "duration": 4.0
+    }
+   }
+  },
+  {
+   "id": "pieton_sportive",
+   "nameFr": "Sportive en short",
+   "age": "adulte",
+   "genre": "femme",
+   "height": 1.713,
+   "radius": 0.26,
+   "walkSpeed": 1.55,
+   "strideM": 1.55,
+   "palettes": [
+    "p23",
+    "p24",
+    "p25",
+    "p26",
+    "p27",
+    "p28",
+    "p29",
+    "p30",
+    "p31",
+    "p32",
+    "p33",
+    "p34"
+   ],
+   "lods": [
+    {
+     "file": "pieton_sportive_lod0.glb",
+     "triangles": 4266,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_sportive_lod1.glb",
+     "triangles": 1020,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_sportive_lod2.glb",
+     "triangles": 280,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.0
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_femme_echarpe",
+   "nameFr": "Femme à l’écharpe",
+   "age": "adulte",
+   "genre": "femme",
+   "height": 1.749,
+   "radius": 0.28,
+   "walkSpeed": 1.38,
+   "strideM": 1.518,
+   "palettes": [
+    "p00",
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08",
+    "p09",
+    "p10",
+    "p11",
+    "p12",
+    "p13",
+    "p14",
+    "p15",
+    "p44",
+    "p45",
+    "p46",
+    "p47",
+    "p48",
+    "p49",
+    "p50",
+    "p51"
+   ],
+   "lods": [
+    {
+     "file": "pieton_femme_echarpe_lod0.glb",
+     "triangles": 4494,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_femme_echarpe_lod1.glb",
+     "triangles": 1040,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_femme_echarpe_lod2.glb",
+     "triangles": 266,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.1
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  },
+  {
+   "id": "pieton_homme_parka",
+   "nameFr": "Homme en parka et bonnet",
+   "age": "adulte",
+   "genre": "homme",
+   "height": 1.899,
+   "radius": 0.33,
+   "walkSpeed": 1.3,
+   "strideM": 1.56,
+   "palettes": [
+    "p44",
+    "p45",
+    "p46",
+    "p47",
+    "p48",
+    "p49",
+    "p50",
+    "p51",
+    "p00",
+    "p01",
+    "p02",
+    "p03",
+    "p04",
+    "p05",
+    "p06",
+    "p07",
+    "p08",
+    "p09",
+    "p10",
+    "p11",
+    "p12",
+    "p13",
+    "p14",
+    "p15"
+   ],
+   "lods": [
+    {
+     "file": "pieton_homme_parka_lod0.glb",
+     "triangles": 4548,
+     "maxDistance": 35
+    },
+    {
+     "file": "pieton_homme_parka_lod1.glb",
+     "triangles": 1074,
+     "maxDistance": 110
+    },
+    {
+     "file": "pieton_homme_parka_lod2.glb",
+     "triangles": 254,
+     "maxDistance": 320
+    }
+   ],
+   "animations": {
+    "marche": {
+     "duration": 1.2
+    },
+    "attente": {
+     "duration": 3.6
+    }
+   }
+  }
+ ]
+}
