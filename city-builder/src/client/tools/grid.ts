@@ -31,6 +31,21 @@ export interface GridLayout {
   length: number;
   /** Vrai si le nombre d'îlots a été plafonné. */
   clamped: boolean;
+  /**
+   * Orientation (radians) : 0 = axes nord / est ; sinon quadrillage aligné sur une route en biais. Les bornes
+   * x0..z1 sont alors exprimées dans le repère tourné autour de l'origine (ox, oz) ; `corners` est en monde.
+   */
+  angle: number; ox: number; oz: number;
+  corners: number[];
+}
+
+/** Repère tourné du quadrillage : monde -> local et local -> monde (rotation d'angle `a` autour de (ox, oz)). */
+export function gridFrame(angle: number, ox: number, oz: number): { toLocal(x: number, z: number): [number, number]; toWorld(x: number, z: number): [number, number] } {
+  const c = Math.cos(angle), s = Math.sin(angle);
+  return {
+    toLocal: (x, z) => { const dx = x - ox, dz = z - oz; return [ox + dx * c + dz * s, oz - dx * s + dz * c]; },
+    toWorld: (x, z) => { const dx = x - ox, dz = z - oz; return [ox + dx * c - dz * s, oz + dx * s + dz * c]; },
+  };
 }
 
 const snap = (v: number): number => Math.round(v / TILE_SIZE) * TILE_SIZE;
@@ -44,7 +59,10 @@ export function gridCorner(x: number, z: number): { x: number; z: number } {
  * Disposition du quadrillage entre le coin `a` (déjà sur la grille) et le curseur `b`.
  * `mirror` (facultatif) : retire les morceaux déjà couverts par une route existante colinéaire.
  */
-export function gridLayout(a: { x: number; z: number }, b: { x: number; z: number }, block: number, mirror?: WorldMirror): GridLayout {
+export function gridLayout(a: { x: number; z: number }, bw: { x: number; z: number }, block: number, mirror?: WorldMirror, angle = 0): GridLayout {
+  const F = gridFrame(angle, a.x, a.z);
+  const [blx, blz] = F.toLocal(bw.x, bw.z);
+  const b = { x: blx, z: blz };
   const B = Math.max(TILE_SIZE, snap(block));
   const sx = b.x >= a.x ? 1 : -1, sz = b.z >= a.z ? 1 : -1;
   let nx = Math.max(1, Math.round(Math.abs(b.x - a.x) / B));
@@ -54,12 +72,18 @@ export function gridLayout(a: { x: number; z: number }, b: { x: number; z: numbe
   const x0 = Math.min(a.x, a.x + sx * nx * B), x1 = Math.max(a.x, a.x + sx * nx * B);
   const z0 = Math.min(a.z, a.z + sz * nz * B), z1 = Math.max(a.z, a.z + sz * nz * B);
   const raw: [number, number, number, number][] = [];
-  for (let i = 0; i <= nz; i++) raw.push([x0, z0 + i * B, x1, z0 + i * B]);
-  for (let j = 0; j <= nx; j++) raw.push([x0 + j * B, z0, x0 + j * B, z1]);
+  const seg = (xa: number, za: number, xb: number, zb: number): [number, number, number, number] => {
+    const [p, q] = F.toWorld(xa, za), [r, t] = F.toWorld(xb, zb);
+    const r2 = (v: number): number => Math.round(v * 100) / 100;
+    return [r2(p), r2(q), r2(r), r2(t)];
+  };
+  for (let i = 0; i <= nz; i++) raw.push(seg(x0, z0 + i * B, x1, z0 + i * B));
+  for (let j = 0; j <= nx; j++) raw.push(seg(x0 + j * B, z0, x0 + j * B, z1));
+  const corners = [...F.toWorld(x0, z0), ...F.toWorld(x1, z0), ...F.toWorld(x1, z1), ...F.toWorld(x0, z1)];
   const lines = mirror ? raw.flatMap((l) => uncoveredPieces(l, mirror)) : raw;
   let length = 0;
   for (const l of lines) length += Math.hypot(l[2] - l[0], l[3] - l[1]);
-  return { x0, z0, x1, z1, nx, nz, block: B, lines, length, clamped };
+  return { x0, z0, x1, z1, nx, nz, block: B, lines, length, clamped, angle, ox: a.x, oz: a.z, corners };
 }
 
 /**
@@ -103,10 +127,11 @@ export function uncoveredPieces(l: [number, number, number, number], mirror: Wor
 }
 
 /** Vrai si le tronçon (polyligne) est posé sur l'une des rues du quadrillage (pour l'annulation groupée). */
-export function edgeOnGrid(poly: ArrayLike<number>, g: { x0: number; z0: number; x1: number; z1: number; block: number }): boolean {
+export function edgeOnGrid(poly: ArrayLike<number>, g: { x0: number; z0: number; x1: number; z1: number; block: number; angle?: number; ox?: number; oz?: number }): boolean {
   const n = poly.length;
   if (n < 4) return false;
-  const ax = poly[0]!, az = poly[1]!, bx = poly[n - 2]!, bz = poly[n - 1]!;
+  const F = gridFrame(g.angle ?? 0, g.ox ?? 0, g.oz ?? 0);
+  const [ax, az] = F.toLocal(poly[0]!, poly[1]!), [bx, bz] = F.toLocal(poly[n - 2]!, poly[n - 1]!);
   const tol = 0.75;
   const inX = (x: number): boolean => x >= g.x0 - tol && x <= g.x1 + tol;
   const inZ = (z: number): boolean => z >= g.z0 - tol && z <= g.z1 + tol;

@@ -350,7 +350,7 @@ export class GridPreview {
 
   hide(): void { this.group.visible = false; }
 
-  show(o: { start: { x: number; z: number } | null; hover: { x: number; z: number } | null; lines: readonly (readonly number[])[]; rect: { x0: number; z0: number; x1: number; z1: number } | null; width: number; validity: Validity }): void {
+  show(o: { start: { x: number; z: number } | null; hover: { x: number; z: number } | null; lines: readonly (readonly number[])[]; rect: readonly number[] | null; width: number; validity: Validity }): void {
     this.group.visible = true;
     const tint = colorOf(o.validity);
     const key = `${o.width}|${o.lines.map((l) => l.join(',')).join(';')}`;
@@ -369,8 +369,7 @@ export class GridPreview {
       });
       this.outline.visible = !!o.rect;
       if (o.rect) {
-        const r = o.rect;
-        buildGroundRibbon(this.outline.geometry, [r.x0, r.z0, r.x1, r.z0, r.x1, r.z1, r.x0, r.z1], 0.5, this.heightAt, 0.35, 3, true);
+        buildGroundRibbon(this.outline.geometry, [...o.rect], 0.5, this.heightAt, 0.35, 3, true);
       }
     }
     for (const m of this.ribbons) (m.material as THREE.MeshBasicMaterial).color.copy(tint);

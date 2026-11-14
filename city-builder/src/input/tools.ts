@@ -373,7 +373,7 @@ export class ToolController implements IToolController, PointerToolSink {
       }
       case 'grid': {
         const L = p.layout;
-        this.grid?.show({ start: p.start, hover: p.hover, lines: L ? L.lines : [], rect: L ? { x0: L.x0, z0: L.z0, x1: L.x1, z1: L.z1 } : null, width: roadWidth(p.type), validity: L ? p.validity : 'ok' });
+        this.grid?.show({ start: p.start, hover: p.hover, lines: L ? L.lines : [], rect: L ? L.corners : null, width: roadWidth(p.type), validity: L ? p.validity : 'ok' });
         if (!L) tag(p.message || null, 'info');
         else {
           const head = `${L.nx}×${L.nz} îlot${L.nx * L.nz > 1 ? 's' : ''} de ${L.block} m · ${fmt(L.length)} m de rues`;

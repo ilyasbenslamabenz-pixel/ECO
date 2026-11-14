@@ -22,7 +22,7 @@ export type UndoStep =
   | { kind: 'buildRoad'; kindId: RoadKindId; points: number[]; c1?: [number, number]; c2?: [number, number] }
   | { kind: 'upgradeRoad'; edgeId: number; toKind: RoadKindId; reverse: boolean }
   /** Tronçons d'id ≥ minEdgeId posés sur les rues du quadrillage (x0..x1, z0..z1, pas `block`). */
-  | { kind: 'removeGrid'; minEdgeId: number; x0: number; z0: number; x1: number; z1: number; block: number };
+  | { kind: 'removeGrid'; minEdgeId: number; x0: number; z0: number; x1: number; z1: number; block: number; angle?: number; ox?: number; oz?: number };
 
 export interface UndoEntry {
   label: string;

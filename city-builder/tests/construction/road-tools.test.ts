@@ -294,3 +294,21 @@ test('Améliorer : motif local immédiat (inverser une rue à double sens, gamme
   const r = tools.preview;
   assert.ok(r.kind === 'upgrade' && r.toKind === 'avenue' && r.validity === 'ok' && r.refund > 0 && r.cost === 0, r.kind === 'upgrade' ? r.message : '');
 });
+
+test('quadrillage orienté : aligné sur une route en biais (rues parallèles et perpendiculaires, îlots carrés)', async () => {
+  const { gridLayout, edgeOnGrid } = await import('../../src/client/tools/grid');
+  const ang = Math.PI / 6; // 30°
+  const a = { x: 10, z: 20 };
+  const far = { x: a.x + Math.cos(ang) * 130 - Math.sin(ang) * 128, z: a.z + Math.sin(ang) * 130 + Math.cos(ang) * 128 };
+  const L = gridLayout(a, far, 64, undefined, ang);
+  assert.equal(L.nx, 2); assert.equal(L.nz, 2);
+  assert.equal(L.lines.length, 6);
+  for (const [xa, za, xb, zb] of L.lines) {
+    const d = Math.atan2(zb - za, xb - xa);
+    const rel = ((d - ang) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2);
+    assert.ok(rel < 1e-3 || Math.PI / 2 - rel < 1e-3, `rue parallèle ou perpendiculaire à la route (${d})`);
+    assert.ok(Math.abs(Math.hypot(xb - xa, zb - za) - 128) < 0.05, 'longueur 2 îlots');
+    assert.ok(edgeOnGrid([xa, za, xb, zb], L), 'annulation groupée : rue reconnue dans le repère tourné');
+  }
+  assert.equal(L.corners.length, 8);
+});

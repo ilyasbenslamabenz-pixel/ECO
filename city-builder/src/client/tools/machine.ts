@@ -134,6 +134,8 @@ export class ConstructionTools {
   private gridStart: { x: number; z: number } | null = null;
   private gridKey = '';
   private upgradeKey = '';
+  /** Orientation du quadrillage en cours (0 = nord / est). */
+  private gridAngle = 0;
   readonly draft = new RoadDraft();
   readonly undo = new UndoStack();
   preview: ToolPreview = { kind: 'select', hover: null };
@@ -331,7 +333,7 @@ export class ConstructionTools {
       return false;
     }
     if (!g) { this.preview = { kind: 'grid', type: this.roadType, start: this.gridStart, hover: null, layout: null, validity: 'ok', cost: 0, message: 'Placez le coin opposé' }; return false; }
-    const layout = gridLayout(this.gridStart, g, this.gridBlock, this.mirror);
+    const layout = gridLayout(this.gridStart, g, this.gridBlock, this.mirror, this.gridAngle);
     const key = `${this.roadType}|${this.mirror.version}|${layout.lines.map((l) => l.join(',')).join(';')}`;
     const prev = this.preview;
     if (key === this.gridKey && prev.kind === 'grid' && prev.layout) {
@@ -609,7 +611,12 @@ export class ConstructionTools {
     const g = this.lastGround;
     if (!this.gridStart) {
       if (!g) return;
-      this.gridStart = gridCorner(g.x, g.z);
+      // Aimantation : premier coin posé sur une route proche en biais -> quadrillage aligné sur elle.
+      const near = this.magnet ? this.mirror.nearestEdge(g.x, g.z, 12) : null;
+      const a = near ? Math.atan2(near.tz, near.tx) : 0;
+      const q = a - Math.round(a / (Math.PI / 2)) * (Math.PI / 2); // ramené à ±45°
+      if (near && Math.abs(q) > 0.02) { this.gridAngle = q; this.gridStart = { x: Math.round(near.px * 100) / 100, z: Math.round(near.pz * 100) / 100 }; }
+      else { this.gridAngle = 0; this.gridStart = gridCorner(g.x, g.z); }
       this.refresh();
       return;
     }
@@ -628,7 +635,7 @@ export class ConstructionTools {
     }
     if (built > 0) {
       this.applied++;
-      this.undo.push({ label: `Quadrillage ${layout.nx}×${layout.nz}`, steps: [{ kind: 'removeGrid', minEdgeId: minEdge, x0: layout.x0, z0: layout.z0, x1: layout.x1, z1: layout.z1, block: layout.block }] });
+      this.undo.push({ label: `Quadrillage ${layout.nx}×${layout.nz}`, steps: [{ kind: 'removeGrid', minEdgeId: minEdge, x0: layout.x0, z0: layout.z0, x1: layout.x1, z1: layout.z1, block: layout.block, angle: layout.angle, ox: layout.ox, oz: layout.oz }] });
     }
     const blocks = `${layout.nx}×${layout.nz} îlot${layout.nx * layout.nz > 1 ? 's' : ''} de ${layout.block} m`;
     if (built === layout.lines.length) this.notify(`Quadrillage ${blocks} : ${fmt(layout.length)} m de rues (−${fmt(spent)} ¢)`, 'ok');
