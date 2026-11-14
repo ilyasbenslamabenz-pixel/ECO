@@ -4,6 +4,8 @@
  * (occupants réels, trafic, trajets) est affiché avec sa phase, jamais inventé.
  * Propriétaire : agent construction/caméra/UI.
  */
+import { alertMaskOf } from '../render/plugins/alertes';
+import { ALERT_BITS, ALERT_KINDS, ALERT_LABELS } from '../shared/protocol-ext/alertes';
 import { TILE_SIZE } from '../shared/constants';
 import type { PickResult, WorldMirror } from '../client/tools/mirror';
 import { roadDef } from '../client/tools/mirror';
@@ -65,6 +67,8 @@ export class InfoPanel {
       const v = a && rec.variant >= 0 ? a.variants[rec.variant] : undefined;
       this.kicker.textContent = a ? CATEGORY_FR[a.category] : 'Bâtiment';
       this.title.textContent = a?.nameFr ?? rec.assetId;
+      const pm = alertMaskOf(rec.id);
+      if (pm) this.row('Problèmes', el('span', { cls: 'neg' }, ALERT_KINDS.filter((k) => pm & ALERT_BITS[k]).map((k) => ALERT_LABELS[k]).join(' · ')));
       if (a) {
         if (v) this.row('Variante', v.nameFr);
         this.row('Capacité', a.capacity.residents ? `${fmt(a.capacity.residents)} habitants` : a.capacity.jobs ? `${fmt(a.capacity.jobs)} emplois` : '—');
