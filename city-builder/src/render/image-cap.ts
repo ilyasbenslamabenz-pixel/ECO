@@ -5,6 +5,7 @@
  * Réglé une fois au démarrage (main.ts) avant tout chargement ; Infinity = images d'origine.
  */
 import type * as THREE from 'three';
+import { Cache, Source } from 'three';
 
 export const imageLimits = {
   /** Côté maximal (px) des images de texture gardées en mémoire (modèles). */
@@ -47,8 +48,17 @@ function workCanvas(w: number, h: number): typeof work {
 }
 
 /** Image réduite à `cap` px de côté au plus (même orientation), ou l'image d'origine si elle tient déjà. */
+/**
+ * Images déjà réduites, par image d'origine. THREE.Cache est activé : plusieurs modèles reçoivent la MÊME
+ * ImageBitmap pour une texture commune (atlas). L'original étant libéré après réduction, les suivants
+ * recevaient une image détachée (« ImageBitmap has been detached » dans WebKit) : ils reprennent ici la
+ * version réduite.
+ */
+const reduced = new WeakMap<object, ImageData>();
+
 export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | ImageData {
   if (!Number.isFinite(cap)) return img;
+  if (img && typeof img === 'object') { const r = reduced.get(img as object); if (r) return r; }
   const d = dims(img);
   if (!d || (d.w <= cap && d.h <= cap)) return img;
   const s = cap / Math.max(d.w, d.h);
@@ -60,10 +70,17 @@ export function downscaleImage<T>(img: T, cap = imageLimits.textureCap): T | Ima
   ctx.clearRect(0, 0, w, h);
   ctx.drawImage(img as unknown as Img as CanvasImageSource, 0, 0, w, h);
   const out = ctx.getImageData(0, 0, w, h);
-  // Libère l'original au plus tôt (ImageBitmap : mémoire décodée rendue tout de suite).
+  reduced.set(img as object, out);
+  // Le cache de three rend désormais la version réduite aux chargements suivants (même texture commune).
+  const files = (Cache as unknown as { files: Record<string, unknown> }).files;
+  for (const k of Object.keys(files)) if (files[k] === img) files[k] = out;
+  // Libère l'original au plus tôt (ImageBitmap : mémoire décodée rendue tout de suite) : plus personne ne
+  // peut le recevoir (cache remplacé, réductions suivantes servies par `reduced`).
   (img as { close?: () => void }).close?.();
   return out;
 }
+
+const sharedSources = new WeakMap<ImageData, Source<unknown>>();
 
 /** Réduit en place les images des textures d'un modèle chargé (une fois par texture). */
 export function capModelTextures(root: THREE.Object3D, cap = imageLimits.textureCap): void {
@@ -80,6 +97,15 @@ export function capModelTextures(root: THREE.Object3D, cap = imageLimits.texture
         const img = t.image as unknown;
         const out = downscaleImage(img, cap);
         if (out !== img) { t.image = out; t.needsUpdate = true; }
+        // Même image réduite (texture commune à plusieurs modèles) = une seule copie sur le GPU : three
+        // partage la texture WebGL entre textures de même Source (et mêmes réglages).
+        if (typeof ImageData !== 'undefined' && t.image instanceof ImageData) {
+          const key = t.image as ImageData;
+          const own = t.source as unknown as Source<unknown>;
+          const src = sharedSources.get(key);
+          if (!src) sharedSources.set(key, own);
+          else if (own !== src) (t as unknown as { source: Source<unknown> }).source = src;
+        }
       }
     }
   });
