@@ -181,3 +181,16 @@ test('budget : miroir de l\'économie existante, montants et trésorerie inchang
   assert.ok(cmd.ok);
   assert.ok(Math.abs((cmd.data.data as { groups: Record<string, number> }).groups.economie! - rec.balance) < 0.05);
 });
+
+test('budget des modules : chaque ligne postée est appliquée à la trésorerie (recette +, dépense −) et au bilan du mois', () => {
+  const muniPlugin = createMunicipalPlugin();
+  const s = town([muniPlugin]);
+  const m = muniPlugin.municipal;
+  const before = s.economy.money;
+  m.budget.post('expense', 'investissement:lignes_ht', 4_500, 'electricite');
+  m.budget.post('income', 'vente:electricite', 1_200, 'electricite');
+  assert.equal(Math.round(s.economy.money - before), -3_300);
+  runDays(s, 32);
+  const rec = s.economy.history.find((h) => (h.services ?? 0) !== 0);
+  assert.ok(rec && Math.round(rec.services!) === -3_300, `bilan du mois : services ${rec?.services}`);
+});

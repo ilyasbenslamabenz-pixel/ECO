@@ -58,6 +58,8 @@ export function createMunicipalPlugin(opts: MunicipalPluginOptions = {}): SimPlu
       ctx.provide(MUNICIPAL_SERVICE, muni);
       muni.scheduler.log = (m) => { console.error(m); };
       muni.economySource = () => (ctx as PluginContext & EconomyAccess).economy?.lastMonth();
+      // Lignes des modules (électricité, déchets, port/aéroport…) appliquées à la trésorerie au fil de l'eau.
+      muni.onModuleMoney = (v) => (ctx as PluginContext & EconomyAccess).economy?.applyService?.(v);
     },
 
     onNewGame(ctx) {

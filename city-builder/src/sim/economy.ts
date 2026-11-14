@@ -80,6 +80,8 @@ export interface MonthRecord {
   jobs: number;
   unemploymentRate: number;
   happiness: number;
+  /** Solde des services municipaux du mois (électricité, eau, déchets, port… : + recettes, − dépenses). */
+  services?: number;
 }
 
 export interface Forecast {
@@ -120,7 +122,7 @@ export interface EconomyJSON {
   history: MonthRecord[];
   monthsInDeficit: number;
   bankrupt: boolean;
-  month: { construction: number; refunds: number; loansTaken: number; operating?: number; hours?: number; acc?: { income: Record<TaxSector, number>; buildings: number; roads: number; salaries: number } };
+  month: { construction: number; refunds: number; loansTaken: number; operating?: number; hours?: number; acc?: { income: Record<TaxSector, number>; buildings: number; roads: number; salaries: number }; services?: number; lastServices?: number };
 }
 
 const zeroSectors = (): Record<TaxSector, number> => ({ residential: 0, commercial: 0, industrial: 0, office: 0 });
@@ -150,6 +152,9 @@ export class Economy {
   /** Cumuls du mois en cours. */
   private monthConstruction = 0;
   private monthRefunds = 0;
+  /** Solde des services des modules versé ce mois-ci (appliqué au fil de l'eau). */
+  private monthServices = 0;
+  private lastServices = 0;
   private monthLoans = 0;
   /** Solde d'exploitation déjà versé heure par heure ce mois-ci (recettes − entretien − salaires). */
   private monthOperating = 0;
@@ -171,6 +176,8 @@ export class Economy {
     this.bankrupt = false;
     this.monthConstruction = 0;
     this.monthRefunds = 0;
+    this.lastServices = 0;
+    this.monthServices = 0;
     this.monthLoans = 0;
     this.monthOperating = 0;
     this.monthHours = 0;
@@ -193,6 +200,15 @@ export class Economy {
   canAfford(cost: number): boolean { return !this.bankrupt && this.money >= cost; }
   spend(cost: number): void { this.money -= cost; this.monthConstruction += cost; }
   refund(amount: number): void { this.money += amount; this.monthRefunds += amount; }
+  /**
+   * Recette (+) ou dépense (−) d'un service municipal (modules électricité, eau, déchets, port/aéroport),
+   * appliquée tout de suite à la trésorerie et cumulée dans le bilan du mois (`services`).
+   */
+  applyService(amount: number): void {
+    if (!Number.isFinite(amount) || amount === 0) return;
+    this.money += amount;
+    this.monthServices += amount;
+  }
 
   addUpkeep(v: number, kind: 'buildings' | 'roads' = 'buildings'): void {
     if (kind === 'roads') this.roadUpkeep += v; else this.buildingUpkeep += v;
@@ -345,7 +361,11 @@ export class Economy {
   }
 
   /** Solde d'exploitation horaire courant (affichage « / h »). */
-  get hourlyBalance(): number { return (this.monthlyIncome - (this.buildingUpkeep + this.roadUpkeep + this.salaries())) / HOURS_PER_MONTH; }
+  get hourlyBalance(): number {
+    // Services municipaux : moyenne horaire du mois en cours (ou du dernier mois clos en début de mois).
+    const svc = this.monthHours > 0 ? this.monthServices / this.monthHours : this.lastServices / HOURS_PER_MONTH;
+    return (this.monthlyIncome - (this.buildingUpkeep + this.roadUpkeep + this.salaries())) / HOURS_PER_MONTH + svc;
+  }
 
   /**
    * Appelé au changement de mois : encaisse les impôts, paie l'entretien, les salaires et
@@ -395,11 +415,14 @@ export class Economy {
       balance: r2(balance), moneyEnd: Math.round(this.money),
       population: ctx?.population ?? 0, jobs: ctx?.jobs ?? 0,
       unemploymentRate: ctx?.unemploymentRate ?? 0, happiness: ctx?.happiness ?? 0,
+      services: r2(this.monthServices),
     };
     this.history.push(rec);
     if (this.history.length > HISTORY_MAX_MONTHS) this.history.splice(0, this.history.length - HISTORY_MAX_MONTHS);
     this.monthConstruction = 0;
     this.monthRefunds = 0;
+    this.lastServices = this.monthServices;
+    this.monthServices = 0;
     this.monthLoans = 0;
     return rec;
   }
@@ -409,7 +432,7 @@ export class Economy {
       money: this.money, taxRates: { ...this.taxRates }, loans: this.loans.map((l) => ({ ...l })), nextLoanId: this.nextLoanId,
       history: this.history.map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } })),
       monthsInDeficit: this.monthsInDeficit, bankrupt: this.bankrupt,
-      month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans, operating: this.monthOperating, hours: this.monthHours, acc: { ...this.acc, income: { ...this.acc.income } } },
+      month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans, operating: this.monthOperating, hours: this.monthHours, acc: { ...this.acc, income: { ...this.acc.income } }, services: this.monthServices, lastServices: this.lastServices },
     };
   }
 
@@ -427,6 +450,8 @@ export class Economy {
     this.monthLoans = j.month.loansTaken;
     this.monthOperating = j.month.operating ?? 0;
     this.monthHours = j.month.hours ?? 0;
+    this.monthServices = j.month.services ?? 0;
+    this.lastServices = j.month.lastServices ?? 0;
     this.acc = j.month.acc ? { ...j.month.acc, income: { ...zeroSectors(), ...j.month.acc.income } } : { income: zeroSectors(), buildings: 0, roads: 0, salaries: 0 };
   }
 }

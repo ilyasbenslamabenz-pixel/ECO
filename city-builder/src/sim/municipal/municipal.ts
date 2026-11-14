@@ -28,6 +28,8 @@ export class Municipal {
   grids: IndicatorGrids;
   networks: Networks;
   budget: BudgetLedger;
+  /** Trésorerie de la ville : reçoit le solde de chaque ligne de module (branché par le plugin municipal). */
+  onModuleMoney: ((signed: number) => void) | null = null;
   effects: EffectRegistry;
   readonly scheduler = new MultiRateScheduler();
   /** Source facultative du bilan mensuel de l'économie de base (branchée par le module si le cœur l'expose). */
@@ -38,7 +40,7 @@ export class Municipal {
   constructor(geometry: GridGeometry = { originX: 0, originZ: 0, cellSize: DEFAULT_CELL_SIZE, cols: 1, rows: 1 }) {
     this.grids = new IndicatorGrids(geometry);
     this.networks = new Networks();
-    this.budget = new BudgetLedger();
+    this.budget = this.hooked(new BudgetLedger());
     this.effects = new EffectRegistry();
     for (const f of FREQUENCIES) {
       this.scheduler.add({ id: `municipal:propagation:${f}`, every: f, order: BUILTIN_TASK_ORDER, run: () => this.grids.propagate(f) });
@@ -53,6 +55,8 @@ export class Municipal {
     });
   }
 
+  private hooked(b: BudgetLedger): BudgetLedger { b.onPost = (v) => this.onModuleMoney?.(v); return b; }
+
   /** Façade couvrant un rectangle monde avec des cellules de `cellSize` m. */
   static forBounds(bounds: { minX: number; minZ: number; maxX: number; maxZ: number }, cellSize = DEFAULT_CELL_SIZE): Municipal {
     return new Municipal(geometryFor(bounds, cellSize));
@@ -62,7 +66,7 @@ export class Municipal {
   reset(geometry: GridGeometry): void {
     this.grids = new IndicatorGrids(geometry);
     this.networks = new Networks();
-    this.budget = new BudgetLedger();
+    this.budget = this.hooked(new BudgetLedger());
     this.effects = new EffectRegistry();
     this.scheduler.resetClock();
   }
@@ -96,7 +100,7 @@ export class Municipal {
     const networks = Networks.fromJSON(s.networks);
     const budget = BudgetLedger.fromJSON(s.budget);
     const effects = EffectRegistry.fromJSON(s.effects);
-    this.grids = grids; this.networks = networks; this.budget = budget; this.effects = effects;
+    this.grids = grids; this.networks = networks; this.budget = this.hooked(budget); this.effects = effects;
     this.scheduler.fromJSON(s.scheduler);
   }
 }

@@ -68,11 +68,16 @@ export class BudgetLedger {
    * Enregistre un montant du mois en cours (cumulé par clé). `amount` > 0 ; pour une correction, poster sur
    * l'autre sens. Renvoie le cumul de la ligne.
    */
+  /** Appelé à chaque ligne de module postée (+ recette, − dépense) : application à la trésorerie (Municipal). */
+  onPost: ((signed: number) => void) | null = null;
+
   post(side: BudgetSide, category: string, amount: number, service = '', district = ''): number {
     if (side !== 'income' && side !== 'expense') throw new Error(`budget : sens ${String(side)} inconnu`);
     if (!category) throw new Error('budget : poste vide');
     if (!Number.isFinite(amount) || amount < 0) throw new Error(`budget : montant ${amount} invalide (≥ 0 attendu)`);
-    return this.put(this.current, { side, category, service, district, amount });
+    const r = this.put(this.current, { side, category, service, district, amount });
+    if (amount > 0) this.onPost?.(side === 'income' ? amount : -amount);
+    return r;
   }
 
   /** Ventile un montant par quartier selon des poids (centimes exacts), une ligne par quartier. */

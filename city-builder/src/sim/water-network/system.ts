@@ -820,10 +820,14 @@ export class WaterSystem {
     }
   }
 
+  /** Trésorerie de la ville (branchée par le plugin) : + recette, − dépense, à chaque heure. */
+  onMoney: ((signed: number) => void) | null = null;
+
   private accountHour(b: WaterBalance, fac: Facility[]): void {
     const s = this.settings, m = this.month;
     const add = (k: string, v: number, side: 'income' | 'expense'): void => {
       if (!(v > 0)) return;
+      this.onMoney?.(side === 'income' ? v : -v);
       m.lines[k] = (m.lines[k] ?? 0) + v;
       if (side === 'income') m.income += v; else m.expenses += v;
     };

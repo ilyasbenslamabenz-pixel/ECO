@@ -114,6 +114,8 @@ export interface PluginEconomy {
   readonly taxRates: Readonly<Record<TaxSector, number>>;
   /** Dernier bilan mensuel clos (copie ; undefined avant le premier mois). */
   lastMonth(): MonthRecord | undefined;
+  /** Recette (+) ou dépense (−) d'un service municipal, appliquée tout de suite à la trésorerie. */
+  applyService(amount: number): void;
 }
 
 /** Résultat d'une écriture de promotion privée (`PluginDevelopment`). */

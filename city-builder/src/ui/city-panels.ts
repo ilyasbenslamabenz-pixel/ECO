@@ -238,6 +238,7 @@ export class CityPanels {
         el('dt', { text: 'Constructions (investissement)' }), el('dd', { text: signedMoney(-last.construction) }),
         el('dt', { text: 'Remboursements de démolition' }), el('dd', { text: signedMoney(last.refunds) }),
         el('dt', { text: 'Emprunts reçus' }), el('dd', { text: signedMoney(last.loansTaken) }),
+        el('dt', { text: 'Services (électricité, eau, déchets, port)' }), el('dd', { cls: ((last as { services?: number }).services ?? 0) < 0 ? 'neg' : 'pos', text: signedMoney((last as { services?: number }).services ?? 0) }),
         el('dt', { text: 'Trésorerie en fin de mois' }), el('dd', { text: money(last.moneyEnd) })));
     } else lm.replaceChildren(el('p', { cls: 'muted small', text: 'Aucun mois clos pour l’instant : le bilan détaillé apparaît le 1er du mois suivant.' }));
     const d = r.date;
