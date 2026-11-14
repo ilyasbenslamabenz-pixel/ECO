@@ -446,6 +446,7 @@ export class BuildBar {
       const chain = m.draft.chained > 0 ? ` · ${m.draft.chained} tronçon${m.draft.chained > 1 ? 's' : ''} — le tracé continue, « Terminer » pour arrêter` : ' — le tracé continue depuis l’extrémité';
       return `${ROAD_KINDS[m.roadType].nameFr}${m.draft.elevation ? ` · ${m.draft.elevation > 0 ? '+' : ''}${m.draft.elevation} m` : ''} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'départ puis arrivée'}${chain}`;
     }
+    if (m.tool === 'bulldoze' && m.bulldozeArea) return m.hasAreaStart ? 'Démolir par zone : choisissez le coin opposé du rectangle (Échap : annuler)' : `Démolir par zone : touchez un coin, puis le coin opposé — ${m.bulldozeRoads ? 'bâtiments et routes' : 'bâtiments seulement'} (remboursement 25 %)`;
     if (m.tool === 'bulldoze') return 'Démolir : cliquez un bâtiment ou un tronçon de route (remboursement 25 %)';
     if (m.tool === 'terraform') return terrainHint(m);
     return '';
@@ -516,6 +517,10 @@ export class BuildBar {
       }
     } else if (t === 'terraform') {
       terrainToolActions(m, act);
+    } else if (t === 'bulldoze') {
+      act('Un par un', 'Démolir un bâtiment ou un tronçon à la fois', () => m.setBulldozeArea(false), !m.bulldozeArea);
+      act('Zone', 'Démolir tout ce qui est dans un rectangle (une seule annulation)', () => m.setBulldozeArea(true), m.bulldozeArea);
+      if (m.bulldozeArea) act('Routes aussi', 'Inclure les tronçons de route entièrement dans la zone', () => m.setBulldozeRoads(!m.bulldozeRoads), m.bulldozeRoads);
     }
     this.hint.textContent = this.hintText();
     act('Terminer', t === 'road' ? 'Terminer le tracé en cours ; sinon revenir à la sélection (Échap)' : 'Revenir à la sélection (Échap)', () => {
@@ -529,7 +534,7 @@ export class BuildBar {
   private syncFinish(): void {
     const on = this.d.machine.drawing;
     this.finishBtn.classList.toggle('hidden', !on);
-    if (this.d.machine.tool === 'terraform') this.hint.textContent = this.hintText();
+    if (this.d.machine.tool === 'terraform' || this.d.machine.tool === 'bulldoze') this.hint.textContent = this.hintText();
     document.body.classList.toggle('road-drawing', on);
     if (on !== this.wasDrawing) {
       this.wasDrawing = on;

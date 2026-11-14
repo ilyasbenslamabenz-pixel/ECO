@@ -84,6 +84,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.hoverMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.select);
     this.selMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.select);
     this.terrainPrev = new TerrainEditPreview(deps.scene, deps.heightAt, () => deps.machine.mirror.terrain);
+    this.areaMarker = new SelectionMarker(deps.scene, deps.heightAt, COLORS.error);
     deps.camera.toolSink = this;
     deps.machine.onPreview((p) => this.render(p));
     deps.machine.onSelect = (p) => this.select(p);
@@ -178,6 +179,8 @@ export class ToolController implements IToolController, PointerToolSink {
     this.pendingHover = { x: sx, y: sy, type };
   }
   private pendingHover: { x: number; y: number; type: string } | null = null;
+  /** Démolition par zone : contour du rectangle. */
+  private areaMarker: SelectionMarker | null = null;
 
   /** Pinceau de terrain glissé : minuterie des passes, dernière passe (temps, position). */
   private paint: { timer: ReturnType<typeof setInterval>; t0: number; lastT: number; lastX: number; lastZ: number } | null = null;
@@ -237,6 +240,11 @@ export class ToolController implements IToolController, PointerToolSink {
       this.roadStartedThisGesture = true;
       void d.machine.primary();
     }
+    // Démolition par zone à la souris : premier coin posé à l'appui (clic-clic ou glisser).
+    if (type !== 'touch' && d.machine.tool === 'bulldoze' && d.machine.bulldozeArea && !d.machine.hasAreaStart) {
+      this.roadStartedThisGesture = true;
+      void d.machine.primary();
+    }
     // Quai / Creuser à la souris : départ posé à l'appui (clic-clic ou glisser).
     if (type !== 'touch' && d.machine.tool === 'terraform' && !isBrushMode(d.machine.terrain.mode) && !d.machine.terrain.hasStart) {
       this.roadStartedThisGesture = true;
@@ -267,14 +275,17 @@ export class ToolController implements IToolController, PointerToolSink {
       if (m.tool === 'road' && m.roadSub !== 'upgrade' && (!m.drawing || (m.roadSub === 'draw' && m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
       if (m.tool === 'road' && m.roadSub === 'upgrade' && !(m.preview.kind === 'upgrade' && m.preview.target)) return;
       if (m.tool === 'road' && m.roadSub === 'draw' && !m.draft.points()) return; // doigt relâché sur le départ
-      if (m.tool === 'bulldoze' && !(m.preview.kind === 'bulldoze' && m.preview.target)) return;
+      if (m.tool === 'bulldoze' && m.bulldozeArea) {
+        // Zone : premier coin au relâcher ; ensuite la démolition se confirme (bouton avec le nombre d'objets).
+        if (!m.hasAreaStart) { void m.primary(); return; }
+      } else if (m.tool === 'bulldoze' && !(m.preview.kind === 'bulldoze' && m.preview.target)) return;
       // Quai / Creuser : le départ se pose au relâcher ; l'application se confirme.
       if (m.tool === 'terraform' && !isBrushMode(m.terrain.mode) && !m.terrain.hasStart) { void m.primary(); return; }
       this.pendingTouchConfirm = true;
       this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: m.tool === 'building' });
       return;
     }
-    if (m.tool === 'road' || (m.tool === 'terraform' && this.roadStartedThisGesture)) {
+    if (m.tool === 'road' || ((m.tool === 'terraform' || (m.tool === 'bulldoze' && m.bulldozeArea)) && this.roadStartedThisGesture)) {
       if (m.tool === 'road' && m.roadSub === 'upgrade' && !tap) return; // Améliorer : un clic franc, pas un glisser
       if (tap && this.roadStartedThisGesture) return; // simple clic de départ
       void m.primary();
@@ -290,7 +301,12 @@ export class ToolController implements IToolController, PointerToolSink {
     if (!m) return 'Construire';
     const p = m.preview;
     if (m.tool === 'building') return 'Construire';
-    if (m.tool === 'bulldoze') return 'Démolir';
+    if (m.tool === 'bulldoze') {
+      const a = p.kind === 'bulldoze' ? p.area : null;
+      if (!a) return 'Démolir';
+      const n = a.buildings.length + a.edges.length;
+      return n ? `Démolir ${n} objet${n > 1 ? 's' : ''} · +${fmt(a.refund)} ¢` : 'Zone vide';
+    }
     if (m.tool === 'terraform') return terrainLabel(m.terrain.mode);
     if (p.kind === 'powerline') return !p.a ? 'Choisir le départ' : p.validity === 'error' ? 'Ligne refusée' : p.b ? `Construire la ligne · ${fmt(p.cost)} ¢` : 'Choisir l’arrivée';
     if (p.kind === 'grid') return p.validity === 'error' ? 'Îlot refusé' : `Construire l’îlot · ${fmt(p.cost)} ¢`;
@@ -425,6 +441,8 @@ export class ToolController implements IToolController, PointerToolSink {
     if (this.pendingTouchConfirm && (p.kind === 'road' || p.kind === 'grid' || p.kind === 'upgrade')) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
     if (p.kind !== 'select' && p.kind !== 'bulldoze') this.hoverMarker.hide();
     if (p.kind !== 'terrain') this.terrainPrev?.hide();
+    if (!(p.kind === 'bulldoze' && p.area)) this.areaMarker?.hide();
+    if (this.pendingTouchConfirm && p.kind === 'bulldoze' && p.area) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
     switch (p.kind) {
       case 'building': {
         const y = footprintGroundY(d.heightAt, p.proposal.obb, p.asset.footprint.tilesX, p.asset.footprint.tilesZ);
@@ -469,6 +487,16 @@ export class ToolController implements IToolController, PointerToolSink {
         break;
       }
       case 'bulldoze':
+        if (d.machine.bulldozeArea) {
+          this.hoverMarker.hide();
+          const a = p.area;
+          if (a && this.areaMarker) {
+            this.areaMarker.showPath([a.a.x, a.a.z, a.b.x, a.a.z, a.b.x, a.b.z, a.a.x, a.b.z, a.a.x, a.a.z], 1.2);
+            const n = a.buildings.length, ne = a.edges.length;
+            tag(n + ne ? `Démolir : ${n} bâtiment${n > 1 ? 's' : ''}${ne ? ` · ${ne} tronçon${ne > 1 ? 's' : ''}` : ''}\nRemboursement +${fmt(a.refund)} ¢` : 'Zone vide', n + ne ? 'error' : 'info');
+          } else tag(p.areaStart ? 'Choisissez le coin opposé' : 'Démolir par zone : premier coin', 'info');
+          break;
+        }
         this.hoverMarker.setColor(COLORS.error);
         this.showMarker(this.hoverMarker, p.target);
         if (p.target) {

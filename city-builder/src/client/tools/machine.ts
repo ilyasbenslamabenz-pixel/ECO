@@ -21,7 +21,7 @@
 import { normRot } from '../../shared/footprint';
 import type { CatalogAsset } from '../../shared/catalog';
 import { isBuildingCategory } from '../../shared/catalog';
-import type { CommandError, RoadEdgeRecord, RoadKindId, ToolId } from '../../shared/contracts';
+import type { BuildingRecord, CommandError, RoadEdgeRecord, RoadKindId, ToolId } from '../../shared/contracts';
 import { legacyRoadType } from '../../sim/roads/index';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage } from '../../shared/protocol';
 import type { Ray } from './geometry';
@@ -64,6 +64,11 @@ export const TOOL_PHASE: Record<ToolId, number | null> = {
   powerline: null,
 };
 
+/** Démolition par zone : rectangle (coins a, b), bâtiments (et routes) entièrement dedans, remboursement indicatif. */
+export interface BulldozeArea { a: { x: number; z: number }; b: { x: number; z: number }; buildings: BuildingRecord[]; edges: RoadEdgeRecord[]; refund: number }
+/** Nombre maximal d'objets démolis d'un coup. */
+export const AREA_DEMOLISH_MAX = 300;
+
 /** Remboursement à la démolition appliqué par la simulation (src/sim/world.ts). Affichage indicatif. */
 export const DEMOLISH_REFUND_RATE = 0.25;
 
@@ -83,7 +88,7 @@ export type ToolPreview =
   | { kind: 'road'; type: RoadKindId; mode: RoadMode; points: number[] | null; start: SnapPoint | null; control: SnapPoint | null; hover: SnapPoint | null; validity: Validity; cost: number; length: number; message: string; angle: string; chained: number; elevation?: number; path?: number[] }
   | { kind: 'grid'; type: RoadKindId; start: { x: number; z: number } | null; hover: { x: number; z: number } | null; layout: GridLayout | null; validity: Validity; cost: number; message: string }
   | { kind: 'upgrade'; target: RoadEdgeView | null; toKind: RoadKindId | null; reverse: boolean; validity: Validity; cost: number; refund: number; message: string }
-  | { kind: 'bulldoze'; target: PickResult | null; refund: number }
+  | { kind: 'bulldoze'; target: PickResult | null; refund: number; area?: BulldozeArea | null; areaStart?: { x: number; z: number } | null }
   | TerrainPreview;
 
 export type Notify = (text: string, kind: 'info' | 'error' | 'ok') => void;
@@ -183,6 +188,7 @@ export class ConstructionTools {
     if (opts?.roadType && roadDef(opts.roadType)) this.roadType = opts.roadType;
     this.tool = t;
     this.lineA = null;
+    this.areaStart = null;
     this.draft.reset();
     this.gridStart = null;
     this.draft.type = this.roadType;
@@ -280,6 +286,11 @@ export class ConstructionTools {
         this.preview = { kind: 'select', hover: this.lastRay ? this.mirror.pick(this.lastRay, g) : null };
         break;
       case 'bulldoze': {
+        if (this.bulldozeArea) {
+          const a = this.areaStart;
+          this.preview = { kind: 'bulldoze', target: null, refund: 0, areaStart: a, area: a && g ? this.areaContents(a, g) : null };
+          break;
+        }
         const target = this.lastRay ? this.mirror.pick(this.lastRay, g) : null;
         const t = target && target.kind !== 'vehicle' ? target : null;
         this.preview = { kind: 'bulldoze', target: t, refund: t ? this.refundOf(t) : 0 };
@@ -757,10 +768,84 @@ export class ConstructionTools {
     this.refresh();
   }
 
+  /** Démolir : un objet à la fois, ou par zone (rectangle). Routes comprises dans la zone si `bulldozeRoads`. */
+  bulldozeArea = false;
+  bulldozeRoads = false;
+  private areaStart: { x: number; z: number } | null = null;
+  get hasAreaStart(): boolean { return this.areaStart !== null; }
+  setBulldozeArea(on: boolean): void { this.bulldozeArea = on; this.areaStart = null; this.refresh(); }
+  setBulldozeRoads(on: boolean): void { this.bulldozeRoads = on; this.refresh(); }
+
+  /** Contenu d'un rectangle : bâtiments dont le centre est dedans, tronçons dont les deux extrémités sont dedans. */
+  areaContents(a: { x: number; z: number }, b: { x: number; z: number }): BulldozeArea {
+    const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), z0 = Math.min(a.z, b.z), z1 = Math.max(a.z, b.z);
+    const inside = (x: number, z: number): boolean => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+    const buildings: BuildingRecord[] = [], edges: RoadEdgeRecord[] = [];
+    let refund = 0;
+    for (const r of this.mirror.buildings.values()) {
+      if (buildings.length >= AREA_DEMOLISH_MAX || !inside(r.x, r.z)) continue;
+      buildings.push(r);
+      refund += (this.mirror.asset(r.assetId)?.cost ?? 0) * DEMOLISH_REFUND_RATE;
+    }
+    if (this.bulldozeRoads) for (const e of this.mirror.edges.values()) {
+      if (buildings.length + edges.length >= AREA_DEMOLISH_MAX) break;
+      const v = this.mirror.edgeView(e);
+      if (!v || !inside(v.ax, v.az) || !inside(v.bx, v.bz)) continue;
+      edges.push(e);
+      refund += v.length * (roadDef(v.kindId)?.costPerMeter ?? 0) * DEMOLISH_REFUND_RATE;
+    }
+    return { a: { ...a }, b: { ...b }, buildings, edges, refund: Math.round(refund) };
+  }
+
   private async bulldozeCurrent(): Promise<void> {
     const p = this.preview;
-    if (p.kind !== 'bulldoze' || !p.target) return;
+    if (p.kind !== 'bulldoze') return;
+    if (this.bulldozeArea) {
+      const g = this.lastGround;
+      if (!g) return;
+      if (!this.areaStart) { this.areaStart = { x: g.x, z: g.z }; this.refresh(); return; }
+      // Exactement la sélection affichée (recalculée si l'aperçu n'en a pas).
+      const area = p.area ?? this.areaContents(this.areaStart, g);
+      this.areaStart = null;
+      await this.demolishArea(area);
+      this.refresh();
+      return;
+    }
+    if (!p.target) return;
     await this.demolishTarget(p.target);
+  }
+
+  /** Démolit le contenu d'une zone ; une seule entrée d'annulation (tout est reconstruit d'un coup). */
+  async demolishArea(area: BulldozeArea): Promise<number> {
+    if (!area.buildings.length && !area.edges.length) { this.notify('Rien à démolir dans cette zone', 'info'); return 0; }
+    const steps: UndoStep[] = [];
+    let refund = 0, nb = 0, ne = 0, failed = 0;
+    for (const rec of area.buildings) {
+      try {
+        const r = await this.sim.send('demolish', { buildingId: rec.id });
+        refund += r.refund; nb++;
+        this.undo.forgetBuilding(rec.id);
+        steps.push({ kind: 'placeBuilding', assetId: rec.assetId, x: rec.x, z: rec.z, rot: rec.rot, variant: rec.variant });
+      } catch { failed++; }
+    }
+    for (const e of area.edges) {
+      if (!this.mirror.edges.has(e.id)) continue;
+      const v = this.mirror.edgeView(e);
+      try {
+        const r = await this.sim.send('removeRoad', { edgeId: e.id });
+        refund += r.refund; ne++;
+        this.undo.forgetEdge(e.id);
+        if (v) steps.push({ kind: 'buildRoad', kindId: v.kindId, points: [v.ax, v.az, v.bx, v.bz], ...(v.c1 && v.c2 ? { c1: v.c1, c2: v.c2 } : {}) });
+      } catch { failed++; }
+    }
+    if (steps.length) {
+      this.applied++;
+      this.undo.push({ label: `Démolition de zone : ${nb} bâtiment${nb > 1 ? 's' : ''}${ne ? `, ${ne} tronçon${ne > 1 ? 's' : ''}` : ''}`, steps });
+    }
+    const parts = [nb ? `${nb} bâtiment${nb > 1 ? 's' : ''}` : '', ne ? `${ne} tronçon${ne > 1 ? 's' : ''} de route` : ''].filter(Boolean).join(' et ');
+    if (steps.length) this.notify(`Zone démolie : ${parts} (+${fmt(refund)} ¢)${failed ? ` — ${failed} refusé${failed > 1 ? 's' : ''}` : ''}`, 'ok');
+    else this.notify('Démolition impossible dans cette zone', 'error');
+    return steps.length;
   }
 
   /** Démolition d'une cible (outil Bulldozer ou bouton « Démolir » d'un panneau). */
@@ -796,6 +881,7 @@ export class ConstructionTools {
     if (this.tool === 'road' && this.draft.back()) { this.refresh(); return true; }
     if (this.tool === 'terraform' && this.terrain.back()) return true;
     if (this.tool === 'powerline' && this.lineA) { this.lineA = null; this.refresh(); return true; }
+    if (this.tool === 'bulldoze' && this.areaStart) { this.areaStart = null; this.refresh(); return true; }
     if (this.tool !== 'select') { this.setTool('select'); return true; }
     return false;
   }
