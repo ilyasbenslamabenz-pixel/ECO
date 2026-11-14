@@ -240,6 +240,18 @@ async function boot(): Promise<void> {
     render.ctx.scene.traverse((o) => { objects++; if ((o as THREE.InstancedMesh).isInstancedMesh) instanced++; else if ((o as THREE.Mesh).isMesh) meshes++; });
     return { geometries: r.info.memory.geometries, textures: r.info.memory.textures, programs: r.info.programs?.length ?? 0, objects, instanced, meshes, dom: document.getElementsByTagName('*').length };
   };
+  // Diagnostic (e2e mémoire) : objets et géométries par groupe de premier niveau de la scène.
+  (debug as unknown as Record<string, unknown>).sceneCensus = () => {
+    const out: Record<string, { obj: number; geo: number }> = {};
+    for (const top of render.ctx.scene.children) {
+      const geos = new Set<unknown>(); let obj = 0;
+      top.traverse((o) => { obj++; const g = (o as THREE.Mesh).geometry; if (g) geos.add(g); });
+      const k = top.name || top.type;
+      const cur = out[k] ?? { obj: 0, geo: 0 };
+      out[k] = { obj: cur.obj + obj, geo: cur.geo + geos.size };
+    }
+    return out;
+  };
   // Diagnostic (e2e mémoire) : textures de la scène regroupées par origine.
   (debug as unknown as Record<string, unknown>).textureReport = () => {
     const tex = new Set<THREE.Texture>();
