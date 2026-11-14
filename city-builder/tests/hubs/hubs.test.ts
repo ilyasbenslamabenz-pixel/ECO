@@ -386,7 +386,7 @@ test('OUTIL DE POSE : Aéroport posé via le catalogue (aperçu rouge/vert par l
 });
 
 test('port fluvial : accepté au bord d\'une rivière navigable (carte sans mer), navire à quai', () => {
-  const t = hubsSim({ seed: 1, terrain: { hydrology: 'aucune', rivers: 0.6, relief: 0.15 } });
+  const t = hubsSim({ seed: 1, terrain: { hydrology: 'aucune', rivers: 0.6, relief: 0.15, genVersion: 1 } }); // site fluvial de la génération v1
   const site = findSite(t.sim, 'port_commerce', 32);
   assert.ok(site, 'emplacement fluvial trouvé');
   assert.ok(place(t.sim, 'port_commerce', site.x, site.z, site.rot).ok);

@@ -11,7 +11,7 @@
  *                               ou de sens sans démolir
  *   building  : fantôme qui suit le curseur (snapping façade/route), clic = placeBuilding
  *   bulldoze  : survol = cible en rouge + remboursement, clic = demolish / removeRoad
- *   terraform : non disponible (Phase 2) — la simulation répond NOT_IMPLEMENTED
+ *   terraform : tiroir Terrain — Défricher, Quai / remblai, Creuser (src/client/tools/terrain-tool.ts)
  *
  * Toute validation passe par la simulation : chaque changement d'aperçu envoie une commande
  * `dryRun` (une seule en vol à la fois, la plus récente gagne) et l'aperçu devient vert ou
@@ -32,6 +32,8 @@ import { nextUpgradeKind, prevUpgradeKind } from '../../sim/roads/upgrade';
 import type { RoadEdgeView } from './mirror';
 import { proposePlacement, type PlacementProposal } from './snapping';
 import { UndoStack, type UndoStep } from './undo';
+import { TerrainTool, type TerrainPreview } from './terrain-tool';
+import type { ExtCommandArgs, ExtCommandName, ExtCommandResult } from '../../sim/sim-protocol';
 
 /**
  * Pôles de transport (module `hubs`, phase 2C) — ajout minimal à l'outil de pose : une entrée du catalogue
@@ -48,6 +50,8 @@ export interface SimPort {
   send<K extends CommandName>(name: K, args: CommandArgs<K>): Promise<CommandResult<K>>;
   onSnapshot(l: (s: SnapshotMessage) => void): void;
   onDelta(l: (d: DeltaMessage) => void): void;
+  /** Commandes étendues (SimBridge.sendExt) : éditions du terrain. Absent = outil Terrain indisponible. */
+  sendExt?<K extends ExtCommandName>(name: K, args: ExtCommandArgs<K>): Promise<ExtCommandResult<K>>;
 }
 
 /** Phase prévue des outils non encore disponibles. */
@@ -56,7 +60,7 @@ export const TOOL_PHASE: Record<ToolId, number | null> = {
   road: null,
   building: null,
   bulldoze: null,
-  terraform: 2,
+  terraform: null,
 };
 
 /** Remboursement à la démolition appliqué par la simulation (src/sim/world.ts). Affichage indicatif. */
@@ -76,7 +80,8 @@ export type ToolPreview =
   | { kind: 'road'; type: RoadKindId; mode: RoadMode; points: number[] | null; start: SnapPoint | null; control: SnapPoint | null; hover: SnapPoint | null; validity: Validity; cost: number; length: number; message: string; angle: string; chained: number; elevation?: number; path?: number[] }
   | { kind: 'grid'; type: RoadKindId; start: { x: number; z: number } | null; hover: { x: number; z: number } | null; layout: GridLayout | null; validity: Validity; cost: number; message: string }
   | { kind: 'upgrade'; target: RoadEdgeView | null; toKind: RoadKindId | null; reverse: boolean; validity: Validity; cost: number; refund: number; message: string }
-  | { kind: 'bulldoze'; target: PickResult | null; refund: number };
+  | { kind: 'bulldoze'; target: PickResult | null; refund: number }
+  | TerrainPreview;
 
 export type Notify = (text: string, kind: 'info' | 'error' | 'ok') => void;
 
@@ -143,11 +148,17 @@ export class ConstructionTools {
   /** Nombre d'actions réellement appliquées par la simulation (diagnostic e2e). */
   applied = 0;
 
+  /** Outils du tiroir Terrain (Défricher, Quai / remblai, Creuser). */
+  readonly terrain: TerrainTool;
+
   constructor(readonly mirror: WorldMirror, readonly sim: SimPort, readonly notify: Notify) {
     mirror.onChange(() => this.refresh());
     // Nouvelle partie ou partie chargée : les identifiants repartent de 1, l'historique d'annulation de l'ancienne
     // ville détruirait des objets de la nouvelle.
     sim.onSnapshot(() => { this.undo.clear(); this.draft.reset(); });
+    this.terrain = new TerrainTool({
+      terrainEdit: (args) => (sim.sendExt ? sim.sendExt('terrainEdit', args) : Promise.reject(new Error('Éditions du terrain indisponibles'))),
+    }, notify, () => { if (this.tool === 'terraform') this.refresh(); });
   }
 
   onPreview(fn: (p: ToolPreview) => void): void { this.listeners.push(fn); }
@@ -297,6 +308,11 @@ export class ConstructionTools {
         if (points) this.validateRoad(points);
         break;
       }
+      case 'terraform':
+        this.terrain.angleSnap = this.angleSnap;
+        this.terrain.setHover(g);
+        this.preview = this.terrain.preview();
+        break;
       default:
         this.preview = { kind: 'none' };
     }
@@ -479,6 +495,7 @@ export class ConstructionTools {
           else await this.roadClick();
           break;
         case 'bulldoze': await this.bulldozeCurrent(); break;
+        case 'terraform': if (await this.terrain.click()) this.applied++; break;
         default: break;
       }
     } finally { this.busy = false; }
@@ -649,6 +666,7 @@ export class ConstructionTools {
   secondary(): boolean {
     if (this.tool === 'road' && this.gridStart) { this.gridStart = null; this.gridKey = ''; this.refresh(); return true; }
     if (this.tool === 'road' && this.draft.back()) { this.refresh(); return true; }
+    if (this.tool === 'terraform' && this.terrain.back()) return true;
     if (this.tool !== 'select') { this.setTool('select'); return true; }
     return false;
   }

@@ -46,13 +46,19 @@ import {
   planRoundabout, commitRoundabout, roadPreviewPath,
 } from './roads';
 import { commitUpgrade, planUpgrade, type UpgradeBlocker } from './roads/upgrade';
-import { NO_WATER, extractPatch, generateWorld, type WorldTerrain } from './terrain';
+import {
+  NO_WATER, TERRAIN_GEN_VERSION, commitEdit, extractPatch, flattenWalls, generateWorld, parseEdits, planEdit, unionRect,
+  type EditableTerrain, type EditPlan, type TerrainEdit, type TerrainPatch, type WorldTerrain,
+} from './terrain';
 import { Rng } from './rng';
 import { EventScheduler, SimEvent } from './scheduler';
 import { CURRENT_SAVE_VERSION, SAVE_FORMAT_ID, validateSave, type SaveFileV2 } from './save-format';
 import { buildCity } from './city-builder';
-import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimReport } from './sim-protocol';
+import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimReport, TerrainEditResult } from './sim-protocol';
 import { PluginHost, SIM_PLUGINS, type PluginSaveField, type SimPlugin } from './plugins';
+
+/** Champ facultatif de la sauvegarde : éditions du terrain du joueur (src/sim/terrain/edits.ts), dans l'ordre. */
+export interface TerrainEditsSaveField { terrainEdits?: TerrainEdit[] }
 
 export type CmdOutcome<K extends CommandName> = { ok: true; data: CommandResult<K> } | { ok: false; error: CommandError };
 export type ExtOutcome<K extends ExtCommandName> = { ok: true; data: ExtCommandResult<K> } | { ok: false; error: CommandError };
@@ -158,6 +164,11 @@ export class Simulation {
   /** Zone de terrain modifiée depuis le dernier delta (union). */
   private pendingPatch: { i0: number; j0: number; i1: number; j1: number } | null = null;
   private trafficBuildingsDirty = true;
+  /** Éditions du terrain par le joueur (sauvegardées, rejouées au chargement) et état à envoyer au rendu. */
+  private terrainEdits: TerrainEdit[] = [];
+  private pendingEditLayers = false;
+  private pendingQuays = false;
+  private pendingCleared: number[] = [];
   private tripsToTraffic = 0;
   private jobsCache = 0;
   private jobsDirty = true;
@@ -196,13 +207,18 @@ export class Simulation {
   }
 
   newGame(p: NewGameParams): void {
-    this.params = { ...p };
-    this.terrain = generateWorld({ ...(p.terrain ?? {}), seed: p.seed, mapChunks: p.mapChunks, samplesPerTile: 1 });
+    // Version de génération fixée à la création (enregistrée avec la partie : terrain identique au rechargement).
+    this.params = { ...p, terrain: { ...(p.terrain ?? {}), genVersion: p.terrain?.genVersion === 1 ? 1 : TERRAIN_GEN_VERSION } };
+    this.terrain = generateWorld({ ...this.params.terrain, seed: p.seed, mapChunks: p.mapChunks, samplesPerTile: 1 });
     this.naturalHeights = new Float32Array(this.terrain.heights);
     this.net = new RoadNetwork(this.profileEnv(), INITIAL_ROAD_NODE_CAPACITY);
     this.segPolys.clear();
     this.segInfo.clear();
     this.pendingPatch = null;
+    this.terrainEdits = [];
+    this.pendingEditLayers = false;
+    this.pendingQuays = false;
+    this.pendingCleared = [];
     this.tilesPerSide = this.terrain.samplesX - 1;
     this.obbs.clear();
     this.categoryOf.clear();
@@ -324,6 +340,9 @@ export class Simulation {
     this.pendingEdgesAdded.length = 0;
     this.pendingEdgesRemoved.length = 0;
     this.pendingPatch = null;
+    this.pendingEditLayers = false;
+    this.pendingQuays = false;
+    this.pendingCleared = [];
   }
 
   notify(level: SimNotice['level'], message: string): void {
@@ -881,7 +900,9 @@ export class Simulation {
       stats: { ...this.getStats(), date: { ...this.stats.date } },
     };
     if (this.pendingPatch && this.terrain) {
-      msg.terrainPatch = extractPatch(this.terrain, this.pendingPatch);
+      const patch: TerrainPatch = extractPatch(this.terrain, this.pendingPatch);
+      this.decorateEditPatch(patch);
+      msg.terrainPatch = patch;
       this.pendingPatch = null;
     }
     const signals = this.takeSignalFrame();
@@ -1054,6 +1075,10 @@ export class Simulation {
           this.applyNetworkChanges(true);
           return ok({ edgeIds: c.segmentIds, cost: p.plan.cost });
         }
+        case 'terrainEdit': {
+          const r = this.terrainEdit(args as ExtCommandArgs<'terrainEdit'>);
+          return r.ok ? ok(r.data) : r;
+        }
         case 'buildCity': {
           const a = args as ExtCommandArgs<'buildCity'>;
           const r = buildCity(this, a.maxBuildings === undefined ? { preset: a.preset } : { preset: a.preset, maxBuildings: a.maxBuildings });
@@ -1077,10 +1102,111 @@ export class Simulation {
     return this.plugins.command(a.plugin, a.name, a.payload);
   }
 
+  /* ------------------------- Éditions du terrain ------------------------- */
+
+  /** Terrain éditable : hauteurs NATURELLES (base des profils et du nivellement), eau et forêt partagées. */
+  private editable(): EditableTerrain {
+    const t = this.terrain!;
+    return { ...t, heights: this.naturalHeights, waterSurface: t.waterSurface, forest: t.forest };
+  }
+
+  /**
+   * Défricher, Quai / remblai, Creuser : plan (coût, zone), obstacles (bâtiments, routes et leurs talus), fonds,
+   * puis application aux hauteurs naturelles, re-nivellement des routes et patch pour le rendu.
+   */
+  terrainEdit(a: ExtCommandArgs<'terrainEdit'>): { ok: true; data: TerrainEditResult } | { ok: false; error: CommandError } {
+    if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
+    if (this.terrainEdits.length >= 4000) return fail('INVALID_ARGS', 'Trop d\'éditions du terrain dans cette partie');
+    const r = planEdit(this.editable(), a.edit);
+    if (!r.ok) return fail('INVALID_ARGS', r.message);
+    const plan = r.plan;
+    if (plan.edit.k !== 'clear') {
+      const hit = this.editObstacle(plan);
+      if (hit) return fail('COLLISION', hit);
+    }
+    const data: TerrainEditResult = { cost: plan.cost, volume: plan.volume, forestM2: plan.forestM2, wallLength: plan.wallLength, outline: plan.outline };
+    if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : travaux suspendus jusqu\'au retour d\'une trésorerie positive');
+    if (!this.economy.canAfford(plan.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${plan.cost} crédits requis)`);
+    if (a.dryRun) return { ok: true, data };
+    this.applyEditPlan(plan, true);
+    this.economy.spend(plan.cost);
+    return { ok: true, data };
+  }
+
+  /** Premier obstacle (bâtiment, route ou talus) sur un échantillon modifié en hauteur ou en eau ; null sinon. */
+  private editObstacle(plan: EditPlan): string | null {
+    const t = this.terrain!;
+    const W = t.samplesX, sp = t.spacing;
+    const reach = MAX_ROAD_HALF_WIDTH + SLOPE_WIDTH;
+    for (let n = 0; n < plan.idx.length; n++) {
+      const k = plan.idx[n]!;
+      const dh = Math.abs(plan.h[n]! - this.naturalHeights[k]!);
+      const wetBefore = t.waterSurface[k]! > this.naturalHeights[k]! + 0.05;
+      const wetAfter = plan.ws[n]! > plan.h[n]! + 0.05;
+      if (dh < 0.05 && wetBefore === wetAfter) continue;
+      const x = t.originX + (k % W) * sp, z = t.originZ + ((k / W) | 0) * sp;
+      if (this.buildingAtPoint(x, z, sp)) return 'Un bâtiment occupe la zone : démolissez-le d\'abord';
+      if (this.roadClearance(makeObb(x, z, sp / 2, sp / 2, 0), reach) < SLOPE_WIDTH) return 'Une route ou son talus occupe la zone : supprimez-la d\'abord';
+    }
+    return null;
+  }
+
+  /** Applique un plan validé (aussi au rejeu d'une sauvegarde, `live` = faux : ni nivellement ni delta). */
+  private applyEditPlan(plan: EditPlan, live: boolean): void {
+    const t = this.terrain!;
+    commitEdit(this.editable(), plan, live ? [] : [t.heights]);
+    this.terrainEdits.push(plan.edit);
+    if (plan.walls.length) t.quays = flattenWalls(plan.walls, t.quays ? t.quays.slice() : []);
+    if (!live) return;
+    // Hauteurs nivelées = naturelles éditées + plateformes et talus de TOUTES les routes (comme au chargement).
+    const before = t.heights;
+    const graded = new Float32Array(this.naturalHeights);
+    t.heights = graded;
+    if (this.net.segCount > 0) gradeTerrainForRoads(t, this.net);
+    let rect = plan.rect;
+    const W = t.samplesX;
+    for (let k = 0; k < graded.length; k++) {
+      if (graded[k] === before[k]) continue;
+      const i = k % W, j = (k / W) | 0;
+      rect = unionRect(rect, { i0: i, j0: j, i1: i, j1: j });
+    }
+    this.pendingPatch = this.pendingPatch ? unionRect(this.pendingPatch, rect) : rect;
+    this.pendingEditLayers = true;
+    if (plan.walls.length) this.pendingQuays = true;
+    if (plan.edit.k === 'clear') this.pendingCleared.push(plan.edit.x, plan.edit.z, plan.edit.r);
+  }
+
+  /** Rejoue une édition sauvegardée (sans contrôle ni coût : elle a été validée quand le joueur l'a faite). */
+  private replayEdit(e: TerrainEdit): void {
+    const r = planEdit(this.editable(), e);
+    if (r.ok) this.applyEditPlan(r.plan, false);
+  }
+
+  /** Joint au patch du delta les couches des éditions (forêt, murs de quai, zones défrichées). */
+  private decorateEditPatch(patch: TerrainPatch): void {
+    const t = this.terrain!;
+    if (this.pendingEditLayers) {
+      const rw = patch.i1 - patch.i0 + 1, rh = patch.j1 - patch.j0 + 1;
+      const f = new Uint8Array(rw * rh);
+      for (let j = 0; j < rh; j++) {
+        const row = (patch.j0 + j) * t.samplesX + patch.i0;
+        f.set(t.forest.subarray(row, row + rw), j * rw);
+      }
+      patch.forest = f;
+    }
+    if (this.pendingQuays) patch.quays = (t.quays ?? []).slice();
+    if (this.pendingCleared.length) patch.cleared = this.pendingCleared.splice(0);
+    this.pendingEditLayers = false;
+    this.pendingQuays = false;
+  }
+
+  /** Éditions du terrain de la partie (lecture : tests, diagnostic). */
+  get terrainEditList(): readonly TerrainEdit[] { return this.terrainEdits; }
+
   /* ---------------------------- Sauvegarde ---------------------------- */
 
-  toSave(): SaveFileV2 & PluginSaveField {
-    const save: SaveFileV2 & PluginSaveField = {
+  toSave(): SaveFileV2 & PluginSaveField & TerrainEditsSaveField {
+    const save: SaveFileV2 & PluginSaveField & TerrainEditsSaveField = {
       format: SAVE_FORMAT_ID,
       version: CURRENT_SAVE_VERSION,
       savedAt: new Date().toISOString(),
@@ -1093,6 +1219,8 @@ export class Simulation {
       population: this.demo.toJSON(),
       sim: { rng: this.rng.getState(), scheduler: this.scheduler.toJSON() },
     };
+    // Éditions du terrain (champ facultatif, absent si aucune : format v2 inchangé, rejouées au chargement).
+    if (this.terrainEdits.length) save.terrainEdits = this.terrainEdits.map((e) => ({ ...e }));
     // Sections des modules (champ facultatif, absent si aucune) : sections inconnues conservées telles quelles.
     const plugins = this.plugins.save();
     if (plugins) save.plugins = plugins;
@@ -1131,7 +1259,12 @@ export class Simulation {
   }
 
   private applySave(s: SaveFileV2): CommandError | null {
-    this.newGame(s.params);
+    // Sauvegarde antérieure à la génération v2 (pas de version) : terrain régénéré avec l'algorithme d'origine.
+    this.newGame({ ...s.params, terrain: { ...(s.params.terrain ?? {}), genVersion: s.params.terrain?.genVersion === 2 ? 2 : 1 } });
+    // Éditions du terrain rejouées sur le terrain régénéré, AVANT les routes (profils et nivellement calculés dessus).
+    const edits = parseEdits((s as TerrainEditsSaveField).terrainEdits);
+    if (!edits) return { code: 'BAD_SAVE', message: 'Éditions du terrain mal formées' };
+    for (const e of edits) this.replayEdit(e);
     this.clock.totalMinutes = s.clock.totalMinutes;
     // Réseau routier : nœuds et tronçons avec leurs identifiants et courbes (absentes en v1 = tronçons droits).
     for (const n of s.roads.nodes) this.net.addNode(n.x, n.z, n.y, n.id);

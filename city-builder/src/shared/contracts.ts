@@ -62,6 +62,13 @@ export interface MapGenOptions {
   maxAltitude?: number;
   erosion?: number;
   resources?: number;
+  /** Rivières : aucune, une seule (défaut, étroite et peu sinueuse) ou réseau complet (densité `rivers`). */
+  riverMode?: 'aucune' | 'une' | 'plusieurs';
+  /**
+   * Version de l'algorithme de génération (1 = d'origine, 2 = actuelle, défaut). Fixée par la simulation à la création
+   * et enregistrée avec la partie ; une sauvegarde sans version est régénérée en v1 (terrain identique à l'original).
+   */
+  genVersion?: 1 | 2;
 }
 
 /** Carte de hauteurs : grille (samplesX x samplesZ) de hauteurs en mètres, espacement `spacing`. */

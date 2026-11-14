@@ -7,6 +7,14 @@
 (`meta:<slot>`) pour lister sans décompresser. `autosave.ts` — `Autosaver` : rotation
 `auto-1..3` toutes les 3 min. Sauvegarde rapide : emplacement `rapide`.
 
+### Terrain (carte v2, éditions du joueur)
+
+Le terrain n'est pas stocké : il est régénéré depuis `params` (graine, `params.terrain`). `params.terrain.genVersion`
+fixe l'algorithme (2 = carte actuelle ; **absent = 1**, carte d'origine : les anciennes sauvegardes retrouvent
+exactement leur terrain). Les éditions du joueur (Défricher, Quai / remblai, Creuser) sont dans le champ facultatif
+`terrainEdits` (liste ordonnée, ~50 octets par édition), rejouées au chargement avant les routes. Format v2 inchangé ;
+tests : `tests/terrain/editions.test.ts`.
+
 ## Entièrement automatique (aucune action du joueur)
 
 `src/save/auto-triggers.ts` — `AutoSaveTriggers`, branché dans `src/main.ts` :

@@ -36,7 +36,12 @@ import { listSlotsAsync, removeSlotAsync, slotId } from './save-slots';
 import type { ThumbnailSource } from './thumbnails';
 import { initTooltips } from './tooltips';
 
-export interface NewGameChoice { cityName: string; seed: number; mapChunks: number; startMoney: number }
+export interface NewGameChoice {
+  cityName: string; seed: number; mapChunks: number; startMoney: number;
+  /** Carte : rivières (aucune / une / plusieurs) et côte (mer / sans mer). */
+  riverMode?: 'aucune' | 'une' | 'plusieurs';
+  hydrology?: 'mer' | 'aucune';
+}
 
 export interface UIHandlers {
   onNewGame(): void;
@@ -153,7 +158,10 @@ export function initUI(h: UIHandlers): UIHandle {
     const f = new FormData(e.target as HTMLFormElement);
     const cityName = String(f.get('cityName') ?? '').trim().slice(0, 40) || 'Nouvelle-Aube';
     const seed = Number.parseInt(String(f.get('seed') ?? ''), 10);
-    h.onNewGameWith?.({ cityName, seed: Number.isFinite(seed) ? seed | 0 : randomSeed(), mapChunks: Number(f.get('mapChunks')) || 8, startMoney: Number(f.get('startMoney')) || 500000 });
+    const rm = String(f.get('riverMode') ?? 'une');
+    const riverMode = rm === 'aucune' || rm === 'plusieurs' ? rm : 'une';
+    const hydrology = String(f.get('hydrology') ?? 'mer') === 'aucune' ? 'aucune' : 'mer';
+    h.onNewGameWith?.({ cityName, seed: Number.isFinite(seed) ? seed | 0 : randomSeed(), mapChunks: Number(f.get('mapChunks')) || 8, startMoney: Number(f.get('startMoney')) || 500000, riverMode, hydrology });
   });
 
   /* ---------- Chargement ---------- */

@@ -551,6 +551,8 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   /* Lanceur « Énergie » (module électricité, à mi-hauteur à droite) : il recouvrait les options d'outil au doigt ;
      masqué pendant l'utilisation d'un outil, il revient avec l'outil Sélection. */
   body.tool-opts #elec-launcher, body.confirming #elec-launcher, body.road-drawing #elec-launcher { display: none; }
+  /* Outil Terrain : outils + réglages (jusqu'à 8 boutons) sur plusieurs lignes. */
+  .tool-actions { flex: 1 1 100%; flex-wrap: wrap; justify-content: center; row-gap: 4px; }
   #objectives { display: none !important; }
 
   /* Panneaux : feuille glissante pleine largeur entre la barre du haut et les outils. */

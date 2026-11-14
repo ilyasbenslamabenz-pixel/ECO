@@ -63,7 +63,8 @@ export function runHours(s: Simulation, hours: number, step = 10): void {
 }
 
 /** Site au bord de l'eau (graine 1234, rivières 0,6, sans mer) : rue z = 240 de x = −344 à −184, eau au sud. */
-export const RIVER_MAP: MapGenOptions = { hydrology: 'aucune', rivers: 0.6 };
+// Scénario écrit sur la génération v1 (réseau de rivières) : figé en v1, la v2 n'a qu'une rivière par défaut.
+export const RIVER_MAP: MapGenOptions = { hydrology: 'aucune', rivers: 0.6, genVersion: 1 };
 export const RIVER_SEED = 1234;
 
 /** Bourg riverain : rue, 7 logements au nord ; renvoie les ids des logements. */

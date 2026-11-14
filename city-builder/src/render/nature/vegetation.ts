@@ -340,7 +340,17 @@ export class VegetationSystem {
     this.cellsZ = Math.ceil(((world.samplesZ - 1) * world.spacing) / this.o.cellSize);
     this.originX = world.originX;
     this.originZ = world.originZ;
-    const rnd = mulberry32(world.params.seed ^ 0x7ee5);
+    // Tirage aléatoire propre à chaque cellule (graine, i, j) : défricher ou remblayer une zone ne déplace pas les
+    // arbres du reste de la carte au rechargement.
+    const seed = (world.params.seed ^ 0x7ee5) | 0;
+    let st = 0;
+    const rnd = (): number => {
+      st = (st + 0x6d2b79f5) | 0;
+      let t = st;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
     const byRole = (r: VegRole): number[] => this.species.map((s, i) => (s.role === r ? i : -1)).filter((i) => i >= 0);
     const broad = [...byRole('feuillu'), ...byRole('ornement')];
     const conif = byRole('conifere');
@@ -355,6 +365,7 @@ export class VegetationSystem {
     for (let j = 0; j < world.samplesZ - 1; j++) {
       for (let i = 0; i < W - 1; i++) {
         const k = j * W + i;
+        st = (Math.imul(seed ^ Math.imul(i + 1, 0x27d4eb2d), 0x165667b1) ^ Math.imul(j + 1, 0x9e3779b1)) | 0;
         const f = world.forest[k]! / 255;
         const x0 = world.originX + i * sp;
         const z0 = world.originZ + j * sp;
@@ -479,6 +490,44 @@ export class VegetationSystem {
       const ex = px - dx * t;
       const ez = pz - dz * t;
       if (ex * ex + ez * ez <= halfWidth * halfWidth) { this.alive[i] = 0; r++; }
+    }
+    if (r) this.dirty = true;
+    return r;
+  }
+
+  /**
+   * Défrichage : retire la végétation naturelle (arbres, arbustes, fleurs ; pas les rochers ni les arbres plantés)
+   * des disques donnés à plat (x, z, rayon). Renvoie le nombre retiré.
+   */
+  removeInDiscs(discs: readonly number[]): number {
+    let r = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (!this.alive[i] || this.planted[i] || this.species[this.spc[i]!]?.role === 'rocher') continue;
+      const x = this.px[i]!, z = this.pz[i]!;
+      for (let d = 0; d + 2 < discs.length; d += 3) {
+        const dx = x - discs[d]!, dz = z - discs[d + 1]!;
+        if (dx * dx + dz * dz <= discs[d + 2]! * discs[d + 2]!) { this.alive[i] = 0; r++; break; }
+      }
+    }
+    if (r) this.dirty = true;
+    return r;
+  }
+
+  /**
+   * Après une modification du relief (remblai, creusement, nivellement) : retire, dans le rectangle, la végétation
+   * naturelle désormais dans l'eau ou qui flotterait / serait enterrée (écart au sol > `tol` m).
+   */
+  removeInvalid(minX: number, minZ: number, maxX: number, maxZ: number, isWet: (x: number, z: number) => boolean, tol = 0.6): number {
+    let r = 0;
+    const H = this.o.heightAt;
+    for (let i = 0; i < this.n; i++) {
+      if (!this.alive[i] || this.planted[i]) continue;
+      const x = this.px[i]!, z = this.pz[i]!;
+      if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
+      const sp = this.species[this.spc[i]!];
+      const sink = sp?.role === 'rocher' ? 0.25 * sp.asset.dimensions.height + 0.5 : 0.4;
+      const dy = this.py[i]! - H(x, z);
+      if (isWet(x, z) || dy > tol || dy < -tol - sink) { this.alive[i] = 0; r++; }
     }
     if (r) this.dirty = true;
     return r;

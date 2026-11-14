@@ -161,7 +161,7 @@ export function extractPatch(t: TerrainData & { waterSurface?: Float32Array }, r
 }
 
 /** Applique un patch reçu sur une copie locale du terrain (côté rendu). */
-export function applyPatch(t: TerrainData & { waterSurface?: Float32Array }, p: TerrainPatch): void {
+export function applyPatch(t: TerrainData & { waterSurface?: Float32Array; forest?: Uint8Array; quays?: number[] }, p: TerrainPatch): void {
   const rw = p.i1 - p.i0 + 1;
   const rh = p.j1 - p.j0 + 1;
   if (p.heights.length !== rw * rh) throw new Error('Patch de terrain incohérent');
@@ -169,7 +169,9 @@ export function applyPatch(t: TerrainData & { waterSurface?: Float32Array }, p: 
     const row = (p.j0 + j) * t.samplesX + p.i0;
     t.heights.set(p.heights.subarray(j * rw, (j + 1) * rw), row);
     if (t.waterSurface) t.waterSurface.set(p.waterSurface.subarray(j * rw, (j + 1) * rw), row);
+    if (t.forest && p.forest && p.forest.length === rw * rh) t.forest.set(p.forest.subarray(j * rw, (j + 1) * rw), row);
   }
+  if (p.quays) t.quays = p.quays.slice();
 }
 
 /** Fusionne deux régions. */

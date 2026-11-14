@@ -13,6 +13,18 @@ import type { BuildingOccupancy, CitizenInfo, DemographyReport } from './demogra
 import { TAX_SECTORS, type Forecast, type Loan, type LoanOffer, type MonthRecord, type TaxSector } from './economy';
 import type { Season } from './clock';
 import type { CityBuildResult } from './city-builder';
+import { editShapeError, type TerrainEdit } from './terrain/edits';
+
+/** Réponse d'une édition du terrain (Défricher, Quai / remblai, Creuser). */
+export interface TerrainEditResult {
+  cost: number;
+  /** Terre déplacée (m³), forêt retirée (m²), longueur de mur de quai (m). */
+  volume: number;
+  forestM2: number;
+  wallLength: number;
+  /** Contour de la zone touchée (x, z alternés, fermé) pour l'aperçu. */
+  outline: number[];
+}
 
 export interface SimNotice {
   /** Minute de jeu de l'événement. */
@@ -76,6 +88,8 @@ export interface ExtCommandMap {
    * ou grand (Ø 56 m). dryRun : valide et chiffre sans construire.
    */
   buildRoundabout: { args: { x: number; z: number; size: 'small' | 'large'; dryRun?: boolean }; result: { edgeIds: number[]; cost: number } };
+  /** Édition du terrain par le joueur (src/sim/terrain/edits.ts) ; `dryRun` : coût et contour sans rien modifier. */
+  terrainEdit: { args: { edit: TerrainEdit; dryRun?: boolean }; result: TerrainEditResult };
 }
 
 export type ExtCommandName = keyof ExtCommandMap;
@@ -86,7 +100,7 @@ export type ExtCommandMessage = { [K in ExtCommandName]: { kind: 'cmd'; reqId: n
 /** Delta enrichi : `report` présent environ une fois par seconde. */
 export type DeltaMessageExt = DeltaMessage & { report?: SimReport };
 
-export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout'];
+export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout', 'terrainEdit'];
 
 export function isExtCommandName(name: unknown): name is ExtCommandName {
   return typeof name === 'string' && (EXT_COMMANDS as readonly string[]).includes(name);
@@ -129,5 +143,10 @@ export function validateExtCommand(msg: unknown): CommandError | null {
     case 'buildRoundabout':
       if (!isNum(a.x) || !isNum(a.z)) return bad('Position de giratoire invalide');
       return a.size === 'small' || a.size === 'large' ? null : bad('Taille de giratoire inconnue');
+    case 'terrainEdit': {
+      if (a.dryRun !== undefined && typeof a.dryRun !== 'boolean') return bad('dryRun invalide');
+      const e = editShapeError(a.edit);
+      return e ? bad(e) : null;
+    }
   }
 }

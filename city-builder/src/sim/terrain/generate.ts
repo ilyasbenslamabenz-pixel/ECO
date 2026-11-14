@@ -15,7 +15,7 @@
 import { CHUNK_SIZE, MAX_TERRAIN_HEIGHT, TILE_SIZE, WATER_LEVEL } from '../../shared/constants';
 import { clamp, mulberry32, smoothstep } from '../../shared/math';
 import { fbm, hash01, ridged, warp } from './noise';
-import { NO_WATER, RESOURCE, type RiverPath, type WorldGenParams, type WorldTerrain } from './types';
+import { NO_WATER, RESOURCE, TERRAIN_GEN_VERSION, type RiverPath, type WorldGenParams, type WorldTerrain } from './types';
 
 export const DEFAULT_WORLD_PARAMS: WorldGenParams = {
   seed: 1,
@@ -28,7 +28,12 @@ export const DEFAULT_WORLD_PARAMS: WorldGenParams = {
   rivers: 0.5,
   erosion: 0.6,
   resources: 0.5,
+  genVersion: TERRAIN_GEN_VERSION,
+  riverMode: 'une',
 };
+
+/** v2 : part du terrain sec couverte de bosquets par unité de `forest` (0,55 par défaut => ≈ 22 % du terrain sec). */
+export const FOREST_V2_SHARE = 0.4;
 
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
@@ -47,6 +52,8 @@ export function normalizeParams(p: Partial<WorldGenParams>): WorldGenParams {
     rivers: clamp(num(p.rivers, d.rivers), 0, 1),
     erosion: clamp(num(p.erosion, d.erosion), 0, 1),
     resources: clamp(num(p.resources, d.resources), 0, 1),
+    genVersion: p.genVersion === 1 ? 1 : 2,
+    riverMode: p.riverMode === 'aucune' || p.riverMode === 'plusieurs' || p.riverMode === 'une' ? p.riverMode : d.riverMode,
   };
 }
 
@@ -441,7 +448,9 @@ export function generateWorld(input: Partial<WorldGenParams>): WorldTerrain {
   const waterSurface = new Float32Array(N).fill(NO_WATER);
   const rivers: RiverPath[] = [];
   const isRiver = new Uint8Array(N);
-  if (p.rivers > 0) {
+  if (p.rivers > 0 && p.genVersion === 2 && p.riverMode === 'une') {
+    h = carveMainRiver(p, h, W, H, spacing, origin, waterSurface, rivers);
+  } else if (p.rivers > 0 && (p.genVersion === 1 || p.riverMode === 'plusieurs')) {
     // Perturbation (non appliquée au terrain) : fait serpenter les cours d'eau sur les plaines.
     const hFlow = new Float32Array(N);
     for (let j = 0; j < H; j++) {
@@ -563,6 +572,19 @@ export function generateWorld(input: Partial<WorldGenParams>): WorldTerrain {
   let forestN = 0;
   let minH = Infinity;
   let maxH = -Infinity;
+  // v2 : champ des bosquets et seuil tel qu'une part `FOREST_V2_SHARE * forest` du terrain sec soit boisée.
+  const grovesAt = (x: number, z: number): number => fbm(x / 520, z / 520, s + 83, 3) * 0.5 + 0.5 + fbm(x / 110, z / 110, s + 84, 2) * 0.07;
+  let grovesThr = Infinity;
+  if (p.genVersion === 2 && p.forest > 0) {
+    const vals: number[] = [];
+    for (let k = 0; k < N; k += 3) {
+      if (waterSurface[k]! > h[k]! || dist[k]! <= 6) continue;
+      vals.push(grovesAt(origin + (k % W) * spacing, origin + ((k / W) | 0) * spacing));
+    }
+    vals.sort((a, b) => a - b);
+    const share = clamp(FOREST_V2_SHARE * p.forest, 0, 0.95);
+    if (vals.length) grovesThr = vals[Math.min(vals.length - 1, Math.floor(vals.length * (1 - share)))]!;
+  }
   for (let j = 0; j < H; j++) {
     for (let i = 0; i < W; i++) {
       const k = j * W + i;
@@ -583,12 +605,20 @@ export function generateWorld(input: Partial<WorldGenParams>): WorldTerrain {
         const r = Math.max(Math.abs(x), Math.abs(z)) / half;
         const patches = fbm(x / 380, z / 380, s + 81, 4) * 0.5 + 0.5 + fbm(x / 90, z / 90, s + 82, 2) * 0.12;
         const cover = p.forest;
-        const thrP = 1 - cover * 0.85; // seuil des clairières
-        let f = smoothstep(thrP - 0.08, thrP + 0.12, patches * (0.6 + 0.6 * m));
+        let f: number;
+        if (p.genVersion === 1) {
+          const thrP = 1 - cover * 0.85; // seuil des clairières
+          f = smoothstep(thrP - 0.08, thrP + 0.12, patches * (0.6 + 0.6 * m));
+        } else {
+          // v2 : bosquets regroupés (bruit à grande échelle, lisières nettes) séparés de grandes clairières ; seuil
+          // par quantile (part du terrain sec boisée stable d'une graine à l'autre).
+          f = smoothstep(grovesThr - 0.02, grovesThr + 0.06, grovesAt(x, z)) * clamp(0.7 + 0.45 * m, 0, 1) * (0.8 + 0.2 * smoothstep(0.4, 0.8, patches));
+        }
         f *= 1 - smoothstep(0.35, 0.8, slope); // pas sur les falaises
         f *= 1 - smoothstep(0.7, 0.92, altN); // limite de la végétation
         f *= 1 - smoothstep(WATER_LEVEL + 3.5, WATER_LEVEL + 1.5, v); // pas sur la plage
-        f *= 0.35 + 0.65 * smoothstep(0.2, 0.42, r); // plaine centrale plus dégagée (place pour la ville)
+        if (p.genVersion === 1) f *= 0.35 + 0.65 * smoothstep(0.2, 0.42, r); // plaine centrale plus dégagée (place pour la ville)
+        else f *= 0.1 + 0.9 * smoothstep(0.24, 0.55, r); // v2 : plaine centrale presque entièrement dégagée
         const fv = Math.round(clamp(f, 0, 1) * 255);
         forest[k] = fv;
         if (fv > 64) forestN++;
@@ -631,6 +661,156 @@ export function generateWorld(input: Partial<WorldGenParams>): WorldTerrain {
       generationMs: Math.round(t1 - t0),
     },
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Rivière principale unique (génération v2)                           */
+/* ------------------------------------------------------------------ */
+
+/** Hauteur bilinéaire dans une grille (coordonnées monde). */
+function sampleGrid(h: Float32Array, W: number, H: number, spacing: number, origin: number, x: number, z: number): number {
+  const fx = clamp((x - origin) / spacing, 0, W - 1.001);
+  const fz = clamp((z - origin) / spacing, 0, H - 1.001);
+  const i = Math.floor(fx);
+  const j = Math.floor(fz);
+  const tx = fx - i;
+  const tz = fz - j;
+  const k = j * W + i;
+  return (h[k]! * (1 - tx) + h[k + 1]! * tx) * (1 - tz) + (h[k + W]! * (1 - tx) + h[k + W + 1]! * tx) * tz;
+}
+
+/**
+ * Une seule rivière, de la source la plus lointaine du bassin principal jusqu'à la mer (ou au bord de carte) :
+ * tracé D8 sur un relief peu perturbé, puis lissé (moyenne glissante) et rééchantillonné : peu de méandres,
+ * pas d'escaliers à 45°. Lit étroit (8 à 22 m) creusé le long de la polyligne lissée. Renvoie le relief creusé ;
+ * remplit `waterSurface` et `rivers` (un seul cours).
+ */
+function carveMainRiver(p: WorldGenParams, h: Float32Array, W: number, H: number, spacing: number, origin: number, waterSurface: Float32Array, rivers: RiverPath[]): Float32Array {
+  const N = W * H;
+  const s = p.seed;
+  const hFlow = new Float32Array(N);
+  for (let j = 0; j < H; j++) {
+    for (let i = 0; i < W; i++) {
+      const x = origin + i * spacing;
+      const z = origin + j * spacing;
+      hFlow[j * W + i] = h[j * W + i]! + fbm(x / 700, z / 700, s + 33, 3) * 2.5;
+    }
+  }
+  const flow = computeFlow(hFlow, W, H, WATER_LEVEL);
+  // Embouchure : dernier échantillon émergé avant un exutoire (mer ou bord), d'accumulation maximale.
+  let mouth = -1;
+  let best = 0;
+  for (let k = 0; k < N; k++) {
+    const d = flow.down[k]!;
+    if (d < 0 || flow.down[d]! !== -1 || h[k]! < WATER_LEVEL) continue;
+    if (flow.acc[k]! > best) { best = flow.acc[k]!; mouth = k; }
+  }
+  // Seuil de source : plus `rivers` est grand, plus la rivière remonte loin.
+  const thr = Math.max(30, N * (0.006 - 0.004 * p.rivers));
+  if (mouth < 0 || best < thr * 2) return h;
+  // Amont le plus fourni de chaque échantillon.
+  const up = new Int32Array(N).fill(-1);
+  for (let k = 0; k < N; k++) {
+    const d = flow.down[k]!;
+    if (d >= 0 && (up[d]! < 0 || flow.acc[k]! > flow.acc[up[d]!]!)) up[d] = k;
+  }
+  const cells: number[] = [];
+  for (let k = mouth, guard = 0; k >= 0 && flow.acc[k]! >= thr && guard < N; guard++) { cells.push(k); k = up[k]!; }
+  if (cells.length < 8) return h;
+  cells.reverse(); // amont -> aval
+  const n = cells.length;
+  const px = new Float64Array(n);
+  const pz = new Float64Array(n);
+  const acc = new Float64Array(n);
+  for (let q = 0; q < n; q++) {
+    const k = cells[q]!;
+    px[q] = origin + (k % W) * spacing;
+    pz[q] = origin + ((k / W) | 0) * spacing;
+    acc[q] = flow.acc[k]!;
+  }
+  // Lissage : moyennes glissantes successives (extrémités fixes).
+  const R = 6;
+  for (let pass = 0; pass < 3; pass++) {
+    const sx = new Float64Array(px);
+    const sz = new Float64Array(pz);
+    for (let q = 1; q < n - 1; q++) {
+      const r = Math.min(R, q, n - 1 - q);
+      let ax = 0, az = 0;
+      for (let o = -r; o <= r; o++) { ax += sx[q + o]!; az += sz[q + o]!; }
+      px[q] = ax / (2 * r + 1);
+      pz[q] = az / (2 * r + 1);
+    }
+  }
+  // Rééchantillonnage à pas régulier (≈ spacing).
+  const xs: number[] = [px[0]!];
+  const zs: number[] = [pz[0]!];
+  const as: number[] = [acc[0]!];
+  let carry = 0;
+  for (let q = 1; q < n; q++) {
+    const dx = px[q]! - px[q - 1]!;
+    const dz = pz[q]! - pz[q - 1]!;
+    const L = Math.hypot(dx, dz);
+    let t = spacing - carry;
+    while (t <= L) {
+      const u = t / L;
+      xs.push(px[q - 1]! + dx * u);
+      zs.push(pz[q - 1]! + dz * u);
+      as.push(acc[q - 1]! + (acc[q]! - acc[q - 1]!) * u);
+      t += spacing;
+    }
+    carry = L - (t - spacing);
+  }
+  xs.push(px[n - 1]!); zs.push(pz[n - 1]!); as.push(acc[n - 1]!);
+  const m = xs.length;
+  // Surface : suit le terrain réel, monotone décroissante vers l'aval.
+  const surf = new Float64Array(m);
+  const width = new Float64Array(m);
+  let run = Infinity;
+  for (let q = 0; q < m; q++) {
+    run = Math.min(run, sampleGrid(h, W, H, spacing, origin, xs[q]!, zs[q]!));
+    surf[q] = Math.max(WATER_LEVEL, run - 0.8);
+    run = Math.min(run, surf[q]! + 0.8 - 0.01);
+    width[q] = clamp(6 + Math.sqrt(as[q]! / thr) * 3.2, 8, 22);
+  }
+  // Creusement : profil en U, berges en pente douce, distance à la polyligne lissée.
+  const newH = new Float32Array(h);
+  for (let q = 0; q + 1 < m; q++) {
+    const ax = xs[q]!, az = zs[q]!, bx = xs[q + 1]!, bz = zs[q + 1]!;
+    const wMax = Math.max(width[q]!, width[q + 1]!);
+    const reach = wMax / 2 + 6 + wMax * 0.4;
+    const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - reach - origin) / spacing));
+    const i1 = Math.min(W - 1, Math.ceil((Math.max(ax, bx) + reach - origin) / spacing));
+    const j0 = Math.max(0, Math.floor((Math.min(az, bz) - reach - origin) / spacing));
+    const j1 = Math.min(H - 1, Math.ceil((Math.max(az, bz) + reach - origin) / spacing));
+    const dx = bx - ax, dz = bz - az;
+    const l2 = dx * dx + dz * dz || 1e-9;
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const x = origin + i * spacing;
+        const z = origin + j * spacing;
+        const u = clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+        const d = Math.hypot(x - (ax + dx * u), z - (az + dz * u));
+        const w = width[q]! + (width[q + 1]! - width[q]!) * u;
+        const sf = surf[q]! + (surf[q + 1]! - surf[q]!) * u;
+        const halfW = w / 2;
+        const bank = 6 + w * 0.4;
+        const depth = 1.2 + w * 0.05;
+        let target: number;
+        if (d <= halfW) target = sf - depth * (1 - (d / halfW) ** 2) - 0.25;
+        else if (d <= halfW + bank) target = sf - 0.25 + ((d - halfW) / bank) ** 1.5 * bank * 0.35;
+        else continue;
+        const k = j * W + i;
+        if (target < newH[k]!) newH[k] = target;
+        if (d <= halfW + spacing * 0.5) waterSurface[k] = Math.max(waterSurface[k]!, sf);
+      }
+    }
+  }
+  const pts: number[] = [];
+  for (let q = 0; q < m; q++) pts.push(xs[q]!, surf[q]!, zs[q]!, width[q]!);
+  const dm = flow.down[mouth]!;
+  if (dm >= 0) pts.push(origin + (dm % W) * spacing, WATER_LEVEL, origin + ((dm / W) | 0) * spacing, width[m - 1]!);
+  rivers.push({ points: new Float32Array(pts), flow: best });
+  return newH;
 }
 
 /** Pente (dénivelé / distance) par différences centrales. */

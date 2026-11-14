@@ -4,7 +4,7 @@
     {
       "name": "plage",
       "file": "apres-plage.jpg",
-      "x": 256,
+      "x": 224,
       "z": 272,
       "dist": 95,
       "pitch": 0.42,
@@ -13,8 +13,8 @@
     {
       "name": "plage-quai",
       "file": "apres-plage-quai.jpg",
-      "x": 256,
-      "z": 272,
+      "x": 484,
+      "z": 236,
       "dist": 60,
       "pitch": 0.32,
       "yaw": -2.441592653589793
@@ -22,11 +22,11 @@
     {
       "name": "riviere",
       "file": "apres-riviere.jpg",
-      "x": 286,
-      "z": -256,
+      "x": -84.5194970290473,
+      "z": -260.2836140246614,
       "dist": 130,
       "pitch": 0.5,
-      "yaw": 0.6
+      "yaw": -0.5780972450961724
     },
     {
       "name": "colline",
@@ -49,8 +49,8 @@
     {
       "name": "pont",
       "file": "apres-pont.jpg",
-      "x": 112,
-      "z": 112,
+      "x": 192,
+      "z": 208,
       "dist": 80,
       "pitch": 0.32,
       "yaw": 3.741592653589793
@@ -58,8 +58,8 @@
     {
       "name": "pont-culee",
       "file": "apres-pont-culee.jpg",
-      "x": 82,
-      "z": 112,
+      "x": 162,
+      "z": 208,
       "dist": 40,
       "pitch": 0.22,
       "yaw": 4.0415926535897935
@@ -85,8 +85,8 @@
     {
       "name": "rondpoint",
       "file": "apres-rondpoint.jpg",
-      "x": -80,
-      "z": 288,
+      "x": 144,
+      "z": -160,
       "dist": 95,
       "pitch": 0.75,
       "yaw": 0.4
@@ -96,9 +96,9 @@
     {
       "label": "plage : rue le long du rivage",
       "points": [
-        320,
+        288,
         272,
-        192,
+        160,
         272
       ],
       "extra": {},
@@ -107,16 +107,16 @@
         "edgeIds": [
           1
         ],
-        "cost": 7680
+        "cost": 14280
       }
     },
     {
-      "label": "rivière : rue sur la berge",
+      "label": "plage : rue de quai au ras de l'eau",
       "points": [
-        186,
-        -242,
-        326,
-        -242
+        524,
+        236,
+        444,
+        236
       ],
       "extra": {},
       "ok": true,
@@ -124,7 +124,24 @@
         "edgeIds": [
           2
         ],
-        "cost": 8400
+        "cost": 4800
+      }
+    },
+    {
+      "label": "rivière : rue sur la berge",
+      "points": [
+        -135.72215372071432,
+        -347.31399922267883,
+        -82.14647318960174,
+        -217.97086467109867
+      ],
+      "extra": {},
+      "ok": true,
+      "data": {
+        "edgeIds": [
+          3
+        ],
+        "cost": 24150
       }
     },
     {
@@ -139,7 +156,7 @@
       "ok": true,
       "data": {
         "edgeIds": [
-          3
+          4
         ],
         "cost": 8400
       }
@@ -156,7 +173,7 @@
       "ok": true,
       "data": {
         "edgeIds": [
-          4
+          5
         ],
         "cost": 10800
       }
@@ -175,62 +192,26 @@
       "ok": true,
       "data": {
         "edgeIds": [
-          5
+          6
         ],
-        "cost": 37800
+        "cost": 38400
       }
     },
     {
       "label": "pont : rue qui traverse la rivière (128 m)",
       "points": [
-        48,
-        112,
-        176,
-        112
-      ],
-      "extra": {},
-      "ok": false,
-      "message": "Une route ne peut pas commencer ou finir dans l'eau"
-    },
-    {
-      "label": "pont : rue qui traverse la rivière (176 m)",
-      "points": [
-        24,
-        112,
-        200,
-        112
-      ],
-      "extra": {},
-      "ok": false,
-      "message": "Une route ne peut pas commencer ou finir dans l'eau"
-    },
-    {
-      "label": "pont : rue qui traverse la rivière (224 m)",
-      "points": [
-        0,
-        112,
-        224,
-        112
-      ],
-      "extra": {},
-      "ok": false,
-      "message": "Une route ne peut pas commencer ou finir dans l'eau"
-    },
-    {
-      "label": "pont : rue qui traverse la rivière (272 m)",
-      "points": [
-        -24,
-        112,
-        248,
-        112
+        128,
+        208,
+        256,
+        208
       ],
       "extra": {},
       "ok": true,
       "data": {
         "edgeIds": [
-          6
+          7
         ],
-        "cost": 40920
+        "cost": 15480
       }
     },
     {
@@ -247,7 +228,7 @@
       "ok": true,
       "data": {
         "edgeIds": [
-          7
+          8
         ],
         "cost": 60000
       }
@@ -255,16 +236,16 @@
     {
       "label": "rond-point : rue est-ouest",
       "points": [
-        -170,
-        288,
-        10,
-        288
+        54,
+        -160,
+        234,
+        -160
       ],
       "extra": {},
       "ok": true,
       "data": {
         "edgeIds": [
-          8
+          9
         ],
         "cost": 10800
       }
@@ -272,17 +253,17 @@
     {
       "label": "rond-point : rue nord-sud",
       "points": [
-        -80,
-        198,
-        -80,
-        378
+        144,
+        -250,
+        144,
+        -70
       ],
       "extra": {},
       "ok": true,
       "data": {
         "edgeIds": [
-          11,
-          12
+          12,
+          13
         ],
         "cost": 10800
       }
@@ -292,38 +273,38 @@
       "ok": true,
       "data": {
         "edgeIds": [
-          21,
           22,
           23,
           24,
           25,
           26,
           27,
-          28
+          28,
+          29
         ],
         "cost": 7917
       }
     }
   ],
   "plage": {
-    "x": 256,
+    "x": 224,
     "z": 272,
     "dx": 0,
     "dz": 1,
-    "score": 0.024558258056640803
+    "score": 0.03634433746337873
   },
   "pont": {
-    "x": 112,
-    "z": 112,
+    "x": 192,
+    "z": 208,
     "dx": 1,
     "dz": 0,
-    "wet": 2
+    "wet": 1
   },
   "riviere": {
-    "cx": 256,
-    "cz": -256,
-    "ux": 1,
-    "uz": 0,
+    "cx": -96,
+    "cz": -288,
+    "ux": 0.38268343236508984,
+    "uz": 0.9238795325112867,
     "off": 6,
     "off2": 6
   },
@@ -367,7 +348,7 @@
   },
   "tunnelEdges": [
     {
-      "id": 7,
+      "id": 8,
       "runs": [
         5,
         44
@@ -376,9 +357,9 @@
     }
   ],
   "rondpoint": {
-    "x": -80,
-    "z": 288,
-    "v": 1.9692373275756836
+    "x": 144,
+    "z": -160,
+    "v": 0.9016313552856445
   },
   "errors": []
 }
