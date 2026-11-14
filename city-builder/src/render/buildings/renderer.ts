@@ -16,6 +16,9 @@ import * as THREE from 'three';
 import type { AssetCatalog, CatalogAsset } from '../../shared/catalog';
 import type { BuildingRecord, IBuildingRenderer } from '../../shared/contracts';
 import { rotAngle } from '../../shared/footprint';
+import { FrontYardLayer, frontOffset } from './front-yards';
+
+const _off = new THREE.Vector3();
 import { BuildingMaterials, nightFactorForHour, VARYING_ROLES } from './materials';
 
 /** Source de modèles : la bibliothèque d'assets du jeu (src/render/assets.ts) convient. */
@@ -119,6 +122,8 @@ export interface BuildingRendererOptions {
 
 export class InstancedBuildingRenderer implements IBuildingRenderer {
   readonly group = new THREE.Group();
+  /** Jardinets des maisons (haies, allées) ; modèles avancés vers la rue (front-yards.ts). */
+  private readonly yards: FrontYardLayer;
   readonly materials: BuildingMaterials;
   private readonly batches = new Map<string, Batch>();
   private readonly batchList: Batch[] = [];
@@ -143,6 +148,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   constructor(scene: THREE.Object3D, private readonly lib: ModelSource, opts: BuildingRendererOptions = {}) {
     this.group.name = 'batiments';
     scene.add(this.group);
+    this.yards = new FrontYardLayer(this.group);
     this.assets = new Map(lib.catalog.assets.map((a) => [a.id, a]));
     this.materials = new BuildingMaterials(lib.catalog, (f) => lib.url(f), opts.anisotropy ?? 8);
     this.lodBias = opts.lodBias ?? 1;
@@ -217,14 +223,16 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       if (i >= b.capacity) this.grow(b, b.capacity * 2);
       b.ids.push(r.id);
       _q.setFromAxisAngle(_up, rotAngle(r.rot));
-      _p.set(r.x, r.y, r.z);
+      frontOffset(a, r.rot, _off);
+      _p.set(r.x + _off.x, r.y, r.z + _off.z);
+      this.yards.add(r.id, a, r.x, r.y, r.z, r.rot);
       _s.set(1, b.heightScale, 1);
       _m.compose(_p, _q, _s).toArray(b.mats, i * 16);
       const d = a.dimensions;
       const h = d.height * b.heightScale;
-      b.spheres[i * 4] = r.x;
+      b.spheres[i * 4] = r.x + _off.x;
       b.spheres[i * 4 + 1] = r.y + h / 2;
-      b.spheres[i * 4 + 2] = r.z;
+      b.spheres[i * 4 + 2] = r.z + _off.z;
       b.spheres[i * 4 + 3] = 0.5 * Math.hypot(d.width, d.depth, h);
       const k = hash01(r.id);
       const k2 = hash01(r.id * 31 + 7);
@@ -240,6 +248,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
 
   remove(ids: readonly number[]): void {
     for (const id of ids) {
+      this.yards.remove(id);
       const b = this.idToBatch.get(id);
       if (!b) continue;
       const i = b.ids.indexOf(id);
@@ -350,6 +359,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   get loading(): number { return this.pending; }
 
   update(cx: number, cy: number, cz: number): void {
+    this.yards.update();
     if (this.uploads.length) this.pumpUploads(6);
     _camPos.set(cx, cy, cz);
     const cam = this.camera;
@@ -429,6 +439,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     this.batchList.length = 0;
     this.idToBatch.clear();
     this.materials.dispose();
+    this.yards.dispose();
     this.group.removeFromParent();
   }
 }
