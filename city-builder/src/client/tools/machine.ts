@@ -214,11 +214,21 @@ export class ConstructionTools {
   setUpgradeTarget(t: UpgradeTarget): void { this.upgradeTarget = t; this.upgradeKey = ''; this.refresh(); }
 
   /** Vrai si un tracé (ou un quadrillage) est en cours : le bouton « Terminer » l'arrête. */
-  get drawing(): boolean { return this.tool === 'road' && (this.draft.phase !== 'idle' || this.gridStart !== null); }
+  get drawing(): boolean {
+    if (this.tool === 'terraform') return this.terrain.mode === 'river' && this.terrain.riverPoints > 0;
+    return this.tool === 'road' && (this.draft.phase !== 'idle' || this.gridStart !== null);
+  }
 
   /** « Terminer » : arrête l'enchaînement en cours sans quitter l'outil. Renvoie false si rien n'était en cours. */
   finishRoad(): boolean {
     if (!this.drawing) return false;
+    if (this.tool === 'terraform') {
+      // Rivière : « Terminer » creuse le tracé (2 points au moins), sinon abandonne le point posé.
+      if (this.terrain.riverPoints >= 2) void this.terrain.finishRiver().then((ok) => { if (ok) this.applied++; this.refresh(); });
+      else this.terrain.reset();
+      this.refresh();
+      return true;
+    }
     const n = this.draft.chained;
     this.draft.reset();
     this.gridStart = null;

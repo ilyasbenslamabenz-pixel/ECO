@@ -211,6 +211,11 @@ export class ToolController implements IToolController, PointerToolSink {
     this.pendingHover = null;
     this.feed(sx, sy, type);
     const m = d.machine;
+    // Rivière : chaque appui franc pose un point de passage (pas de confirmation, « Terminer » dans la barre).
+    if (m.tool === 'terraform' && m.terrain.mode === 'river') {
+      if (tap && !this.roadStartedThisGesture) void m.primary();
+      return;
+    }
     if (type === 'touch' && m.tool !== 'select') {
       // Route : les étapes intermédiaires se posent au relâcher ; l'action finale se confirme.
       if (m.tool === 'road' && m.roadSub !== 'upgrade' && (!m.drawing || (m.roadSub === 'draw' && m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
@@ -474,7 +479,7 @@ export class ToolController implements IToolController, PointerToolSink {
 }
 
 function terrainLabel(m: TerrainToolMode): string {
-  return m === 'clear' ? 'Défricher' : m === 'quay' ? 'Quai / remblai' : m === 'dig' ? 'Creuser' : m === 'raise' ? 'Élever' : m === 'lower' ? 'Abaisser' : 'Niveler';
+  return m === 'clear' ? 'Défricher' : m === 'quay' ? 'Quai / remblai' : m === 'dig' ? 'Creuser' : m === 'river' ? 'Rivière' : m === 'raise' ? 'Élever' : m === 'lower' ? 'Abaisser' : 'Niveler';
 }
 
 function samePick(a: PickResult, b: PickResult): boolean {

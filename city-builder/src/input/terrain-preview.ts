@@ -38,6 +38,12 @@ export class TerrainEditPreview {
       if (h) this.ring.showPoint(h.x, h.z, p.radius); else this.ring.hide();
       return;
     }
+    if (p.mode === 'river') {
+      if (p.path && p.path.length >= 4) this.ring.showPath(p.path, Math.max(1, p.width - 1.2));
+      else if (h) this.ring.showPoint(h.x, h.z, 3); else this.ring.hide();
+      if (p.outline && p.outline.length >= 6) this.zone.showPath(p.outline, 0.6); else this.zone.hide();
+      return;
+    }
     if (!p.start) {
       this.zone.hide();
       if (h) this.ring.showPoint(h.x, h.z, 3); else this.ring.hide();

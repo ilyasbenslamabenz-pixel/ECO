@@ -267,3 +267,37 @@ test('pinceaux de relief : élever, abaisser, niveler (bord adouci, coût, sauve
   assert.equal(s2.fromSave(save), null);
   assert.deepEqual(Array.from(s2.terrain!.heights), Array.from(t.heights), 'terrain identique après rechargement');
 });
+
+test('rivière : tracé courbe en eau, berges en pente sans mur, eau descendante raccordée à la mer, rejeu identique', () => {
+  const s = seaSim();
+  const t = s.terrain!;
+  const sea = findSea(s);
+  // De l'intérieur des terres jusque dans la mer, en passant par un point décalé (courbe).
+  const ex = sea.dx * (sea.dist + 30), ez = sea.dz * (sea.dist + 30);
+  const nx = -sea.dz, nz = sea.dx;
+  const pts = [-sea.dx * 150, -sea.dz * 150, sea.dx * sea.dist * 0.4 + nx * 70, sea.dz * sea.dist * 0.4 + nz * 70, ex, ez];
+  const plan = planEdit({ ...t, heights: t.heights.slice(), waterSurface: t.waterSurface.slice(), forest: t.forest.slice() }, { k: 'river', pts, w: 24 });
+  assert.ok(plan.ok, plan.ok ? '' : plan.message);
+  assert.equal(plan.plan.walls.length, 0, 'berges naturelles : aucun mur');
+  const r = s.terrainEdit({ edit: { k: 'river', pts, w: 24 } });
+  assert.ok(r.ok, r.ok ? '' : r.error.message);
+  assert.ok(r.data.volume > 0 && r.data.cost > 0);
+  assert.ok(s.isWet(pts[0]!, pts[1]!), 'eau à la source');
+  assert.ok(s.isWet(pts[2]!, pts[3]!), 'eau au point de passage');
+  // Niveau : la source n'est pas plus basse que l'embouchure, l'embouchure au niveau de la mer.
+  const ws = (x: number, z: number): number => t.waterSurface[Math.round((z - t.originZ) / t.spacing) * t.samplesX + Math.round((x - t.originX) / t.spacing)]!;
+  assert.ok(ws(pts[0]!, pts[1]!) >= ws(pts[2]!, pts[3]!) - 1e-3);
+  assert.ok(Math.abs(ws(pts[2]!, pts[3]!) - t.waterLevel) < 20);
+  // La berge, 30 m à côté de la source, reste sèche.
+  const px = -sea.dz, pz = sea.dx;
+  assert.ok(!s.isWet(pts[0]! + px * 30, pts[1]! + pz * 30), 'berge sèche');
+  const h0 = hashTerrain(s);
+  const save = JSON.parse(JSON.stringify(s.toSave()));
+  const s2 = new Simulation();
+  s2.setCatalog(townCatalog());
+  assert.equal(s2.fromSave(save), null);
+  assert.equal(hashTerrain(s2), h0);
+  // Validation : un seul point, ou une forme invalide.
+  assert.ok(!s.terrainEdit({ edit: { k: 'river', pts: [0, 0, 1, 1], w: 24 }, dryRun: true }).ok);
+  assert.ok(!s.terrainEdit({ edit: { k: 'river', pts: [0, 0, 'x'], w: 24 } as unknown as TerrainEdit, dryRun: true }).ok);
+});

@@ -7,6 +7,8 @@
  *    est posé sur la ligne, face à l'eau, dont le pied est approfondi. Sert aussi à combler ou dévier une rivière.
  *  - `dig`   (Creuser) : bassin ou canal rectangulaire droit (largeur `w`), mis en eau au niveau de l'eau voisine
  *    (sinon bassin isolé), berges aplanies et murs de quai là où la rive est sèche.
+ *  - `river` (Rivière) : tracé courbe (points lissés), lit creusé en auge, berges naturelles en pente (sans mur),
+ *    mise en eau descendante d'un bout à l'autre, raccordée au niveau de l'eau existante aux extrémités.
  *  - `raise` / `lower` / `flatten` (Élever, Abaisser, Niveler) : pinceau circulaire à bord adouci (cosinus) ;
  *    l'eau n'est jamais créée ni étendue (un fond relevé au-dessus de l'eau devient terre ferme).
  *
@@ -30,7 +32,9 @@ export type TerrainEdit =
   | { k: 'raise'; x: number; z: number; r: number; d: number }
   | { k: 'lower'; x: number; z: number; r: number; d: number }
   /** `h` absent à la pose : hauteur du centre, fixée par la simulation (rejouée telle quelle au chargement). */
-  | { k: 'flatten'; x: number; z: number; r: number; h?: number };
+  | { k: 'flatten'; x: number; z: number; r: number; h?: number }
+  /** Rivière : points de passage (x, z alternés), largeur du lit `w`. */
+  | { k: 'river'; pts: number[]; w: number };
 
 export type TerrainEditKind = TerrainEdit['k'];
 
@@ -49,6 +53,11 @@ export const EDIT_LIMITS = {
   /** Pas des pinceaux Élever / Abaisser (m). */
   minStep: 0.5,
   maxStep: 10,
+  minRiverWidth: 16,
+  maxRiverWidth: 64,
+  /** Points de passage d'une rivière, longueur maximale (m). */
+  maxRiverPoints: 32,
+  maxRiverLength: 2400,
   /** Nombre maximal d'éditions conservées dans une partie. */
   maxEdits: 4000,
 } as const;
@@ -70,6 +79,10 @@ export const QUAY_FREEBOARD = 1.2;
 export const QUAY_FOOT_DEPTH = 5;
 /** Profondeur d'un bassin creusé sous sa surface d'eau (m). */
 export const DIG_DEPTH = 4;
+/** Rivière : profondeur au milieu du lit, largeur des berges en pente, pente des berges (m de haut par m). */
+export const RIVER_DEPTH = 3.5;
+export const RIVER_BANK = 14;
+const RIVER_BANK_SLOPE = 0.55;
 /** Largeur (en cases) de la bande préparée de part et d'autre d'un mur. */
 const BAND = 1.5;
 
@@ -112,6 +125,7 @@ export function editShapeError(e: unknown): string | null {
   if (o.k === 'dig') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) && fin(o.w) ? null : 'Tracé de bassin invalide';
   if (o.k === 'raise' || o.k === 'lower') return fin(o.x) && fin(o.z) && fin(o.r) && fin(o.d) ? null : 'Pinceau de relief invalide';
   if (o.k === 'flatten') return fin(o.x) && fin(o.z) && fin(o.r) && (o.h === undefined || fin(o.h)) ? null : 'Nivellement invalide';
+  if (o.k === 'river') return Array.isArray(o.pts) && o.pts.length >= 4 && o.pts.length % 2 === 0 && o.pts.length <= EDIT_LIMITS.maxRiverPoints * 2 && o.pts.every(fin) && fin(o.w) ? null : 'Tracé de rivière invalide';
   return 'Type d\'édition du terrain inconnu';
 }
 
@@ -124,6 +138,7 @@ export function normalizeEdit(e: TerrainEdit): TerrainEdit {
     case 'quay': return { k: 'quay', ax: r2(e.ax), az: r2(e.az), bx: r2(e.bx), bz: r2(e.bz) };
     case 'dig': return { k: 'dig', ax: r2(e.ax), az: r2(e.az), bx: r2(e.bx), bz: r2(e.bz), w: r2(clamp(e.w, L.minDigWidth, L.maxDigWidth)) };
     case 'raise': case 'lower': return { k: e.k, x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)), d: r2(clamp(e.d, L.minStep, L.maxStep)) };
+    case 'river': return { k: 'river', pts: e.pts.slice(0, L.maxRiverPoints * 2).map(r2), w: r2(clamp(e.w, L.minRiverWidth, L.maxRiverWidth)) };
     case 'flatten': return e.h === undefined ? { k: 'flatten', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)) } : { k: 'flatten', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)), h: r2(e.h) };
   }
 }
@@ -136,6 +151,35 @@ export function parseEdits(raw: unknown): TerrainEdit[] | null {
   for (const e of raw) {
     if (editShapeError(e)) return null;
     out.push(normalizeEdit(e as TerrainEdit));
+  }
+  return out;
+}
+
+/**
+ * Axe lissé d'une rivière (courbe de Catmull-Rom passant par les points), échantillonné tous les `step` m.
+ * Partagé par la simulation et l'aperçu de l'outil (même courbe).
+ */
+export function riverCenterline(pts: readonly number[], step = 4): number[] {
+  const P: number[] = [];
+  for (let i = 0; i + 1 < pts.length; i += 2) {
+    const n = P.length;
+    if (n >= 2 && Math.hypot(pts[i]! - P[n - 2]!, pts[i + 1]! - P[n - 1]!) < 0.5) continue;
+    P.push(pts[i]!, pts[i + 1]!);
+  }
+  const m = P.length / 2;
+  if (m < 2) return P;
+  const out: number[] = [P[0]!, P[1]!];
+  const at = (i: number, c: 0 | 1): number => P[clamp(i, 0, m - 1) * 2 + c]!;
+  for (let i = 0; i < m - 1; i++) {
+    const seg = Math.hypot(at(i + 1, 0) - at(i, 0), at(i + 1, 1) - at(i, 1));
+    const steps = Math.max(1, Math.ceil(seg / step));
+    for (let s = 1; s <= steps; s++) {
+      const u = s / steps, u2 = u * u, u3 = u2 * u;
+      for (const c of [0, 1] as const) {
+        const p0 = at(i - 1, c), p1 = at(i, c), p2 = at(i + 1, c), p3 = at(i + 2, c);
+        out.push(0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 + (-p0 + 3 * p1 - 3 * p2 + p3) * u3));
+      }
+    }
   }
   return out;
 }
@@ -278,6 +322,8 @@ export function planEdit(t: EditableTerrain, raw: TerrainEdit): PlanOutcome {
     return p ? { ok: true, plan: p } : bad(e.k === 'flatten' ? 'Déjà plat ici' : 'Rien à modifier ici');
   }
 
+  if (e.k === 'river') return planRiver(t, e, c);
+
   const L = Math.hypot(e.bx - e.ax, e.bz - e.az);
   if (L < EDIT_LIMITS.minLength) return bad(`Tracé trop court (${EDIT_LIMITS.minLength} m minimum)`);
   if (L > EDIT_LIMITS.maxLength) return bad(`Tracé trop long (${EDIT_LIMITS.maxLength} m maximum)`);
@@ -395,6 +441,114 @@ export function planEdit(t: EditableTerrain, raw: TerrainEdit): PlanOutcome {
   if (!p) return bad('Rien à creuser');
   if (isolated && p.volume < 1) return bad('Rien à creuser');
   return { ok: true, plan: p };
+}
+
+/** Rivière : lit en auge le long de l'axe lissé, berges en pente, eau descendante raccordée aux extrémités. */
+function planRiver(t: EditableTerrain, e: Extract<TerrainEdit, { k: 'river' }>, c: Changes): PlanOutcome {
+  const bad = (message: string): PlanOutcome => ({ ok: false, message });
+  const W = t.samplesX, sp = t.spacing;
+  const path = riverCenterline(e.pts, Math.min(4, sp / 2));
+  const n = path.length / 2;
+  if (n < 2) return bad('Posez au moins deux points pour la rivière');
+  const cum = new Float64Array(n);
+  for (let v = 1; v < n; v++) cum[v] = cum[v - 1]! + Math.hypot(path[v * 2]! - path[v * 2 - 2]!, path[v * 2 + 1]! - path[v * 2 - 1]!);
+  const total = cum[n - 1]!;
+  if (total < EDIT_LIMITS.minLength) return bad(`Rivière trop courte (${EDIT_LIMITS.minLength} m minimum)`);
+  if (total > EDIT_LIMITS.maxRiverLength) return bad(`Rivière trop longue (${EDIT_LIMITS.maxRiverLength} m maximum)`);
+  const hw = e.w / 2;
+  const reach = hw + RIVER_BANK;
+  const idxAt = (x: number, z: number): number => {
+    const i = Math.round((x - t.originX) / sp), j = Math.round((z - t.originZ) / sp);
+    return i < 0 || j < 0 || i >= t.samplesX || j >= t.samplesZ ? -1 : j * W + i;
+  };
+  // Niveau de l'eau existante touchée par une extrémité (le plus bas), sinon NaN.
+  const refAt = (x: number, z: number): number => {
+    const rect = rectFor(t, x - hw - 2 * sp, z - hw - 2 * sp, x + hw + 2 * sp, z + hw + 2 * sp);
+    let r = Infinity;
+    if (rect) for (let j = rect.j0; j <= rect.j1; j++) for (let i = rect.i0; i <= rect.i1; i++) {
+      const k = j * W + i;
+      if (wetK(t, k) && Math.hypot(t.originX + i * sp - x, t.originZ + j * sp - z) <= hw + 2 * sp) r = Math.min(r, t.waterSurface[k]!);
+    }
+    return Number.isFinite(r) ? r : NaN;
+  };
+  const refA = refAt(path[0]!, path[1]!), refB = refAt(path[(n - 1) * 2]!, path[(n - 1) * 2 + 1]!);
+  // Point le plus bas des berges (terre sèche) à chaque station : l'eau reste dessous.
+  const bankLow = new Float64Array(n).fill(Infinity);
+  for (let v = 0; v < n; v++) {
+    const a = Math.max(0, v - 1), b = Math.min(n - 1, v + 1);
+    let tx = path[b * 2]! - path[a * 2]!, tz = path[b * 2 + 1]! - path[a * 2 + 1]!;
+    const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+    for (const side of [-1, 1]) for (let d = hw + sp * 0.5; d <= reach; d += sp) {
+      const k = idxAt(path[v * 2]! - tz * d * side, path[v * 2 + 1]! + tx * d * side);
+      if (k >= 0 && !wetK(t, k)) bankLow[v] = Math.min(bankLow[v]!, t.heights[k]!);
+    }
+  }
+  let lowest = Infinity;
+  for (let v = 0; v < n; v++) lowest = Math.min(lowest, bankLow[v]!);
+  const free = Number.isFinite(lowest) ? Math.max(t.waterLevel, lowest - 1.2) : t.waterLevel;
+  const lv = new Float64Array(n);
+  for (let v = 0; v < n; v++) {
+    const u = cum[v]! / total;
+    let l = Number.isFinite(refA) && Number.isFinite(refB) ? refA + (refB - refA) * u : Number.isFinite(refA) ? refA : Number.isFinite(refB) ? refB : free;
+    if (Number.isFinite(bankLow[v]!)) l = Math.min(l, bankLow[v]! - 0.8);
+    lv[v] = Math.max(l, t.waterLevel - 2);
+  }
+  // L'eau descend d'un bout à l'autre (jamais de remontée).
+  if (lv[0]! >= lv[n - 1]!) for (let v = 1; v < n; v++) lv[v] = Math.min(lv[v]!, lv[v - 1]!);
+  else for (let v = n - 2; v >= 0; v--) lv[v] = Math.min(lv[v]!, lv[v + 1]!);
+  // Pour chaque échantillon proche : distance à l'axe et niveau de l'eau au point le plus proche.
+  const best = new Map<number, { d: number; l: number }>();
+  for (let v = 0; v < n - 1; v++) {
+    const ax = path[v * 2]!, az = path[v * 2 + 1]!, bx = path[v * 2 + 2]!, bz = path[v * 2 + 3]!;
+    const rect = rectFor(t, Math.min(ax, bx) - reach, Math.min(az, bz) - reach, Math.max(ax, bx) + reach, Math.max(az, bz) + reach);
+    if (!rect) continue;
+    const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz || 1;
+    for (let j = rect.j0; j <= rect.j1; j++) for (let i = rect.i0; i <= rect.i1; i++) {
+      const x = t.originX + i * sp, z = t.originZ + j * sp;
+      const u = clamp(((x - ax) * dx + (z - az) * dz) / len2, 0, 1);
+      const d = Math.hypot(x - ax - dx * u, z - az - dz * u);
+      if (d > reach) continue;
+      const k = j * W + i;
+      const cur = best.get(k);
+      if (!cur || d < cur.d) best.set(k, { d, l: lv[v]! + (lv[v + 1]! - lv[v]!) * u });
+    }
+  }
+  let wetCount = 0;
+  for (const [k, { d, l }] of best) {
+    const h0 = t.heights[k]!;
+    const wet0 = wetK(t, k);
+    if (d <= hw) {
+      const u = d / hw;
+      const bed = l - (1.2 + (RIVER_DEPTH - 1.2) * (1 - u * u));
+      c.set(k, Math.round(Math.min(h0, bed) * 100) / 100, wet0 ? Math.max(t.waterSurface[k]!, l) : Math.round(l * 100) / 100);
+      wetCount++;
+      continue;
+    }
+    if (wet0) continue; // eau existante : la rivière s'y raccorde
+    const target = l + 0.5 + (d - hw) * RIVER_BANK_SLOPE;
+    let h = h0;
+    if (h0 > target) h = target; // déblai : berge en pente douce
+    else if (d <= hw + sp * 1.2 && h0 < l + 0.5) h = l + 0.5; // levée : la berge reste au-dessus de l'eau
+    if (Math.abs(h - h0) < 0.01 && t.waterSurface[k]! === NO_WATER) continue;
+    c.set(k, Math.round(h * 100) / 100, NO_WATER);
+  }
+  if (wetCount === 0) return bad('Zone hors de la carte');
+  // Contour : berges gauche puis droite.
+  const left: number[] = [], right: number[] = [];
+  const stride = Math.max(1, Math.round(8 / Math.min(4, sp / 2)));
+  for (let v = 0; v < n; v += v === n - 1 ? 1 : Math.min(stride, n - 1 - v)) {
+    const a = Math.max(0, v - 1), b = Math.min(n - 1, v + 1);
+    let tx = path[b * 2]! - path[a * 2]!, tz = path[b * 2 + 1]! - path[a * 2 + 1]!;
+    const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+    left.push(path[v * 2]! - tz * hw, path[v * 2 + 1]! + tx * hw);
+    right.push(path[v * 2]! + tz * hw, path[v * 2 + 1]! - tx * hw);
+    if (v === n - 1) break;
+  }
+  const outline = [...left];
+  for (let q = right.length - 2; q >= 0; q -= 2) outline.push(right[q]!, right[q + 1]!);
+  outline.push(left[0]!, left[1]!);
+  const p = finish(t, e, c, [], [], 0, outline);
+  return p ? { ok: true, plan: p } : bad('Rien à creuser');
 }
 
 /** Applique un plan : hauteurs (une ou plusieurs copies : naturelles, nivelées), surface d'eau, forêt. */

@@ -519,7 +519,7 @@ export class BuildBar {
     }
     this.hint.textContent = this.hintText();
     act('Terminer', t === 'road' ? 'Terminer le tracé en cours ; sinon revenir à la sélection (Échap)' : 'Revenir à la sélection (Échap)', () => {
-      if (t === 'road' && m.finishRoad()) { this.d.tools.cancel(); return; }
+      if ((t === 'road' || t === 'terraform') && m.finishRoad()) { this.d.tools.cancel(); return; }
       this.d.tools.setTool('select'); this.closeDrawer();
     });
     this.syncFinish();
@@ -529,11 +529,13 @@ export class BuildBar {
   private syncFinish(): void {
     const on = this.d.machine.drawing;
     this.finishBtn.classList.toggle('hidden', !on);
+    if (this.d.machine.tool === 'terraform') this.hint.textContent = this.hintText();
     document.body.classList.toggle('road-drawing', on);
     if (on !== this.wasDrawing) {
       this.wasDrawing = on;
       // La barre d'options suit (libellés « Terminer » et indications).
       if (this.d.machine.tool === 'road') this.hint.textContent = this.hintText();
+      else if (this.d.machine.tool === 'terraform') this.sync();
     }
   }
 }
