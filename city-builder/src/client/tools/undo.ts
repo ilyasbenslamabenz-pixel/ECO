@@ -19,6 +19,8 @@ export type UndoStep =
   | { kind: 'demolish'; buildingId: number }
   | { kind: 'removeRoad'; edgeId: number }
   | { kind: 'placeBuilding'; assetId: string; x: number; z: number; rot: number; variant: number }
+  /** Bâtiment déplacé → remis à sa position d'origine. */
+  | { kind: 'moveBuilding'; buildingId: number; x: number; z: number; rot: number }
   | { kind: 'buildRoad'; kindId: RoadKindId; points: number[]; c1?: [number, number]; c2?: [number, number] }
   | { kind: 'upgradeRoad'; edgeId: number; toKind: RoadKindId; reverse: boolean }
   /** Tronçons d'id ≥ minEdgeId posés sur les rues du quadrillage (x0..x1, z0..z1, pas `block`). */

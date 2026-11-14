@@ -4,6 +4,7 @@
  * (occupants réels, trafic, trajets) est affiché avec sa phase, jamais inventé.
  * Propriétaire : agent construction/caméra/UI.
  */
+import type { BuildingRecord } from '../shared/contracts';
 import { alertMaskOf } from '../render/plugins/alertes';
 import { ALERT_BITS, ALERT_KINDS, ALERT_LABELS } from '../shared/protocol-ext/alertes';
 import { TILE_SIZE } from '../shared/constants';
@@ -20,6 +21,8 @@ export interface InfoPanelDeps {
   camera: CameraController;
   thumbs: ThumbnailSource | null;
   demolish(p: PickResult): Promise<boolean>;
+  /** Outil Déplacer (facultatif) : le bâtiment suit ensuite le pointeur jusqu'au nouvel emplacement. */
+  move?(rec: BuildingRecord): void;
   close(): void;
 }
 
@@ -84,6 +87,7 @@ export class InfoPanel {
       }
       const refund = Math.round((a?.cost ?? 0) * DEMOLISH_REFUND_RATE);
       this.action('Démolir', () => { void this.d.demolish(p); }, 'danger', `Démolir (remboursement +${money(refund)}) — Suppr`);
+      if (this.d.move) this.action('Déplacer', () => { this.d.move!(rec); }, '', 'Déplacer ce bâtiment ailleurs (gratuit, habitants conservés)');
       this.action('Centrer', () => cam.flyTo({ targetX: rec.x, targetZ: rec.z, distance: Math.max(60, (a?.dimensions.height ?? 20) * 3) }), '', 'Centrer la caméra');
       this.action('Vue rue', () => this.streetViewAt(rec.x, rec.z, a ? Math.max(a.footprint.tilesX, a.footprint.tilesZ) * TILE_SIZE : 16), '', 'Se placer dans la rue devant le bâtiment');
     } else if (p.kind === 'road') {

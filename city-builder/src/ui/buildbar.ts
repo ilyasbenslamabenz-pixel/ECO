@@ -434,6 +434,7 @@ export class BuildBar {
 
   private hintText(): string {
     const m = this.d.machine;
+    if (m.tool === 'building' && m.moving) return `Déplacer : ${m.moving.name} — touchez le nouvel emplacement (gratuit, habitants conservés ; Échap : annuler)`;
     if (m.tool === 'building' && m.asset) {
       const v = m.variant >= 0 ? m.asset.variants[m.variant] : undefined;
       return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m`;

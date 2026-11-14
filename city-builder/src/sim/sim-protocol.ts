@@ -92,6 +92,11 @@ export interface ExtCommandMap {
   buildRoundabout: { args: { x: number; z: number; size: 'small' | 'large'; dryRun?: boolean }; result: { edgeIds: number[]; cost: number } };
   /** Édition du terrain par le joueur (src/sim/terrain/edits.ts) ; `dryRun` : coût et contour sans rien modifier. */
   terrainEdit: { args: { edit: TerrainEdit; dryRun?: boolean }; result: TerrainEditResult };
+  /**
+   * Déplace un bâtiment existant (même identifiant : habitants, emplois et élèves conservés), gratuitement, avec les
+   * contrôles de la pose (carte, collisions hors lui-même, routes, eau, pente). dryRun : valide sans déplacer.
+   */
+  moveBuilding: { args: { buildingId: number; x: number; z: number; rot: number; dryRun?: boolean }; result: { buildingId: number; x: number; z: number; rot: number } };
 }
 
 export type ExtCommandName = keyof ExtCommandMap;
@@ -102,7 +107,7 @@ export type ExtCommandMessage = { [K in ExtCommandName]: { kind: 'cmd'; reqId: n
 /** Delta enrichi : `report` présent environ une fois par seconde. */
 export type DeltaMessageExt = DeltaMessage & { report?: SimReport };
 
-export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout', 'terrainEdit'];
+export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout', 'terrainEdit', 'moveBuilding'];
 
 export function isExtCommandName(name: unknown): name is ExtCommandName {
   return typeof name === 'string' && (EXT_COMMANDS as readonly string[]).includes(name);
@@ -145,6 +150,9 @@ export function validateExtCommand(msg: unknown): CommandError | null {
     case 'buildRoundabout':
       if (!isNum(a.x) || !isNum(a.z)) return bad('Position de giratoire invalide');
       return a.size === 'small' || a.size === 'large' ? null : bad('Taille de giratoire inconnue');
+    case 'moveBuilding':
+      if (!isNum(a.buildingId) || !isNum(a.x) || !isNum(a.z) || !isNum(a.rot)) return bad('Déplacement invalide');
+      return a.dryRun === undefined || typeof a.dryRun === 'boolean' ? null : bad('dryRun invalide');
     case 'terrainEdit': {
       if (a.dryRun !== undefined && typeof a.dryRun !== 'boolean') return bad('dryRun invalide');
       const e = editShapeError(a.edit);

@@ -46,6 +46,7 @@ export function snapToNeighbor(m: WorldMirror, asset: CatalogAsset, o: Obb, tx: 
   const hT = extentAlong(o, tx, tz), hN = extentAlong(o, nx, nz);
   let best: { x: number; z: number; cost: number } | null = null;
   for (const b of m.buildings.values()) {
+    if (b.id === ignoreId) continue;
     const ob = m.buildingObb(b);
     if (!ob) continue;
     const dx = ob.cx - o.cx, dz = ob.cz - o.cz;
@@ -99,6 +100,10 @@ export function rotationFacing(asset: CatalogAsset, dx: number, dz: number): num
  * Vrai si l'empreinte orientée chevauche une route (demi-largeur, axe courbe) ou un bâtiment existant (avec
  * l'écart minimal exigé par la simulation autour des maisons quand `category` est donnée).
  */
+/** Bâtiment ignoré par l'aimantation et les collisions locales (outil Déplacer : le bâtiment déplacé lui-même). */
+let ignoreId = -1;
+export function setSnapIgnore(id: number | null): void { ignoreId = id ?? -1; }
+
 export function obbConflicts(m: WorldMirror, o: Obb, category?: string): boolean {
   const bb = obbAabb(o);
   for (const e of m.edges.values()) {
@@ -114,6 +119,7 @@ export function obbConflicts(m: WorldMirror, o: Obb, category?: string): boolean
     }
   }
   for (const b of m.buildings.values()) {
+    if (b.id === ignoreId) continue;
     const other = m.buildingObb(b);
     if (!other) continue;
     const gap = category ? buildingGap(category, m.asset(b.assetId)?.category ?? '') : 0;

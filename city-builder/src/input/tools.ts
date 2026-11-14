@@ -306,7 +306,7 @@ export class ToolController implements IToolController, PointerToolSink {
     const m = this.deps?.machine;
     if (!m) return 'Construire';
     const p = m.preview;
-    if (m.tool === 'building') return 'Construire';
+    if (m.tool === 'building') return m.moving ? 'Déplacer ici' : 'Construire';
     if (m.tool === 'bulldoze') {
       const a = p.kind === 'bulldoze' ? p.area : null;
       if (!a) return 'Démolir';
@@ -351,7 +351,7 @@ export class ToolController implements IToolController, PointerToolSink {
 
   rotate(): void {
     this.deps?.machine.rotate(1);
-    if (this.pendingTouchConfirm) this.hooks?.touchConfirm({ label: 'Construire', canRotate: true });
+    if (this.pendingTouchConfirm) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: true });
   }
 
   /* ----------------------------- Clavier ----------------------------- */
@@ -470,7 +470,7 @@ export class ToolController implements IToolController, PointerToolSink {
         const snap = (p.proposal.snapped ? ' · façade côté route' : '') + (p.proposal.neighbor ? ' · aligné sur le voisin' : '');
         const svcR = serviceOf(p.asset) ? `\nRayon d’action : ${fmt(serviceRadius(p.asset))} m${this.coverageOthers.length ? ` · ${this.coverageOthers.length} déjà construit${this.coverageOthers.length > 1 ? 's' : ''} (cercles bleus)` : ''}` : '';
         if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');
-        else tag(`${head}\n${fmt(p.cost)} ¢${snap}${svcR}`, p.validity === 'ok' ? 'ok' : 'pending');
+        else tag(`${head}\n${d.machine.moving ? 'Déplacement gratuit' : `${fmt(p.cost)} ¢`}${snap}${svcR}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
       }
       case 'road': {

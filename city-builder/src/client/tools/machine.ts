@@ -30,7 +30,7 @@ import { RoadDraft, angleLabel, snapRoadPoint, type RoadMode, type SnapPoint } f
 import { DEFAULT_GRID_BLOCK, edgeOnGrid, gridCorner, gridLayout, type GridLayout } from './grid';
 import { nextUpgradeKind, prevUpgradeKind } from '../../sim/roads/upgrade';
 import type { RoadEdgeView } from './mirror';
-import { proposePlacement, type PlacementProposal } from './snapping';
+import { proposePlacement, setSnapIgnore, type PlacementProposal } from './snapping';
 import { UndoStack, type UndoStep } from './undo';
 import { TerrainTool, type TerrainPreview } from './terrain-tool';
 import type { ExtCommandArgs, ExtCommandName, ExtCommandResult } from '../../sim/sim-protocol';
@@ -189,6 +189,7 @@ export class ConstructionTools {
     this.tool = t;
     this.lineA = null;
     this.areaStart = null;
+    if (this.moving) this.stopMove();
     this.draft.reset();
     this.gridStart = null;
     this.draft.type = this.roadType;
@@ -545,17 +546,42 @@ export class ConstructionTools {
     return false;
   }
 
+  /** Outil Déplacer : bâtiment en cours de déplacement (identifiant, position d'origine), null sinon. */
+  moving: { id: number; x: number; z: number; rot: number; name: string } | null = null;
+
+  /** Démarre le déplacement d'un bâtiment : outil Bâtiment avec son modèle, sa variante et sa rotation. */
+  startMove(rec: BuildingRecord): boolean {
+    const a = this.mirror.asset(rec.assetId);
+    if (!a || isHubAsset(a)) { this.notify('Ce bâtiment ne peut pas être déplacé', 'error'); return false; }
+    if (!this.setTool('building', { assetId: a.id })) return false;
+    this.variant = rec.variant;
+    this.rot = rec.rot;
+    this.autoAlign = true;
+    this.moving = { id: rec.id, x: rec.x, z: rec.z, rot: rec.rot, name: a.nameFr };
+    setSnapIgnore(rec.id);
+    this.notify(`Déplacer : ${a.nameFr} — choisissez le nouvel emplacement (gratuit)`, 'info');
+    this.refresh();
+    return true;
+  }
+
+  private stopMove(): void { this.moving = null; setSnapIgnore(null); }
+
   private validateBuilding(): void {
     const seq = ++this.previewSeq;
     const p = this.preview;
     if (p.kind !== 'building') return;
     const args = { assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot, variant: p.variant, dryRun: true };
+    const mv = this.moving;
     const version = this.mirror.version;
     this.dry.run(async () => {
       if (seq !== this.previewSeq) return; // un aperçu plus récent attend déjà
       let validity: Validity; let message = ''; let cost = p.cost;
       try {
-        if (isHubAsset(p.asset)) {
+        if (mv) {
+          if (!this.sim.sendExt) throw new Error('Déplacement indisponible');
+          await this.sim.sendExt('moveBuilding', { buildingId: mv.id, x: args.x, z: args.z, rot: args.rot, dryRun: true });
+          cost = 0;
+        } else if (isHubAsset(p.asset)) {
           const r = await this.sim.send('pluginCommand', { plugin: 'hubs', name: 'place', payload: { assetId: args.assetId, x: args.x, z: args.z, rot: args.rot, dryRun: true } });
           cost = (r.data as { cost: number }).cost;
         } else {
@@ -640,6 +666,19 @@ export class ConstructionTools {
   private async placeCurrent(): Promise<void> {
     const p = this.preview;
     if (p.kind !== 'building') return;
+    const mv = this.moving;
+    if (mv) {
+      try {
+        if (!this.sim.sendExt) throw new Error('Déplacement indisponible');
+        await this.sim.sendExt('moveBuilding', { buildingId: mv.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot });
+        this.applied++;
+        this.undo.push({ label: `Déplacement : ${mv.name}`, steps: [{ kind: 'moveBuilding', buildingId: mv.id, x: mv.x, z: mv.z, rot: mv.rot }] });
+        this.notify(`${mv.name} déplacé (gratuit)`, 'ok');
+        this.stopMove();
+        this.setTool('select');
+      } catch (e) { this.notify(`Déplacement refusé : ${errorOf(e).message}`, 'error'); }
+      return;
+    }
     if (isHubAsset(p.asset)) {
       try {
         const r = await this.sim.send('pluginCommand', { plugin: 'hubs', name: 'place', payload: { assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot } });
@@ -897,6 +936,7 @@ export class ConstructionTools {
         if (s.kind === 'demolish') await this.sim.send('demolish', { buildingId: s.buildingId });
         else if (s.kind === 'removeRoad') await this.sim.send('removeRoad', { edgeId: s.edgeId });
         else if (s.kind === 'placeBuilding') await this.sim.send('placeBuilding', { assetId: s.assetId, x: s.x, z: s.z, rot: s.rot, variant: s.variant });
+        else if (s.kind === 'moveBuilding') { if (!this.sim.sendExt) throw new Error('Déplacement indisponible'); await this.sim.sendExt('moveBuilding', { buildingId: s.buildingId, x: s.x, z: s.z, rot: s.rot }); }
         else if (s.kind === 'upgradeRoad') {
           const r = await this.sim.send('upgradeRoad', { edgeId: s.edgeId, ...(s.toKind ? { kind: s.toKind } : {}), ...(s.reverse ? { reverse: true } : {}) });
           this.undo.renameEdge(s.edgeId, r.edgeId);

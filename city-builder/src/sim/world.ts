@@ -489,6 +489,47 @@ export class Simulation {
     return { ok: true, data: { buildingId: id, cost } };
   }
 
+  /**
+   * Déplacement d'un bâtiment (outil Déplacer) : mêmes contrôles que la pose, le bâtiment lui-même étant ignoré
+   * pour les collisions ; gratuit ; même identifiant (occupants conservés), position et rotation mises à jour.
+   */
+  moveBuilding(a: ExtCommandArgs<'moveBuilding'>): { ok: true; data: ExtCommandResult<'moveBuilding'> } | { ok: false; error: CommandError } {
+    if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
+    const i = this.buildings.indexOf(a.buildingId);
+    if (i < 0) return fail('NOT_FOUND', 'Bâtiment introuvable');
+    const asset = this.catalog!.assets[this.buildings.assetIndex[i]!]!;
+    const id = a.buildingId;
+    const oldObb = this.obbs.get(id)!;
+    // Contrôles de la pose sans le bâtiment lui-même.
+    this.obbs.delete(id);
+    this.buildingIndex.remove(id);
+    const check = this.placeChecked({ assetId: asset.id, x: a.x, z: a.z, rot: a.rot, dryRun: true }, true);
+    const restore = (o: Obb): void => { this.obbs.set(id, o); const bb = obbAabb(o); this.buildingIndex.insert(id, bb.minX, bb.minZ, bb.maxX, bb.maxZ); };
+    if (!check.ok) { restore(oldObb); return check; }
+    const x = Math.round(a.x * 100) / 100, z = Math.round(a.z * 100) / 100, rot = normRot(a.rot);
+    if (a.dryRun) { restore(oldObb); return { ok: true, data: { buildingId: id, x, z, rot } }; }
+    const o = this.obbFor(asset, x, z, rot);
+    restore(o);
+    // Altitude : moyenne du terrain sous l'empreinte (comme à la pose).
+    let hSum = 0, n = 0;
+    const nx = Math.max(1, asset.footprint.tilesX), nz = Math.max(1, asset.footprint.tilesZ);
+    for (let j = 0; j <= nz; j++) for (let k = 0; k <= nx; k++) {
+      const [wx, wz] = obbToWorld(o, -o.hx + (2 * o.hx * k) / nx, -o.hz + (2 * o.hz * j) / nz);
+      hSum += terrainHeightAt(this.terrain, wx, wz); n++;
+    }
+    const y = hSum / n;
+    const st = this.buildings;
+    st.x[i] = x; st.y[i] = y; st.z[i] = z; st.rot[i] = rot;
+    st.roadAccess[i] = this.computeRoadAccess(i) ? 1 : 0;
+    this.demography?.markCoverageDirty();
+    this.trafficBuildingsDirty = true;
+    this.jobsDirty = true;
+    // Rendu et miroir du client : retiré puis rajouté avec le même identifiant.
+    this.pendingBuildingsRemoved.push(id);
+    this.pendingBuildingsAdded.push({ id, assetId: asset.id, variant: st.variant[i]!, x, z, y, rot });
+    return { ok: true, data: { buildingId: id, x, z, rot } };
+  }
+
   /** Insertion sans contrôle ni coût (utilisée par placeBuilding et le chargement). */
   private insertBuilding(r: BuildingRecord, silent = false): void {
     const asset = this.getAsset(r.assetId)!;
@@ -1109,6 +1150,10 @@ export class Simulation {
         case 'terrainEdit': {
           const r = this.terrainEdit(args as ExtCommandArgs<'terrainEdit'>);
           return r.ok ? ok(r.data) : r;
+        }
+        case 'moveBuilding': {
+          const r = this.moveBuilding(args as ExtCommandArgs<'moveBuilding'>);
+          return r.ok ? ok(r.data) : fail(r.error.code, r.error.message);
         }
         case 'buildCity': {
           const a = args as ExtCommandArgs<'buildCity'>;

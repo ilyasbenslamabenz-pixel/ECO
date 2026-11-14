@@ -401,6 +401,8 @@ async function boot(): Promise<void> {
     else if (!wantWater && autoWater) { waterView.set('off'); autoWater = false; }
   });
   debug.constructionApplied = () => cons.machine.applied;
+  // Diagnostic (e2e) : outil Déplacer sur un bâtiment donné.
+  (debug as unknown as Record<string, unknown>).startMove = (id: number) => { const r = cons.machine.mirror.buildings.get(id); return r ? cons.machine.startMove(r) : false; };
   debug.worldToScreen = (x, z) => {
     const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);
     const r = canvas.getBoundingClientRect();
