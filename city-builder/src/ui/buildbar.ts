@@ -19,9 +19,9 @@ import { zonageDrawer } from './panels/zonage';
 import { renderTerrainDrawer, terrainHint, terrainToolActions } from './terrain-drawer';
 
 export type DrawerId = 'road' | 'building' | 'services' | 'transport' | 'environment' | 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
-type CatalogDrawer = 'building' | 'services' | 'transport' | 'environment' | 'energy' | 'water';
+type CatalogDrawer = 'building' | 'services' | 'transport' | 'environment' | 'energy' | 'water' | 'waste';
 /** Sous-barres sans fonction simulée : aperçu des outils prévus, grisés avec leur phase. */
-type PlannedDrawer = 'zones' | 'waste' | 'terrain';
+type PlannedDrawer = 'zones' | 'terrain';
 
 interface Tab { id: string; label: string; cats: AssetCategory[]; placeable: boolean; icon: string; color: string; filter?: (a: CatalogAsset) => boolean }
 
@@ -47,6 +47,7 @@ export const DRAWER_TABS: Record<CatalogDrawer, Tab[]> = {
   ],
   // Modules électricité et eau : leurs installations sont des bâtiments du catalogue (reconnus par la simulation).
   energy: [{ id: 'power', label: 'Centrales et postes', cats: ['industrial'], placeable: true, icon: 'energy', color: '#ffc531', filter: (a) => a.id.startsWith('elec_') }],
+  waste: [{ id: 'dechets', label: 'Collecte et traitement', cats: ['public'], placeable: true, icon: 'waste', color: '#8fcf5a', filter: (a) => a.id.startsWith('dechets_') }],
   water: [{ id: 'eau', label: 'Eau et égouts', cats: ['public'], placeable: true, icon: 'water', color: '#4aa8ff', filter: (a) => a.id.startsWith('eau_') }],
   environment: [
     { id: 'park', label: 'Parcs', cats: ['public'], placeable: true, icon: 'park', color: '#5fd38a', filter: isGreen },
@@ -66,12 +67,6 @@ export const PLANNED: Record<PlannedDrawer | 'transport', { label: string; icon:
     { label: 'Bureaux', icon: 'office', color: '#a77bff', phase: '2B', tip: 'Zone de bureaux' },
     { label: 'Agricole', icon: 'wheat', color: '#9bd84a', phase: '2B', tip: 'Zone agricole (5e secteur fiscal)' },
     { label: 'Spécial', icon: 'star', color: '#ffd23f', phase: '2B', tip: 'Zones spéciales (quartiers à thème)' },
-  ],
-  waste: [
-    { label: 'Collecte', icon: 'truck', color: '#8fcf5a', phase: '2B', tip: 'Camions de collecte dans le trafic' },
-    { label: 'Tri et recyclage', icon: 'recycle', color: '#4fd16f', phase: '2B', tip: 'Centre de tri' },
-    { label: 'Incinérateur', icon: 'fire', color: '#ff7a4a', phase: '2B', tip: 'Incinération' },
-    { label: 'Décharge', icon: 'landfill', color: '#b89a6a', phase: '2B', tip: 'Décharge contrôlée' },
   ],
   terrain: [
     { label: 'Élever', icon: 'raise', color: '#d9b77a', phase: '2B', tip: 'Élever le terrain' },
@@ -200,7 +195,7 @@ const UPGRADE_TIPS = {
   reverse: 'Inverser le sens d’une rue à sens unique',
 } as const;
 
-const PLANNED_IDS: readonly string[] = ['zones', 'waste'];
+const PLANNED_IDS: readonly string[] = ['zones'];
 
 export class BuildBar {
   private drawer = $('build-drawer');
@@ -226,7 +221,7 @@ export class BuildBar {
       transport: 'Transports : gare de voyageurs, port et aéroport ; bus, tramway (phase 2C)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
       zones: 'Zones (résidentiel, commercial, industriel, bureaux, agricole) : aperçu — phase 2B', energy: 'Énergie : centrales, éoliennes, solaire, barrage, postes ; lignes haute tension depuis le tableau de bord',
-      water: 'Eau et égouts : pompage, potabilisation, château d’eau, épuration (canalisations le long des routes)', waste: 'Déchets : aperçu — phase 2B', terrain: 'Terrain : défricher, quais et remblais, bassins et canaux',
+      water: 'Eau et égouts : pompage, potabilisation, château d’eau, épuration (canalisations le long des routes)', waste: 'Déchets : dépôt de camions-bennes, centre de tri, incinérateur, décharge', terrain: 'Terrain : défricher, quais et remblais, bassins et canaux',
     };
     for (const b of Array.from(this.toolbar.querySelectorAll<HTMLButtonElement>('button[data-tool], button[data-cat]'))) {
       const tool = b.dataset['tool'] as ToolId | undefined;
@@ -325,7 +320,7 @@ export class BuildBar {
           this.tabsEl.append(b);
         }
       }
-      if (id === 'energy' || id === 'water') this.tabsEl.append(this.dashboardChip(id));
+      if (id === 'energy' || id === 'water' || id === 'waste') this.tabsEl.append(this.dashboardChip(id));
       for (const a of assetsForTab(this.d.catalog, current)) this.body.append(this.card(a, current.placeable, current.color));
     }
     if (id === 'transport') for (const p of PLANNED.transport) this.body.append(this.plannedTile(p));
@@ -333,11 +328,12 @@ export class BuildBar {
   }
 
   /** Ouvre le tableau de bord du module (panneau existant) en fermant le tiroir : pas de chevauchement. */
-  private dashboardChip(id: 'energy' | 'water'): HTMLButtonElement {
-    const b = el('button', { cls: 'chip-tab', attrs: { type: 'button', 'data-dashboard': id } }, iconEl(id === 'energy' ? 'energy' : 'water'), el('span', { text: id === 'energy' ? 'Tableau de bord et lignes' : 'Tableau de bord' }));
+  private dashboardChip(id: 'energy' | 'water' | 'waste'): HTMLButtonElement {
+    const b = el('button', { cls: 'chip-tab', attrs: { type: 'button', 'data-dashboard': id } }, iconEl(id), el('span', { text: id === 'energy' ? 'Tableau de bord et lignes' : 'Tableau de bord' }));
     b.addEventListener('click', () => {
       this.closeDrawer();
-      document.getElementById(id === 'energy' ? 'elec-launcher' : 'eau-btn')?.click();
+      if (id === 'waste') window.dispatchEvent(new Event('dechets:open'));
+      else document.getElementById(id === 'energy' ? 'elec-launcher' : 'eau-btn')?.click();
     });
     return b;
   }

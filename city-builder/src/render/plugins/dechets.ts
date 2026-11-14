@@ -96,6 +96,8 @@ const onKey = (e: KeyboardEvent): void => {
   if (e.shiftKey) setLayer(!(overlay?.visible ?? false));
   else if (panelEl) closePanel(); else openPanel();
 };
+/** Ouverture depuis le tiroir Déchets ou le menu latéral (bascule). */
+const onOpen = (): void => { if (panelEl) closePanel(); else openPanel(); };
 const onLayerEvent = (e: Event): void => { overlay?.setVisible(!!(e as CustomEvent<{ visible: boolean }>).detail?.visible); };
 
 function applyPayload(p: DechetsDelta | DechetsSnapshot): void {
@@ -113,6 +115,7 @@ export const dechetsRenderPlugin: RenderPlugin = {
     containers = new ContainerLayer(ctx);
     overlay = new WasteOverlay(ctx);
     window.addEventListener('keydown', onKey);
+    window.addEventListener('dechets:open', onOpen);
     window.addEventListener(DECHETS_LAYER_EVENT, onLayerEvent);
     window.__dechets = {
       trucks: () => trucks?.count ?? 0,
@@ -152,6 +155,7 @@ export const dechetsRenderPlugin: RenderPlugin = {
   dispose() {
     closePanel();
     window.removeEventListener('keydown', onKey);
+    window.removeEventListener('dechets:open', onOpen);
     window.removeEventListener(DECHETS_LAYER_EVENT, onLayerEvent);
     trucks?.dispose(); facilities?.dispose(); containers?.dispose(); overlay?.dispose();
     trucks = null; facilities = null; containers = null; overlay = null;
