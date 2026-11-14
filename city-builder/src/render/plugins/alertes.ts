@@ -41,6 +41,12 @@ function atlas(): THREE.CanvasTexture | null {
 
 /** Masque des problèmes de chaque bâtiment (dernière charge reçue) : lu par la fiche du bâtiment sélectionné. */
 const masks = new Map<number, number>();
+/** Icônes affichées (menu Calques) ; mémorisé pour la session. */
+let shown = true;
+let pointsRef: THREE.Points | null = null;
+let countRef = 0;
+export const alertsVisible = (): boolean => shown;
+export function setAlertsVisible(v: boolean): void { shown = v; if (pointsRef) pointsRef.visible = v && countRef > 0; }
 export const alertMaskOf = (id: number): number => masks.get(id) ?? 0;
 
 export function createAlertesRenderPlugin(): RenderPlugin & { readonly count: () => number } {
@@ -66,7 +72,8 @@ export function createAlertesRenderPlugin(): RenderPlugin & { readonly count: ()
     geo.setAttribute('kind', new THREE.Float32BufferAttribute(kind, 1));
     geo.setAttribute('slot', new THREE.Float32BufferAttribute(slot, 1));
     geo.computeBoundingSphere();
-    if (points) points.visible = n > 0;
+    countRef = n;
+    if (points) points.visible = shown && n > 0;
   };
 
   return {
@@ -92,6 +99,7 @@ export function createAlertesRenderPlugin(): RenderPlugin & { readonly count: ()
       points.frustumCulled = false;
       points.renderOrder = 20;
       points.visible = false;
+      pointsRef = points;
       c.scene.add(points);
     },
     applySnapshotExt(p) { apply(p); },

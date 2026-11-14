@@ -51,6 +51,7 @@ const P: Record<string, string> = {
   zoomOut: '<circle class="f" cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4L21 21M7.6 10.5h5.8"/>',
   compass: '<circle cx="12" cy="12" r="9"/><path d="M12 4.8l2.6 7.2H9.4z" fill="#ef5b5b" stroke="none"/><path d="M12 19.2l-2.6-7.2h5.2z" fill="currentColor" stroke="none" opacity=".55"/>',
   plane: '<path class="f" d="M21 15.5l-8-4.6V5.2a1 1 0 00-2 0v5.7l-8 4.6V17l8-2.4V19l-2 1.5V22l3-.9 3 .9v-1.5L13 19v-4.4l8 2.4z"/>',
+  layers: '<path d="M12 3.5l8.5 4.5-8.5 4.5L3.5 8z"/><path d="M3.5 12l8.5 4.5 8.5-4.5"/><path d="M3.5 16l8.5 4.5 8.5-4.5"/>',
   map: '<path class="f" d="M3 6l6-2.5 6 2.5 6-2.5V18l-6 2.5L9 18l-6 2.5z"/><path d="M9 3.5V18M15 6v14.5"/>',
   target: '<circle class="f" cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
   topview: '<rect class="f" x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/>',

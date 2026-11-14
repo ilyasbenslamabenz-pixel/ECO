@@ -6,6 +6,7 @@
  * Modes d'URL : ?demo (scène de démonstration), ?autostart (partie immédiate), ?validate (porte visuelle),
  * ?seed=N (graine de la partie), ?h=H (heure de départ).
  */
+import { initLayersMenu } from './ui/layers-menu';
 import * as THREE from 'three';
 import { previousTrace, traceStart, traceStep, tracePlaying } from './boot-trace';
 import { powerView } from './shared/power/view';
@@ -481,6 +482,7 @@ async function boot(): Promise<void> {
   await b.ready;
   debug.workerReady = true;
   ui.setExtPort(b);
+  initLayersMenu({ pluginCommand: async (plugin, name, payload) => (await b.send('pluginCommand', { plugin, name, ...(payload !== undefined ? { payload } : {}) })).data });
   ui.setModuleBridge({ pluginCommand: async (plugin, name, payload) => (await b.send('pluginCommand', { plugin, name, ...(payload !== undefined ? { payload } : {}) })).data });
   await b.send('init', { protocolVersion: PROTOCOL_VERSION, catalog });
 
