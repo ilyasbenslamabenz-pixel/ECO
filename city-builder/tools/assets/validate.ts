@@ -41,6 +41,8 @@ const PLAUSIBLE: Record<AssetCategory, [number, number, number]> = {
   apartment_high: [25, 120, 120], skyscraper: [60, 450, 120], commercial: [3, 60, 150], industrial: [4, 60, 200],
   public: [4, 80, 200], vehicle: [1, 5, 20], tree: [1.5, 40, 30], vegetation: [0.1, 8, 12],
   street_furniture: [0.05, 15, 15], prop: [0.05, 10, 15],
+  // Port et aéroport (module hubs) : grues, navires (≈ 200 m), avions — demande docs/requests/assets-transport.md §1.
+  transport: [0.05, 90, 260],
 };
 
 const errors: string[] = [];
@@ -138,7 +140,9 @@ async function main(): Promise<void> {
         const cz = (b.min[2] + b.max[2]) / 2;
         if (Math.abs(cx) > 0.1 * w + 0.05 || Math.abs(cz) > 0.1 * d + 0.05) err(a.id, `origine décentrée (centre ${cx.toFixed(2)}, ${cz.toFixed(2)})`);
         if (b.min[1] > 0.25) err(a.id, `objet flottant : base à y = ${b.min[1].toFixed(2)} m`);
-        if (b.min[1] < -3) err(a.id, `base trop enterrée : y = ${b.min[1].toFixed(2)} m`);
+        // Navires (`origine:flottaison`) : y = 0 = ligne de flottaison, quille à −tirant d'eau (≤ 10,5 m).
+        const floats = a.tags.includes('origine:flottaison');
+        if (b.min[1] < (floats ? -10.6 : -3)) err(a.id, `base trop enterrée : y = ${b.min[1].toFixed(2)} m`);
         const [hMin, hMax, horizMax] = PLAUSIBLE[a.category];
         if (h < hMin || h > hMax) err(a.id, `hauteur ${h.toFixed(2)} m hors plage plausible [${hMin}, ${hMax}] pour ${a.category}`);
         if (Math.max(w, d) > horizMax) err(a.id, `emprise ${Math.max(w, d).toFixed(1)} m > ${horizMax} m plausible pour ${a.category}`);

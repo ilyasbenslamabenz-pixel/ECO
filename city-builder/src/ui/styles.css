@@ -576,3 +576,13 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   #touch-confirm { bottom: calc(var(--tb-h) + 6px); }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Modules : tableaux de bord ouverts depuis les tiroirs Énergie / Eau (boutons flottants masqués : ils couvraient la carte). */
+#elec-launcher, #eau-btn { display: none !important; }
+/* Panneau Eau : sous la barre du haut (plus haute sur téléphone), en-tête et bouton fermer toujours visibles. */
+@media (max-width: 760px) {
+  #eau-ui { top: calc(162px + env(safe-area-inset-top, 0px)) !important; z-index: 41 !important; right: calc(12px + env(safe-area-inset-right, 0px)); }
+  #eau-panel { width: auto !important; max-height: calc(100dvh - 162px - 240px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important; }
+}
+/* Panneau Énergie : les chiffres longs passent à la ligne au lieu d'être coupés. */
+#elec-panel .kpi b { white-space: normal; overflow-wrap: anywhere; }

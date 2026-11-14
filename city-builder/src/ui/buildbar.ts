@@ -16,13 +16,14 @@ import { iconEl } from './icons';
 import type { ThumbnailSource } from './thumbnails';
 
 export type DrawerId = 'road' | 'building' | 'services' | 'transport' | 'environment' | 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
-type CatalogDrawer = 'building' | 'services' | 'transport' | 'environment';
+type CatalogDrawer = 'building' | 'services' | 'transport' | 'environment' | 'energy' | 'water';
 /** Sous-barres sans fonction simulée : aperçu des outils prévus, grisés avec leur phase. */
-type PlannedDrawer = 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
+type PlannedDrawer = 'zones' | 'waste' | 'terrain';
 
 interface Tab { id: string; label: string; cats: AssetCategory[]; placeable: boolean; icon: string; color: string; filter?: (a: CatalogAsset) => boolean }
 
 const isTransport = (a: CatalogAsset): boolean => a.tags.includes('transport');
+const isHub = (a: CatalogAsset): boolean => a.tags.includes('hub');
 const isGreen = (a: CatalogAsset): boolean => a.tags.includes('espace_vert') || a.tags.includes('parc');
 
 export const DRAWER_TABS: Record<CatalogDrawer, Tab[]> = {
@@ -36,7 +37,14 @@ export const DRAWER_TABS: Record<CatalogDrawer, Tab[]> = {
     { id: 'industrial', label: 'Industrie', cats: ['industrial'], placeable: true, icon: 'factory', color: '#ffcf4a' },
   ],
   services: [{ id: 'public', label: 'Services publics', cats: ['public'], placeable: true, icon: 'services', color: '#ff7a7a', filter: (a) => !isTransport(a) && !isGreen(a) }],
-  transport: [{ id: 'station', label: 'Gares', cats: ['public'], placeable: true, icon: 'station', color: '#4fd1e8', filter: isTransport }],
+  transport: [
+    { id: 'station', label: 'Gares', cats: ['public'], placeable: true, icon: 'station', color: '#4fd1e8', filter: isTransport },
+    // Pôles de transport (module hubs) : seules les entrées `hub` du catalogue (Port, Aéroport), pas leurs pièces.
+    { id: 'hubs', label: 'Port et aéroport', cats: ['transport'], placeable: true, icon: 'anchor', color: '#4aa8ff', filter: isHub },
+  ],
+  // Modules électricité et eau : leurs installations sont des bâtiments du catalogue (reconnus par la simulation).
+  energy: [{ id: 'power', label: 'Centrales et postes', cats: ['industrial'], placeable: true, icon: 'energy', color: '#ffc531', filter: (a) => a.id.startsWith('elec_') }],
+  water: [{ id: 'eau', label: 'Eau et égouts', cats: ['public'], placeable: true, icon: 'water', color: '#4aa8ff', filter: (a) => a.id.startsWith('eau_') }],
   environment: [
     { id: 'park', label: 'Parcs', cats: ['public'], placeable: true, icon: 'park', color: '#5fd38a', filter: isGreen },
     { id: 'tree', label: 'Arbres', cats: ['tree'], placeable: false, icon: 'tree', color: '#46c46e' },
@@ -56,20 +64,6 @@ export const PLANNED: Record<PlannedDrawer | 'transport', { label: string; icon:
     { label: 'Agricole', icon: 'wheat', color: '#9bd84a', phase: '2B', tip: 'Zone agricole (5e secteur fiscal)' },
     { label: 'Spécial', icon: 'star', color: '#ffd23f', phase: '2B', tip: 'Zones spéciales (quartiers à thème)' },
   ],
-  energy: [
-    { label: 'Centrale thermique', icon: 'plant', color: '#ff8a5c', phase: '2B', tip: 'Production électrique thermique' },
-    { label: 'Éolienne', icon: 'wind', color: '#9fe1ff', phase: '2B', tip: 'Production éolienne' },
-    { label: 'Solaire', icon: 'solar', color: '#ffd23f', phase: '2B', tip: 'Centrale solaire' },
-    { label: 'Hydroélectrique', icon: 'dam', color: '#4aa8ff', phase: '2B', tip: 'Barrage hydroélectrique' },
-    { label: 'Lignes électriques', icon: 'pylon', color: '#c7ccd4', phase: '2B', tip: 'Réseau, délestage et pannes' },
-  ],
-  water: [
-    { label: 'Pompage', icon: 'pump', color: '#4aa8ff', phase: '2B', tip: 'Captage et pompage' },
-    { label: 'Château d’eau', icon: 'watertower', color: '#7cc4ff', phase: '2B', tip: 'Stockage et pression' },
-    { label: 'Canalisations', icon: 'pipe', color: '#a0b4c8', phase: '2B', tip: 'Réseau d’eau potable' },
-    { label: 'Égouts', icon: 'sewer', color: '#9b8a6a', phase: '2B', tip: 'Réseau d’assainissement' },
-    { label: 'Épuration', icon: 'treatment', color: '#5fd3c4', phase: '2B', tip: 'Station d’épuration (pollution aval)' },
-  ],
   waste: [
     { label: 'Collecte', icon: 'truck', color: '#8fcf5a', phase: '2B', tip: 'Camions de collecte dans le trafic' },
     { label: 'Tri et recyclage', icon: 'recycle', color: '#4fd16f', phase: '2B', tip: 'Centre de tri' },
@@ -85,8 +79,6 @@ export const PLANNED: Record<PlannedDrawer | 'transport', { label: string; icon:
   transport: [
     { label: 'Arrêt de bus', icon: 'busstop', color: '#ffb14a', phase: '2C', tip: 'Lignes de bus' },
     { label: 'Tramway', icon: 'tram', color: '#4fd1e8', phase: '2C', tip: 'Réseau de tramway' },
-    { label: 'Port', icon: 'anchor', color: '#4aa8ff', phase: '2C', tip: 'Port de commerce' },
-    { label: 'Aéroport', icon: 'airport', color: '#c7ccd4', phase: '2C', tip: 'Aéroport' },
   ],
 };
 
@@ -110,10 +102,11 @@ export const CATEGORY_FR: Record<AssetCategory, string> = {
   house: 'Maison individuelle', townhouse: 'Maisons mitoyennes', apartment_low: 'Petit immeuble', apartment_mid: 'Immeuble moyen',
   apartment_high: 'Haute densité', skyscraper: 'Gratte-ciel', commercial: 'Commerce / bureaux', industrial: 'Industrie', public: 'Service public',
   vehicle: 'Véhicule', tree: 'Arbre', vegetation: 'Végétation', street_furniture: 'Mobilier urbain', prop: 'Décor',
+  transport: 'Transport (port, aéroport)',
 };
 
 export function assetsForTab(cat: AssetCatalog, tab: Tab): CatalogAsset[] {
-  return cat.assets.filter((a) => tab.cats.includes(a.category) && (!tab.filter || tab.filter(a))).sort((a, b) => a.cost - b.cost);
+  return cat.assets.filter((a) => tab.cats.includes(a.category) && (a.category !== 'transport' || isHub(a)) && (!tab.filter || tab.filter(a))).sort((a, b) => a.cost - b.cost);
 }
 
 /** Coupe en travers d'un type de route (SVG), dessinée d'après le profil de la simulation. */
@@ -178,7 +171,7 @@ export interface BuildBarDeps {
   notify: (t: string, k?: 'info' | 'error' | 'ok') => void;
 }
 
-const PLANNED_IDS: readonly string[] = ['zones', 'energy', 'water', 'waste', 'terrain'];
+const PLANNED_IDS: readonly string[] = ['zones', 'waste', 'terrain'];
 
 export class BuildBar {
   private drawer = $('build-drawer');
@@ -198,10 +191,10 @@ export class BuildBar {
     const tips: Record<string, string> = {
       road: 'Routes : 6 types (rue, avenue, boulevard, sens unique, piétonne, autoroute), droites ou courbes', building: 'Bâtiments : maisons, immeubles, tours, commerces, industrie',
       services: 'Services publics : mairie, école, hôpital, pompiers, police…', environment: 'Nature : parcs (constructibles) ; arbres, végétation, mobilier (phase 2C)',
-      transport: 'Transports : gare de voyageurs ; bus, tramway, port, aéroport (phase 2C)',
+      transport: 'Transports : gare de voyageurs, port et aéroport ; bus, tramway (phase 2C)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
-      zones: 'Zones (résidentiel, commercial, industriel, bureaux, agricole) : aperçu — phase 2B', energy: 'Énergie : aperçu des équipements — phase 2B',
-      water: 'Eau et assainissement : aperçu — phase 2B', waste: 'Déchets : aperçu — phase 2B', terrain: 'Terraformation : aperçu — phase 2B',
+      zones: 'Zones (résidentiel, commercial, industriel, bureaux, agricole) : aperçu — phase 2B', energy: 'Énergie : centrales, éoliennes, solaire, barrage, postes ; lignes haute tension depuis le tableau de bord',
+      water: 'Eau et égouts : pompage, potabilisation, château d’eau, épuration (canalisations le long des routes)', waste: 'Déchets : aperçu — phase 2B', terrain: 'Terraformation : aperçu — phase 2B',
     };
     for (const b of Array.from(this.toolbar.querySelectorAll<HTMLButtonElement>('button[data-tool], button[data-cat]'))) {
       const tool = b.dataset['tool'] as ToolId | undefined;
@@ -285,10 +278,21 @@ export class BuildBar {
           this.tabsEl.append(b);
         }
       }
+      if (id === 'energy' || id === 'water') this.tabsEl.append(this.dashboardChip(id));
       for (const a of assetsForTab(this.d.catalog, current)) this.body.append(this.card(a, current.placeable, current.color));
     }
     if (id === 'transport') for (const p of PLANNED.transport) this.body.append(this.plannedTile(p));
     this.body.scrollLeft = 0;
+  }
+
+  /** Ouvre le tableau de bord du module (panneau existant) en fermant le tiroir : pas de chevauchement. */
+  private dashboardChip(id: 'energy' | 'water'): HTMLButtonElement {
+    const b = el('button', { cls: 'chip-tab', attrs: { type: 'button', 'data-dashboard': id } }, iconEl(id === 'energy' ? 'energy' : 'water'), el('span', { text: id === 'energy' ? 'Tableau de bord et lignes' : 'Tableau de bord' }));
+    b.addEventListener('click', () => {
+      this.closeDrawer();
+      document.getElementById(id === 'energy' ? 'elec-launcher' : 'eau-btn')?.click();
+    });
+    return b;
   }
 
   private plannedTile(p: { label: string; icon: string; color: string; phase: string; tip: string }): HTMLButtonElement {
@@ -387,6 +391,7 @@ export class BuildBar {
   private buildingCat(): string {
     const a = this.d.machine.asset;
     if (!a) return 'building';
+    if (a.category === 'transport') return 'transport';
     if (a.category !== 'public') return 'building';
     return isTransport(a) ? 'transport' : isGreen(a) ? 'environment' : 'services';
   }
