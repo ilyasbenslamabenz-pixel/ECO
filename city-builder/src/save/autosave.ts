@@ -17,13 +17,19 @@ export interface AutosaveOptions {
   timers?: { set: (fn: () => void, ms: number) => unknown; clear: (h: unknown) => void };
 }
 
+/** Préfixe des sauvegardes automatiques d'une ville (« auto-meknes-city- »). */
+export function autoPrefixFor(cityName: string): string {
+  const slug = cityName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+  return `auto-${slug || 'ville'}-`;
+}
+
 export class Autosaver {
   private handle: unknown = null;
   private busy = false;
   private nextIndex = -1;
   readonly intervalMs: number;
   readonly slotCount: number;
-  readonly prefix: string;
+  prefix: string;
 
   constructor(private readonly requestSave: () => Promise<SaveFile>, private readonly store: SaveStore, private readonly opts: AutosaveOptions = {}) {
     this.intervalMs = Math.max(10_000, opts.intervalMs ?? 180_000);
@@ -32,6 +38,16 @@ export class Autosaver {
   }
 
   get running(): boolean { return this.handle !== null; }
+
+  /**
+   * Emplacements propres à une ville (« auto-<ville>-1..N ») : une nouvelle ville n'écrase plus les
+   * sauvegardes automatiques de la précédente.
+   */
+  setPrefix(prefix: string): void {
+    if (prefix === this.prefix) return;
+    this.prefix = prefix;
+    this.nextIndex = -1;
+  }
 
   start(): void {
     if (this.handle !== null) return;

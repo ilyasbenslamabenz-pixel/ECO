@@ -100,9 +100,11 @@ try {
   check(JSON.stringify(got.roads) === JSON.stringify(ref.roads), `routes identiques (${got.roads.edges.length} tronçons, courbes comprises)`);
   // L'argent bouge chaque heure de jeu et le chargement relance le temps : on compare l'état chargé (instantané).
   const loadedMoney = await page.evaluate(() => window.__aube.snapshotStats.money);
-  check(Math.abs(loadedMoney - ref.money) < 0.01, `trésorerie identique au chargement (${loadedMoney} / ${ref.money})`);
+  check(Math.abs(loadedMoney - ref.money) < 0.51, // stats arrondies au franc
+    `trésorerie identique au chargement (${loadedMoney} / ${ref.money})`);
   check(loadedMinutes === ref.minutes, `date identique au chargement (${ref.minutes} -> ${loadedMinutes} min)`);
-  check(got.pop === ref.pop, `population identique (${got.pop})`);
+  const loadedPop = await page.evaluate(() => window.__aube.snapshotStats.population);
+  check(loadedPop === ref.pop, `population identique au chargement (${loadedPop} / ${ref.pop})`);
   await page.evaluate(() => window.__aube.renderNow(2));
   await page.screenshot({ path: join(out, 'jeu-recharge.png'), timeout: 600000 });
   check(errors.length === 0, `aucune erreur de page${errors.length ? ' : ' + errors.slice(0, 5).join(' | ') : ''}`);

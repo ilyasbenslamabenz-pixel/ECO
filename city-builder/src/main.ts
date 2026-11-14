@@ -27,6 +27,7 @@ import { initUI } from './ui/hud';
 import { applyGraphicsOptions } from './ui/options';
 import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
 import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
+import { autoPrefixFor } from './save/autosave';
 import { AutoSaveTriggers, IMPORTANT_COMMANDS, latestSlot } from './save/auto-triggers';
 import { CloudSlotProvider } from './save/cloud';
 import { BackupReminder, deliverFile, exportMeknes, importMeknes, importSlotName, requestPersistentStorage, resolveDownloads, type ExportFile } from './save/file-transfer';
@@ -400,6 +401,7 @@ async function boot(): Promise<void> {
     tracePlaying(true);
     traceStep('partie lancée');
     state.cityName = s.params.cityName;
+    autosaver?.setPrefix(autoPrefixFor(s.params.cityName));
     render.applySnapshot(s);
     if (!demoRunning) props.clear();
     input.camera.bounds = terrainBounds(s.terrain);
@@ -452,7 +454,10 @@ async function boot(): Promise<void> {
     })),
     remove: async (slot) => { await st.remove(slot); return true; },
   });
-  autosaver = new Autosaver(async () => (await b.send('save', { slot: 'auto' })).data as SaveFile, st, { onError: (m: string) => ui.toast(m, 'error') });
+  // Toutes les minutes (au lieu de 3) : une fermeture brutale (Safari iPhone) perd au plus une minute de jeu,
+  // la sauvegarde à la fermeture de la page n'ayant pas toujours le temps de finir.
+  autosaver = new Autosaver(async () => (await b.send('save', { slot: 'auto' })).data as SaveFile, st, { intervalMs: 60_000, onError: (m: string) => ui.toast(m, 'error') });
+  if (state.cityName) autosaver.setPrefix(autoPrefixFor(state.cityName));
   const auto = autosaver;
   // Sauvegarde entièrement automatique : arrière-plan/fermeture, retour au menu, actions importantes.
   autoTriggers = new AutoSaveTriggers({

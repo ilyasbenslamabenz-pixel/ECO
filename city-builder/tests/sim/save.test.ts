@@ -6,7 +6,7 @@ import { CURRENT_SAVE_VERSION, validateSave } from '../../src/sim/save-format';
 import { decodeSave, encodeSave, compressionAvailable, isGzip } from '../../src/save/codec';
 import { LocalStorageBackend, MemoryBackend, openBestBackend, type StorageLike } from '../../src/save/backends';
 import { SaveStore } from '../../src/save/store';
-import { Autosaver } from '../../src/save/autosave';
+import { Autosaver, autoPrefixFor } from '../../src/save/autosave';
 import { buildTown, newTownSim, runDays, townCatalog } from './fixtures';
 
 function town(days = 12): Simulation {
@@ -232,4 +232,18 @@ test('autosave : rotation sur 3 emplacements, jamais deux écritures simultanée
   const auto2 = new Autosaver(async () => a.toSave(), store, { slots: 3 });
   const r = await auto2.saveNow();
   assert.ok(r.ok && r.value.slot === 'auto-3', r.ok ? r.value.slot : r.message);
+});
+
+test('autosave : emplacements propres à chaque ville (une nouvelle ville n\'écrase pas la précédente)', async () => {
+  const a = town(2);
+  const store = new SaveStore(new MemoryBackend());
+  assert.equal(autoPrefixFor('Meknes City'), 'auto-meknes-city-');
+  assert.equal(autoPrefixFor('Aube-sur-Mer (démonstration)'), 'auto-aube-sur-mer-demonstration-');
+  const auto = new Autosaver(async () => a.toSave(), store, { slots: 3 });
+  auto.setPrefix(autoPrefixFor('Ville A'));
+  for (let i = 0; i < 4; i++) assert.ok((await auto.saveNow()).ok);
+  auto.setPrefix(autoPrefixFor('Ville B'));
+  for (let i = 0; i < 4; i++) assert.ok((await auto.saveNow()).ok);
+  const slots = (await store.list()).map((s) => s.slot).sort();
+  assert.deepEqual(slots, ['auto-ville-a-1', 'auto-ville-a-2', 'auto-ville-a-3', 'auto-ville-b-1', 'auto-ville-b-2', 'auto-ville-b-3']);
 });
