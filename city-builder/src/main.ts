@@ -8,6 +8,8 @@
  */
 import * as THREE from 'three';
 import { previousTrace, traceStart, traceStep, tracePlaying } from './boot-trace';
+import { powerView } from './shared/power/view';
+import { waterView } from './render/water-network/view';
 import { bootDone, bootStarted, deviceProfile, isSafeMode, setSafeMode } from './render/device-profile';
 import { imageLimits } from './render/image-cap';
 import { DEFAULT_START_MONEY, GAME_NAME, PROTOCOL_VERSION, type SimSpeed } from './shared/constants';
@@ -369,7 +371,20 @@ async function boot(): Promise<void> {
   const cons = initConstruction({ sim: b, ui, input, scene: render.ctx.scene, models: lib, catalog, heightAt: (x, z) => render.terrain.heightAt(x, z), renderer: render.ctx.renderer, lite: render.profile.lite });
   render.ctx.onFrame.push((dt) => cons.update(dt));
   // Grille de construction au sol (cases de 8 m) pendant le tracé des routes, la pose et le terrassement.
-  cons.machine.onToolChange((t) => { traceStep(`outil ${t}`); render.terrain.setGrid(t === 'road' || t === 'building' || t === 'terraform'); });
+  // Calques des réseaux affichés automatiquement pendant la pose (électricité : ligne HT ou installation ;
+  // eau : installation d'eau), retirés ensuite s'ils avaient été ouverts ainsi.
+  let autoPower = false, autoWater = false;
+  cons.machine.onToolChange((t) => {
+    traceStep(`outil ${t}`);
+    render.terrain.setGrid(t === 'road' || t === 'building' || t === 'terraform');
+    const id = t === 'building' ? cons.machine.asset?.id ?? '' : '';
+    const wantPower = t === 'powerline' || id.startsWith('elec_');
+    const wantWater = id.startsWith('eau_');
+    if (wantPower && !powerView.overlay) { powerView.setOverlay(true); autoPower = true; }
+    else if (!wantPower && autoPower) { powerView.setOverlay(false); autoPower = false; }
+    if (wantWater && waterView.mode === 'off') { waterView.set('desserte'); autoWater = true; }
+    else if (!wantWater && autoWater) { waterView.set('off'); autoWater = false; }
+  });
   debug.constructionApplied = () => cons.machine.applied;
   debug.worldToScreen = (x, z) => {
     const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);
