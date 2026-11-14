@@ -56,6 +56,11 @@ Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration)
 | Build : `dist/index.html` + `dist/artifact.html` (fragment) + `game.js` + `sim.worker.js` + `assets/` relatifs ; budget ≤ 60 Mo (≈ 42 Mo) | `npm run build` |
 | Test de charge (500 bâtiments, 1 000 véhicules) et mesures | `npm run stress` → `tests/e2e/out/stress-rapport.json` (chiffres dans `PROJECT_STATUS.md`) |
 
+### Zonage et croissance automatique (phase 2B)
+| Fonctionnalité | Preuve |
+|---|---|
+| Outil Zones (souris / doigt) : résidentiel faible, moyen, dense, commerces, bureaux, industrie, Retirer, profondeur 1–4 cases, superposition instanciée visible avec l'outil ; croissance façade vers la route avec chantiers, jauge R/C/B/I, densification ; sauvegarde versionnée | `tests/zonage/*.test.ts` (19 tests), `tests/zonage/e2e.mjs`, captures `docs/captures-zonage/`, `docs/ZONAGE.md` |
+
 ## Partiel (fonctionne, avec limites connues)
 | Fonctionnalité | Limite | Phase |
 |---|---|---|
@@ -72,7 +77,7 @@ Commandes de preuve : `npm run typecheck`, `npm test` (unitaires + intégration)
 | Fonctionnalité | Phase |
 |---|---|
 | Fusion des matériaux par bâtiment (atlas) pour réduire les appels de rendu ; culling par chunk des bâtiments | 2 |
-| Zonage (R/C/I) et croissance automatique ; terraformation (`terraform` renvoie NOT_IMPLEMENTED) | 2 |
+| Terraformation (`terraform` renvoie NOT_IMPLEMENTED) ; zones agricole et spéciales | 2 |
 | Inspection détaillée d'un habitant / d'un bâtiment (`inspectBuilding`, `inspectCitizen` existent côté simulation) | 2 |
 | Lignes de bus, piétons, feux stop des véhicules, gyrophares | 3 |
 | Échangeurs, passages dénivelés | 4 |

@@ -382,6 +382,18 @@ export class Simulation {
   }
 
   placeBuilding(a: CommandArgs<'placeBuilding'>): CmdOutcome<'placeBuilding'> {
+    return this.placeChecked(a, false);
+  }
+
+  /**
+   * Promotion privée (API d'écriture des modules, `PluginContext.development`) : mêmes contrôles que
+   * `placeBuilding`, sans coût pour la ville (ni contrôle de fonds ou de faillite). Utilisée par le zonage.
+   */
+  placePrivateBuilding(a: { assetId: string; x: number; z: number; rot: number; variant?: number }): CmdOutcome<'placeBuilding'> {
+    return this.placeChecked({ assetId: a.assetId, x: a.x, z: a.z, rot: a.rot, ...(a.variant !== undefined ? { variant: a.variant } : {}) }, true);
+  }
+
+  private placeChecked(a: CommandArgs<'placeBuilding'>, privateDev: boolean): CmdOutcome<'placeBuilding'> {
     if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
     const asset = this.getAsset(a.assetId);
     if (!asset) return fail('UNKNOWN_ASSET', `Modèle inconnu : ${a.assetId}`);
@@ -422,15 +434,18 @@ export class Simulation {
     if (hMin < t.waterLevel + 0.3) return fail('UNDER_WATER', 'Impossible de construire dans l\'eau');
     const span = Math.max(asset.footprint.tilesX, asset.footprint.tilesZ) * TILE_SIZE;
     if ((hMax - hMin) / span > MAX_BUILDING_SLOPE) return fail('TOO_STEEP', 'Terrain trop pentu pour ce bâtiment');
-    if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
-    if (!this.economy.canAfford(asset.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${asset.cost} crédits requis)`);
-    if (a.dryRun) return { ok: true, data: { buildingId: 0, cost: asset.cost } };
+    if (!privateDev) {
+      if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
+      if (!this.economy.canAfford(asset.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${asset.cost} crédits requis)`);
+    }
+    const cost = privateDev ? 0 : asset.cost;
+    if (a.dryRun) return { ok: true, data: { buildingId: 0, cost } };
 
     const id = this.nextBuildingId++;
     const y = hSum / n;
     this.insertBuilding({ id, assetId: asset.id, variant, x, z, y, rot });
-    this.economy.spend(asset.cost);
-    return { ok: true, data: { buildingId: id, cost: asset.cost } };
+    if (cost > 0) this.economy.spend(cost);
+    return { ok: true, data: { buildingId: id, cost } };
   }
 
   /** Insertion sans contrôle ni coût (utilisée par placeBuilding et le chargement). */
@@ -472,6 +487,16 @@ export class Simulation {
   }
 
   demolish(a: CommandArgs<'demolish'>): CmdOutcome<'demolish'> {
+    return this.demolishChecked(a.buildingId, false);
+  }
+
+  /** Démolition par un module (promotion privée) : sans remboursement ni notification. */
+  demolishPrivateBuilding(buildingId: number): CmdOutcome<'demolish'> {
+    return this.demolishChecked(buildingId, true);
+  }
+
+  private demolishChecked(buildingId: number, privateDev: boolean): CmdOutcome<'demolish'> {
+    const a = { buildingId };
     if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
     const i = this.buildings.indexOf(a.buildingId);
     if (i < 0) return fail('NOT_FOUND', 'Bâtiment introuvable');
@@ -483,12 +508,12 @@ export class Simulation {
     this.buildings.remove(a.buildingId);
     this.buildingIndex.remove(a.buildingId);
     this.economy.removeUpkeep(asset.upkeepPerMonth, 'buildings');
-    const refund = Math.round(asset.cost * DEMOLISH_REFUND_RATE);
-    this.economy.refund(refund);
+    const refund = privateDev ? 0 : Math.round(asset.cost * DEMOLISH_REFUND_RATE);
+    if (refund > 0) this.economy.refund(refund);
     this.pendingBuildingsRemoved.push(a.buildingId);
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;
-    if (displaced > 0) this.notify('warn', `${asset.nameFr} démoli : ${displaced} habitant(s) relogé(s) ou partis`);
+    if (displaced > 0 && !privateDev) this.notify('warn', `${asset.nameFr} démoli : ${displaced} habitant(s) relogé(s) ou partis`);
     return { ok: true, data: { refund } };
   }
 

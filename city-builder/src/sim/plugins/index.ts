@@ -14,6 +14,7 @@ import { electricitePlugin } from './electricite';
 import { dechetsPlugin } from './dechets';
 import { hubsPlugin } from './hubs';
 import { eauPlugin } from './eau';
+import { zonagePlugin } from './zonage';
 import type { SimPlugin } from './types';
 
 export type { PluginCommandResult, PluginContext, PluginSaveField, PluginSaveSection, SimPlugin } from './types';
@@ -30,4 +31,5 @@ export const SIM_PLUGINS: readonly SimPlugin[] = [
   dechetsPlugin,
   hubsPlugin,
   eauPlugin,
+  zonagePlugin,
 ];

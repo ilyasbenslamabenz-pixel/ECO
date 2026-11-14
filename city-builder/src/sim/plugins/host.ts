@@ -11,7 +11,7 @@ import { terrainBounds } from '../../shared/terrain-gen';
 import { Rng } from '../rng';
 import type { Simulation } from '../world';
 import type {
-  PluginBuildings, PluginClock, PluginCommandResult, PluginContext, PluginDemography, PluginEconomy, PluginErrorRecord, PluginRoads,
+  PluginBuildings, PluginClock, PluginCommandResult, PluginContext, PluginDemography, PluginDevelopment, PluginEconomy, PluginErrorRecord, PluginRoads,
   PluginSaveSection, PluginTerrain, SimPlugin,
 } from './types';
 
@@ -133,6 +133,16 @@ export class PluginHost {
         return h ? { ...h, income: { ...h.income }, expenses: { ...h.expenses } } : undefined;
       },
     };
+    const development: PluginDevelopment = {
+      place: (a) => {
+        const r = sim.placePrivateBuilding(a);
+        return r.ok ? { ok: true, data: { buildingId: r.data.buildingId } } : { ok: false, code: r.error.code, message: r.error.message };
+      },
+      demolish: (id) => {
+        const r = sim.demolishPrivateBuilding(id);
+        return r.ok ? { ok: true, data: {} } : { ok: false, code: r.error.code, message: r.error.message };
+      },
+    };
     const rngs = this.rngs, services = this.services;
     return {
       pluginId,
@@ -149,6 +159,7 @@ export class PluginHost {
       get speed() { return sim.speed; },
       get rng() { return rngs.get(pluginId)!; },
       notify: (level, message) => sim.notify(level, message),
+      development,
       provide: (name, api) => { services.set(name, api); },
       use: <T>(name: string) => services.get(name) as T | undefined,
     };

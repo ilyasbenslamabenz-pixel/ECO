@@ -12,6 +12,7 @@ import { electricitePanel } from './electricite';
 import { dechetsPanel } from './dechets';
 import { transportsPanel } from './transports';
 import { eauPanel } from './eau';
+import { zonagePanel } from './zonage';
 import type { UiPanel } from './types';
 
 export type { UiPanel, UiPanelApi } from './types';
@@ -25,4 +26,5 @@ export const UI_PANELS: readonly UiPanel[] = [
   dechetsPanel,
   transportsPanel,
   eauPanel,
+  zonagePanel,
 ];

@@ -14,6 +14,7 @@ import type { ToolController } from '../input/tools';
 import { $, el, fmt, money, phaseBadge } from './dom';
 import { iconEl } from './icons';
 import type { ThumbnailSource } from './thumbnails';
+import { zonageDrawer } from './panels/zonage';
 
 export type DrawerId = 'road' | 'building' | 'services' | 'transport' | 'environment' | 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
 type CatalogDrawer = 'building' | 'services' | 'transport' | 'environment' | 'energy' | 'water';
@@ -163,6 +164,23 @@ function roadSvg(type: RoadKindId): SVGSVGElement {
   return svg;
 }
 
+/**
+ * Tiroir fourni par un module (phase 2B) : remplace l'aperçu « prévu » d'une catégorie de la barre.
+ * `render` remplit les onglets et le corps du tiroir ; `closed` est appelé quand le tiroir se ferme ou qu'un
+ * autre s'ouvre (l'outil du module doit alors rendre la main).
+ */
+export interface DrawerProvider {
+  /** Info-bulle du bouton de la barre d'outils. */
+  readonly tip: string;
+  render(o: { tabs: HTMLElement; body: HTMLElement; deps: BuildBarDeps; close(): void; rerender(): void }): void;
+  closed?(): void;
+}
+
+/** Tiroirs fournis par les modules (une ligne par module). */
+const DRAWER_PROVIDERS: Partial<Record<DrawerId, DrawerProvider>> = {
+  zones: zonageDrawer,
+};
+
 export interface BuildBarDeps {
   catalog: AssetCatalog;
   tools: ToolController;
@@ -202,8 +220,9 @@ export class BuildBar {
       const enable = tool ? d.tools.isAvailable(tool) : true;
       if (!enable) continue;
       b.disabled = false;
-      if (!cat || !PLANNED_IDS.includes(cat)) b.querySelector('.phase')?.remove();
-      b.dataset['tip'] = tips[tool ?? cat ?? ''] ?? b.dataset['tip'] ?? '';
+      const provided = cat ? DRAWER_PROVIDERS[cat as DrawerId] : undefined;
+      if (!cat || !PLANNED_IDS.includes(cat) || provided) { b.querySelector('.phase')?.remove(); b.classList.remove('soon'); }
+      b.dataset['tip'] = provided?.tip ?? tips[tool ?? cat ?? ''] ?? b.dataset['tip'] ?? '';
     }
     this.toolbar.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
@@ -234,6 +253,7 @@ export class BuildBar {
   get openDrawerId(): DrawerId | null { return this.open; }
 
   openDrawer(id: DrawerId): void {
+    if (this.open && this.open !== id) DRAWER_PROVIDERS[this.open]?.closed?.();
     this.open = id;
     this.drawer.classList.remove('hidden');
     this.drawer.dataset['drawer'] = id;
@@ -243,6 +263,7 @@ export class BuildBar {
   }
 
   closeDrawer(): void {
+    if (this.open) DRAWER_PROVIDERS[this.open]?.closed?.();
     this.open = null;
     this.drawer.classList.add('hidden');
     document.body.classList.remove('drawer-open');
@@ -258,6 +279,11 @@ export class BuildBar {
     this.titleEl.className = `drawer-title ${meta.cls}`;
     this.titleEl.replaceChildren(iconEl(meta.icon), el('span', { text: meta.title }));
     if (id === 'road') { this.renderRoads(); return; }
+    const provider = DRAWER_PROVIDERS[id];
+    if (provider) {
+      provider.render({ tabs: this.tabsEl, body: this.body, deps: this.d, close: () => this.closeDrawer(), rerender: () => { if (this.open === id) this.renderDrawer(); } });
+      return;
+    }
     if ((PLANNED_IDS as readonly string[]).includes(id)) {
       this.tabsEl.append(el('span', { cls: 'drawer-note' }, el('span', { text: 'Aperçu des outils prévus' }), phaseBadge(PLANNED[id as PlannedDrawer][0]!.phase)));
       for (const p of PLANNED[id as PlannedDrawer]) this.body.append(this.plannedTile(p));

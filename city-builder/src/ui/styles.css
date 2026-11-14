@@ -260,6 +260,30 @@ button.hud-stat:hover:not(:disabled) { background: rgba(255,255,255,.05); }
 .tile .phase { position: absolute; top: 5px; right: 5px; font-size: 9px; }
 .tile.soon:disabled { opacity: .62; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Zonage (phase 2B) : tuiles des zones, jauge de demande R/C/B/I. */
+.zn-tile.active { border-color: var(--ic); box-shadow: 0 0 0 1px var(--ic) inset, 0 0 14px color-mix(in srgb, var(--ic) 35%, transparent); }
+.zn-opts .seg button { min-width: 34px; }
+.zn-growth { min-height: 34px; font-size: 12px; border-radius: 10px; padding: 4px 10px; }
+.zn-growth.active { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.zn-tile { width: 88px; min-height: 84px; padding: 8px 4px 6px; }
+.zn-tile .tile-ico { width: 40px; height: 40px; }
+.zn-note { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.zn-gauge-host { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 0 4px; }
+.zn-gauge { display: flex; gap: 7px; height: 70px; align-items: stretch; }
+.zn-gauge.compact { height: 34px; gap: 4px; }
+.zn-gauge.compact .zn-col { width: 16px; }
+.zn-gauge.compact .zn-bar { width: 10px; }
+.zn-gauge.compact .zn-col b { font-size: 10px; }
+.zn-col { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 20px; }
+.zn-col b { font-size: 11px; line-height: 1; }
+.zn-bar { position: relative; flex: 1; width: 12px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
+.zn-bar::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255,255,255,.45); }
+.zn-bar i { position: absolute; left: 0; right: 0; display: block; }
+.zn-sum { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.zn-panel table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 8px 0; }
+.zn-panel td, .zn-panel th { padding: 3px 4px; border-bottom: 1px solid var(--line); text-align: right; }
+.zn-panel td:first-child, .zn-panel th:first-child { text-align: left; }
+.zn-panel .muted { color: var(--muted); font-size: 12px; margin: 6px 0; }
 
 #tool-options { display: flex; gap: 10px; align-items: center; padding: 6px 8px 6px 14px; background: var(--glass-2); border: 1px solid var(--line); border-radius: 999px;
   backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); animation: rise .2s ease-out; }
@@ -511,6 +535,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .card { width: 118px; }
   .road-card { width: 140px; }
   .tile { width: 92px; min-height: 88px; }
+  .zn-tile { width: 80px; min-height: 80px; }
   #tool-options { border-radius: 14px; flex-wrap: wrap; justify-content: center; padding: 6px; }
   .tool-hint { flex-basis: 100%; text-align: center; white-space: normal; }
   #objectives { display: none !important; }
