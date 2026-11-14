@@ -91,6 +91,8 @@ export class Dashboards {
         const id = b.dataset['dash'] ?? '';
         if (id === 'finance') d.openFinance();
         else if (id === 'population') d.openPop();
+        // Modules électricité et eau : leur propre tableau de bord (le même que dans les tiroirs de construction).
+        else if (id === 'energy' || id === 'water') { this.hide(); document.getElementById(id === 'energy' ? 'elec-launcher' : 'eau-btn')?.click(); }
         else this.toggle(id as DashId);
         document.body.classList.remove('sidebar-open');
         $('btn-sidebar').setAttribute('aria-expanded', 'false');
