@@ -134,3 +134,23 @@ test('monde : faillite bloque les constructions, message explicite', () => {
   assert.ok(s.economy.history.length >= BANKRUPTCY_MONTHS);
   assert.equal(s.clock.totalMinutes >= MINUTES_PER_MONTH * BANKRUPTCY_MONTHS, true);
 });
+
+test('nouvelle partie : les montants horaires du mois de l\'ancienne ville sont remis à zéro', () => {
+  const e = new Economy();
+  e.reset(10_000);
+  e.roadUpkeep = 720;
+  e.onHour(10);
+  assert.ok(e.money < 10_000, 'entretien versé à l\'heure');
+  e.reset(5_000);
+  const j = e.toJSON() as { month: { operating?: number; hours?: number; acc?: { roads: number } } };
+  assert.equal(j.month.operating ?? 0, 0);
+  assert.equal(j.month.hours ?? 0, 0);
+  assert.equal(j.month.acc?.roads ?? 0, 0);
+});
+
+test('solde horaire : hors emprunts (remboursés en fin de mois)', () => {
+  const e = new Economy();
+  e.reset(0);
+  e.roadUpkeep = 720;
+  assert.equal(e.hourlyBalance, -1);
+});

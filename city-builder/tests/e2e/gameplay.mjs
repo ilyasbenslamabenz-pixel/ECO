@@ -98,7 +98,9 @@ try {
   const got = strip(after.data);
   check(JSON.stringify(got.buildings) === JSON.stringify(ref.buildings), `bâtiments identiques après rechargement (${got.buildings.length})`);
   check(JSON.stringify(got.roads) === JSON.stringify(ref.roads), `routes identiques (${got.roads.edges.length} tronçons, courbes comprises)`);
-  check(got.money === ref.money, `trésorerie identique (${got.money})`);
+  // L'argent bouge chaque heure de jeu et le chargement relance le temps : on compare l'état chargé (instantané).
+  const loadedMoney = await page.evaluate(() => window.__aube.snapshotStats.money);
+  check(Math.abs(loadedMoney - ref.money) < 0.01, `trésorerie identique au chargement (${loadedMoney} / ${ref.money})`);
   check(loadedMinutes === ref.minutes, `date identique au chargement (${ref.minutes} -> ${loadedMinutes} min)`);
   check(got.pop === ref.pop, `population identique (${got.pop})`);
   await page.evaluate(() => window.__aube.renderNow(2));

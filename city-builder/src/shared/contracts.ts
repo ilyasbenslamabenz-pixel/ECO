@@ -98,6 +98,8 @@ export interface SimStats {
   vehicles: number;
   /** Bilan mensuel prévisionnel (recettes - dépenses), crédits/mois. */
   monthlyBalance: number;
+  /** Argent réellement gagné (+) ou perdu (−) par heure de jeu (hors remboursements d'emprunts, prélevés en fin de mois). */
+  hourlyBalance?: number;
   speed: SimSpeed;
   /** Durée moyenne d'un tick de simulation (ms), mesurée dans le worker. */
   tickMs: number;

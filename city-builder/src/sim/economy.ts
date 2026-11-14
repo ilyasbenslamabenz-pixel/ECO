@@ -172,6 +172,9 @@ export class Economy {
     this.monthConstruction = 0;
     this.monthRefunds = 0;
     this.monthLoans = 0;
+    this.monthOperating = 0;
+    this.monthHours = 0;
+    this.acc = { income: zeroSectors(), buildings: 0, roads: 0, salaries: 0 };
   }
 
   /** Entretien mensuel courant (bâtiments + routes). */
@@ -424,7 +427,7 @@ export class Economy {
     this.monthLoans = j.month.loansTaken;
     this.monthOperating = j.month.operating ?? 0;
     this.monthHours = j.month.hours ?? 0;
-    if (j.month.acc) this.acc = { ...j.month.acc, income: { ...zeroSectors(), ...j.month.acc.income } };
+    this.acc = j.month.acc ? { ...j.month.acc, income: { ...zeroSectors(), ...j.month.acc.income } } : { income: zeroSectors(), buildings: 0, roads: 0, salaries: 0 };
   }
 }
 

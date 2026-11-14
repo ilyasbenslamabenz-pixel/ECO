@@ -34,9 +34,13 @@ export function traceStep(label: string): void {
 }
 
 /** Partie en cours : drapeau retiré à la fermeture normale de la page (pagehide). */
-export function tracePlaying(on: boolean): void { try { if (on) localStorage.setItem(PLAYING_KEY, '1'); else localStorage.removeItem(PLAYING_KEY); } catch { /* */ } }
+let playingWanted = false;
+export function tracePlaying(on: boolean): void { playingWanted = on; setPlayingFlag(on); }
+function setPlayingFlag(on: boolean): void { try { if (on) localStorage.setItem(PLAYING_KEY, '1'); else localStorage.removeItem(PLAYING_KEY); } catch { /* */ } }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('pagehide', () => tracePlaying(false));
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') tracePlaying(false); });
+  window.addEventListener('pagehide', () => setPlayingFlag(false));
+  // Retour sur la page : la surveillance reprend (un plantage après être revenu au jeu reste signalé).
+  window.addEventListener('pageshow', () => { if (playingWanted) setPlayingFlag(true); });
+  document.addEventListener('visibilitychange', () => setPlayingFlag(document.visibilityState === 'hidden' ? false : playingWanted));
 }

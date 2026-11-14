@@ -413,10 +413,12 @@ export function initUI(h: UIHandlers): UIHandle {
       elMoney.textContent = moneyShort(s.money);
       elMoney.classList.toggle('neg', s.money < 0);
       // Argent gagné ou perdu à chaque heure de jeu (versé heure par heure par la simulation : 720 h par mois).
-      const perHour = Math.round(s.monthlyBalance / 720);
-      elBalance.replaceChildren(signedShort(perHour), el('span', { cls: 'per', text: ' / h' }));
-      elBalance.classList.toggle('neg', s.monthlyBalance < 0);
-      elBalance.classList.toggle('pos', s.monthlyBalance > 0);
+      // Argent réellement versé chaque heure (les emprunts sont remboursés en une fois en fin de mois).
+      const h = s.hourlyBalance ?? s.monthlyBalance / 720;
+      const perHour = Math.abs(h) >= 1 ? signedShort(Math.round(h)) : `${h < 0 ? '−' : '+'}${Math.abs(h).toFixed(2).replace('.', ',')} CHF`;
+      elBalance.replaceChildren(perHour, el('span', { cls: 'per', text: ' / h' }));
+      elBalance.classList.toggle('neg', h < 0);
+      elBalance.classList.toggle('pos', h > 0);
       elPop.textContent = fmt(s.population);
       currentSpeed = s.speed;
       for (const b of speedButtons) { const on = Number(b.dataset['speed']) === s.speed; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); }

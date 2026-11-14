@@ -109,6 +109,9 @@ export class ConstructionTools {
 
   constructor(readonly mirror: WorldMirror, readonly sim: SimPort, readonly notify: Notify) {
     mirror.onChange(() => this.refresh());
+    // Nouvelle partie ou partie chargée : les identifiants repartent de 1, l'historique d'annulation de l'ancienne
+    // ville détruirait des objets de la nouvelle.
+    sim.onSnapshot(() => { this.undo.clear(); this.draft.reset(); });
   }
 
   onPreview(fn: (p: ToolPreview) => void): void { this.listeners.push(fn); }
@@ -372,7 +375,12 @@ export class ConstructionTools {
         if (s.kind === 'demolish') await this.sim.send('demolish', { buildingId: s.buildingId });
         else if (s.kind === 'removeRoad') await this.sim.send('removeRoad', { edgeId: s.edgeId });
         else if (s.kind === 'placeBuilding') await this.sim.send('placeBuilding', { assetId: s.assetId, x: s.x, z: s.z, rot: s.rot, variant: s.variant });
-        else await this.sim.send('buildRoad', { type: legacyRoadType(s.kindId), kind: s.kindId, points: s.points });
+        else {
+          // Route courbe : point de contrôle quadratique retrouvé depuis la Bézier cubique stockée (c1 = a + 2/3 (q - a)).
+          const [ax, az] = [s.points[0]!, s.points[1]!];
+          const control: [number, number] | undefined = s.c1 ? [(3 * s.c1[0] - ax) / 2, (3 * s.c1[1] - az) / 2] : undefined;
+          await this.sim.send('buildRoad', { type: legacyRoadType(s.kindId), kind: s.kindId, points: s.points, ...(control ? { control } : {}) });
+        }
         ok++;
       } catch (err) { lastErr = errorOf(err).message; }
     }

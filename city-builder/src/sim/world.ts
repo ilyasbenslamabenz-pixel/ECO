@@ -772,6 +772,7 @@ export class Simulation {
     s.roadLengthM = Math.round(this.roadLength);
     s.vehicles = this.traffic.actCount;
     s.monthlyBalance = Math.round(this.economy.monthlyBalance);
+    s.hourlyBalance = Math.round(this.economy.hourlyBalance * 100) / 100;
     s.speed = this.speed;
     s.tickMs = this.tickMs;
     return s;
