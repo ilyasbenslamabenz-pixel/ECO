@@ -46,6 +46,7 @@ export function handleCommand(sim: Simulation, raw: unknown): HandlerOutput {
       return success({ seed: msg.args.seed }, true);
     case 'buildRoad': { const r = sim.buildRoad(msg.args); return r.ok ? success(r.data) : failure(r.error); }
     case 'removeRoad': { const r = sim.removeRoad(msg.args); return r.ok ? success(r.data) : failure(r.error); }
+    case 'upgradeRoad': { const r = sim.upgradeRoad(msg.args); return r.ok ? success(r.data) : failure(r.error); }
     case 'placeBuilding': { const r = sim.placeBuilding(msg.args); return r.ok ? success(r.data) : failure(r.error); }
     case 'demolish': { const r = sim.demolish(msg.args); return r.ok ? success(r.data) : failure(r.error); }
     case 'setSpeed':

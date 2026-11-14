@@ -454,7 +454,7 @@ export function initUI(h: UIHandlers): UIHandle {
         touchConfirm(o) {
           document.body.classList.toggle('confirming', !!o);
           if (!o) { touchBar.classList.add('hidden'); return; }
-          $('tc-ok').textContent = o.label;
+          $('tc-ok').textContent = chfText(o.label);
           $('tc-rotate').classList.toggle('hidden', !o.canRotate);
           touchBar.classList.remove('hidden');
         },

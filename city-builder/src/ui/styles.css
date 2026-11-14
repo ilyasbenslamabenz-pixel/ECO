@@ -291,6 +291,12 @@ body.drawer-open #tool-options, body.confirming #tool-options { display: none; }
 .tool-hint { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tool-actions { display: flex; gap: 4px; flex: 0 0 auto; }
 .tool-actions button { min-height: 32px; padding: 4px 11px; font-size: 12px; border-radius: 999px; }
+.tool-actions { flex-wrap: wrap; justify-content: center; }
+.tool-actions .ta-break { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--line-2); }
+/* « Terminer le tracé » : grand bouton au-dessus des options, visible tant qu'un tracé enchaîné est en cours. */
+#road-finish { align-self: center; min-height: 46px; padding: 0 24px; font-size: 15px; font-weight: 700; border-radius: 999px; box-shadow: var(--shadow); animation: rise .2s ease-out; }
+body.confirming #road-finish { margin-bottom: 86px; }
+body.drawer-open #road-finish { display: none; }
 
 /* Objectifs (phase 2C : panneau discret repliable) */
 #objectives { position: fixed; z-index: 13; right: max(10px, var(--safe-r)); bottom: calc(max(10px, var(--safe-b)) + 86px); width: 250px;
@@ -416,7 +422,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 #touch-confirm { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tb-h) + 10px); z-index: 21; display: flex; gap: 8px;
   padding: 8px; background: var(--panel); border: 1px solid var(--line-2); border-radius: 18px; box-shadow: var(--shadow); }
 #touch-confirm button { min-height: 52px; min-width: 52px; font-size: 16px; border-radius: 14px; }
-#touch-confirm #tc-ok { font-size: 15px; padding: 0 22px; }
+#touch-confirm #tc-ok { font-size: 15px; padding: 0 22px; white-space: nowrap; }
 #cursor-tag { position: fixed; z-index: 22; pointer-events: none; background: rgba(10,14,18,.92); border: 1px solid var(--line-2); border-left: 3px solid var(--accent);
   border-radius: 8px; padding: 5px 9px; font-size: 12px; white-space: pre; transform: translate(16px, 14px); font-variant-numeric: tabular-nums; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
 #cursor-tag.ok { border-left-color: var(--ok); }
@@ -538,6 +544,12 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   .zn-tile { width: 80px; min-height: 80px; }
   #tool-options { border-radius: 14px; flex-wrap: wrap; justify-content: center; padding: 6px; }
   .tool-hint { flex-basis: 100%; text-align: center; white-space: normal; }
+  .tool-actions .ta-break { flex-basis: 100%; height: 0; width: auto; margin: 0; background: none; }
+  .tool-actions button { padding: 4px 9px; }
+  #road-finish { min-height: 50px; font-size: 16px; }
+  /* Lanceur « Énergie » (module électricité, à mi-hauteur à droite) : il recouvrait les options d'outil au doigt ;
+     masqué pendant l'utilisation d'un outil, il revient avec l'outil Sélection. */
+  body.tool-opts #elec-launcher, body.confirming #elec-launcher, body.road-drawing #elec-launcher { display: none; }
   #objectives { display: none !important; }
 
   /* Panneaux : feuille glissante pleine largeur entre la barre du haut et les outils. */

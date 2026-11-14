@@ -5,7 +5,9 @@
  *                     d'empreinte au sol et flèche de façade ;
  *  - RoadPreview    : ruban de chaussée qui épouse le relief, à la largeur du type de route,
  *                     marqueurs de départ / point de courbure / accrochage ;
- *  - SelectionMarker: contour au sol + équerres verticales (sélection ou cible du bulldozer).
+ *  - SelectionMarker: contour au sol + équerres verticales (sélection ou cible du bulldozer) ;
+ *  - GridPreview    : rues d'un quadrillage (outil Routes › Quadrillage) et coins de l'îlot ;
+ *  - flèches de sens (RoadPreview, outil Améliorer : sens unique, inversion).
  * Les géométries ne sont reconstruites que quand l'aperçu change (pas d'allocation par image).
  * Propriétaire : agent construction/caméra/UI.
  */
@@ -199,12 +201,16 @@ export class RoadPreview {
   private ctrlLine = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.6));
   /** Guide d'aimantation : droite d'alignement (axe de la route, perpendiculaire, 45°…) depuis le départ. */
   private guide = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.55));
+  /** Chevrons de sens de circulation (outil Améliorer). */
+  private arrows = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.95));
 
   constructor(scene: THREE.Scene, private heightAt: HeightFn) {
     this.group.name = 'road-preview';
     this.ribbon.renderOrder = 10; this.center.renderOrder = 11; this.ctrlLine.renderOrder = 11; this.guide.renderOrder = 11;
     (this.guide.material as THREE.MeshBasicMaterial).color.copy(COLORS.snap);
-    this.group.add(this.ribbon, this.center, this.ctrlLine, this.guide);
+    this.arrows.renderOrder = 12;
+    (this.arrows.material as THREE.MeshBasicMaterial).color.set(0xffffff);
+    this.group.add(this.ribbon, this.center, this.ctrlLine, this.guide, this.arrows);
     const ring = new THREE.RingGeometry(2.2, 3.2, 40).rotateX(-Math.PI / 2);
     for (let i = 0; i < 3; i++) {
       const m = new THREE.Mesh(ring, overlayMaterial(0.95));
@@ -218,8 +224,10 @@ export class RoadPreview {
 
   hide(): void { this.group.visible = false; }
 
-  show(o: { points: number[] | null; width: number; validity: Validity; start: { x: number; z: number } | null; control: { x: number; z: number } | null; hover: { x: number; z: number; snap: string; guide?: { x0: number; z0: number; x1: number; z1: number } } | null }): void {
+  show(o: { points: number[] | null; width: number; validity: Validity; start: { x: number; z: number } | null; control: { x: number; z: number } | null; hover: { x: number; z: number; snap: string; guide?: { x0: number; z0: number; x1: number; z1: number } } | null; arrows?: boolean }): void {
     this.group.visible = true;
+    this.arrows.visible = !!o.arrows && !!o.points && o.points.length >= 4;
+    if (this.arrows.visible && o.points) this.buildArrows(o.points, o.width);
     const g = o.hover?.guide;
     this.guide.visible = !!g;
     if (g) {
@@ -269,7 +277,102 @@ export class RoadPreview {
     }
   }
 
+  /** Chevrons (pointe vers la fin de la polyligne) tous les ~14 m, à plat sur la chaussée. */
+  private buildArrows(pts: readonly number[], width: number): void {
+    const pos: number[] = [], idx: number[] = [];
+    const size = Math.min(3.2, Math.max(1.6, width * 0.18));
+    let acc = 7;
+    for (let k = 0; k + 3 < pts.length; k += 2) {
+      const ax = pts[k]!, az = pts[k + 1]!, bx = pts[k + 2]!, bz = pts[k + 3]!;
+      const len = Math.hypot(bx - ax, bz - az);
+      if (len < 1e-6) continue;
+      const ux = (bx - ax) / len, uz = (bz - az) / len, nx = -uz, nz = ux;
+      for (; acc <= len; acc += 14) {
+        const cx = ax + ux * acc, cz = az + uz * acc;
+        // Chevron : deux bras de largeur 0,5 m.
+        for (const sg of [-1, 1]) {
+          const tipX = cx + ux * size, tipZ = cz + uz * size;
+          const bX = cx + nx * size * sg, bZ = cz + nz * size * sg;
+          const i = pos.length / 3, w = 0.28;
+          for (const [x, z] of [[tipX - nx * w * sg, tipZ - nz * w * sg], [tipX + nx * w * sg, tipZ + nz * w * sg], [bX + ux * w, bZ + uz * w], [bX - ux * w, bZ - uz * w]] as const) {
+            pos.push(x, this.heightAt(x, z) + 0.5, z);
+          }
+          idx.push(i, i + 1, i + 2, i, i + 2, i + 3);
+        }
+      }
+      acc -= len;
+    }
+    const geo = this.arrows.geometry;
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeBoundingSphere();
+  }
+
   dispose(): void { this.group.removeFromParent(); }
+}
+
+/* ------------------------------------------------------------------ */
+
+/** Aperçu d'un quadrillage : une bande par rue (pool de maillages réutilisés) et marqueurs de coins. */
+export class GridPreview {
+  readonly group = new THREE.Group();
+  private ribbons: THREE.Mesh[] = [];
+  private outline = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.9));
+  private corners: THREE.Mesh[] = [];
+  private key = '';
+
+  constructor(private scene: THREE.Scene, private heightAt: HeightFn) {
+    this.group.name = 'grid-preview';
+    this.outline.renderOrder = 11;
+    (this.outline.material as THREE.MeshBasicMaterial).color.copy(COLORS.snap);
+    this.group.add(this.outline);
+    const ring = new THREE.RingGeometry(2.2, 3.4, 32).rotateX(-Math.PI / 2);
+    for (let i = 0; i < 2; i++) {
+      const m = new THREE.Mesh(ring, overlayMaterial(0.95));
+      m.renderOrder = 12;
+      (m.material as THREE.MeshBasicMaterial).color.copy(COLORS.snap);
+      this.corners.push(m);
+      this.group.add(m);
+    }
+    this.group.visible = false;
+    scene.add(this.group);
+  }
+
+  hide(): void { this.group.visible = false; }
+
+  show(o: { start: { x: number; z: number } | null; hover: { x: number; z: number } | null; lines: readonly (readonly number[])[]; rect: { x0: number; z0: number; x1: number; z1: number } | null; width: number; validity: Validity }): void {
+    this.group.visible = true;
+    const tint = colorOf(o.validity);
+    const key = `${o.width}|${o.lines.map((l) => l.join(',')).join(';')}`;
+    if (key !== this.key) {
+      this.key = key;
+      while (this.ribbons.length < o.lines.length) {
+        const m = new THREE.Mesh(new THREE.BufferGeometry(), overlayMaterial(0.45));
+        m.renderOrder = 10;
+        this.ribbons.push(m);
+        this.group.add(m);
+      }
+      this.ribbons.forEach((m, i) => {
+        const l = o.lines[i];
+        m.visible = !!l;
+        if (l) buildGroundRibbon(m.geometry, l, o.width, this.heightAt, 0.25, 3);
+      });
+      this.outline.visible = !!o.rect;
+      if (o.rect) {
+        const r = o.rect;
+        buildGroundRibbon(this.outline.geometry, [r.x0, r.z0, r.x1, r.z0, r.x1, r.z1, r.x0, r.z1], 0.5, this.heightAt, 0.35, 3, true);
+      }
+    }
+    for (const m of this.ribbons) (m.material as THREE.MeshBasicMaterial).color.copy(tint);
+    const pts = [o.start, o.hover];
+    for (let i = 0; i < 2; i++) {
+      const p = pts[i], m = this.corners[i]!;
+      m.visible = !!p;
+      if (p) m.position.set(p.x, this.heightAt(p.x, p.z) + 0.4, p.z);
+    }
+  }
+
+  dispose(): void { this.group.removeFromParent(); for (const m of this.ribbons) m.geometry.dispose(); void this.scene; }
 }
 
 /* ------------------------------------------------------------------ */
