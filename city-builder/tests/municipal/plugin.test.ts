@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { Simulation } from '../../src/sim/world';
 import { SIM_PLUGINS, type SimPlugin } from '../../src/sim/plugins';
 /** Registre de base SANS les modules municipaux (municipal, dechets — enregistrés depuis l'intégration) : le test injecte sa propre instance. */
-const BASE_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => p.id !== 'municipal' && p.id !== 'dechets');
+const BASE_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => p.id !== 'municipal' && p.id !== 'dechets' && p.id !== 'paliers'); // paliers : prime de population (hors budget municipal)
 import { validateSave } from '../../src/sim/save-format';
 import { createMunicipalPlugin, Municipal, MUNICIPAL_SERVICE } from '../../src/sim/municipal';
 import { emptyMunicipalSave, migrateMunicipal, municipalSaveSection, MUNICIPAL_SAVE_VERSION } from '../../src/sim/save-sections/municipal';

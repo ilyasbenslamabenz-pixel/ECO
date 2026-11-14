@@ -39,10 +39,12 @@ const LATE_MODULES: readonly string[] = ['dechets', 'hubs', 'eau'];
  * Les autres (hubs, eau : docs/requests/eau.md §1) sont livrés, non vides, mais dormants tant que le joueur ne les utilise pas.
  */
 const LATE_ACTIVE: readonly string[] = ['dechets'];
+/** Paliers de ville : prime versée dès le premier seuil de population franchi (agit sans action du joueur). */
+const SELF_ACTIVE: readonly string[] = ['paliers'];
 /** Modules de phase 2A (PHASE2_MODULES sans les modules intégrés plus tard). */
 const BASE_MODULES: readonly string[] = PHASE2_MODULES.filter((id) => !LATE_MODULES.includes(id));
 /** Modules d'atmosphère (phase 2C) exclus aussi : leur absence d'effet sur la base est testée dans tests/weather. */
-const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id) && !LATE_ACTIVE.includes(p.id));
+const EMPTY_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => !IMPLEMENTED.has(p.id) && !isAtmosphere(p.id) && !SIM_ONLY.includes(p.id) && !LATE_ACTIVE.includes(p.id) && !SELF_ACTIVE.includes(p.id));
 
 function town(plugins?: readonly SimPlugin[]): Simulation {
   const s = plugins ? new Simulation(plugins) : new Simulation();
@@ -101,7 +103,7 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
   // Zonage (tests/zonage) : enregistré partout, inerte sans zone, testé à part.
   const late = [...ELECTRICITE_MODULES, ...LATE_MODULES, ...ZONAGE_MODULES];
   // Politiques et recherche (phase 2C, tests/gouvernance) : simulation, sauvegarde et panneau ; pas de rendu.
-  const gov = ['politiques', 'recherche'];
+  const gov = ['politiques', 'recherche', 'paliers'];
   // Alertes (icônes de problèmes) : simulation et rendu, rien de sauvegardé, pas de panneau.
   const alerts = ['alertes'];
   assert.deepEqual([...PHASE2_MODULES].sort(), [...ids, ...LATE_MODULES].sort());

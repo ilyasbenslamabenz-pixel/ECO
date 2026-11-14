@@ -36,7 +36,7 @@ const META: Record<DashId, { title: string; icon: string; cls: string; kicker: s
 };
 
 /** Tableau de bord hôte de chaque module de phase 2. */
-const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research' };
+const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research', paliers: 'city' };
 
 export interface ModuleBridge { pluginCommand(plugin: string, name: string, payload?: unknown): Promise<unknown> }
 

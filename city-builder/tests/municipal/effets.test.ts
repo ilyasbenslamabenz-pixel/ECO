@@ -11,7 +11,7 @@ import { Municipal } from '../../src/sim/municipal';
 import { Simulation } from '../../src/sim/world';
 import { SIM_PLUGINS, type SimPlugin } from '../../src/sim/plugins';
 /** Registre de base SANS les modules municipaux (municipal, dechets — enregistrés depuis l'intégration) : le test injecte sa propre instance. */
-const BASE_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => p.id !== 'municipal' && p.id !== 'dechets');
+const BASE_PLUGINS: readonly SimPlugin[] = SIM_PLUGINS.filter((p) => p.id !== 'municipal' && p.id !== 'dechets' && p.id !== 'paliers'); // paliers : prime de population (hors budget municipal)
 import { createMunicipalPlugin, MUNICIPAL_SERVICE } from '../../src/sim/municipal';
 import { buildTown, runDays, townCatalog } from '../sim/fixtures';
 
