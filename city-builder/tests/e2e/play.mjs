@@ -153,6 +153,9 @@ try {
   check(sd.buildings.length === b0 + 1 && Math.abs(placedBias.rot - pv.rot) < 1e-3, `bâtiment posé en biais à la souris (rot ${placedBias?.rot})`);
   // Le long de l'avenue (horizontale) : deux bâtiments au plus près, côté nord puis côté sud.
   let near = 0;
+  // Axe réel de l'avenue : ses extrémités s'aimantent sur la grille (8 m), il peut différer de cz.
+  const avNode = sd.roads.nodes.reduce((best, n) => (Math.abs(n.x - (cx + 160)) < Math.abs(best.x - (cx + 160)) ? n : best));
+  const az = Math.abs(avNode.z - cz) <= 8 ? avNode.z : cz;
   for (const [x, side] of [[cx + 110, -1], [cx + 120, 1]]) {
     await page.evaluate(([a, b]) => window.__aube.lookAt(a, b, 160), [x, cz]);
     await settle(page);
@@ -164,8 +167,8 @@ try {
       await page.mouse.click(s.x, s.y); await page.waitForTimeout(1000);
       const d = await saveData(page);
       const b = d.buildings[d.buildings.length - 1];
-      const gap = Math.abs(b.z - cz);
-      R.notes[`avenue${side}`] = { preview: p, center: b };
+      const gap = Math.abs(b.z - az);
+      R.notes[`avenue${side}`] = { preview: p, center: b, axis: az, gap };
       if (d.buildings.length > sd.buildings.length && gap < 11.5 + 8 + 2.5) near++;
       sd = d;
     } else R.notes[`avenue${side}`] = { preview: p };

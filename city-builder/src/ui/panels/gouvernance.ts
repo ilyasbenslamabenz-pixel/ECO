@@ -25,7 +25,7 @@ function mountPolitiques(root: HTMLElement, api: UiPanelApi): () => void {
         btn.disabled = true;
         api.command('toggle', { id: p.id, on: !p.active }).then((r) => { st = r as PolitiquesState; render(); }).catch((e: unknown) => { api.toast(errText(e), 'error'); btn.disabled = false; });
       });
-      const cost = p.monthlyCost > 0 ? `${money(p.monthlyCost)} / mois${p.costPerResident ? ` (${fmt(p.costPerResident)} CHF par habitant)` : ''}` : 'Sans coût direct';
+      const cost = p.costPerMonth > 0 || p.costPerResident > 0 ? `${money(p.monthlyCost)} / mois${p.costPerResident ? ` (${fmt(p.costPerResident)} CHF par habitant)` : ''}` : 'Sans coût direct';
       list.append(el('div', { cls: `gov-card${p.active ? ' on' : ''}` },
         el('div', { cls: 'gov-top' }, el('b', { text: p.nameFr }), btn),
         el('p', { cls: 'small', text: p.descFr }),
