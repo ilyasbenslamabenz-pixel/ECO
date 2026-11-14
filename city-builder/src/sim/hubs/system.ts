@@ -163,6 +163,9 @@ export class HubsSystem {
     const r = this.check(ctx, type, rx, rz, rot);
     if (!r.ok) return r;
     const spec = HUB_SPECS[type];
+    // Coût payé par la trésorerie (budget municipal appliqué) : refus si les fonds manquent.
+    const money = (ctx as { economy?: { money?: number } }).economy?.money;
+    if (typeof money === 'number' && money < spec.cost) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: `Fonds insuffisants (${spec.cost} crédits requis)` };
     if (dryRun) return { ok: true, id: 0, cost: spec.cost, y: r.y, type };
     const rec: HubRecord = { id: this.nextId++, type, x: rx, z: rz, rot, y: r.y, waterY: r.waterY, builtAt: ctx.clock.totalMinutes };
     const m = this.muni;
