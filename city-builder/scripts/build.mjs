@@ -57,6 +57,24 @@ function html({ fragment }) {
 
 const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#10161c"/><path d="M16 50V32a16 16 0 0132 0v18M24 50V36a8 8 0 0116 0v14M11 50h42M32 9v7" fill="none" stroke="#3ddc84" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>\n';
 
+/** Copies 256 px des textures communes (x.webp -> x.256.webp) : le mode allégé ne décode jamais les 1024 px. */
+async function liteTextures(assetsDir) {
+  const sharp = (await import('sharp')).default;
+  let files = 0, bytes = 0;
+  const walk = async (d) => {
+    for (const f of readdirSync(d)) {
+      const p = join(d, f);
+      if (statSync(p).isDirectory()) { await walk(p); continue; }
+      if (!f.endsWith('.webp') || f.endsWith('.256.webp')) continue;
+      const out = p.replace(/\.webp$/, '.256.webp');
+      await sharp(p).resize(256, 256, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 82 }).toFile(out);
+      files++; bytes += statSync(out).size;
+    }
+  };
+  for (const sub of ['textures', 'buildings']) if (existsSync(join(assetsDir, sub))) await walk(join(assetsDir, sub));
+  return { files, bytes };
+}
+
 function copyAssets() {
   const src = join(root, 'assets');
   const dst = join(dist, 'assets');
@@ -96,6 +114,7 @@ if (watch) {
   const c1 = await esbuild.context(mainOpts);
   const c2 = await esbuild.context(workerOpts);
   copyAssets();
+  await liteTextures(join(dist, 'assets'));
   writePages();
   await Promise.all([c1.watch(), c2.watch()]);
   console.log('Surveillance active (Ctrl+C pour arrêter).');
@@ -109,6 +128,8 @@ if (watch) {
     const h = gzipFilesIn(join(dist, 'assets'), ['.hdr']);
     console.log(`HDRI gzip : ${h.files} fichiers, ${mb(h.before)} Mo -> ${mb(h.after)} Mo`);
   }
+  const lt = await liteTextures(join(dist, 'assets'));
+  console.log(`Textures 256 px (mode allégé) : ${lt.files} fichiers, ${(lt.bytes / 1024 / 1024).toFixed(2)} Mo`);
   writePages();
   if (!checkBudget()) process.exit(1);
 }

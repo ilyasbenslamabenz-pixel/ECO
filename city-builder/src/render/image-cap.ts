@@ -16,6 +16,18 @@ export const imageLimits = {
   maxConcurrentModels: Infinity,
 };
 
+/**
+ * Mode allégé : adresse de la version 256 px d'une texture (`x.webp` -> `x.256.webp`, générée au build,
+ * scripts/build.mjs). Le téléphone ne décode jamais l'image 1024 px : une maison neuve en demandait 27 d'un
+ * coup (~110 Mo décodés) avant leur réduction, et Safari iPhone fermait la page à l'ouverture de l'outil
+ * Bâtiments. Seules les textures communes (assets/textures, assets/buildings) ont une version réduite.
+ */
+export function liteTextureUrl(url: string): string {
+  if (imageLimits.textureCap > 256) return url;
+  if (!/\/assets\/(textures|buildings)\/.*\.webp(\?|$)/.test(url) || /\.256\.webp/.test(url)) return url;
+  return url.replace(/\.webp(?=\?|$)/, '.256.webp');
+}
+
 type Img = HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas;
 
 function dims(img: unknown): { w: number; h: number } | null {

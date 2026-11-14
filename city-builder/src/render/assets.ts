@@ -6,7 +6,7 @@
  */
 import * as THREE from 'three';
 import { createGltfLoader } from './gzip-assets';
-import { capModelTextures, imageLimits } from './image-cap';
+import { capModelTextures, imageLimits, liteTextureUrl } from './image-cap';
 import { traceStep } from '../boot-trace';
 import type { AssetCatalog, CatalogAsset } from '../shared/catalog';
 import type { IAssetLibrary } from '../shared/contracts';
@@ -43,8 +43,15 @@ export function dequantizeGeometry(g: THREE.BufferGeometry): void {
   }
 }
 
+/** Gestionnaire de chargement : en mode allégé, textures communes servies en 256 px (voir liteTextureUrl). */
+function liteManager(): THREE.LoadingManager {
+  const m = new THREE.LoadingManager();
+  m.setURLModifier((u) => liteTextureUrl(u));
+  return m;
+}
+
 export class AssetLibrary implements IAssetLibrary<THREE.Group> {
-  private loader = createGltfLoader();
+  private loader = createGltfLoader(liteManager());
   private cache = new Map<string, Promise<THREE.Group>>();
   private loaded = new Set<string>();
   private byId: Map<string, CatalogAsset>;

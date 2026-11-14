@@ -11,7 +11,7 @@
  * immeuble a son propre motif ; 2 = vitrine toujours allumée ; -1 = jamais).
  */
 import * as THREE from 'three';
-import { downscaleImage } from '../image-cap';
+import { downscaleImage, liteTextureUrl } from '../image-cap';
 import type { AssetCatalog, TextureSet } from '../../shared/catalog';
 
 export interface AubeMaterialExtras { set: string | null; uv: 'meters' | 'unit'; kind: 'opaque' | 'glass' }
@@ -52,7 +52,7 @@ export class BuildingMaterials {
   private async decodeImage(url: string): Promise<HTMLImageElement | ImageBitmap> {
     if (typeof createImageBitmap === 'function' && typeof fetch === 'function') {
       try {
-        const r = await fetch(url);
+        const r = await fetch(liteTextureUrl(url));
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return await createImageBitmap(await r.blob(), { imageOrientation: 'from-image', premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
       } catch (e) {
