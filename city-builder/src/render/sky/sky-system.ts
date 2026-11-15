@@ -291,6 +291,7 @@ export class SkySystem {
     }
     // Luminance bornée : un brouillard trop clair délave le paysage.
     let lum = fc.r * 0.2126 + fc.g * 0.7152 + fc.b * 0.0722;
+    if (pal.fog.duskDesat > 0 && duskW > 0) fc.lerp(tmpColor.setRGB(lum, lum, lum * 1.04), pal.fog.duskDesat * duskW);
     // Temps gris : brouillard désaturé, plus sombre sous la pluie, laiteux dans le brouillard.
     const grey = Math.max(overcast * 0.85, w.fog);
     if (grey > 0) {

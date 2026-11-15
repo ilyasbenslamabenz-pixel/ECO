@@ -231,6 +231,29 @@ export function hydroShare(season: string): number {
 }
 
 /**
+ * Centrale au pied d'un barrage (src/sim/hydro) : la puissance dépend de la HAUTEUR DE CHUTE (retenue − aval) et du
+ * DÉBIT entrant (rivière barrée + sources). Physique : P = ρ·g·η·Q·H ; facteur de jeu choisi pour qu'à la référence
+ * (HYDRO_REF_FLOW m³/s, HYDRO_REF_HEAD m) une centrale produise sa puissance nominale × débit saisonnier, comme une
+ * centrale au fil de l'eau ; au-delà, plafond HYDRO_MAX_FACTOR × nominale (turbines). Chute nulle : rien.
+ */
+export const HYDRO_REF_HEAD = 10;
+export const HYDRO_REF_FLOW = 60;
+export const HYDRO_MAX_FACTOR = 4;
+
+export function hydroDamKw(nominalKw: number, headM: number, flowM3s: number, season: string): number {
+  if (!(headM > 0) || !(flowM3s > 0)) return 0;
+  const k = (flowM3s / HYDRO_REF_FLOW) * (headM / HYDRO_REF_HEAD) * hydroShare(season);
+  return nominalKw * Math.min(HYDRO_MAX_FACTOR, k);
+}
+
+/** Site d'une centrale au pied d'un barrage : raison affichée (chute, débit) ; non valide si la retenue est vide. */
+export function hydroDamSiteCheck(dam: { headM: number; flowM3s: number; full: boolean }): { ok: boolean; reason: string } {
+  if (!(dam.flowM3s > 0)) return { ok: false, reason: 'Barrage sans arrivée d\'eau : posez une source en amont ou barrez une rivière' };
+  if (!(dam.headM > 0)) return { ok: true, reason: `Au pied d'un barrage : retenue en remplissage (débit ${Math.round(dam.flowM3s)} m³/s)` };
+  return { ok: true, reason: `Au pied d'un barrage : chute ${dam.headM.toLocaleString('fr-FR')} m, débit ${Math.round(dam.flowM3s)} m³/s${dam.full ? '' : ' (retenue en remplissage)'}` };
+}
+
+/**
  * Validation du site d'un barrage : part des points d'un anneau autour de l'ouvrage qui sont dans l'eau.
  * Un barrage doit être au BORD d'un cours d'eau : ni en plein champ (aucune eau), ni entouré d'eau.
  */

@@ -23,7 +23,7 @@ import { governanceModifiers } from '../../shared/governance';
 import {
   BATTERY_ONE_WAY, BATTERY_SPEC, batteryStep, capacityKwhOf,
   baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hourlyFactor, hydroShare,
-  hydroSiteCheck, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
+  hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
   TARIFF_CENTS_PER_KWH, windPowerShare, windProfile,
 } from '../../shared/power/model';
 import {
@@ -128,7 +128,20 @@ interface Facility {
   upkeep: number;
   /** Capacité de stockage (kWh) : batteries seulement, 0 sinon. */
   capacityKwh: number;
+  /** Centrale hydroélectrique au pied d'un barrage (src/sim/hydro) : identifiant du barrage ; absent sinon. */
+  damId?: number;
+  /** Version du service `hydro` lors de la validation du site. */
+  hydroVer?: number;
 }
+
+/** Service `hydro` publié par le cœur de la simulation (barrages et retenues, src/sim/hydro/system.ts). */
+interface HydroDamService {
+  version(): number;
+  damNear(x: number, z: number, reach: number): { id: number; headM: number; flowM3s: number; full: boolean } | null;
+  dam(id: number): { id: number; headM: number; flowM3s: number; full: boolean } | null;
+}
+/** Distance maximale entre une centrale et l'axe d'un barrage (m, en plus de sa demi-taille). */
+const DAM_PLANT_REACH = 60;
 
 interface Consumer {
   id: number;
@@ -265,17 +278,32 @@ export class PowerSystem {
       const x = st.x[i]!, z = st.z[i]!;
       const halfSize = (Math.max(a.footprint.tilesX, a.footprint.tilesZ) * TILE_SIZE) / 2;
       let siteOk = true, siteReason = '';
+      let damId: number | undefined, hydroVer: number | undefined;
       if (kind === 'hydro') {
         const prev = this.facilities.get(id);
-        if (prev && prev.kind === 'hydro' && prev.x === x && prev.z === z) { siteOk = prev.siteOk; siteReason = prev.siteReason; } else {
-          const c = hydroSiteCheck(x, z, halfSize, (px, pz) => ctx.terrain.isWet(px, pz));
-          siteOk = c.ok; siteReason = c.reason;
+        // Au pied d'un barrage : production selon la chute et le débit ; sinon, règle d'origine (au fil de l'eau,
+        // au bord d'un cours d'eau). Validation mise en cache tant que ni la centrale ni les barrages ne changent.
+        const hs = ctx.use<HydroDamService>('hydro');
+        const ver = hs?.version();
+        if (prev && prev.kind === 'hydro' && prev.x === x && prev.z === z && prev.hydroVer === ver) {
+          siteOk = prev.siteOk; siteReason = prev.siteReason; damId = prev.damId; hydroVer = ver;
+        } else {
+          const dam = hs?.damNear(x, z, halfSize + DAM_PLANT_REACH) ?? null;
+          if (dam) {
+            const c = hydroDamSiteCheck(dam);
+            siteOk = c.ok; siteReason = c.reason; damId = dam.id;
+          } else {
+            const c = hydroSiteCheck(x, z, halfSize, (px, pz) => ctx.terrain.isWet(px, pz));
+            siteOk = c.ok; siteReason = c.reason;
+          }
+          hydroVer = ver;
         }
       }
       out.set(id, {
         id, kind, nameFr: a.nameFr, x, y: st.y[i]!, z, rot: st.rot[i]!, nominalKw: nominalKwOf(a, kind),
         radius: FACILITY_SPECS[kind].radius, halfSize, siteOk, siteReason, upkeep: a.upkeepPerMonth,
         capacityKwh: kind === 'batterie' ? capacityKwhOf(a) : 0,
+        ...(damId !== undefined ? { damId } : {}), ...(hydroVer !== undefined ? { hydroVer } : {}),
       });
     }
     return out;
@@ -576,7 +604,14 @@ export class PowerSystem {
       case 'thermique': return f.nominalKw;
       case 'eolien': return f.nominalKw * windPowerShare(wind) * this.govRenew;
       case 'solaire': return f.nominalKw * sun * this.govRenew;
-      case 'hydro': return f.siteOk ? f.nominalKw * hydroShare(ctx.clock.season) : 0;
+      case 'hydro': {
+        if (!f.siteOk) return 0;
+        if (f.damId !== undefined) {
+          const d = ctx.use<HydroDamService>('hydro')?.dam(f.damId);
+          return d ? hydroDamKw(f.nominalKw, d.headM, d.flowM3s, ctx.clock.season) : 0;
+        }
+        return f.nominalKw * hydroShare(ctx.clock.season);
+      }
       case 'poste': return 0;
       // Batteries : puissance de décharge possible pendant l'heure (bornée par la puissance max et l'énergie stockée).
       case 'batterie': return Math.min(f.nominalKw, (this.facilityState(f.id).storedKwh ?? 0) * BATTERY_ONE_WAY);

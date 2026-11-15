@@ -275,7 +275,8 @@ const FRAG_MAIN = /* glsl */ `
     // sol forestier assombri. Indispensable de loin, où la moyenne des textures domine.
     float moist = vEnv.x;
     float forestD = vEnv.y;
-    vec3 gTint = mix(uGrassDry, uGrassLush, smoothstep(0.25, 0.8, moist + (mac.g - 0.5) * 0.35));
+    // Palette vive : variation macroscopique plus marquée (prairies sèches / grasses en grandes plages).
+    vec3 gTint = mix(uGrassDry, uGrassLush, smoothstep(0.25, 0.8, moist + (mac.g - 0.5) * (0.35 + 0.35 * uGrassRemap)));
     // Palette vive : couleur absolue (texture = détail de luminance), plus sèche sur les pentes.
     vec3 gAbs = mix(gTint, uGrassSlope, smoothstep(0.08, 0.3, slopeF)) * (dot(albs[0], vec3(0.2126, 0.7152, 0.0722)) / 0.238);
     albs[0] = mix(albs[0] * gTint, gAbs, uGrassRemap) * mix(1.0, 0.94, far);

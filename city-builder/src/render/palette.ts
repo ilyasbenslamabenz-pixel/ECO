@@ -61,6 +61,8 @@ export interface Palette {
     readonly blueMix: number;
     /** Luminance maximale de la couleur du brouillard (un brouillard trop clair délave le lointain). */
     readonly maxLum: number;
+    /** Désaturation de la brume au crépuscule (0..1) : l'horizon rose du ciel ne teinte plus tout le paysage. */
+    readonly duskDesat: number;
   };
   readonly terrain: {
     /** Herbe sèche / grasse (selon l'humidité) : teinte multiplicative (remap 0) ou couleur absolue (remap 1). */
@@ -106,7 +108,7 @@ export const PALETTE_NATURELLES: Palette = {
   sun: { intensity: 3.1, colorHigh: [1.0, 0.95, 0.88], colorLow: [1.0, 0.48, 0.22] },
   hemi: { skyDay: [0.62, 0.72, 0.9], ground: [0.32, 0.28, 0.22], intensity: 1 },
   sky: { zenithTint: [1, 1, 1], horizonFog: 0.65 },
-  fog: { density: 0.00022, blueMix: 0, maxLum: 0.9 },
+  fog: { density: 0.00022, blueMix: 0, maxLum: 0.9, duskDesat: 0 },
   terrain: {
     grassDry: [0.9, 0.9, 0.64], grassLush: [0.66, 0.88, 0.5], grassRemap: 0, grassSlope: [0.9, 0.9, 0.64],
     rockDesat: 0.78, rockTint: [1.02, 0.99, 0.94],
@@ -132,14 +134,14 @@ export const PALETTE_VIVES: Palette = {
   sun: { intensity: 3.3, colorHigh: [1.0, 0.93, 0.82], colorLow: [1.0, 0.45, 0.18] },
   hemi: { skyDay: [0.56, 0.7, 0.98], ground: [0.27, 0.3, 0.18], intensity: 1.05 },
   sky: { zenithTint: [0.8, 0.9, 1.06], horizonFog: 0.42 },
-  fog: { density: 0.00015, blueMix: 0.4, maxLum: 0.6 },
+  fog: { density: 0.00015, blueMix: 0.4, maxLum: 0.6, duskDesat: 0.45 },
   terrain: {
-    grassDry: [0.155, 0.17, 0.052], grassLush: [0.06, 0.15, 0.032], grassRemap: 0.82, grassSlope: [0.14, 0.15, 0.06],
-    rockDesat: 0.42, rockTint: [1.12, 1.04, 0.94],
+    grassDry: [0.17, 0.175, 0.06], grassLush: [0.07, 0.155, 0.038], grassRemap: 0.82, grassSlope: [0.15, 0.15, 0.065],
+    rockDesat: 0.55, rockTint: [1.08, 1.04, 0.98],
     dirtTint: [1.08, 0.98, 0.86], sandTint: [1.18, 1.1, 0.92], gravelTint: [0.86, 0.86, 0.84],
     dirtPatch: 0.12, macroStrength: 0.2,
   },
-  foliage: [0.96, 1.08, 0.86],
+  foliage: [0.97, 1.04, 0.9],
   minimap: {
     plain: [104, 150, 70], hill: [168, 160, 120], beach: [222, 204, 150], forest: [40, 98, 46], forestMax: 0.85,
     waterShallow: [52, 132, 186], waterDeep: [22, 74, 138], shade: 0.42,

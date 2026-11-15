@@ -18,7 +18,7 @@ import { ELECTRICITE_SAVE_VERSION, migrateElectricite, type ElectriciteSave } fr
 import {
   CONSUMER_CLASSES, type ConsumerClass, ELECTRICITE_ID, ELECTRICITE_SERVICE, type ElectriciteService, type FacilityKind,
 } from '../../shared/power/types';
-import { FACILITY_SPECS, hydroSiteCheck } from '../../shared/power/model';
+import { FACILITY_SPECS, hydroDamSiteCheck, hydroSiteCheck } from '../../shared/power/model';
 import { TILE_SIZE } from '../../shared/constants';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 
@@ -170,6 +170,9 @@ export function createElectricitePlugin(): ElectricitePlugin {
           if (!(kind in FACILITY_SPECS) || x === undefined || z === undefined) return bad('kind, x, z attendus');
           if (kind !== 'hydro') return { ok: true, data: { ok: true, reason: 'Aucune contrainte de site', wetShare: 0 } };
           const half = (4 * TILE_SIZE) / 2;
+          // Au pied d'un barrage (src/sim/hydro) : site valide selon la retenue (chute, débit).
+          const dam = ctx.use<{ damNear(x: number, z: number, r: number): { headM: number; flowM3s: number; full: boolean } | null }>('hydro')?.damNear(x, z, (6 * TILE_SIZE) / 2 + 60);
+          if (dam) { const d = hydroDamSiteCheck(dam); return { ok: true, data: { ok: d.ok, reason: d.reason, wetShare: 0 } }; }
           const c = hydroSiteCheck(x, z, half, (px, pz) => ctx.terrain.isWet(px, pz));
           return { ok: true, data: { ok: c.ok, reason: c.reason, wetShare: c.wetShare } };
         }
