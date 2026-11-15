@@ -9,14 +9,18 @@
  */
 import { snapshotExt, type CirculationDelta, type CirculationSnapshot } from '../../shared/protocol-ext';
 import { CongestionOverlay } from '../traffic/congestion';
+import { JunctionSigns } from '../traffic/junction-signs';
 import type { RenderPlugin, RenderPluginContext } from './types';
 
 /** Couche de congestion de la partie en cours (exposée pour les tests et les captures). */
 export const congestionOverlay = new CongestionOverlay();
+/** Panneaux Stop / Cédez le passage des carrefours. */
+export const junctionSigns = new JunctionSigns();
 
 function apply(payload: CirculationDelta | CirculationSnapshot | undefined): void {
   if (!payload) { congestionOverlay.visible = false; return; }
   if (payload.layout) congestionOverlay.setLayout(payload.layout);
+  if (payload.panneaux) junctionSigns.set(payload.panneaux);
   if (payload.congestion) congestionOverlay.setLevels(payload.congestion);
   if (payload.overlay !== undefined) congestionOverlay.visible = payload.overlay;
 }
@@ -25,12 +29,12 @@ export const circulationRenderPlugin: RenderPlugin = {
   id: 'circulation',
 
   init(ctx: RenderPluginContext): void {
-    ctx.scene.add(congestionOverlay.group);
+    ctx.scene.add(congestionOverlay.group, junctionSigns.group);
   },
 
   applySnapshotExt(payload: unknown): void {
     const snap = snapshotExt({ circulation: payload }, 'circulation');
-    if (!payload) congestionOverlay.dispose();
+    if (!payload) { congestionOverlay.dispose(); junctionSigns.set(undefined); }
     apply(snap);
   },
 
@@ -41,5 +45,7 @@ export const circulationRenderPlugin: RenderPlugin = {
   dispose(): void {
     congestionOverlay.dispose();
     congestionOverlay.group.removeFromParent();
+    junctionSigns.dispose();
+    junctionSigns.group.removeFromParent();
   },
 };

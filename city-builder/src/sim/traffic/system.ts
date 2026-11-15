@@ -1571,6 +1571,34 @@ export class TrafficSystem {
     return { heads, nodeIds };
   }
 
+  /**
+   * Panneaux de carrefour (rendu) : [x, y, z, cap, type] par panneau — type 1 « Stop » (carrefour réglé en stop),
+   * 2 « Cédez le passage » (branches non prioritaires d'un carrefour à priorité, entrées de giratoire). Même
+   * emplacement qu'un feu : trottoir de droite, à la ligne d'arrêt.
+   */
+  signLayout(): number[] {
+    const g = this.graph;
+    const out: number[] = [];
+    if (!g) return out;
+    const p = this.tmp4;
+    for (let node = 0; node < g.nodeCount; node++) {
+      if (g.nodeControl[node] !== Control.Yield) continue;
+      const kind = this.junctionModes.get(g.nodeId[node]!) === 'stop' ? 1 : 2;
+      for (let a = g.nodeArmStart[node]!; a < g.nodeArmStart[node + 1]!; a++) {
+        if (g.armRankPrio[a]) continue;
+        const arc = g.armArc[a]!;
+        const e = arc >> 1;
+        const lanes = Math.max(1, g.arcLaneCount[arc]!);
+        const first = g.arcFirstLane[arc]!;
+        if (first < 0) continue;
+        const outer = first + lanes - 1;
+        g.linkPoint(outer, g.linkLen[outer]!, g.edgeLaneWidth[e]! / 2 + 0.5 + 1.1, p, 0);
+        out.push(Math.round(p[0]! * 100) / 100, Math.round(p[1]! * 100) / 100, Math.round(p[2]! * 100) / 100, Math.round(p[3]! * 1000) / 1000, kind);
+      }
+    }
+    return out;
+  }
+
   /** État de chaque bras régulé (0 vert, 1 orange, 2 rouge), même ordre que `signalLayout()` ; tampon neuf. */
   signalStateArray(): Uint8Array {
     const g = this.graph;

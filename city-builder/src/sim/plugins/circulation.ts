@@ -73,6 +73,7 @@ function buildPayload(t: TrafficSystem, full: boolean): CirculationDelta {
   if (full || t.signalLayoutVersion !== state.layoutSent) {
     const layout = t.congestionLayout();
     out.layout = layout;
+    out.panneaux = t.signLayout();
     state.layoutSent = layout.version;
     transfer.push(layout.edgeIds.buffer, layout.ptStart.buffer, layout.x.buffer, layout.y.buffer, layout.z.buffer, layout.half.buffer);
   }

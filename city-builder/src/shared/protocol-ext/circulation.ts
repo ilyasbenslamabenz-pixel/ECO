@@ -175,6 +175,8 @@ export interface CirculationDelta {
   stats?: CirculationStats;
   /** Affichage de la carte de congestion demandé par le joueur (présent quand il change). */
   overlay?: boolean;
+  /** Panneaux de carrefour [x, y, z, cap, type] × n (1 stop, 2 cédez le passage) : avec la géométrie (`layout`). */
+  panneaux?: number[];
 }
 
 /** Charge utile de `snapshot.ext.circulation` (état complet pour un rendu qui repart de zéro). */
@@ -184,6 +186,7 @@ export interface CirculationSnapshot {
   congestion?: CongestionFrame;
   stats?: CirculationStats;
   overlay: boolean;
+  panneaux?: number[];
 }
 
 /** Commandes du module : nom -> { payload, result }. */
