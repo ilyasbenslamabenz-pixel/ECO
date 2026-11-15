@@ -6,6 +6,11 @@
  */
 import { axisLabel, niceStep } from './finance';
 
+/** Couleurs du thème courant (clair ou sombre) pour les dessins au canevas. */
+export const cssVar = (name: string, fallback: string): string => (typeof document !== 'undefined' ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() : '') || fallback;
+export const ink = (a: number): string => `rgba(${cssVar('--ink', '255, 255, 255')}, ${a})`;
+
+
 export interface ChartSeries {
   kind: 'bar' | 'line';
   values: number[];
@@ -57,7 +62,7 @@ export function drawChart(canvas: HTMLCanvasElement, spec: ChartSpec): void {
   const p = prepCanvas(canvas);
   if (!p) return;
   const { g, w, h } = p;
-  const muted = 'rgba(200,212,224,0.62)';
+  const muted = cssVar('--muted', 'rgba(200,212,224,0.62)');
   g.font = CHART_FONT;
   const n = spec.labels.length;
   if (n === 0 || spec.series.every((s) => s.values.length === 0)) {
@@ -99,7 +104,7 @@ export function drawChart(canvas: HTMLCanvasElement, spec: ChartSpec): void {
   g.lineWidth = 1; g.textBaseline = 'middle';
   for (let v = main.lo, k = 0; v <= main.hi + main.step / 2; v += main.step, k++) {
     const y = Math.round(Y(main, v)) + 0.5;
-    g.strokeStyle = Math.abs(v) < main.step / 2 && main.lo < 0 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)';
+    g.strokeStyle = Math.abs(v) < main.step / 2 && main.lo < 0 ? ink(0.22) : ink(0.07);
     g.beginPath(); g.moveTo(L, y); g.lineTo(R, y); g.stroke();
     if (la) { g.fillStyle = muted; g.textAlign = 'right'; g.fillText(ll[k] ?? '', L - 6, y); }
   }
@@ -108,11 +113,11 @@ export function drawChart(canvas: HTMLCanvasElement, spec: ChartSpec): void {
     for (let v = ra.lo, k = 0; v <= ra.hi + ra.step / 2; v += ra.step, k++) {
       const y = Y(ra, v);
       g.fillStyle = muted; g.fillText(rl[k] ?? '', R + 6, y);
-      g.strokeStyle = 'rgba(255,255,255,0.18)'; g.beginPath(); g.moveTo(R, Math.round(y) + 0.5); g.lineTo(R + 3, Math.round(y) + 0.5); g.stroke();
+      g.strokeStyle = ink(0.18); g.beginPath(); g.moveTo(R, Math.round(y) + 0.5); g.lineTo(R + 3, Math.round(y) + 0.5); g.stroke();
     }
   }
   // Axes.
-  g.strokeStyle = 'rgba(255,255,255,0.2)';
+  g.strokeStyle = ink(0.2);
   g.beginPath(); g.moveTo(L + 0.5, T - 4); g.lineTo(L + 0.5, B); g.lineTo(R, B); if (ra) g.lineTo(R + 0.5, T - 4); g.stroke();
   // Abscisses : un libellé par mois si la place le permet, sinon un sur deux (dernier toujours affiché).
   g.fillStyle = muted; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
@@ -145,7 +150,7 @@ export function drawChart(canvas: HTMLCanvasElement, spec: ChartSpec): void {
     g.beginPath();
     s.values.forEach((v, i) => (i ? g.lineTo(X(i), Y(a, v)) : g.moveTo(X(i), Y(a, v))));
     g.stroke();
-    g.fillStyle = '#0f1419'; g.lineWidth = 1.6;
+    g.fillStyle = cssVar('--panel-solid', '#0f1419'); g.lineWidth = 1.6;
     s.values.forEach((v, i) => { g.beginPath(); g.arc(X(i), Y(a, v), n > 16 ? 1.8 : 2.6, 0, Math.PI * 2); g.fill(); g.stroke(); });
   }
 }

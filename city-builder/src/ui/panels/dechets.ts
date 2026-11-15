@@ -27,7 +27,7 @@ const CSS = `
 .dechets-panel .reglage input[type=range] { grid-column: 1 / -1; width: 100%; }
 .dechets-panel .reglage select { min-height: 32px; }
 .dechets-panel .calque { display: flex; gap: 8px; align-items: center; font-size: 13px; min-height: 32px; }
-.dechets-panel .fill { height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+.dechets-panel .fill { height: 6px; border-radius: 3px; background: rgba(var(--ink), .12); overflow: hidden; }
 .dechets-panel .fill > i { display: block; height: 100%; background: linear-gradient(90deg, #5fb85a, #e3b341, #e5534b); }
 `;
 

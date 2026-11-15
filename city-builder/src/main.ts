@@ -28,7 +28,7 @@ import { initRender, type RenderStats } from './render';
 import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
-import { applyGraphicsOptions } from './ui/options';
+import { applyGraphicsOptions, applyTheme, loadOptions } from './ui/options';
 import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
 import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
 import { autoPrefixFor } from './save/autosave';
@@ -127,6 +127,7 @@ function errText(e: unknown): string {
 }
 
 async function boot(): Promise<void> {
+  applyTheme(loadOptions().theme);
   const params = new URLSearchParams(location.search);
   const debug: DebugInfo = {
     ready: false, workerReady: false, snapshotReceived: false, deltas: 0, frames: () => 0, catalogAssets: 0, errors: [],

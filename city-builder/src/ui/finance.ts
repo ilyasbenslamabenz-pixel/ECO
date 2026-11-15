@@ -8,6 +8,7 @@
  */
 import type { SimStats } from '../shared/contracts';
 import { MONTHS, money } from './dom';
+import { cssVar, ink } from './charts';
 
 export interface FinancePoint { minutes: number; money: number; balance: number; year: number; month: number; day: number }
 
@@ -102,7 +103,7 @@ export class FinanceChart {
     const X = (i: number): number => L + ((R - L) * i) / (pts.length - 1);
     const Y = (v: number): number => B - ((B - T) * (v - lo)) / (hi - lo);
     // Grille et axe (discrets).
-    g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1; g.fillStyle = muted; g.textAlign = 'right'; g.textBaseline = 'middle';
+    g.strokeStyle = ink(0.07); g.lineWidth = 1; g.fillStyle = muted; g.textAlign = 'right'; g.textBaseline = 'middle';
     for (let v = lo; v <= hi + step / 2; v += step) {
       const y = Math.round(Y(v)) + 0.5;
       g.beginPath(); g.moveTo(L, y); g.lineTo(R, y); g.stroke();
@@ -126,8 +127,8 @@ export class FinanceChart {
     if (hi_ >= 0 && hi_ < pts.length) {
       const p = pts[hi_]!;
       const x = X(hi_); const y = Y(p.money);
-      g.strokeStyle = 'rgba(255,255,255,0.25)'; g.beginPath(); g.moveTo(x, T); g.lineTo(x, B); g.stroke();
-      g.fillStyle = accent; g.strokeStyle = '#141920'; g.lineWidth = 2;
+      g.strokeStyle = ink(0.25); g.beginPath(); g.moveTo(x, T); g.lineTo(x, B); g.stroke();
+      g.fillStyle = accent; g.strokeStyle = cssVar('--panel-solid', '#141920'); g.lineWidth = 2;
       g.beginPath(); g.arc(x, y, 4.5, 0, Math.PI * 2); g.fill(); g.stroke();
       this.tip.textContent = `${dateLabel(p)} · ${money(p.money)}`;
       this.tip.style.left = `${10 + x}px`;

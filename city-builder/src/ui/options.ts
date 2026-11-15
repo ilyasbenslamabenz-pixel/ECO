@@ -15,9 +15,16 @@ export interface GraphicsOptions {
   viewDistance: number;
   /** Images par seconde maximales : « auto » = 60 sur téléphone, sans limite ailleurs. */
   fps: 'auto' | '30' | '60' | 'max';
+  /** Thème de l'interface : clair (verre dépoli, par défaut) ou sombre (thème d'origine). */
+  theme: 'clair' | 'sombre';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto' };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'clair' };
+
+/** Applique le thème de l'interface (attribut lu par les feuilles de style). */
+export function applyTheme(t: GraphicsOptions['theme']): void {
+  if (typeof document !== 'undefined') document.documentElement.dataset['theme'] = t;
+}
 const KEY = 'aube-urbaine:options:v1';
 
 export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined): GraphicsOptions {
@@ -29,6 +36,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     shadows: s === 'off' || s === 'low' || s === 'high' || s === 'ultra' ? s : DEFAULT_OPTIONS.shadows,
     viewDistance: Number.isFinite(d) ? Math.min(8000, Math.max(1500, d)) : DEFAULT_OPTIONS.viewDistance,
     fps: o?.fps === '30' || o?.fps === '60' || o?.fps === 'max' || o?.fps === 'auto' ? o.fps : DEFAULT_OPTIONS.fps,
+    theme: o?.theme === 'sombre' || o?.theme === 'clair' ? o.theme : DEFAULT_OPTIONS.theme,
   };
 }
 
@@ -53,6 +61,7 @@ export interface GraphicsTargets {
 }
 
 export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): void {
+  applyTheme(o.theme);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const prof = deviceProfile(o.quality);
   const ratio = o.quality === 'basse' ? Math.min(dpr, 1) * 0.75 : o.quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, prof.lite ? prof.maxPixelRatio : 1.5);

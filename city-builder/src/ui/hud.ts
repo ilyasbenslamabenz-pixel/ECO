@@ -203,11 +203,12 @@ export function initUI(h: UIHandlers): UIHandle {
     (optForm.elements.namedItem('shadows') as HTMLSelectElement).value = o.shadows;
     (optForm.elements.namedItem('viewDistance') as HTMLInputElement).value = String(o.viewDistance);
     (optForm.elements.namedItem('fps') as HTMLSelectElement).value = o.fps;
+    (optForm.elements.namedItem('theme') as HTMLSelectElement).value = o.theme;
     distOut.textContent = `${fmt(o.viewDistance)} m`;
   };
   optForm.addEventListener('input', () => {
     const f = new FormData(optForm);
-    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'] });
+    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'] });
     distOut.textContent = `${fmt(o.viewDistance)} m`;
     saveOptions(o);
     h.onOptions?.(o);
