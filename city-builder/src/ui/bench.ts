@@ -121,14 +121,14 @@ const LAYER_LABELS: Record<string, string> = {
  * de premier niveau, et sans la passe d'ombre (carte gardée). EXT_disjoint_timer_query_webgl2 si exposé, sinon
  * temps de rendu attendu jusqu'à la fin du travail GPU (lecture d'un pixel).
  */
-async function layerBreakdown(h: BenchHost, view: string, n: number): Promise<LayerBreakdown> {
+async function layerBreakdown(h: BenchHost, view: string, n: number, mainOnly = false): Promise<LayerBreakdown> {
   const r = h.renderer, gl = r.getContext() as WebGL2RenderingContext;
   const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
   const px = new Uint8Array(4);
   const frame = (): Promise<void> => new Promise((res) => requestAnimationFrame(() => res()));
   const draw = (): void => r.render(h.scene, h.camera);
   const measure = async (): Promise<number> => {
-    draw(); // image de préparation (listes, uniformes)
+    if (n > 1) draw(); // image de préparation (listes, uniformes)
     const vals: number[] = [];
     if (ext) {
       const qs: WebGLQuery[] = [];
@@ -158,7 +158,7 @@ async function layerBreakdown(h: BenchHost, view: string, n: number): Promise<La
     const layers: LayerCost[] = [];
     for (const o of h.scene.children) {
       const name = o.name;
-      if (!name || !o.visible || !LAYER_LABELS[name] && !/^[a-z_-]+$/.test(name)) continue;
+      if (!name || !o.visible || (!LAYER_LABELS[name] && (mainOnly || !/^[a-z_-]+$/.test(name)))) continue;
       o.visible = false;
       try { layers.push({ layer: LAYER_LABELS[name] ?? name, ms: total - (await measure()), share: 0 }); } finally { o.visible = true; }
     }
@@ -316,9 +316,10 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     // Temps processeur : court échantillon séparé (attente de la carte graphique avant chaque image : gl.finish).
     let cpu: { updateMs: number; renderMs: number } | null = null;
     try { cpu = h.cpuFrames(cpuN, sc.cpuYaw); } catch { cpu = null; }
-    if (sc.id === 'aerien' || sc.id === 'rue') {
+    // Parcours court (tests, rendu logiciel très lent) : vue rue seule, calques principaux, une mesure par calque.
+    if (sc.id === 'rue' || (sc.id === 'aerien' && !opts.short)) {
       badge(`Mesure : ${i + 1}/${SCENES.length} — coût par calque (${sc.label})`);
-      try { breakdown.push(await layerBreakdown(h, sc.label, opts.short ? 2 : 8)); } catch (e) { warnings.push(`Coût par calque indisponible : ${String(e)}`); }
+      try { breakdown.push(await layerBreakdown(h, sc.label, opts.short ? 1 : 8, opts.short)); } catch (e) { warnings.push(`Coût par calque indisponible : ${String(e)}`); }
     }
     frameHooks.splice(frameHooks.indexOf(hook), 1);
     const s = [...iv].sort((a, b) => a - b);

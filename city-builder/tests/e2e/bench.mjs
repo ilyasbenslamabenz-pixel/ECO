@@ -39,7 +39,7 @@ async function run(label, path) {
   page.on('request', (r) => { const u = r.url(); if (!u.startsWith(base) && !u.startsWith('blob:') && !u.startsWith('data:')) foreign.push(u); });
   const t0 = Date.now();
   await page.goto(`${base}${path}`, { waitUntil: 'load' });
-  await page.waitForSelector('#bench-results', { timeout: 600000 });
+  await page.waitForSelector('#bench-results', { timeout: 1500000 });
   console.log(`[${label}] tableau affiché après ${Math.round((Date.now() - t0) / 1000)} s`);
   // Rendu logiciel : boucle d'affichage suspendue pour que les clics ne fassent pas la queue derrière les images.
   await page.evaluate(() => window.__aube.pauseRender(true));
@@ -51,7 +51,7 @@ async function run(label, path) {
   check(r?.version && r.version !== 'inconnue', `[${label}] version du jeu : ${r?.version}`);
   const rows = await page.$$eval('#bench-results > div > table > tbody > tr', (trs) => trs.length);
   check(rows === 4, `[${label}] tableau : ${rows} lignes`);
-  check(r?.breakdown?.length === 2 && r.breakdown.every((b) => b.totalMs > 0 && b.layers.length > 0), `[${label}] coût GPU par calque (${r?.breakdown?.map((b) => `${b.view} : ${b.totalMs} ms, ${b.layers.slice(0, 3).map((l) => `${l.layer} ${l.share} %`).join(', ')}`).join(' | ')})`);
+  check(r?.breakdown?.length === 1 && r.breakdown.every((b) => b.totalMs > 0 && b.layers.length > 0), `[${label}] coût GPU par calque (${r?.breakdown?.map((b) => `${b.view} : ${b.totalMs} ms, ${b.layers.slice(0, 3).map((l) => `${l.layer} ${l.share} %`).join(', ')}`).join(' | ')})`);
   check(await page.isVisible('#bench-copy'), `[${label}] bouton « Copier les résultats » visible`);
   const links = await page.$$eval('#bench-results a', (as) => as.map((a) => a.getAttribute('href')));
   check(links.some((h) => /[?&]qualite=haute/.test(h)) && links.some((h) => /[?&]lots=0/.test(h)) && links.every((h) => /[?&]bench(=court)?(&|$)/.test(h)),
