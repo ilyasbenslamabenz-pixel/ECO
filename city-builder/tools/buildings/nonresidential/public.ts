@@ -158,7 +158,7 @@ export const ecole: BuildingDef = {
   jobs: 28,
   density: 'moyenne',
   style: 'groupe_scolaire',
-  tags: ['public', 'education', 'ecole', 'cour', 'preau', 'service:education', 'rayon:900', 'capacite_service:300'],
+  tags: ['public', 'education', 'ecole', 'cour', 'preau', 'service:education', 'rayon:600', 'capacite_service:300'],
   source: `${SRC}#ecole`,
   lodDistances: [200, 800],
   palette: npPalette({
@@ -273,7 +273,7 @@ export const casernePompiers: BuildingDef = {
   jobs: 45,
   density: 'moyenne',
   style: 'equipement_contemporain',
-  tags: ['public', 'secours', 'pompiers', 'tour_de_manoeuvre', 'service:incendie', 'rayon:1500', 'capacite_service:4'],
+  tags: ['public', 'secours', 'pompiers', 'tour_de_manoeuvre', 'service:incendie', 'rayon:800', 'capacite_service:4'],
   source: `${SRC}#casernePompiers`,
   frontage: [{ x: -3, z: 12, nx: 0, nz: 1, kind: 'vehicle' }],
   palette: npPalette({
@@ -389,7 +389,7 @@ export const commissariat: BuildingDef = {
   jobs: 60,
   density: 'moyenne',
   style: 'equipement_contemporain',
-  tags: ['public', 'securite', 'police', 'service:police', 'rayon:1500', 'capacite_service:6'],
+  tags: ['public', 'securite', 'police', 'service:police', 'rayon:700', 'capacite_service:6'],
   source: `${SRC}#commissariat`,
   palette: npPalette({
     facade: M('beton_facade', '#e9e6e0'),
@@ -464,7 +464,7 @@ export const hopital: BuildingDef = {
   jobs: 520,
   density: 'forte',
   style: 'hospitalier',
-  tags: ['public', 'sante', 'hopital', 'urgences', 'heliport', 'service:sante', 'rayon:3500', 'capacite_service:260'],
+  tags: ['public', 'sante', 'hopital', 'urgences', 'heliport', 'service:sante', 'rayon:1200', 'capacite_service:260'],
   source: `${SRC}#hopital`,
   lodDistances: [240, 1000],
   frontage: [{ x: 0, z: 16, nx: 0, nz: 1, kind: 'pedestrian' }, { x: 16, z: 16, nx: 0, nz: 1, kind: 'vehicle' }],
@@ -595,7 +595,7 @@ export const musee: BuildingDef = {
   jobs: 40,
   density: 'moyenne',
   style: 'neoclassique',
-  tags: ['public', 'culture', 'musee', 'bibliotheque', 'coupole', 'colonnade', 'service:culture', 'rayon:2500', 'attractivite:3'],
+  tags: ['public', 'culture', 'musee', 'bibliotheque', 'coupole', 'colonnade', 'service:culture', 'rayon:1000', 'attractivite:3'],
   source: `${SRC}#musee`,
   lodDistances: [220, 900],
   palette: npPalette({
@@ -963,7 +963,7 @@ export const parc: BuildingDef = {
   jobs: 4,
   density: 'faible',
   style: 'jardin_public',
-  tags: ['public', 'parc', 'loisirs', 'kiosque', 'fontaine', 'aire_de_jeux', 'espace_vert', 'service:loisirs', 'rayon:600', 'attractivite:2'],
+  tags: ['public', 'parc', 'loisirs', 'kiosque', 'fontaine', 'aire_de_jeux', 'espace_vert', 'service:loisirs', 'rayon:400', 'attractivite:2'],
   source: `${SRC}#parc`,
   palette: npPalette({
     gazon: M('terrain_herbe', '#9cc06a'),

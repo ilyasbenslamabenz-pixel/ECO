@@ -338,25 +338,25 @@ export const EQUIPEMENTS: BuildingDef[] = [
   ecole(meta({
     id: 'proc_ecole_brique', nameFr: 'Groupe scolaire en brique', category: 'public',
     tiles: [4, 4], ...budget(4, 3, 2, 480), jobs: 34, density: 'moyenne', style: 'brique_pignon',
-    quartiers: Q('faubourg', 'pavillonnaire'), tags: ['public', 'education', 'ecole', 'service:education', 'rayon:900', 'capacite_service:320'],
+    quartiers: Q('faubourg', 'pavillonnaire'), tags: ['public', 'education', 'ecole', 'service:education', 'rayon:600', 'capacite_service:320'],
   }), { w: 29.5, d: 13.0, floors: 2, preau: true, cour: 5.0, horloge: true, aile: true }),
 
   ecole(meta({
     id: 'proc_ecole_moderne', nameFr: 'École contemporaine', category: 'public',
     tiles: [4, 4], ...budget(4, 3, 1, 460), jobs: 26, density: 'moyenne', style: 'beton_moderne',
-    quartiers: Q('grands_ensembles', 'pavillonnaire'), tags: ['public', 'education', 'ecole', 'service:education', 'rayon:800', 'capacite_service:240'],
+    quartiers: Q('grands_ensembles', 'pavillonnaire'), tags: ['public', 'education', 'ecole', 'service:education', 'rayon:500', 'capacite_service:240'],
   }), { w: 29.0, d: 12.5, floors: 1, preau: true, cour: 5.0, aile: true }),
 
   ecole(meta({
     id: 'proc_creche', nameFr: 'Crèche de quartier', category: 'public',
     tiles: [3, 3], ...budget(3, 2, 1, 470), jobs: 16, density: 'faible', style: 'reconstruction',
-    quartiers: Q('faubourg', 'grands_ensembles', 'pavillonnaire'), tags: ['public', 'petite_enfance', 'service:petite_enfance', 'rayon:600', 'capacite_service:60'],
+    quartiers: Q('faubourg', 'grands_ensembles', 'pavillonnaire'), tags: ['public', 'petite_enfance', 'service:petite_enfance', 'rayon:400', 'capacite_service:60'],
   }), { w: 19.5, d: 10.5, floors: 1, cour: 4.0, preau: true }),
 
   civique(meta({
     id: 'proc_mediatheque', nameFr: 'Médiathèque', category: 'public',
     tiles: [4, 3], ...budget(4, 3, 2, 620), jobs: 38, density: 'moyenne', style: 'verre_contemporain',
-    quartiers: Q('centre_historique', 'affaires', 'grands_ensembles'), tags: ['public', 'culture', 'mediatheque', 'attractivite:2', 'service:culture', 'rayon:2000'],
+    quartiers: Q('centre_historique', 'affaires', 'grands_ensembles'), tags: ['public', 'culture', 'mediatheque', 'attractivite:2', 'service:culture', 'rayon:800'],
   }), { w: 29.0, d: 20.0, floors: 2, porche: 'auvent', vitrine: true, mat: true }),
 
   civique(meta({
@@ -374,7 +374,7 @@ export const EQUIPEMENTS: BuildingDef[] = [
   civique(meta({
     id: 'proc_centre_sante', nameFr: 'Centre de santé', category: 'public',
     tiles: [3, 3], ...budget(3, 3, 2, 600), jobs: 56, density: 'moyenne', style: 'beton_moderne',
-    quartiers: Q('faubourg', 'grands_ensembles'), tags: ['public', 'sante', 'service:sante', 'rayon:1500', 'capacite_service:90'],
+    quartiers: Q('faubourg', 'grands_ensembles'), tags: ['public', 'sante', 'service:sante', 'rayon:600', 'capacite_service:90'],
   }), { w: 22.0, d: 18.0, floors: 2, porche: 'auvent', vitrine: true }),
 
   gymnase(meta({
@@ -386,7 +386,7 @@ export const EQUIPEMENTS: BuildingDef[] = [
   gymnase(meta({
     id: 'proc_salle_polyvalente', nameFr: 'Salle polyvalente', category: 'public',
     tiles: [4, 3], ...budget(4, 3, 0, 450), jobs: 12, density: 'moyenne', style: 'brique_pignon',
-    quartiers: Q('faubourg', 'pavillonnaire'), tags: ['public', 'culture', 'salle', 'service:culture', 'rayon:1200'],
+    quartiers: Q('faubourg', 'pavillonnaire'), tags: ['public', 'culture', 'salle', 'service:culture', 'rayon:500'],
   }), { w: 28.0, d: 19.0, h: 8.0, charpente: true }),
 
   chapelle(meta({
