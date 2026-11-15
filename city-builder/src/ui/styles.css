@@ -994,3 +994,12 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 .lg-head.svc svg.ic { color: var(--accent-2); }
 .lg-head.svc span { font-weight: 600; font-size: 12.5px; }
 #tc-reason.warn { color: var(--warn); }
+@media (max-width: 760px) {
+  /* Tiroirs Routes et Services (onglets sur plusieurs lignes) : un peu plus hauts, corps défilable, rien de coupé. */
+  #build-drawer[data-drawer="services"], #build-drawer[data-drawer="road"] { max-height: 56dvh; }
+  #build-drawer[data-drawer="services"] .drawer-body { overflow-y: auto; align-items: flex-start; }
+  #build-drawer[data-drawer="services"] .card .thumb { aspect-ratio: 16 / 9; }
+}
+/* Panneau Énergie dans le tableau de bord : le titre est déjà dans l'en-tête, on garde seulement ses boutons. */
+#dash-body .elec > h3 { font-size: 0; justify-content: flex-end; margin-bottom: 4px; }
+#dash-body .elec > h3 > span { font-size: 13px; }
