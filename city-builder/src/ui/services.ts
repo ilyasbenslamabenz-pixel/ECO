@@ -77,7 +77,7 @@ export function renderCityServices(r: SimReport | null, bar: Bar): HTMLElement {
   if (num(S.fire?.ruins) > 0) gaps.push(`${fmt(num(S.fire.ruins))} ruine(s) à démolir ou reconstruire (fiche du bâtiment).`);
   box.append(el('div', { cls: 'sec-title', text: 'Où ça manque' }));
   box.append(gaps.length ? el('ul', { cls: 'svc-gaps small' }, ...gaps.map((g) => el('li', { text: g }))) : el('p', { cls: 'small pos', text: 'Tous les habitants sont couverts par la police, les pompiers et les soins.' }));
-  box.append(el('p', { cls: 'muted small', text: 'Cartes détaillées : bouton Calques › Criminalité, Risque d’incendie, Santé.' }));
+  box.append(el('p', { cls: 'muted small', text: 'Cartes détaillées : bouton Cartes › Criminalité, Risque d’incendie, Santé.' }));
 
   // Sécurité.
   box.append(el('div', { cls: 'sec-title', text: 'Sécurité' }));

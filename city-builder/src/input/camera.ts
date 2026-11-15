@@ -3,10 +3,19 @@
  *
  * AÉRIEN (orbite autour d'un point au sol, de ~2 000 m à ~8 m) :
  *   souris   : glisser gauche = saisir et déplacer le sol (outil Sélection) ; glisser droit ou
- *              milieu = pivoter / incliner ; molette = zoom VERS LE CURSEUR ;
+ *              milieu (ou Maj + glisser gauche) = pivoter / incliner ; molette = zoom VERS LE CURSEUR ;
+ *              Maj + molette = pivoter ; glissement au bord de l'écran (option, désactivé par défaut) ;
+ *   pavé tactile (PC portable) : deux doigts = déplacer la carte dans les deux axes (proportionnel à l'altitude,
+ *              amorti comme le reste) ; pincer = zoom vers le curseur (Ctrl + molette sous Chrome/Edge,
+ *              `gesturechange` sous Safari, torsion = pivoter) ; Maj ou Alt + deux doigts = pivoter
+ *              (horizontal) / incliner (vertical) ; clic-glissé à un doigt = comme le clic gauche de la souris.
+ *              Détection pavé tactile / molette : `WheelClassifier` (deltas fractionnaires, deltaX, rythme, crans
+ *              de ~100 px, deltaMode), décision « collante » le temps d'une session de défilement ; réglage
+ *              Options › Navigation « Auto / Pavé tactile / Souris » (`inputPref`).
  *   clavier  : ZQSD (AZERTY) / WASD (QWERTY) / flèches = déplacer ; A/E (AZERTY, Q/E en QWERTY) = pivoter ;
  *              R/F ou Page↑/Page↓ = incliner ; +/- = zoom ; T = vue de dessus ; N = nord en haut ;
  *              H = retour au point de départ ; C = mode cinématique (orbite lente) ;
+ *   à l'écran : boutons pivoter ↺ ↻ et incliner ▲ ▼ près de la boussole (`rotateBy`, `tiltBy`), boussole = nord ;
  *   tactile  : 1 doigt = outil (ou déplacement avec l'outil Sélection) ; 2 doigts = déplacement
  *              du point milieu dans tous les sens + pincer (zoom vers le milieu) + torsion (rotation), quel que
  *              soit l'outil ; inclinaison = 2 doigts posés immobiles ~0,35 s puis glissés verticalement ensemble.
@@ -82,6 +91,87 @@ export function damp(current: number, goal: number, lambda: number, dt: number):
   return goal + (current - goal) * Math.exp(-lambda * dt);
 }
 
+/* ------------------------- Pavé tactile ou molette ? ------------------------- */
+
+/** Périphérique à l'origine des événements `wheel`. */
+export type WheelDevice = 'touchpad' | 'mouse';
+/** Réglage du joueur : détection automatique, ou périphérique imposé. */
+export type InputPref = 'auto' | 'touchpad' | 'mouse';
+/** Champs utiles d'un `WheelEvent` (`wheelDeltaY` : propriété historique de Chrome / Edge / Safari). */
+export interface WheelSample {
+  deltaX: number; deltaY: number; deltaMode: number; ctrlKey: boolean; shiftKey?: boolean; timeStamp: number; wheelDeltaY?: number;
+}
+
+/** Au-delà de ce silence (ms) entre deux événements `wheel`, une nouvelle session de défilement commence. */
+export const WHEEL_SESSION_GAP_MS = 350;
+/** Deux événements à petits deltas plus rapprochés que ceci (ms) : rythme d'un pavé tactile (≈ 60 à 120 Hz). */
+const TOUCHPAD_RHYTHM_MS = 30;
+/** Un cran de molette fait ~100 px (×1,25 / ×1,5 selon la mise à l'échelle de Windows) : au-delà, « cran ». */
+const NOTCH_MIN = 50;
+
+const isFrac = (v: number): boolean => Math.abs(v - Math.round(v)) > 0.01;
+
+/**
+ * Indice porté par UN événement (sans contexte) : 'touchpad', 'mouse' ou null (ambigu : petit delta entier).
+ *  - deltaMode 1 (lignes) / 2 (pages) : molette (Firefox) ;
+ *  - Ctrl + petits deltas fractionnaires : pincement du pavé tactile (Chrome / Edge) ;
+ *  - wheelDeltaY = −3 × deltaY : pavé tactile de Mac (Safari, Chrome) ;
+ *  - wheelDeltaY multiple de 120 : cran de molette (Chrome / Edge / Safari) ;
+ *  - deltaX non nul (sans Maj, qui transforme la molette en défilement horizontal) : deux doigts ;
+ *  - petit delta fractionnaire : pavé tactile de précision (Windows, densité 1,25 / 1,5) ;
+ *  - grand delta vertical seul (≥ 50 px) : cran de molette.
+ */
+export function wheelEvidence(e: WheelSample): WheelDevice | null {
+  if (e.deltaMode !== 0) return 'mouse';
+  const ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+  const wy = e.wheelDeltaY ?? 0;
+  if (e.ctrlKey) return ay < NOTCH_MIN && (isFrac(e.deltaY) || ay < 10) ? 'touchpad' : ay >= NOTCH_MIN ? 'mouse' : null;
+  if (wy !== 0 && e.deltaY !== 0 && Math.abs(wy + 3 * e.deltaY) < 0.5) return 'touchpad';
+  if (wy !== 0 && Math.abs(wy) >= 120 && wy % 120 === 0 && ax === 0) return 'mouse';
+  if (ax > 0 && !e.shiftKey && (ax < NOTCH_MIN || isFrac(e.deltaX))) return 'touchpad';
+  if (ay > 0 && ay < NOTCH_MIN && isFrac(e.deltaY)) return 'touchpad';
+  if (ay >= NOTCH_MIN && ax === 0) return 'mouse';
+  return null;
+}
+
+/**
+ * Classement des événements `wheel` en pavé tactile ou molette, « collant » le temps d'une session de défilement
+ * (événements séparés de moins de `WHEEL_SESSION_GAP_MS`) : une fois le pavé tactile reconnu, la fin d'un geste
+ * (élan, delta isolé plus grand) reste un déplacement. Une session commencée comme « molette » passe au pavé tactile
+ * sur un indice net (deltaX, fractions, rythme) ; jamais l'inverse. Un événement ambigu en début de session suit
+ * la décision de la session précédente (sinon : molette, dont l'effet d'un petit delta est négligeable).
+ */
+export class WheelClassifier {
+  /** Décision de la session en cours (null : pas encore d'indice). */
+  session: WheelDevice | null = null;
+  /** Dernière décision prise (toutes sessions confondues), null avant le premier indice. */
+  last: WheelDevice | null = null;
+  private lastT = -Infinity;
+  private lastSmall = false;
+
+  classify(e: WheelSample): WheelDevice {
+    const gap = e.timeStamp - this.lastT;
+    if (!(gap >= 0 && gap <= WHEEL_SESSION_GAP_MS)) { this.session = null; this.lastSmall = false; }
+    this.lastT = e.timeStamp;
+    const ay = Math.abs(e.deltaY);
+    const small = ay < NOTCH_MIN && Math.abs(e.deltaX) < NOTCH_MIN;
+    let ev = wheelEvidence(e);
+    // Rythme : petits deltas entiers très rapprochés (pavé tactile à densité 1, Chrome sur Mac).
+    if (ev === null && small && this.lastSmall && gap <= TOUCHPAD_RHYTHM_MS && !e.ctrlKey) ev = 'touchpad';
+    this.lastSmall = small && !e.ctrlKey;
+    if (ev === 'touchpad') this.session = 'touchpad';
+    else if (ev === 'mouse' && this.session === null) this.session = 'mouse';
+    if (this.session) this.last = this.session;
+    return this.session ?? this.last ?? 'mouse';
+  }
+
+  /** Geste de Safari (gesturestart/gesturechange) : c'est forcément un pavé tactile. */
+  markTouchpad(t: number): void { this.session = 'touchpad'; this.last = 'touchpad'; this.lastT = t; }
+}
+
+/** Marge (px CSS) du bord de la fenêtre qui fait glisser la carte quand l'option est activée. */
+export const EDGE_SCROLL_PX = 14;
+
 interface Pose { tx: number; ty: number; tz: number; dist: number; yaw: number; pitchOffset: number }
 type Gesture = 'none' | 'tool' | 'pan' | 'pan-pending' | 'orbit' | 'orbit-pending' | 'look' | 'pinch';
 
@@ -121,6 +211,18 @@ export class CameraController implements ICameraController {
   private pinchAcc = { mx: 0, my: 0, d: 0, a: 0 };
   private onModeChange: ((m: CameraMode) => void) | null = null;
   private onCinematic: ((on: boolean) => void) | null = null;
+  /** Réglage « Navigation » des options : détection automatique ou périphérique imposé. */
+  inputPref: InputPref = 'auto';
+  /** Glissement de la carte quand le curseur de la souris touche le bord de la fenêtre (option, désactivé par défaut). */
+  edgeScroll = false;
+  /** Classement des événements `wheel` (pavé tactile / molette). */
+  readonly wheelKind = new WheelClassifier();
+  /** Dernier périphérique utilisé pour naviguer (fiche des contrôles) ; null tant que rien n'a été détecté. */
+  private lastDevice: WheelDevice | 'touch' | null = null;
+  /** Dernière position du curseur de la souris (glissement au bord) ; `over` : au-dessus de la vue 3D. */
+  private mouse = { x: 0, y: 0, over: false };
+  /** Pincement / torsion Safari (gesturechange) : échelle et rotation précédentes. */
+  private gestureLast: { scale: number; rotation: number } | null = null;
 
   constructor(private camera: THREE.PerspectiveCamera, private dom: HTMLElement, private heightAt: (x: number, z: number) => number) {
     const on = <K extends keyof HTMLElementEventMap>(el: HTMLElement | Window, type: K, fn: (e: HTMLElementEventMap[K]) => void, opts?: AddEventListenerOptions): void => {
@@ -133,6 +235,21 @@ export class CameraController implements ICameraController {
     on(window, 'pointerup', (e) => this.pointerUp(e));
     on(window, 'pointercancel', (e) => this.pointerUp(e, true));
     on(dom, 'wheel', (e) => this.wheel(e), { passive: false });
+    // Pincement du pavé tactile au-dessus de l'interface (Ctrl + molette synthétique de Chrome / Edge) : jamais de
+    // zoom de la PAGE (l'interface se décalerait). Le défilement ordinaire des panneaux n'est pas touché, et ne
+    // déplace jamais la caméra (écouteur `wheel` posé sur la vue 3D seule, les panneaux n'en sont pas les enfants).
+    on(window, 'wheel', (e) => { if (e.ctrlKey && e.target !== dom) e.preventDefault(); }, { passive: false });
+    // Safari (Mac) : le pincement du pavé tactile arrive en gesturestart / gesturechange (échelle, rotation).
+    // Sur iPhone, ces événements accompagnent les doigts déjà suivis par les pointeurs : ignorés dans ce cas.
+    const gStart = (e: Event): void => { e.preventDefault(); this.gestureLast = this.pointers.size ? null : { scale: 1, rotation: 0 }; };
+    const gChange = (e: Event): void => { e.preventDefault(); this.gesture3(e as Event & { scale?: number; rotation?: number; clientX?: number; clientY?: number }); };
+    const gEnd = (): void => { this.gestureLast = null; };
+    dom.addEventListener('gesturestart', gStart);
+    dom.addEventListener('gesturechange', gChange);
+    dom.addEventListener('gestureend', gEnd);
+    this.disposers.push(() => { dom.removeEventListener('gesturestart', gStart); dom.removeEventListener('gesturechange', gChange); dom.removeEventListener('gestureend', gEnd); });
+    // Glissement au bord : le curseur quitte la fenêtre → plus de glissement.
+    on(window, 'mouseout', (e) => { if (!e.relatedTarget) this.mouse.over = false; });
     on(window, 'keydown', (e) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA')) return;

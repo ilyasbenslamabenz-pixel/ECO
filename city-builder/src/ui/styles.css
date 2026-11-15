@@ -1136,3 +1136,64 @@ body[data-tuto-cat="waste"] #family-pop [data-family-cat="waste"] { box-shadow: 
   #toasts .toast.has-act { padding-right: 6px; }
   #objectives.goal-mode #obj-toggle { min-height: 44px; }
 }
+
+/* ===== Vague 5 : menu Cartes (légende en tête, liste par thème qui défile), fiche « Pourquoi », graphiques, journal ===== */
+#layers-pop { display: flex; flex-direction: column; overflow: hidden; width: min(320px, calc(100vw - 24px)); max-height: min(540px, calc(100dvh - 230px)); }
+#layers-pop .layers-head { display: flex; justify-content: space-between; gap: 8px; flex: 0 0 auto; }
+#layers-pop .layers-cur { text-transform: none; letter-spacing: 0; color: var(--text-strong, var(--text)); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#layers-pop .layers-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+#layers-pop .layers-group { grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 6px 2px 0; }
+#layers-pop .layers-group:empty { display: none; }
+#layers-pop .layer-item span { min-width: 0; overflow-wrap: anywhere; line-height: 1.2; }
+#layers-pop .layer-check { flex: 0 0 auto; }
+#layers-pop .map-legend { flex: 0 0 auto; margin: 0 0 8px; padding: 8px; border-radius: 10px; background: rgba(var(--ink), .06); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+#layers-pop .map-grad { height: 10px; border-radius: 5px; }
+#layers-pop .map-ends { display: flex; justify-content: space-between; gap: 8px; margin: 3px 0 4px; font-size: 11.5px; color: var(--muted); }
+#layers-pop .map-ends span:last-child { text-align: right; }
+#layers-pop .map-legend p { margin: 3px 0 0; }
+#layers-pop .map-stat { font-size: 11.5px; }
+@media (max-width: 760px) {
+  #layers-pop { max-height: min(520px, calc(100dvh - 250px)); }
+  #layers-pop .layer-item { min-height: 44px; }
+  #layers-pop .map-what { display: none; } /* légende compacte au doigt : dégradé + quoi faire */
+}
+
+/* Fiche « Pourquoi » d'un bâtiment : raisons classées, action conseillée pour chacune (tient sur 390 px). */
+.why-box { grid-column: 1 / -1; margin: 6px 0 4px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(255, 170, 60, .45); background: rgba(255, 170, 60, .07); min-width: 0; overflow-wrap: anywhere; }
+.why-box.ok { border-color: rgba(61, 220, 132, .4); background: rgba(61, 220, 132, .06); }
+.why-title { font-weight: 700; font-size: 13px; margin: 0 0 4px; }
+.why-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.why-list li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 2px 8px; font-size: 12.5px; line-height: 1.3; }
+.why-list li::before { content: ''; width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; background: var(--warn); grid-row: 1 / span 2; }
+.why-list li.high::before { background: var(--danger); }
+.why-list li.low::before { background: var(--muted); }
+.why-cause { font-weight: 600; color: var(--text-strong, var(--text)); min-width: 0; }
+.why-act { color: var(--muted); min-width: 0; }
+.why-act::before { content: '→ '; }
+
+/* Graphiques d'évolution (Statistiques) : périodes et légende. */
+.hist-ranges { display: flex; gap: 6px; margin: 2px 0 8px; flex-wrap: wrap; }
+.hist-ranges button { min-height: 36px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(var(--ink), .05); font-size: 12.5px; }
+.hist-ranges button.on { background: rgba(var(--accent-rgb), .2); border-color: rgba(var(--accent-rgb), .6); color: var(--text-strong, var(--text)); font-weight: 700; }
+.hist-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin: 4px 0; }
+.hist-legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+.hist-legend i.bar { height: 10px; width: 8px; }
+.hist-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; margin: 6px 0; }
+#dash-body canvas.chart.hist { width: 100%; height: 200px; display: block; }
+@media (pointer: coarse) { .hist-ranges button { min-height: 44px; } }
+
+/* Journal des notifications : gravité, regroupements, non lues. */
+.notif-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.notif-head .chips { margin: 0; }
+.notif-list li.urgent { border-left: 3px solid var(--danger); }
+.notif-list li.important { border-left: 3px solid var(--warn); }
+.notif-list li.unread .ntext { font-weight: 650; }
+.notif-list li .nsev { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-right: 6px; }
+.notif-list li.urgent .nsev { color: var(--danger); }
+.notif-list li.important .nsev { color: var(--warn); }
+.notif-list li.info .nsev { color: var(--muted); }
+.notif-list li .ncount { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: rgba(var(--ink), .1); font-size: 11px; font-weight: 700; }
+.notif-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+.notif-filters button { min-height: 36px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: rgba(var(--ink), .05); font-size: 12px; }
+.notif-filters button.on { background: rgba(var(--accent-rgb), .2); border-color: rgba(var(--accent-rgb), .6); font-weight: 700; }
+@media (pointer: coarse) { .notif-filters button, .notif-head .chip { min-height: 44px; } }

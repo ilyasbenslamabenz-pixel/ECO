@@ -536,7 +536,7 @@ export function initUI(h: UIHandlers): UIHandle {
     const t = r.traffic;
     if (!t || !Number.isFinite(t.meanSpeedKmh)) return;
     if (t.vehicles >= 30 && t.meanSpeedKmh > 0 && t.meanSpeedKmh < 10) {
-      alertOnce('traffic', `Circulation très lente (${fmt(Math.round(t.meanSpeedKmh))} km/h en moyenne) : ouvrez Calques › Circulation pour repérer les bouchons, puis élargissez ou doublez les axes saturés.`, 15 * 60_000);
+      alertOnce('traffic', `Circulation très lente (${fmt(Math.round(t.meanSpeedKmh))} km/h en moyenne) : ouvrez Cartes › Trafic (saturation) pour repérer les bouchons, puis élargissez ou doublez les axes saturés.`, 15 * 60_000);
     } else if (t.meanSpeedKmh >= 18) rearm('traffic');
   };
 

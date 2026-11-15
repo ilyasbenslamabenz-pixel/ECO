@@ -21,6 +21,7 @@ import { ameliorationsSaveSection } from './ameliorations';
 import { busSaveSection } from './bus';
 import { objectifsSaveSection } from './objectifs';
 import { evenementsSaveSection } from './evenements';
+import { historiqueSaveSection } from './historique';
 import type { SaveSectionSpec } from './types';
 
 export type { SaveSectionSpec } from './types';
@@ -45,4 +46,5 @@ export const SAVE_SECTIONS: readonly SaveSectionSpec<unknown>[] = [
   busSaveSection,
   objectifsSaveSection,
   evenementsSaveSection,
+  historiqueSaveSection,
 ];

@@ -136,6 +136,7 @@ export class PluginHost {
         const h = sim.economy.history[sim.economy.history.length - 1];
         return h ? { ...h, income: { ...h.income }, expenses: { ...h.expenses } } : undefined;
       },
+      history: () => sim.economy.history.map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } })),
     };
     const development: PluginDevelopment = {
       place: (a) => {

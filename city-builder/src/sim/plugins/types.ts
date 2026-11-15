@@ -116,6 +116,8 @@ export interface PluginEconomy {
   readonly taxRates: Readonly<Record<TaxSector, number>>;
   /** Dernier bilan mensuel clos (copie ; undefined avant le premier mois). */
   lastMonth(): MonthRecord | undefined;
+  /** Historique mensuel complet (copies, du plus ancien au plus récent ; facultatif : absent des façades de test). */
+  history?(): MonthRecord[];
   /**
    * Recette (+) ou dépense (−) d'un service municipal, appliquée tout de suite à la trésorerie. `oneOff` = montant
    * ponctuel (investissement, prime, travaux) : compté au bilan du mois mais pas dans le solde prévu / horaire.

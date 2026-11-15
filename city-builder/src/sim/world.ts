@@ -304,6 +304,8 @@ export class Simulation {
     this.plugins.service<{ attachCore?(core: unknown): void }>('services')?.attachCore?.(this.demography.services);
     // Transports en commun (module « bus ») : démographie (navetteurs, embauche, satisfaction) et trafic (demande auto).
     this.plugins.service<{ attachCore?(core: unknown): void }>('bus')?.attachCore?.({ demography: this.demography, traffic: this.traffic });
+    // Cartes d'information (vague 5) : lecture seule de la démographie, calculées seulement quand elles sont affichées.
+    this.plugins.service<{ attachCore?(core: unknown): void }>('cartes')?.attachCore?.(this.demography);
     this.demography.districtOf = (id) => this.plugins.service<SecteursService>('secteurs')?.sectorOf?.(id) ?? null;
     this.demography.companyTaxRate = (sector) => (sector === 1 ? this.economy.taxRates.commercial : sector === 2 ? this.economy.taxRates.industrial : sector === 3 ? this.economy.taxRates.office : 0);
   }
