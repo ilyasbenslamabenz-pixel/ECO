@@ -217,9 +217,45 @@ export interface BuildingOccupancy {
   economy?: { landValue: number; rent: number; householdsInDistress: number };
   /** Services (vague 2) : criminalité, risque d'incendie, santé, état (feu, endommagé, ruine), couverture. */
   safety?: BuildingSafety;
+  /** Interface (vague 5) : éléments de la fiche « Pourquoi » (facultatif : absent des simulations plus anciennes). */
+  diagnosis?: BuildingDiagnosis;
   services: string[];
   occupants: CitizenInfo[];
   employees: CitizenInfo[];
+}
+
+/**
+ * Fiche « Pourquoi » d'un bâtiment (docs/INTERFACE.md) : données brutes, mises en mots par l'interface
+ * (src/ui/why.ts). Aucune valeur inventée : tout vient des calculs quotidiens de la simulation.
+ */
+export interface BuildingDiagnosis {
+  /** Points de satisfaction moyens par habitant du bâtiment, par facteur (même calcul que le jour), vide sans habitant. */
+  factors: { key: string; label: string; delta: number }[];
+  /** Logement entièrement vide : raison principale (même règle que `vacancyReasons`), null sinon. */
+  vacancy: keyof VacancyReasons | null;
+  /** Réseaux : 0 desservi, 1 coupé (raccordé mais délesté), 2 hors de tout réseau. */
+  power: number;
+  water: number;
+  /** Pénalités « sans service » appliquées (0 pendant la période de grâce, 1 à plein). */
+  ramp: number;
+  /** Effort moyen des ménages du logement (loyer / ressources), null sans ménage ; part soutenable. */
+  rentBurden: number | null;
+  sustainableShare: number;
+  /** Habitants actifs (18-63 ans hors études) et chômeurs du bâtiment. */
+  labor: number;
+  unemployed: number;
+  /** Ville : chômeurs (dernier calcul quotidien) ; emplois offerts par ce bâtiment (courant, entreprise ouverte). */
+  cityUnemployed: number;
+  jobsOffered: boolean;
+  /** Entreprise : employés sous-qualifiés, diplôme exigé, clientèle (1 = normale), part du loyer dans le chiffre d'affaires. */
+  underqualified: number;
+  requiredEducation: string | null;
+  customers: number | null;
+  rentShare: number | null;
+  /** Clé de la raison des difficultés (`CLOSURE_REASONS`), null sinon. */
+  reasonKey: string | null;
+  /** Desserte en bus du logement (points de satisfaction, 0 sans ligne). */
+  transit: number;
 }
 
 export interface DemographyJSON {
@@ -988,62 +1024,21 @@ export class DemographySystem {
     const fs = this.factorSum;
     fs.fill(0);
     const ramp = this.noServiceRamp();
-    const parts = this.parts;
+    this.lastTaxRate = residentialTaxRate;
     const homeCache = new Map<number, Float64Array>();
     const homeParts = (bi: number): Float64Array => {
       const id = b.id[bi]!;
       let v = homeCache.get(id);
       if (v) return v;
-      v = new Float64Array(7); // électricité, eau, déchets, bruit, politiques, total, (réservé)
-      parts.fill(0);
-      if (this.serviceSatisfactionParts) { v[5] = this.serviceSatisfactionParts(id, parts); for (let k = 0; k < 5; k++) v[k] = parts[k]!; }
-      else { const t = this.serviceSatisfaction(id); v[3] = t; v[5] = t; }
-      // Sans électricité / sans eau (hors de tout réseau, y compris avant la première installation) : pénalité
-      // progressive après la période de grâce du début de partie.
-      if (ramp > 0) {
-        if (this.powerState(id) === 2) { v[0]! -= NO_POWER_PENALTY * ramp; v[5]! -= NO_POWER_PENALTY * ramp; }
-        if (this.waterState(id) === 2) { v[1]! -= NO_WATER_PENALTY * ramp; v[5]! -= NO_WATER_PENALTY * ramp; }
-      }
+      v = this.homePartsOf(bi, ramp, new Float64Array(7));
       homeCache.set(id, v);
       return v;
     };
     for (let i = 0; i < this.citizens.count; i++) {
       const age = this.ageOf(i, now);
       const bi = b.indexOf(c.home[i]!);
-      let t = 55;
-      const add = (f: number, v: number): void => { t += v; fs[f]! += v; };
-      if (bi < 0 || !b.roadAccess[bi]) add(F.logement, -30);
-      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) add(F.emploi, c.job[i]! >= 0 ? 12 : -18);
-      // Emploi très en dessous de son niveau (supérieur dans un poste sans diplôme) : légère insatisfaction.
-      if (c.job[i]! >= 0 && c.education[i] === Education.Higher) { const jm = this.metaOfIndex(b.indexOf(c.job[i]!)); if (jm && jm.reqTier === 0) add(F.emploi, -3); }
-      // Coût du logement (effort du ménage), après la période de grâce.
       const hkr = this.households.indexOf(c.household[i]!);
-      if (ramp > 0 && hkr >= 0) add(F.loyer, rentSatisfaction(this.living.tuning, this.living.burdenOf(hkr), ramp));
-      if (bi >= 0) {
-        const cov = this.coverage;
-        if (age < 18) add(F.education, cov[Service.Education]![bi] ? 8 : -10);
-        add(F.sante, cov[Service.Health]![bi] ? 7 : -7);
-        add(F.police, cov[Service.Police]![bi] ? 5 : -5);
-        add(F.pompiers, cov[Service.Fire]![bi] ? 5 : -5);
-        // Services qui comptent : criminalité du logement, maladie, santé du logement, dégâts d'un incendie.
-        const hid = b.id[bi]!;
-        const st = this.services.tuning;
-        const crime = this.services.crimeOf(hid);
-        if (crime > 0) add(F.police, -(crime / 100) * st.crimeSatisfaction);
-        if (c.sick[i]! > 0) add(F.sante, -st.maladieSatisfaction);
-        const hl = ramp > 0 ? this.services.healthOf(hid) : -1;
-        if (hl >= 0 && hl < 60) add(F.sante, -(60 - hl) * st.santeSatisfaction * ramp);
-        if (this.services.isDamaged(hid)) add(F.pompiers, -st.feuSatisfaction);
-        add(F.loisirs, cov[Service.Leisure]![bi] ? 6 : -2);
-        add(F.equipements, Math.min(8, this.attractAt[bi]! * 2));
-        add(F.pollution, -Math.min(20, this.pollutionAt[bi]! * 6));
-        const hp = homeParts(bi);
-        add(F.electricite, hp[0]!); add(F.eau, hp[1]!); add(F.dechets, hp[2]!); add(F.bruit, hp[3]!); add(F.politiques, hp[4]!);
-      }
-      add(F.trajet, -Math.min(15, c.commute[i]! / 400));
-      // Bonne desserte en bus du logement (0 sans ligne).
-      if (bi >= 0) { const tb = this.transitSatisfaction(b.id[bi]!); if (tb !== 0) add(F.trajet, tb); }
-      add(F.impots, -taxPenalty);
+      let t = this.scoreCitizen(i, age, bi, hkr, ramp, taxPenalty, homeParts, fs);
       t = t < 0 ? 0 : t > 100 ? 100 : t;
       c.happiness[i] = c.happiness[i]! * 0.8 + t * 0.2;
       const hk = hkr;
@@ -1100,6 +1095,102 @@ export class DemographySystem {
     // 6) Économie vivante : ménages en difficulté durable -> logement moins cher, sinon départ (plafonnés).
     this.living.resolve(now);
   }
+
+  /** Taux de l'impôt résidentiel du dernier calcul quotidien (fiche « Pourquoi » d'un bâtiment). */
+  private lastTaxRate = 0;
+
+  /**
+   * Satisfaction apportée au logement d'index `bi` par les modules : électricité, eau, déchets, bruit, politiques, total
+   * (`v[0..5]`), pénalités « sans réseau » comprises après la période de grâce.
+   */
+  private homePartsOf(bi: number, ramp: number, v: Float64Array): Float64Array {
+    const id = this.ctx.buildings.id[bi]!;
+    const parts = this.parts;
+    parts.fill(0);
+    if (this.serviceSatisfactionParts) { v[5] = this.serviceSatisfactionParts(id, parts); for (let k = 0; k < 5; k++) v[k] = parts[k]!; }
+    else { const t = this.serviceSatisfaction(id); v[3] = t; v[5] = t; }
+    // Sans électricité / sans eau (hors de tout réseau, y compris avant la première installation) : pénalité
+    // progressive après la période de grâce du début de partie.
+    if (ramp > 0) {
+      if (this.powerState(id) === 2) { v[0]! -= NO_POWER_PENALTY * ramp; v[5]! -= NO_POWER_PENALTY * ramp; }
+      if (this.waterState(id) === 2) { v[1]! -= NO_WATER_PENALTY * ramp; v[5]! -= NO_WATER_PENALTY * ramp; }
+    }
+    return v;
+  }
+
+  /**
+   * Satisfaction cible d'un habitant (avant bornage 0..100) : chaque facteur est ajouté à la fois au total et à
+   * `fs[facteur]`, dans un ordre fixe (calcul quotidien et fiche « Pourquoi » d'un bâtiment donnent les mêmes points).
+   */
+  private scoreCitizen(i: number, age: number, bi: number, hkr: number, ramp: number, taxPenalty: number, homeParts: (bi: number) => Float64Array, fs: Float64Array): number {
+    const c = this.citizens.col;
+    const b = this.ctx.buildings;
+    let t = 55;
+    const add = (f: number, v: number): void => { t += v; fs[f]! += v; };
+    if (bi < 0 || !b.roadAccess[bi]) add(F.logement, -30);
+    if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) add(F.emploi, c.job[i]! >= 0 ? 12 : -18);
+    // Emploi très en dessous de son niveau (supérieur dans un poste sans diplôme) : légère insatisfaction.
+    if (c.job[i]! >= 0 && c.education[i] === Education.Higher) { const jm = this.metaOfIndex(b.indexOf(c.job[i]!)); if (jm && jm.reqTier === 0) add(F.emploi, -3); }
+    // Coût du logement (effort du ménage), après la période de grâce.
+    if (ramp > 0 && hkr >= 0) add(F.loyer, rentSatisfaction(this.living.tuning, this.living.burdenOf(hkr), ramp));
+    if (bi >= 0) {
+      const cov = this.coverage;
+      if (age < 18) add(F.education, cov[Service.Education]![bi] ? 8 : -10);
+      add(F.sante, cov[Service.Health]![bi] ? 7 : -7);
+      add(F.police, cov[Service.Police]![bi] ? 5 : -5);
+      add(F.pompiers, cov[Service.Fire]![bi] ? 5 : -5);
+      // Services qui comptent : criminalité du logement, maladie, santé du logement, dégâts d'un incendie.
+      const hid = b.id[bi]!;
+      const st = this.services.tuning;
+      const crime = this.services.crimeOf(hid);
+      if (crime > 0) add(F.police, -(crime / 100) * st.crimeSatisfaction);
+      if (c.sick[i]! > 0) add(F.sante, -st.maladieSatisfaction);
+      const hl = ramp > 0 ? this.services.healthOf(hid) : -1;
+      if (hl >= 0 && hl < 60) add(F.sante, -(60 - hl) * st.santeSatisfaction * ramp);
+      if (this.services.isDamaged(hid)) add(F.pompiers, -st.feuSatisfaction);
+      add(F.loisirs, cov[Service.Leisure]![bi] ? 6 : -2);
+      add(F.equipements, Math.min(8, this.attractAt[bi]! * 2));
+      add(F.pollution, -Math.min(20, this.pollutionAt[bi]! * 6));
+      const hp = homeParts(bi);
+      add(F.electricite, hp[0]!); add(F.eau, hp[1]!); add(F.dechets, hp[2]!); add(F.bruit, hp[3]!); add(F.politiques, hp[4]!);
+    }
+    add(F.trajet, -Math.min(15, c.commute[i]! / 400));
+    // Bonne desserte en bus du logement (0 sans ligne).
+    if (bi >= 0) { const tb = this.transitSatisfaction(b.id[bi]!); if (tb !== 0) add(F.trajet, tb); }
+    add(F.impots, -taxPenalty);
+    return t;
+  }
+
+  /**
+   * Agrégats des habitants par bâtiment (index) pour les cartes d'information : bonheur, éducation des adultes
+   * (0..4), actifs et chômeurs. Une passe sur les citoyens ; tampons réutilisés (lecture seule pour l'appelant).
+   */
+  residentAggregates(now: number): { happy: Float32Array; count: Uint32Array; eduSum: Float32Array; adults: Uint32Array; labor: Uint32Array; unemployed: Uint32Array } {
+    const b = this.ctx.buildings;
+    const n = b.count;
+    const a = this.agg;
+    if (a.happy.length < n) {
+      const cap = Math.max(16, b.capacity);
+      a.happy = new Float32Array(cap); a.count = new Uint32Array(cap); a.eduSum = new Float32Array(cap);
+      a.adults = new Uint32Array(cap); a.labor = new Uint32Array(cap); a.unemployed = new Uint32Array(cap);
+    }
+    a.happy.fill(0, 0, n); a.count.fill(0, 0, n); a.eduSum.fill(0, 0, n); a.adults.fill(0, 0, n); a.labor.fill(0, 0, n); a.unemployed.fill(0, 0, n);
+    const c = this.citizens.col;
+    for (let i = 0; i < this.citizens.count; i++) {
+      const bi = b.indexOf(c.home[i]!);
+      if (bi < 0) continue;
+      a.happy[bi]! += c.happiness[i]!;
+      a.count[bi]!++;
+      const age = this.ageOf(i, now);
+      if (age >= 18) { a.adults[bi]!++; a.eduSum[bi]! += c.education[i]!; }
+      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { a.labor[bi]!++; if (c.job[i]! < 0) a.unemployed[bi]!++; }
+    }
+    return a;
+  }
+  private agg = { happy: new Float32Array(0), count: new Uint32Array(0), eduSum: new Float32Array(0), adults: new Uint32Array(0), labor: new Uint32Array(0), unemployed: new Uint32Array(0) };
+
+  /** Logement résidentiel (index) : places de logement du modèle (0 pour un bâtiment sans logement). */
+  housingCapacityAt(bi: number): number { return this.metaOfIndex(bi)?.resCap ?? 0; }
 
   /* ------------------------------ Migrations ------------------------------ */
 
@@ -1619,9 +1710,34 @@ export class DemographySystem {
     const occupants: CitizenInfo[] = [];
     const employees: CitizenInfo[] = [];
     const c = this.citizens.col;
+    // Fiche « Pourquoi » : facteurs de satisfaction de TOUS les habitants (même calcul que le jour), chômage, qualification.
+    const ramp = this.noServiceRamp();
+    const fsum = new Float64Array(FACTOR_COUNT);
+    const hp = this.homePartsOf(bi, ramp, new Float64Array(7));
+    const taxPenalty = residentialTaxPenalty(this.lastTaxRate);
+    let scored = 0, labor = 0, unemployed = 0, under = 0;
     for (let i = 0; i < this.citizens.count; i++) {
-      if (c.home[i] === id && occupants.length < limit) occupants.push(this.citizenInfo(i, now));
-      if (c.job[i] === id && employees.length < limit) employees.push(this.citizenInfo(i, now));
+      if (c.home[i] === id) {
+        if (occupants.length < limit) occupants.push(this.citizenInfo(i, now));
+        const age = this.ageOf(i, now);
+        this.scoreCitizen(i, age, bi, this.households.indexOf(c.household[i]!), ramp, taxPenalty, () => hp, fsum);
+        scored++;
+        if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { labor++; if (c.job[i]! < 0) unemployed++; }
+      }
+      if (c.job[i] === id) {
+        if (employees.length < limit) employees.push(this.citizenInfo(i, now));
+        if (c.education[i]! < m.reqEdu) under++;
+      }
+    }
+    let burdenSum = 0, burdenN = 0;
+    for (let hk = 0; hk < this.households.count; hk++) if (this.households.col.home[hk] === id) { burdenSum += this.living.burdenOf(hk); burdenN++; }
+    let vacancy: keyof VacancyReasons | null = null;
+    if (m.resCap > 0 && b.residents[bi] === 0) {
+      const ws = this.waterState(id), ps = this.powerState(id);
+      const inc = this.living.householdIncomeAverage;
+      const rentCap = ramp > 0 && inc > 0 ? (this.living.tuning.partSoutenable * inc) / 1.05 : Infinity;
+      vacancy = !b.roadAccess[bi] ? 'sansAcces' : ws === 1 || (ws === 2 && ramp > 0) ? 'sansEau' : ps === 1 || (ps === 2 && ramp > 0) ? 'sansElectricite'
+        : bi < this.living.rentUnit.length && this.living.rentUnit[bi]! > rentCap ? 'loyerEleve' : 'demandeFaible';
     }
     const k = this.companies.indexOf(id);
     const sectorNames = SECTOR_FR;

@@ -505,6 +505,8 @@ export class LivingEconomy {
   }
 
   get ramp(): number { return this.lastRamp; }
+  /** Ressources moyennes des ménages logés au dernier calcul quotidien (0 avant le premier jour). */
+  get householdIncomeAverage(): number { return this.stats?.householdIncomeAverage ?? 0; }
 
   /* ------------------------------ Sauvegarde ------------------------------ */
 

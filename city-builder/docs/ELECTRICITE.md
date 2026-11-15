@@ -188,3 +188,8 @@ meshopt) : 0,84 Mo (budget de l'étape : 2 Mo).
   `elec-ligne-rue.png`, `elec-calque.png`, `elec-calque-panneau.png`, `elec-barrage.png`, `elec-poste.png` ;
   planche-contact `tests/e2e/out/planche-contact.png`.
 - `npm run assets:validate` : seule la règle de source `tools/power/` échoue (demande §4 de `docs/requests/electricite.md`).
+- Batteries, conseil et raccordement (2026-11-15) : `npx tsc --noEmit -p .` ✓ ; `npm test` 603/603 (dont 7 dans
+  `tests/electricite/stockage.test.ts` : rendement 85 %, catalogue, facteur de charge éolien, scénario 7 éoliennes +
+  3 fermes solaires la nuit sans vent — sans batterie : coupure et conseil unique ; avec batteries chargées : 7 h
+  sans coupure ; avec raccordement : alimentée —, sauvegarde ancienne partie et niveau de charge) ; `npm run build`
+  ✓ (45,9 Mo / 60) ; `npm run e2e`, `npm run e2e:play`, `npm run e2e:mobile` SUCCÈS.
