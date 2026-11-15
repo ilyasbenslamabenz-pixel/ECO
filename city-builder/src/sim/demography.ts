@@ -1102,7 +1102,6 @@ export class DemographySystem {
 
   private wageBuf = new Float64Array(0);
   private underBuf = new Uint32Array(0);
-  private readonly qtmp: number[] = [];
 
   /**
    * Assiettes fiscales mensuelles (et comptes des entreprises si `commit`). Économie vivante : le chiffre d'affaires
@@ -1145,6 +1144,7 @@ export class DemographySystem {
     L.refreshBuildings(this.buildingsVersion);
     const cc = this.companies.col;
     const isCommercial = (j: number): boolean => this.metaOfIndex(j)?.sector === Sector.Commercial;
+    if (commit) L.prepareCustomers(WORKER_CUSTOMER_SHARE, isCommercial);
     const accounts: ({ workers: number; jobCap: number; under: number; customers: number; revenue: number; rent: number; profit: number } | null)[] = commit ? new Array(this.companies.count).fill(null) : [];
     for (let k = 0; k < this.companies.count; k++) {
       const id = cc.id[k]!;
@@ -1155,7 +1155,7 @@ export class DemographySystem {
       const sector = cc.sector[k]!;
       if (cc.status[k] === CompanyStatus.Closed) { if (commit) { cc.revenue[k] = 0; cc.profit[k] = 0; cc.rent[k] = 0; cc.tax[k] = 0; } continue; }
       const workers = b.workers[bi]!;
-      if (commit && sector === Sector.Commercial) cc.customers[k] = L.localCustomers(bi, m, RESIDENTS_PER_COMMERCIAL_JOB, WORKER_CUSTOMER_SHARE, isCommercial, this.qtmp);
+      if (commit && sector === Sector.Commercial) cc.customers[k] = L.localCustomers(bi, m, RESIDENTS_PER_COMMERCIAL_JOB);
       const cust = sector === Sector.Commercial ? (cc.customers[k]! > 0 ? 0.5 * demandFactor + 0.5 * cc.customers[k]! : demandFactor) : 1;
       const effective = workers - (1 - t.productiviteSousQualifie) * Math.min(workers, under[bi]!);
       const revenue = effective * (REVENUE_PER_WORKER[sector] ?? 0) * cust;

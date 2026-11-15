@@ -31,12 +31,16 @@ const stamps: number[] = [];
 const frameHooks: ((now: number) => void)[] = [];
 let recording = false;
 let hiddenSeen = false;
+/** Dernier retrait de l'écran de chargement (performance.now) : la ville devient visible et jouable. */
+let revealAt = 0;
 
 /** Démarre l'enregistrement des images (au tout début du démarrage, pour mesurer le chargement). */
 export function startBenchRecorder(): void {
   if (recording || typeof requestAnimationFrame === 'undefined') return;
   recording = true;
   document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenSeen = true; });
+  const loading = document.getElementById('loading');
+  if (loading) new MutationObserver(() => { if (loading.classList.contains('hidden')) revealAt = performance.now(); }).observe(loading, { attributes: true, attributeFilter: ['class'] });
   const tick = (): void => {
     const now = performance.now();
     stamps.push(now);
@@ -163,8 +167,12 @@ function gpuInfo(r: THREE.WebGLRenderer): { gpu: string; vendor: string; webgl: 
 
 /* ------------------------------ Parcours ------------------------------ */
 
-/** Joue le parcours puis affiche les résultats. `readyAt` : instant (performance.now) où la ville est jouable. */
-export async function runBench(h: BenchHost, opts: BenchOptions, readyAt: number): Promise<BenchResult> {
+/**
+ * Joue le parcours puis affiche les résultats. `doneAt` : fin du lancement de la démo (performance.now) ; « jouable »
+ * est le dernier retrait de l'écran de chargement (repli : `doneAt`).
+ */
+export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number): Promise<BenchResult> {
+  const readyAt = revealAt > 0 && revealAt <= doneAt ? revealAt : doneAt;
   const warmS = opts.short ? 1 : 5, preS = opts.short ? 0.5 : 3, measS = opts.short ? 2 : 15, cpuN = opts.short ? 3 : 20;
   const badge = progressBadge(h.quality);
   const warnings: string[] = [];

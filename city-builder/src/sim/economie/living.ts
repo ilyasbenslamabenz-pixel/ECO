@@ -101,6 +101,8 @@ const zero = (): LivingCounters => ({ relocations: 0, departuresRent: 0, closure
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const WORK_MIN = 18, WORK_MAX = 64;
 const GRID_M = 500;
+/** Case de la grille de clientèle des commerces (m). */
+const CELL_M = 100;
 const MAX_LOG = 24;
 
 /** Nom d'îlot de la grille de 500 m (colonne en lettre, rangée en chiffre). */
@@ -365,25 +367,54 @@ export class LivingEconomy {
     return businessRent(this.tuning, land, m.level, m.jobCap);
   }
 
-  /**
-   * Clientèle locale d'un commerce (0,25..1,25) : habitants et actifs dans son rayon d'attraction, partagés avec les
-   * employés des commerces du même rayon (1 emploi commercial « nourri » pour `perJob` clients).
-   */
-  localCustomers(bi: number, m: LivingMeta, perJob: number, workerShare: number, commercial: (bj: number) => boolean, tmp: number[]): number {
+  // Grille de clientèle (cases de CELL_M) : habitants, actifs et employés des commerces par case, construite une fois
+  // par clôture mensuelle (O(bâtiments)) ; chaque commerce somme ensuite les cases de son rayon (O(cases du rayon)).
+  private gridRes = new Float64Array(0);
+  private gridCom = new Float64Array(0);
+  private gx0 = 0; private gz0 = 0; private gw = 0; private gh = 0;
+
+  /** Prépare la grille de clientèle (à appeler avant `localCustomers`, une fois par clôture). */
+  prepareCustomers(workerShare: number, commercial: (bj: number) => boolean): void {
     const b = this.host.ctx.buildings;
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i < b.count; i++) { const x = b.x[i]!, z = b.z[i]!; if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+    if (!(x1 >= x0)) { this.gw = this.gh = 0; return; }
+    this.gx0 = x0; this.gz0 = z0;
+    this.gw = Math.floor((x1 - x0) / CELL_M) + 1; this.gh = Math.floor((z1 - z0) / CELL_M) + 1;
+    const n = this.gw * this.gh;
+    if (this.gridRes.length < n) { this.gridRes = new Float64Array(n); this.gridCom = new Float64Array(n); }
+    this.gridRes.fill(0, 0, n); this.gridCom.fill(0, 0, n);
+    for (let i = 0; i < b.count; i++) {
+      const k = Math.floor((b.z[i]! - z0) / CELL_M) * this.gw + Math.floor((b.x[i]! - x0) / CELL_M);
+      this.gridRes[k]! += b.residents[i]! + workerShare * b.workers[i]!;
+      if (commercial(i)) this.gridCom[k]! += b.workers[i]!;
+    }
+  }
+
+  /**
+   * Clientèle locale d'un commerce (0,25..1,25) : habitants et actifs dans son rayon d'attraction (pondérés par
+   * 1 − d / 2R), partagés avec les employés des commerces du même rayon (1 emploi commercial « nourri » pour
+   * `perJob` clients). Utilise la grille de `prepareCustomers`.
+   */
+  localCustomers(bi: number, m: LivingMeta, perJob: number): number {
+    const b = this.host.ctx.buildings;
+    if (this.gw === 0) return 1;
     const R = Math.max(250, Math.min(1500, m.radius));
     const x = b.x[bi]!, z = b.z[bi]!;
-    this.host.ctx.buildingIndex.query(x - R, z - R, x + R, z + R, tmp);
+    const c0 = Math.max(0, Math.floor((x - R - this.gx0) / CELL_M)), c1 = Math.min(this.gw - 1, Math.floor((x + R - this.gx0) / CELL_M));
+    const r0 = Math.max(0, Math.floor((z - R - this.gz0) / CELL_M)), r1 = Math.min(this.gh - 1, Math.floor((z + R - this.gz0) / CELL_M));
     let customers = 0, competitors = 0;
-    for (const id of tmp) {
-      const j = b.indexOf(id);
-      if (j < 0) continue;
-      const dx = b.x[j]! - x, dz = b.z[j]! - z;
-      const d2 = dx * dx + dz * dz;
-      if (d2 > R * R) continue;
-      const w = 1 - 0.5 * Math.sqrt(d2) / R;
-      customers += (b.residents[j]! + workerShare * b.workers[j]!) * w;
-      if (commercial(j)) competitors += b.workers[j]! * w;
+    for (let r = r0; r <= r1; r++) {
+      const cz = this.gz0 + (r + 0.5) * CELL_M - z;
+      for (let c = c0; c <= c1; c++) {
+        const cx = this.gx0 + (c + 0.5) * CELL_M - x;
+        const d2 = cx * cx + cz * cz;
+        if (d2 > R * R) continue;
+        const k = r * this.gw + c;
+        const w = 1 - 0.5 * Math.sqrt(d2) / R;
+        customers += this.gridRes[k]! * w;
+        competitors += this.gridCom[k]! * w;
+      }
     }
     competitors = Math.max(competitors, b.workers[bi]!, 1);
     const f = customers / perJob / competitors;
