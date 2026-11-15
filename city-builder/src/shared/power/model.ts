@@ -4,7 +4,8 @@
  */
 import type { CatalogAsset } from '../catalog';
 import {
-  type ConsumerClass, type FacilityKind, type PlantType, TAG_KW_PREFIX, TAG_PLANT_PREFIX, TAG_SUBSTATION,
+  type ConsumerClass, type FacilityKind, type PlantType, TAG_BATTERY, TAG_KW_PREFIX, TAG_KWH_PREFIX, TAG_PLANT_PREFIX,
+  TAG_SUBSTATION,
 } from './types';
 
 /** Caractéristiques d'une installation (valeurs par défaut ; la puissance peut être surchargée au catalogue). */
@@ -33,7 +34,39 @@ export const FACILITY_SPECS: Record<FacilityKind, FacilitySpec> = {
   solaire: { kind: 'solaire', nameFr: 'Ferme solaire', nominalKw: 6_000, radius: 300, meritCost: 1, failurePerHour: 0.0004, repairHours: 6, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 0 },
   hydro: { kind: 'hydro', nameFr: 'Barrage hydroélectrique', nominalKw: 30_000, radius: 400, meritCost: 3, failurePerHour: 0.0006, repairHours: 24, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 0.5 },
   poste: { kind: 'poste', nameFr: 'Poste de transformation', nominalKw: 45_000, radius: 700, meritCost: 0, failurePerHour: 0.0005, repairHours: 8, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 0.5 },
+  // Batteries : puissance max de charge / décharge ; appelées APRÈS les centrales locales (thermique comprise) et
+  // AVANT le réseau voisin (coût de mérite entre les deux).
+  batterie: { kind: 'batterie', nameFr: 'Batteries de stockage', nominalKw: 2_000, radius: 300, meritCost: 50, failurePerHour: 0.0004, repairHours: 8, airPerHourAtFull: 0, airRadius: 0, noisePerHourAtFull: 0.2 },
 };
+
+/**
+ * Batteries de stockage (lithium-fer-phosphate, conteneurs) : capacité (kWh), puissance max (kW, `FACILITY_SPECS`),
+ * rendement aller-retour (85 % : la moitié des pertes à la charge, l'autre à la décharge, soit √0,85 ≈ 92 % par
+ * sens). Chargées UNIQUEMENT par le surplus des centrales locales (pas par le réseau voisin), une heure de jeu à la fois.
+ */
+export const BATTERY_SPEC = { capacityKwh: 8_000, roundTrip: 0.85 } as const;
+/** Rendement d'un sens (charge ou décharge). */
+export const BATTERY_ONE_WAY = Math.sqrt(BATTERY_SPEC.roundTrip);
+
+/** Capacité (kWh) d'un modèle de batteries (étiquette `elec:kwh:N`, sinon valeur par défaut). */
+export function capacityKwhOf(asset: Pick<CatalogAsset, 'tags'>): number {
+  for (const t of asset.tags) {
+    if (t.startsWith(TAG_KWH_PREFIX)) {
+      const v = Number(t.slice(TAG_KWH_PREFIX.length));
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+  }
+  return BATTERY_SPEC.capacityKwh;
+}
+
+/**
+ * Un pas d'une heure d'une batterie : énergie stockée après échange de `kw` (> 0 charge, < 0 décharge) pendant
+ * `hours` h, bornée à [0, capacité]. Les pertes s'appliquent à chaque sens (rendement aller-retour `BATTERY_SPEC`).
+ */
+export function batteryStep(storedKwh: number, capacityKwh: number, kw: number, hours = 1): number {
+  const next = kw >= 0 ? storedKwh + kw * hours * BATTERY_ONE_WAY : storedKwh + (kw * hours) / BATTERY_ONE_WAY;
+  return Math.min(capacityKwh, Math.max(0, next));
+}
 
 /** Lignes haute tension. */
 export const LINE_SPEC = {
@@ -80,6 +113,7 @@ export function facilityKindOf(asset: Pick<CatalogAsset, 'tags'> | undefined): F
   if (!asset) return undefined;
   for (const t of asset.tags) {
     if (t === TAG_SUBSTATION) return 'poste';
+    if (t === TAG_BATTERY) return 'batterie';
     if (t.startsWith(TAG_PLANT_PREFIX)) {
       const k = t.slice(TAG_PLANT_PREFIX.length);
       if (k === 'thermique' || k === 'eolien' || k === 'solaire' || k === 'hydro') return k;

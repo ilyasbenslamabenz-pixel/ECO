@@ -35,13 +35,14 @@ test('catalogue fusionné : ≥ 30 bâtiments distincts répartis dans toutes le
   assert.ok(by('street_furniture') >= 6);
   // Chaque bâtiment a 3 LOD, des variantes et une silhouette propre (dimensions toutes différentes).
   // Exception déclarée : un modèle réutilisé volontairement (étiquette `reutilise:<id>`, ex. le dépôt de bus sur le modèle
-  // du dépôt de camions-bennes, faute de modèle dédié) partage la silhouette de son original, qui doit exister.
+  // du dépôt de camions-bennes, les batteries de stockage sur celui du poste de transformation, faute de modèle dédié)
+  // partage la silhouette de son original, qui doit exister.
   const reused = buildings.filter((a) => a.tags.some((t) => t.startsWith('reutilise:')));
   for (const a of reused) { const src = a.tags.find((t) => t.startsWith('reutilise:'))!.slice(10); assert.ok(buildings.some((b) => b.id === src), `${a.id} : original ${src}`); }
   const own = buildings.filter((a) => !reused.includes(a));
   const dims = new Set(own.map((a) => `${a.dimensions.width}|${a.dimensions.depth}|${a.dimensions.height}`));
   assert.equal(dims.size, own.length);
-  assert.ok(reused.length <= 1, 'réutilisations limitées');
+  assert.ok(reused.length <= 2, 'réutilisations limitées');
   for (const a of buildings) { assert.equal(a.lods.length, 3, a.id); assert.ok(a.variants.length >= 3, a.id); }
   assert.equal(SAVE_FORMAT_VERSION, CURRENT_SAVE_VERSION);
 });

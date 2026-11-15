@@ -450,6 +450,8 @@ async function boot(): Promise<void> {
   // Construction (miroir de la simulation, outils, aperçus) : branchée AVANT le premier instantané.
   const cons = initConstruction({ sim: b, ui, input, scene: render.ctx.scene, models: lib, catalog, heightAt: (x, z) => render.terrain.heightAt(x, z), renderer: render.ctx.renderer, lite: render.profile.lite });
   render.ctx.onFrame.push((dt) => cons.update(dt));
+  // La grille de construction s'estompe autour du curseur (au lieu de couvrir toute la carte jusqu'à l'horizon).
+  render.ctx.onFrame.push(() => render.terrain.setGridFocus(cons.machine.hoverGround));
   // Grille de construction au sol (cases de 8 m) pendant le tracé des routes, la pose et le terrassement.
   // Calques des réseaux affichés automatiquement pendant la pose (électricité : ligne HT ou installation ;
   // eau : installation d'eau), retirés ensuite s'ils avaient été ouverts ainsi.

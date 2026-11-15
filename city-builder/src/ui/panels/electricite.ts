@@ -34,7 +34,7 @@ const hhmm = (min: number): string => {
   const d = Math.floor(min / 1440) + 1, h = Math.floor((min % 1440) / 60), m = Math.floor(min % 60);
   return `j${d} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 };
-const KIND_FR: Record<FacilityView['kind'], string> = { thermique: 'Thermique', eolien: 'Éolienne', solaire: 'Solaire', hydro: 'Barrage', poste: 'Poste' };
+const KIND_FR: Record<FacilityView['kind'], string> = { thermique: 'Thermique', eolien: 'Éolienne', solaire: 'Solaire', hydro: 'Barrage', poste: 'Poste', batterie: 'Batteries' };
 
 const SOURCE_COLORS: Record<string, string> = { thermique: '#d0743c', eolien: '#5ab0e8', solaire: '#f2c230', hydro: '#3c7fd0', toitures: '#e8e070' };
 
@@ -69,8 +69,9 @@ const CSS = `
 
 function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta): string {
   if (!s) {
-    return `<p class="muted">Aucune installation électrique. Construisez une centrale (onglet Industrie) : centrale thermique, éolienne,
-      ferme solaire ou barrage (au bord d'un cours d'eau), puis des postes de transformation reliés par des lignes haute tension.</p>`;
+    return `<p class="muted">Aucune installation électrique. Construisez une centrale (onglet Énergie) : centrale thermique, éolienne,
+      ferme solaire ou barrage (au bord d'un cours d'eau), des batteries de stockage pour la nuit, puis des postes de
+      transformation reliés par des lignes haute tension. Pour démarrer, le raccordement au réseau voisin suffit.</p>`;
   }
   const reserve = s.exportableKw;
   const totalOut = s.bySource.reduce((t, b) => t + b.outputKw, 0) || 1;
@@ -80,13 +81,14 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
   const cls = s.byClass.filter((b) => b.buildings > 0).map((b) => `<tr><td>${esc(CLASS_LABELS_FR[b.cls])}</td><td>${fmtPower(b.demandKw)}</td><td>${fmtPower(b.deliveredKw)}</td>
       <td class="${b.cut ? 'warn' : 'ok'}">${b.cut}</td><td class="${b.unlinked ? 'warn' : 'muted'}">${b.unlinked}</td></tr>`).join('');
   const bud = st.budget;
-  return `${zeroReason(s, st)}
+  return `${zeroReason(s, st)}${raccordCta(s, st)}
   <div class="kpis">
     <div class="kpi"><span>Production</span><b data-k="production">${fmtPower(s.producedKw)}</b><span>dispo. ${fmtPower(s.availableKw)}</span></div>
     <div class="kpi"><span>Consommation</span><b data-k="demande">${fmtPower(s.demandKw)}</b><span>livré ${fmtPower(s.deliveredKw)} · pertes ${fmtPower(s.lossesKw)}</span></div>
     <div class="kpi"><span>Réserve (surplus exportable)</span><b data-k="reserve" class="${reserve > 0 ? 'ok' : 'warn'}">${fmtPower(reserve)}</b><span>déficit ${fmtPower(s.shortfallKw)}</span></div>
     <div class="kpi"><span>Coupures</span><b data-k="coupures" class="${s.cut + s.unlinked ? 'warn' : 'ok'}">${s.cut} coupés · ${s.unlinked} non raccordés</b><span>${s.powered} / ${s.buildings} bâtiments alimentés</span></div>
   </div>
+  ${renderStorage(s)}
   <p class="muted" style="margin:6px 0">Relevé ${hhmm(s.at)} · vent ${nf1.format(s.windMs)} m/s (${s.windSource === 'meteo' ? 'météo' : s.windSource === 'force' ? 'forcé' : 'profil'}) · soleil ${(s.sun * 100).toFixed(0)} %
     · sans courant : ${nf0.format(s.jobsWithoutPower)} emplois, ${nf0.format(s.residentsWithoutPower)} habitants</p>
   <h4>Part par source</h4>
@@ -111,19 +113,44 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
  */
 function zeroReason(s: ElectriciteSummary, st: ElectriciteDelta): string {
   if (s.producedKw > 0) return '';
-  const facs = (st.facilities ?? []).filter((f) => f.kind !== 'poste');
+  const facs = (st.facilities ?? []).filter((f) => f.kind !== 'poste' && f.kind !== 'batterie');
   let why: string;
   if (facs.length && facs.every((f) => f.failedUntil > 0)) why = 'Vos centrales sont en panne : la réparation est en cours (un meilleur financement de l\'entretien l\'accélère).';
   else if (facs.length && facs.every((f) => !f.siteOk)) why = 'Site invalide : un barrage doit être posé au bord d\'un cours d\'eau.';
   else if (s.availableKw <= 0) {
     const kinds = new Set(facs.map((f) => f.kind));
     why = kinds.has('solaire') && kinds.size === 1 ? 'Vos panneaux solaires ne produisent pas en ce moment (nuit ou ciel couvert).'
-      : kinds.has('eolien') && kinds.size === 1 ? `Pas assez de vent pour vos éoliennes en ce moment (${nf1.format(s.windMs)} m/s).`
+      : kinds.has('eolien') && kinds.size === 1 ? `Pas assez de vent pour vos éoliennes en ce moment (${nf1.format(s.windMs)} m/s, démarrage à 3 m/s).`
+      : kinds.size === 2 && kinds.has('eolien') && kinds.has('solaire') ? `Ni soleil (${(s.sun * 100).toFixed(0)} %) ni assez de vent (${nf1.format(s.windMs)} m/s, démarrage à 3 m/s) : vos éoliennes et panneaux solaires ne produisent rien.`
       : 'Vos centrales ne peuvent rien produire en ce moment (vent, soleil ou panne).';
+    // Relais : batteries, réseau voisin ; sinon, que faire.
+    const sto = s.storage;
+    if (sto && sto.dischargeKw > 0) why += ` Vos batteries prennent le relais (${fmtPower(sto.dischargeKw)}, autonomie ≈ ${nf1.format(sto.autonomyH)} h).`;
+    else if (sto && sto.storedKwh <= 1) why += ' Vos batteries sont vides : elles se rechargeront avec le surplus des centrales.';
+    if (typeof s.importedKw === 'number' && s.importedKw > 0) why += ` Le réseau voisin fournit ${fmtPower(s.importedKw)}.`;
+    else if (st.settings?.raccordement !== true && s.cut > 0) why += ' Raccordez-vous au réseau voisin, construisez des batteries de stockage ou une centrale pilotable (thermique, barrage).';
   } else if (s.buildings === 0 || s.demandKw <= 0) why = `Votre centrale est prête (${fmtPower(s.availableKw)} disponibles), mais rien ne consomme encore : la production affichée est l'électricité réellement consommée. Construisez des zones le long d'une route reliée à la centrale.`;
   else if (s.unlinked >= s.buildings) why = `Votre centrale peut fournir ${fmtPower(s.availableKw)}, mais aucun bâtiment n'y est relié. Le courant suit les routes : la centrale doit toucher une route du même réseau que vos bâtiments (ou reliez un poste de transformation par une ligne haute tension avec « Relier »).`;
   else why = `Votre centrale peut fournir ${fmtPower(s.availableKw)}, mais rien n'a encore été livré ce relevé ; attendez l'heure de jeu suivante.`;
   return `<p class="warn" data-k="zero-raison" style="margin:4px 0 8px">⚠ Production à 0 : ${esc(why)}</p>`;
+}
+
+/** Bouton direct « Se raccorder au réseau voisin » : déficit (coupures faute de production) et raccordement coupé. */
+function raccordCta(s: ElectriciteSummary, st: ElectriciteDelta): string {
+  if (st.settings?.raccordement === true || !(s.shortfallKw > 0 || s.cut > 0)) return '';
+  return `<div class="row" style="margin:0 0 8px"><button class="primary" data-act="raccorder" data-k="raccorder">Se raccorder au réseau voisin (${nf0.format(IMPORT_SPEC.connectionChf)} CHF)</button>
+    <span class="muted">jusqu'à ${fmtPower(IMPORT_SPEC.capacityKw)}, ${IMPORT_SPEC.priceCentsPerKwh.toLocaleString('fr-FR')} ct/kWh</span></div>`;
+}
+
+/** Batteries de stockage : niveau de charge, puissance échangée, autonomie estimée. */
+function renderStorage(s: ElectriciteSummary): string {
+  const b = s.storage;
+  if (!b) return '';
+  const pct = b.capacityKwh > 0 ? (100 * b.storedKwh) / b.capacityKwh : 0;
+  const flow = b.dischargeKw > 0 ? `<span class="warn">décharge ${fmtPower(b.dischargeKw)}</span>` : b.chargeKw > 0 ? `<span class="ok">charge ${fmtPower(b.chargeKw)}</span>` : '<span class="muted">au repos</span>';
+  return `<h4>Batteries de stockage <span class="muted">×${b.count}</span></h4>
+  <div class="row" data-k="batteries"><b>${pct.toFixed(0)} %</b><div class="bar" style="flex:1"><i style="width:${pct.toFixed(1)}%;background:#5fd39a"></i></div></div>
+  <p class="muted" style="margin:2px 0 6px">${fmtEnergy(b.storedKwh)} / ${fmtEnergy(b.capacityKwh)} · ${flow} (max ${fmtPower(b.powerKw)}) · autonomie ≈ ${b.autonomyH > 0 ? `${nf1.format(b.autonomyH)} h` : '—'} · rendement ${Math.round(b.roundTrip * 100)} %. Chargées par le surplus des centrales, elles prennent le relais la nuit ou sans vent.</p>`;
 }
 
 /** Interrupteur du raccordement au réseau électrique voisin (frais uniques, plafond, prix du kWh). */
@@ -156,7 +183,10 @@ function renderNetwork(st: ElectriciteDelta): string {
   if (!facs.length) return '';
   const fRows = facs.map((f) => {
     const state = f.failedUntil > 0 ? `<span class="warn">panne</span>` : !f.siteOk ? `<span class="warn">site invalide</span>` : f.energized ? `<span class="ok">en service</span>` : `<span class="warn">hors réseau</span>`;
-    return `<tr><td>${esc(KIND_FR[f.kind])} n° ${f.id}</td><td>${f.kind === 'poste' ? `<span class="muted">${fmtPower(f.nominalKw)}</span>` : fmtPower(f.outputKw)}</td><td>${state}</td>
+    const out = f.kind === 'poste' ? `<span class="muted">${fmtPower(f.nominalKw)}</span>`
+      : f.kind === 'batterie' ? `${f.capacityKwh ? Math.round((100 * (f.storedKwh ?? 0)) / f.capacityKwh) : 0} % <span class="muted">${(f.storageKw ?? 0) > 0 ? '+' : ''}${fmtPower(f.storageKw ?? 0)}</span>`
+      : fmtPower(f.outputKw);
+    return `<tr><td>${esc(KIND_FR[f.kind])} n° ${f.id}</td><td>${out}</td><td>${state}</td>
       <td><button data-act="auto" data-id="${f.id}" title="Ligne HT vers l'installation la plus proche">Relier</button></td></tr>`;
   }).join('');
   const lRows = lines.map((l) => `<tr><td>Ligne n° ${l.id} <span class="muted">(${l.a} – ${l.b})</span></td><td>${nf1.format(l.lengthM / 1000)} km</td>
@@ -209,6 +239,13 @@ function mountPanel(root: HTMLElement, api: UiPanelApi): () => void {
       const j = act === 'prio-up' ? i - 1 : i + 1;
       [order[i], order[j]] = [order[j]!, order[i]!];
       void run('setPriorities', { order: order as ConsumerClass[] }).then(refresh);
+      return;
+    }
+    if (act === 'raccorder') {
+      void run('raccordement', { on: true }).then((r) => {
+        if (r) api.toast(`Raccordé au réseau électrique voisin (${nf0.format(IMPORT_SPEC.connectionChf)} CHF)`, 'ok');
+        return refresh();
+      });
       return;
     }
     if (act === 'auto') { void run('autoConnect', { id: Number(b.dataset['id']) }).then((r) => { if (r) api.toast('Ligne HT construite', 'ok'); return refresh(); }); return; }

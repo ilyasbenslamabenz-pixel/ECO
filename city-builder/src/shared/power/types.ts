@@ -17,7 +17,8 @@ export const ELECTRICITE_MODULES = [ELECTRICITE_ID] as const;
 /** Types d'installations électriques (centrales + poste de transformation). */
 export type PlantType = 'thermique' | 'eolien' | 'solaire' | 'hydro';
 export const PLANT_TYPES: readonly PlantType[] = ['thermique', 'eolien', 'solaire', 'hydro'];
-export type FacilityKind = PlantType | 'poste';
+/** `batterie` : batteries de stockage (chargées par le surplus des centrales, déchargées en cas de déficit). */
+export type FacilityKind = PlantType | 'poste' | 'batterie';
 
 /** Source de production (les toitures solaires s'ajoutent aux centrales). */
 export type SourceId = PlantType | 'toitures';
@@ -42,6 +43,9 @@ export const FUNDING_MAX = 1.5;
 /** Préfixe des étiquettes de catalogue qui désignent une installation électrique (`elec:centrale:eolien`, `elec:poste`). */
 export const TAG_PLANT_PREFIX = 'elec:centrale:';
 export const TAG_SUBSTATION = 'elec:poste';
+/** Batteries de stockage (`elec:batterie`) ; capacité facultative en kWh (`elec:kwh:8000`), puissance via `elec:kw:N`. */
+export const TAG_BATTERY = 'elec:batterie';
+export const TAG_KWH_PREFIX = 'elec:kwh:';
 /** Puissance nominale facultative inscrite au catalogue (`elec:kw:50000`). */
 export const TAG_KW_PREFIX = 'elec:kw:';
 
@@ -76,6 +80,27 @@ export interface FacilityView {
   energized: boolean;
   /** Rayon de distribution locale (m). */
   radius: number;
+  /** Batteries de stockage : énergie stockée et capacité (kWh), puissance échangée cette heure (kW, > 0 charge, < 0 décharge). */
+  storedKwh?: number;
+  capacityKwh?: number;
+  storageKw?: number;
+}
+
+/** Bilan des batteries de stockage (absent sans batterie). */
+export interface StorageBalance {
+  count: number;
+  /** Énergie stockée et capacité totale (kWh). */
+  storedKwh: number;
+  capacityKwh: number;
+  /** Puissance maximale de charge / décharge (kW, batteries en service). */
+  powerKw: number;
+  /** Puissance de charge (surplus des centrales) et de décharge (vers le réseau) cette heure (kW). */
+  chargeKw: number;
+  dischargeKw: number;
+  /** Rendement aller-retour (0..1). */
+  roundTrip: number;
+  /** Autonomie estimée (h) au rythme de la demande non couverte par les centrales (ou de la décharge en cours). */
+  autonomyH: number;
 }
 
 /** Ligne haute tension (entre deux installations). */
@@ -144,6 +169,13 @@ export interface ElectriciteSummary {
   residentsWithoutPower: number;
   /** Puissance achetée au réseau extérieur cette heure (kW, raccordement) ; absent = non raccordé. */
   importedKw?: number;
+  /** Batteries de stockage (absent sans batterie). */
+  storage?: StorageBalance;
+  /**
+   * Réseau uniquement intermittent : des centrales éoliennes / solaires seulement, sans batterie, sans centrale
+   * pilotable (thermique, hydro) ni raccordement au réseau voisin (absent sinon).
+   */
+  intermittentOnly?: boolean;
 }
 
 /** Réglages du joueur. */

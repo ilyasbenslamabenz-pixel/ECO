@@ -29,6 +29,8 @@ export function powerCatalog(): AssetCatalog {
     facility('ferme_solaire', 3, 3, 2, 600_000, 300, ['elec:centrale:solaire', 'elec:kw:800']),
     facility('barrage', 4, 4, 20, 2_500_000, 2_000, ['elec:centrale:hydro']),
     facility('poste', 2, 2, 2, 300_000, 400, ['elec:poste']),
+    // Batteries de stockage (ajout en fin de liste : les index des modèles précédents ne bougent pas).
+    facility('batteries', 2, 2, 1, 450_000, 800, ['elec:batterie', 'elec:kw:1500', 'elec:kwh:6000']),
   );
   return c;
 }

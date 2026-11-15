@@ -19873,6 +19873,117 @@
       ]
     },
     {
+      "id": "elec_batteries",
+      "nameFr": "Batteries de stockage",
+      "category": "industrial",
+      "lods": [
+        {
+          "file": "models/power/elec_poste_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 2724
+        },
+        {
+          "file": "models/power/elec_poste_lod1.glb",
+          "maxDistance": 800,
+          "triangles": 1436
+        },
+        {
+          "file": "models/power/elec_poste_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 282
+        }
+      ],
+      "dimensions": {
+        "width": 31.6,
+        "depth": 31.6,
+        "height": 15.03
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 4
+      },
+      "cost": 450000,
+      "upkeepPerMonth": 800,
+      "capacity": {
+        "residents": 0,
+        "jobs": 2
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 15.8,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        }
+      ],
+      "variants": [
+        {
+          "id": "conteneurs_blancs",
+          "nameFr": "Conteneurs de batteries blancs",
+          "materialOverrides": {
+            "transfo": {
+              "color": "#e4e9ea"
+            }
+          }
+        },
+        {
+          "id": "conteneurs_verts",
+          "nameFr": "Conteneurs de batteries verts",
+          "materialOverrides": {
+            "transfo": {
+              "color": "#4f7d5a"
+            }
+          }
+        },
+        {
+          "id": "local_brique",
+          "nameFr": "Conteneurs gris, local technique en brique",
+          "materialOverrides": {
+            "transfo": {
+              "color": "#8a9296"
+            },
+            "beton_clair": {
+              "textureSet": "brique_rouge",
+              "color": "#ffffff"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "beton_facade",
+        "brique_rouge",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "route_asphalte",
+        "sol_beton_brut",
+        "terrain_gravier"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/power/models.ts#posteTransformation (modèle du poste de transformation réutilisé pour les batteries de stockage)",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "electricite",
+        "elec:batterie",
+        "elec:kw:2000",
+        "elec:kwh:8000",
+        "energie",
+        "stockage",
+        "reseau",
+        "service:electricite",
+        "reutilise:elec_poste",
+        "style:poste_haute_tension",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
       "id": "dechets_depot_camions",
       "nameFr": "Dépôt de camions-bennes",
       "category": "public",

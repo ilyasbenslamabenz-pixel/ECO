@@ -302,6 +302,9 @@ export class ConstructionTools {
     return a.variants.length ? Math.floor(Math.random() * a.variants.length) : -1;
   }
 
+  /** Dernier point au sol survolé (null hors du terrain) : centre de la grille de construction. */
+  get hoverGround(): { x: number; z: number } | null { return this.lastGround; }
+
   /** Survol : point au sol sous le curseur (ou null) et rayon caméra. */
   hover(ground: { x: number; z: number } | null, ray: Ray | null): void {
     this.lastGround = ground;

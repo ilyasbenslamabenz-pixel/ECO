@@ -297,7 +297,7 @@ const FRAG_MAIN = /* glsl */ `
 
 export interface TerrainMaterialHandle {
   material: THREE.MeshStandardMaterial;
-  uniforms: { uWaterLevel: { value: number }; uMacroStrength: { value: number }; uGrid: { value: number } };
+  uniforms: { uWaterLevel: { value: number }; uMacroStrength: { value: number }; uGrid: { value: number }; uGridFocus: { value: THREE.Vector3 } };
 }
 
 /** Crée le matériau de terrain (partagé par tous les chunks). */
@@ -313,6 +313,8 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
     uMacroStrength: { value: 0.32 },
     /** Grille de construction (cases de 8 m, repère fort tous les 40 m) : 0 = masquée, 1 = visible. */
     uGrid: { value: 0 },
+    /** Centre (x, z) et rayon (m) de la grille autour du curseur ; rayon 0 = grille sur toute la carte. */
+    uGridFocus: { value: new THREE.Vector3(0, 0, 0) },
     uGrassDry: { value: new THREE.Color(0.9, 0.9, 0.64) },
     uGrassLush: { value: new THREE.Color(0.66, 0.88, 0.5) },
   };
@@ -325,7 +327,7 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\n${VERT_MAIN}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n#define AUBE_TERRAIN_OPT ${ab.terrainOpt ? 1 : 0}\n${FRAG_DECL}`)
-      .replace('#include <common>', `#include <common>\nuniform float uGrid;`)
+      .replace('#include <common>', `#include <common>\nuniform float uGrid;\nuniform vec3 uGridFocus;`)
       .replace('#include <map_fragment>', `${FRAG_MAIN}
         if (uGrid > 0.001) {
           vec2 gp = vTWorld.xz / ${TILE_SIZE.toFixed(1)};
@@ -336,7 +338,8 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
           vec2 gl5 = abs(fract(gp5 - 0.5) - 0.5) / max(gw5 * 1.6, vec2(1e-4));
           float major = 1.0 - min(min(gl5.x, gl5.y), 1.0);
           float fade = 1.0 - smoothstep(0.25, 0.6, max(gw.x, gw.y));
-          float g = max(line * 0.35 * fade, major * 0.6) * uGrid;
+          float near = uGridFocus.z > 0.0 ? 1.0 - smoothstep(uGridFocus.z * 0.55, uGridFocus.z, distance(vTWorld.xz, uGridFocus.xy)) : 1.0;
+          float g = max(line * 0.35 * fade, major * 0.6) * uGrid * near;
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), g * 0.55);
         }`)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = tRough;')

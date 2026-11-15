@@ -477,6 +477,10 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 .loan-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 9px; }
 .loan-list li button { min-height: 32px; font-size: 12px; }
 .demand-bars, .act-bars, .age-bars { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.demand-advice { font-size: 11.5px; margin: -3px 0 4px; line-height: 1.35; }
+.demand-advice.ok { color: var(--ok); }
+.demand-advice.warn { color: #ffb4a8; }
+.demand-advice.muted { color: var(--muted); }
 .bar-row { display: grid; grid-template-columns: minmax(96px, 42%) 1fr auto; gap: 8px; align-items: center; }
 .bar-row .k { overflow-wrap: anywhere; }
 .bar-row .track { position: relative; height: 8px; border-radius: 4px; background: rgba(var(--ink), .07); overflow: hidden; }

@@ -116,6 +116,17 @@ export class TerrainSystem implements IRenderTerrain {
   gridStrength = 1;
   setGrid(on: boolean): void { this.gridOn = on; if (this.matHandle) this.matHandle.uniforms.uGrid.value = on ? this.gridStrength : 0; }
   private gridOn = false;
+  /** Rayon (m) autour du curseur où la grille reste visible ; au-delà elle s'estompe. */
+  gridFocusRadius = 220;
+  private gridFocus: { x: number; z: number } | null = null;
+  /** Centre de la grille (point au sol sous le curseur) ; null = garde le dernier centre connu. */
+  setGridFocus(p: { x: number; z: number } | null): void {
+    if (p) this.gridFocus = p;
+    const u = this.matHandle?.uniforms.uGridFocus;
+    if (!u) return;
+    if (this.gridFocus) u.value.set(this.gridFocus.x, this.gridFocus.z, this.gridFocusRadius);
+    else u.value.set(0, 0, 0); // aucun point encore survolé : grille entière (comportement d'origine)
+  }
   get terrainTextures(): TerrainTextures | null { return this.textures; }
   get terrain(): (TerrainData & Partial<WorldTerrain>) | null { return this.data; }
 

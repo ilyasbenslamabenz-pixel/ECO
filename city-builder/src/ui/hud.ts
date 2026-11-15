@@ -631,6 +631,9 @@ export function initUI(h: UIHandlers): UIHandle {
       // Messages de la progression : bouton « Voir » vers le bon onglet du tableau de bord Progression.
       const tab = /^Événement/.test(text) ? 'mod:evenements' : /^(Nouvel objectif|Objectif accompli|Réalisation)/.test(text) ? 'mod:objectifs' : /^Palier atteint/.test(text) ? 'mod:paliers' : null;
       if (tab) showToast(text, kind, /^Événement/.test(text) ? 9000 : 6000, { label: 'Voir', run: () => openView('progression', tab) });
+      // Conseil électricité (réseau seulement éolien / solaire) : bouton vers le tableau de bord Énergie, qui propose
+      // le raccordement au réseau voisin en un geste.
+      else if (/^La nuit sans vent/.test(text)) showToast(text, kind, 12000, { label: 'Énergie', run: () => openView('energy') });
       else showToast(text, kind);
     },
     // Pied du menu : sans détail technique (support de stockage des sauvegardes).
@@ -656,6 +659,17 @@ export function initUI(h: UIHandlers): UIHandle {
           const x = Math.min(sx, W - w - 22);
           cursorTag.style.left = `${Math.max(0, x)}px`;
           cursorTag.style.top = `${sy}px`;
+          // Jamais par-dessus la barre d'outils, ses options (« Terminer », « Pivoter »…) ni le bouton « Terminer le tracé » :
+          // si l'étiquette les chevauche (curseur près du bas de l'écran), elle remonte juste au-dessus.
+          const tr = cursorTag.getBoundingClientRect();
+          let limit = Infinity;
+          for (const id of ['tool-options', 'toolbar', 'road-finish']) {
+            const el = document.getElementById(id);
+            if (!el || el.classList.contains('hidden')) continue;
+            const r = el.getBoundingClientRect();
+            if (r.width && tr.left < r.right && tr.right > r.left && tr.bottom > r.top) limit = Math.min(limit, r.top);
+          }
+          if (limit !== Infinity) cursorTag.style.top = `${Math.max(0, sy - (tr.bottom - limit) - 8)}px`;
         },
         touchConfirm(o) {
           document.body.classList.toggle('confirming', !!o);

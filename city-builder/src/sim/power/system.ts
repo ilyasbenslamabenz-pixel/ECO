@@ -21,6 +21,7 @@
  */
 import { governanceModifiers } from '../../shared/governance';
 import {
+  BATTERY_ONE_WAY, BATTERY_SPEC, batteryStep, capacityKwhOf,
   baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hourlyFactor, hydroShare,
   hydroSiteCheck, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
   TARIFF_CENTS_PER_KWH, windPowerShare, windProfile,
@@ -29,7 +30,8 @@ import {
   type ClassBalance, CONSUMER_CLASSES, type ConsumerClass, COVER_CUT, COVER_NONE, COVER_OK, COVER_PARTIAL, COVER_UNLINKED,
   DEFAULT_PRIORITY_ORDER, type ElectriciteBudget, type ElectriciteCoverage, type ElectriciteDelta, type ElectriciteEvent,
   type ElectriciteSettings, type ElectriciteSummary, ELECTRICITE_NETWORK, type FacilityKind, type FacilityView, FUNDING_MAX,
-  FUNDING_MIN, type LineView, type PlantType, SOURCE_IDS, type SourceBalance, type SourceId, WEATHER_SERVICE, type WeatherLike,
+  FUNDING_MIN, type LineView, type PlantType, SOURCE_IDS, type SourceBalance, type SourceId, type StorageBalance, WEATHER_SERVICE,
+  type WeatherLike,
 } from '../../shared/power/types';
 import { TILE_SIZE } from '../../shared/constants';
 import type { Municipal } from '../municipal/municipal';
@@ -39,7 +41,8 @@ import type { PluginContext } from '../plugins/types';
 /* ------------------------------- État sauvegardé ------------------------------- */
 
 export interface LineState { id: number; a: number; b: number; lengthM: number; failedUntil: number; builtAt: number }
-export interface FacilityState { failedUntil: number; failures: number }
+/** `storedKwh` : énergie stockée (batteries de stockage seulement ; absent des autres installations et des anciennes parties). */
+export interface FacilityState { failedUntil: number; failures: number; storedKwh?: number }
 
 /** Distance maximale d'un bâtiment / d'une installation à la route pour être raccordé (m). */
 const ROAD_ATTACH_M = 80;
@@ -72,7 +75,15 @@ export interface PowerState {
   unpowered?: number[];
   /** Parmi eux, ceux qu'aucun réseau ne dessert (ni installation ni raccordement extérieur). */
   unlinked?: number[];
+  /**
+   * Conseil « réseau seulement intermittent » déjà donné (minute de jeu) : envoyé une fois, à la première coupure
+   * faute de vent ou de soleil ; réarmé quand le réseau gagne une batterie, une centrale pilotable ou le raccordement.
+   */
+  adviceAt?: number;
 }
+
+/** Conseil affiché quand un réseau uniquement éolien / solaire coupe faute de vent ou de soleil. */
+export const INTERMITTENT_ADVICE = 'La nuit sans vent, vos éoliennes et panneaux solaires ne produisent rien. Raccordez-vous au réseau voisin, construisez une centrale thermique ou des batteries.';
 
 export function emptyPowerState(): PowerState {
   return {
@@ -115,6 +126,8 @@ interface Facility {
   siteOk: boolean;
   siteReason: string;
   upkeep: number;
+  /** Capacité de stockage (kWh) : batteries seulement, 0 sinon. */
+  capacityKwh: number;
 }
 
 interface Consumer {
@@ -262,6 +275,7 @@ export class PowerSystem {
       out.set(id, {
         id, kind, nameFr: a.nameFr, x, y: st.y[i]!, z, rot: st.rot[i]!, nominalKw: nominalKwOf(a, kind),
         radius: FACILITY_SPECS[kind].radius, halfSize, siteOk, siteReason, upkeep: a.upkeepPerMonth,
+        capacityKwh: kind === 'batterie' ? capacityKwhOf(a) : 0,
       });
     }
     return out;
@@ -564,7 +578,54 @@ export class PowerSystem {
       case 'solaire': return f.nominalKw * sun * this.govRenew;
       case 'hydro': return f.siteOk ? f.nominalKw * hydroShare(ctx.clock.season) : 0;
       case 'poste': return 0;
+      // Batteries : puissance de décharge possible pendant l'heure (bornée par la puissance max et l'énergie stockée).
+      case 'batterie': return Math.min(f.nominalKw, (this.facilityState(f.id).storedKwh ?? 0) * BATTERY_ONE_WAY);
     }
+  }
+
+  /**
+   * Charge des batteries par le SURPLUS des centrales locales (capacité disponible non appelée), par îlot du réseau
+   * (installations reliées par la voirie, des raccordements locaux ou des lignes en service). Le surplus utilisé est
+   * reporté sur la production des centrales (`outputOf`, pollution comprise). Renvoie la puissance de charge par batterie.
+   */
+  private chargeBatteries(facs: Facility[], avail: Map<number, number>, outputOf: Map<number, number>): Map<number, number> {
+    const out = new Map<number, number>();
+    const bats = facs.filter((f) => f.kind === 'batterie' && this.facilityState(f.id).failedUntil === 0 && (outputOf.get(f.id) ?? 0) <= 1e-6);
+    if (!bats.length) return out;
+    // Îlots (union-find) : lignes en service et raccordements locaux.
+    const parent = new Map<number, number>(facs.map((f) => [f.id, f.id]));
+    const find = (a: number): number => { let r = a; while (parent.get(r)! !== r) r = parent.get(r)!; parent.set(a, r); return r; };
+    const join = (a: number, b: number): void => { if (!parent.has(a) || !parent.has(b)) return; const ra = find(a), rb = find(b); if (ra !== rb) parent.set(Math.max(ra, rb), Math.min(ra, rb)); };
+    for (const l of this.state.lines) if (l.failedUntil === 0) join(l.a, l.b);
+    for (const [a, b] of this.localLinks()) join(a, b);
+    const surplus = new Map<number, number>();
+    for (const f of facs) {
+      if (f.kind === 'poste' || f.kind === 'batterie') continue;
+      const s = Math.max(0, (avail.get(f.id) ?? 0) - (outputOf.get(f.id) ?? 0));
+      if (s > 1e-6) surplus.set(find(f.id), (surplus.get(find(f.id)) ?? 0) + s);
+    }
+    const room = new Map<number, number>();
+    for (const b of bats) {
+      const r = Math.max(0, Math.min(b.nominalKw, (b.capacityKwh - (this.facilityState(b.id).storedKwh ?? 0)) / BATTERY_ONE_WAY));
+      if (r > 1e-6) room.set(find(b.id), (room.get(find(b.id)) ?? 0) + r);
+    }
+    const used = new Map<number, number>();
+    for (const [c, r] of room) used.set(c, Math.min(r, surplus.get(c) ?? 0));
+    for (const b of bats) {
+      const c = find(b.id), r = room.get(c) ?? 0, u = used.get(c) ?? 0;
+      if (r <= 0 || u <= 0) continue;
+      const mine = Math.max(0, Math.min(b.nominalKw, (b.capacityKwh - (this.facilityState(b.id).storedKwh ?? 0)) / BATTERY_ONE_WAY));
+      out.set(b.id, (mine / r) * u);
+    }
+    // Production supplémentaire des centrales de l'îlot, au prorata de leur surplus.
+    for (const f of facs) {
+      if (f.kind === 'poste' || f.kind === 'batterie') continue;
+      const c = find(f.id), s = surplus.get(c) ?? 0, u = used.get(c) ?? 0;
+      if (s <= 0 || u <= 0) continue;
+      const mine = Math.max(0, (avail.get(f.id) ?? 0) - (outputOf.get(f.id) ?? 0));
+      outputOf.set(f.id, (outputOf.get(f.id) ?? 0) + (mine / s) * u);
+    }
+    return out;
   }
 
   /** Installations reliées (lignes en service) à une centrale disponible. */
@@ -752,11 +813,17 @@ export class PowerSystem {
       }
     }
     this.cutList.sort((a, b) => a - b);
+    // Batteries : décharge appelée par la répartition, charge par le surplus des centrales (après la répartition).
+    let dischargeKw = 0;
+    for (const f of facs) if (f.kind === 'batterie') dischargeKw += report.outputOf.get(f.id) ?? 0;
+    const charge = this.chargeBatteries(facs, avail, report.outputOf);
+    let chargeKw = 0;
+    for (const v of charge.values()) chargeKw += v;
     const bySource: SourceBalance[] = SOURCE_IDS.map((source) => ({ source, nominalKw: 0, availableKw: 0, outputKw: 0, count: 0 }));
     const srcIdx = new Map<SourceId, number>(SOURCE_IDS.map((s, i) => [s, i]));
     let availableKw = 0;
     for (const f of facs) {
-      if (f.kind === 'poste') continue;
+      if (f.kind === 'poste' || f.kind === 'batterie') continue;
       const s = bySource[srcIdx.get(f.kind as PlantType)!]!;
       s.count++; s.nominalKw += f.nominalKw; s.availableKw += avail.get(f.id)!; s.outputKw += report.outputOf.get(f.id) ?? 0;
       availableKw += avail.get(f.id)!;
@@ -765,7 +832,8 @@ export class PowerSystem {
     roof.count = rooftopCount; roof.nominalKw = rooftopNominal; roof.availableKw = rooftopKw; roof.outputKw = report.rooftopOut;
     availableKw += rooftopKw;
     const importedKw = report.imported;
-    const producedKw = report.produced - importedKw;
+    // Production des centrales et toitures : hors réseau voisin et hors décharge des batteries, recharge comprise.
+    const producedKw = Math.max(0, report.produced - importedKw - dischargeKw + chargeKw);
     const deliveredKw = byClass.reduce((t, b) => t + b.deliveredKw, 0);
     const summary: ElectriciteSummary = {
       at: now, hour: Math.round(hourOfDay * 100) / 100,
@@ -777,6 +845,33 @@ export class PowerSystem {
       jobsWithoutPower: jobsOff, residentsWithoutPower: resOff,
     };
     if (imp) summary.importedKw = Math.round(importedKw * 10) / 10;
+    // Énergie stockée : mise à jour seulement aux vraies heures de jeu (un recalcul immédiat ne charge rien).
+    const bats = facs.filter((f) => f.kind === 'batterie');
+    if (hourly) {
+      for (const f of bats) {
+        const fs = this.facilityState(f.id);
+        const kw = (charge.get(f.id) ?? 0) - (report.outputOf.get(f.id) ?? 0);
+        fs.storedKwh = Math.round(batteryStep(fs.storedKwh ?? 0, f.capacityKwh, kw) * 1000) / 1000;
+      }
+    }
+    if (bats.length) {
+      let stored = 0, cap = 0, pow = 0;
+      for (const f of bats) {
+        stored += this.facilityState(f.id).storedKwh ?? 0;
+        cap += f.capacityKwh;
+        if (this.facilityState(f.id).failedUntil === 0) pow += f.nominalKw;
+      }
+      // Autonomie : énergie restituable / décharge en cours (sinon / demande raccordée, si les centrales s'arrêtaient).
+      const rate = dischargeKw > 1e-6 ? dischargeKw : Math.max(0, demandKw - unlinkedKw);
+      const storage: StorageBalance = {
+        count: bats.length, storedKwh: Math.round(stored), capacityKwh: cap, powerKw: pow,
+        chargeKw: Math.round(chargeKw * 10) / 10, dischargeKw: Math.round(dischargeKw * 10) / 10, roundTrip: BATTERY_SPEC.roundTrip,
+        autonomyH: rate > 1e-6 ? Math.round((stored * BATTERY_ONE_WAY / rate) * 10) / 10 : 0,
+      };
+      summary.storage = storage;
+    }
+    const nb = (k: SourceId): number => bySource[srcIdx.get(k)!]!.count;
+    if (!imp && !bats.length && nb('thermique') + nb('hydro') === 0 && nb('eolien') + nb('solaire') > 0) summary.intermittentOnly = true;
     this.summaryCache = summary;
 
     // 7. Vues (rendu / interface).
@@ -785,6 +880,10 @@ export class PowerSystem {
       id: f.id, kind: f.kind, nameFr: f.nameFr, x: f.x, y: f.y, z: f.z, rot: f.rot,
       availableKw: avail.get(f.id)!, nominalKw: f.nominalKw, outputKw: report.outputOf.get(f.id) ?? 0,
       failedUntil: this.facilityState(f.id).failedUntil, siteOk: f.siteOk, energized: energized.has(f.id), radius: f.radius,
+      ...(f.kind === 'batterie' ? {
+        storedKwh: Math.round(this.facilityState(f.id).storedKwh ?? 0), capacityKwh: f.capacityKwh,
+        storageKw: Math.round(((charge.get(f.id) ?? 0) - (report.outputOf.get(f.id) ?? 0)) * 10) / 10,
+      } : {}),
     }));
     this.lineViews = this.state.lines.map((l) => {
       const fa = this.facilities.get(l.a)!, fb = this.facilities.get(l.b)!;
@@ -949,12 +1048,23 @@ export class PowerSystem {
     const cutBy: Record<string, number> = {};
     for (const b of s.byClass) if (b.cut) cutBy[b.cls] = b.cut;
     const changed = JSON.stringify(cutBy) !== JSON.stringify(this.state.lastCutByClass);
+    // Conseil (une fois) : réseau seulement éolien / solaire, sans batterie, centrale pilotable ni raccordement, qui
+    // coupe faute de vent ou de soleil. Réarmé quand le réseau n'est plus seulement intermittent.
+    let advised = false;
+    if (!s.intermittentOnly) delete this.state.adviceAt;
+    else if (s.cut > 0 && s.shortfallKw > 0 && this.state.adviceAt === undefined) {
+      this.state.adviceAt = now;
+      this.event(ctx, 'penurie', INTERMITTENT_ADVICE);
+      ctx.notify('warn', INTERMITTENT_ADVICE);
+      advised = true;
+    }
     if (s.cut > 0 && !this.state.shortageCause) {
       const label = s.shortfallKw > 0 ? `Pénurie électrique : ${Math.round(s.shortfallKw)} kW non servis` : 'Coupures électriques (pannes du réseau)';
       this.state.shortageCause = m.effects.cause({ kind: 'electricite:penurie', label, source: 'electricite', at: now });
       this.event(ctx, 'penurie', `${label} — ${s.cut} bâtiments coupés`);
       const CLS_FR: Record<string, string> = { sante: 'santé', services: 'services', residentiel: 'logements', commerce: 'commerces', industrie: 'industrie' };
-      ctx.notify('warn', `${label} : ${s.cut} bâtiments coupés (${s.byClass.filter((b) => b.cut).map((b) => CLS_FR[b.cls] ?? b.cls).join(', ')}). Ajoutez une centrale ou une éolienne.`);
+      const hint = s.intermittentOnly ? 'Raccordez-vous au réseau voisin, ajoutez des batteries ou une centrale thermique.' : 'Ajoutez une centrale ou une éolienne.';
+      if (!advised) ctx.notify('warn', `${label} : ${s.cut} bâtiments coupés (${s.byClass.filter((b) => b.cut).map((b) => CLS_FR[b.cls] ?? b.cls).join(', ')}). ${hint}`);
     }
     if (this.state.shortageCause && changed) {
       const cause = this.state.shortageCause;

@@ -4,7 +4,7 @@
  * catalogue et des modèles partagés de la simulation (électricité, eau) : rien n'est inventé.
  */
 import type { CatalogAsset } from '../shared/catalog';
-import { facilityKindOf, hydroShare, nominalKwOf, solarShare, windPowerShare, windProfile } from '../shared/power/model';
+import { BATTERY_SPEC, capacityKwhOf, facilityKindOf, hydroShare, nominalKwOf, solarShare, windPowerShare, windProfile } from '../shared/power/model';
 import { facilityKindOf as waterKindOf, WATER_FACILITIES } from '../shared/water-network/types';
 import { fmt } from './dom';
 
@@ -47,6 +47,7 @@ const DEPENDS: Record<string, string> = {
   eau_emissaire: 'Au bord d’un cours d’eau ; une station d’épuration évite d’y rejeter des eaux sales.',
   elec_barrage: 'Au bord d’un cours d’eau.',
   elec_poste: 'Transforme et distribue le courant des centrales ; les lignes haute tension relient les sites éloignés.',
+  elec_batteries: 'Se charge avec le surplus des centrales et alimente la ville la nuit ou sans vent ; près d’une route reliée aux centrales.',
 };
 
 export interface CardInfo { lines: string[]; depends: string | null }
@@ -57,6 +58,7 @@ export function cardInfo(a: CatalogAsset): CardInfo {
   if (pk) {
     const kw = nominalKwOf(a, pk);
     if (pk === 'poste') lines.push(`Transformation ${mw(kw)}`);
+    else if (pk === 'batterie') lines.push(`Stockage ${nf1(capacityKwhOf(a) / 1000)} MWh · ${mw(kw)} · rendement ${Math.round(BATTERY_SPEC.roundTrip * 100)} %`);
     else {
       const s = avgShare(pk);
       lines.push(s !== null && s < 0.999 ? `${mw(kw)} nominal · moy. ≈ ${mw(kw * s)}` : `${mw(kw)} nominal`);

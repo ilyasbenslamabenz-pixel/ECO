@@ -15,7 +15,7 @@ import { drawChart, MONTHS_SHORT } from './charts';
 import { $, el, fmt, money, moneyShort, pct, signedMoney } from './dom';
 import { FinanceChart, type FinanceHistory } from './finance';
 import { iconEl } from './icons';
-import { cityDemand, DEMAND_ORDER, demandPct } from './demand';
+import { cityDemand, DEMAND_ORDER, demandAdvice, demandPct } from './demand';
 import { SECTOR_LABELS_FR } from '../shared/protocol-ext/zonage';
 import { renderSatisfaction } from './satisfaction';
 import { livingOverviewRows, renderLivingEconomy } from './economie';
@@ -328,7 +328,10 @@ export class CityPanels {
     } else if (this.popTab === 'demand') {
       // Même source, même échelle et même ordre (R C I B) que la jauge de la barre du haut.
       const dem = cityDemand(r);
-      if (dem) $('pop-demand').replaceChildren(...DEMAND_ORDER.map((s) => barRow(SECTOR_LABELS_FR[s], dem[s], 1, demandPct(dem[s]), 'signed')));
+      if (dem) $('pop-demand').replaceChildren(...DEMAND_ORDER.flatMap((s) => {
+        const a = demandAdvice(s, dem[s], dem.R);
+        return [barRow(SECTOR_LABELS_FR[s], dem[s], 1, demandPct(dem[s]), 'signed'), el('div', { cls: `demand-advice ${a.tone}`, text: a.text })];
+      }));
       const maxE = Math.max(1, ...d.education);
       $('pop-edu').replaceChildren(...d.education.map((v, i) => barRow(d.educationNames[i] ?? `Niveau ${i}`, v, maxE, fmt(v))));
     } else if (this.popTab === 'acts') {
