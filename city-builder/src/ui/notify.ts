@@ -1,35 +1,35 @@
 /**
  * Notifications (toasts) : pile limitée, icône par type, disparition animée ; JOURNAL des messages
- * (centre de notifications de la barre supérieure : badge des non lus, liste datée en date de jeu).
- * Les « Chantier terminé » sont regroupés en un seul message cumulatif (ni toast répété, ni badge).
+ * (centre de notifications de la barre supérieure, liste datée en date de jeu). Vague 5 : doublons regroupés
+ * (« 12 constructions », « Coupures d'électricité : 3 alertes »), gravité urgent / important / info, badge limité
+ * aux urgentes et importantes non lues, « Tout marquer comme lu » (logique pure : src/ui/notify-log.ts).
  * Propriétaire : agent construction/caméra/UI.
  */
 import { $, chfText, el } from './dom';
 import { iconEl } from './icons';
 
-export type NotifyKind = 'info' | 'error' | 'ok';
+import { NotifyJournal, type NotifyEntry, type NotifyKind, type Severity } from './notify-log';
+
+export type { NotifyEntry, NotifyKind, Severity } from './notify-log';
 const ICONS: Record<NotifyKind, string> = { info: 'info', error: 'alert', ok: 'check' };
 const MAX = 4;
-const LOG_MAX = 60;
 
-export interface NotifyEntry {
-  text: string; kind: NotifyKind; at: number; count: number;
-  /** Date de jeu au moment du message (« 12 avr. an 2, 09:34 »), si connue. */
-  gameDate?: string;
-  /** Message cumulatif (chantiers terminés). */
-  group?: 'chantier';
-}
-
-/** Journal des notifications (le plus récent en dernier). */
-export const notifyLog: NotifyEntry[] = [];
-let unread = 0;
+/** Journal regroupé et hiérarchisé (src/ui/notify-log.ts). */
+export const journal = new NotifyJournal();
+/** Entrées du journal (la plus récente en dernier). */
+export const notifyLog: NotifyEntry[] = journal.entries;
 const listeners: (() => void)[] = [];
 let dateOf: () => string = () => '';
+const changed = (): void => { for (const l of listeners) l(); };
 
 export function onNotify(fn: () => void): void { listeners.push(fn); }
-export function unreadCount(): number { return unread; }
-export function markAllRead(): void { if (unread === 0) return; unread = 0; for (const l of listeners) l(); }
-export function clearLog(): void { notifyLog.length = 0; unread = 0; for (const l of listeners) l(); }
+/** Badge : notifications urgentes et importantes non lues (les infos ne comptent pas). */
+export function unreadCount(): number { return journal.badgeCount(); }
+export function markAllRead(): void { if (journal.markAllRead()) changed(); }
+/** Marque comme lues les notifications d'une gravité (ex. les infos à l'ouverture du journal). */
+export function markSeverityRead(sev: Severity): void { if (journal.markRead(sev)) changed(); }
+export function markEntryRead(e: NotifyEntry): void { if (e.unread) { e.unread = false; changed(); } }
+export function clearLog(): void { journal.clear(); changed(); }
 /** Source de la date de jeu affichée dans le journal. */
 export function setNotifyDate(fn: () => string): void { dateOf = fn; }
 
@@ -48,8 +48,6 @@ export function playerText(raw: string): string {
   return t;
 }
 
-const CHANTIER = /^Chantier terminé : (.+?)\.?$/;
-
 /** Bouton d'action d'une notification (ex. « Voir » d'un événement) : au moins 44 px au doigt. */
 export interface ToastAction { label: string; run: () => void }
 
@@ -58,30 +56,17 @@ export function toast(raw: string, kind: NotifyKind = 'info', ms = 4200, action?
   // Téléphone : une seule notification à la fois, plus brève (le détail reste dans la cloche).
   const phone = typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches;
   if (phone && kind !== 'error') ms = Math.min(ms, 2800);
-  const gameDate = dateOf();
-  const ch = CHANTIER.exec(text);
-  let shown = text;
-  if (ch) {
-    // Chantiers terminés : UN message cumulatif dans le journal, sans badge ; toast discret (bureau seulement).
-    let g = notifyLog.find((n) => n.group === 'chantier');
-    if (!g) { g = { text: '', kind: 'ok', at: 0, count: 0, group: 'chantier' }; notifyLog.push(g); }
-    g.count++; g.at = Date.now(); g.gameDate = gameDate;
-    g.text = g.count > 1 ? `Chantiers terminés : ${nf.format(g.count)} (dernier : ${ch[1]})` : text;
-    // Le message cumulatif remonte en fin de journal (le plus récent).
-    notifyLog.splice(notifyLog.indexOf(g), 1); notifyLog.push(g);
-    for (const l of listeners) l();
-    if (phone) return;
-    shown = g.text;
-  } else {
-    // Journal : un message identique consécutif est regroupé (compteur).
-    const last = notifyLog[notifyLog.length - 1];
-    if (last && last.text === text && !last.group) { last.count++; last.at = Date.now(); last.gameDate = gameDate; } else notifyLog.push({ text, kind, at: Date.now(), count: 1, gameDate });
-    unread++;
-  }
-  if (notifyLog.length > LOG_MAX) notifyLog.splice(0, notifyLog.length - LOG_MAX);
-  if (!ch) for (const l of listeners) l();
+  // Journal : regroupement des doublons (« 12 constructions »), gravité (urgent / important / info).
+  const e = journal.add(text, kind, Date.now(), dateOf() || undefined);
+  changed();
+  const grouped = e.count > 1 && e.key.startsWith('r:');
+  // Chantiers terminés : cumul discret, sans toast sur téléphone (comme avant).
+  if (e.group === 'chantier' && phone) return;
+  const shown = grouped ? e.text : text;
+  const ch = e.group === 'chantier';
   const box = $('toasts');
-  const key = ch ? 'chantier' : text;
+  // Un toast par groupe : le cumul (« 5 constructions ») remplace le précédent au lieu d'empiler.
+  const key = e.key.startsWith('r:') ? e.key : text;
   // Dédoublonnage : un message identique (ou le cumul des chantiers) déjà affiché est prolongé et mis à jour.
   for (const t of Array.from(box.children) as HTMLElement[]) {
     if (t.dataset['text'] === key && !t.classList.contains('out')) {

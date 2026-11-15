@@ -277,7 +277,25 @@ export class CameraController implements ICameraController {
     this.gesture = 'none';
     this.pinchDirty = false;
     this.flingV = null;
+    this.mouse.over = false;
+    this.gestureLast = null;
     if (wasTool) this.toolSink?.cancel();
+  }
+
+  /** Périphérique de navigation détecté en dernier (fiche des contrôles) : pavé tactile, souris, écran tactile. */
+  get detectedInput(): WheelDevice | 'touch' | null { return this.lastDevice; }
+
+  /** Pivote la vue (rad, sens de la touche A / Q) : boutons à l'écran. */
+  rotateBy(rad: number): void {
+    this.stopCinematic();
+    if (this.mode === 'street') this.street.gyaw += rad; else this.goal.yaw += rad;
+  }
+
+  /** Incline la vue (rad ; positif = plus plongeante, sens de la touche R) : boutons à l'écran. */
+  tiltBy(rad: number): void {
+    this.stopCinematic();
+    if (this.mode === 'street') this.street.gpitch = clamp(this.street.gpitch - rad, -1.2, 1.2);
+    else this.goal.pitchOffset = this.clampOffset(this.goal.pitchOffset + rad);
   }
 
   setModeListener(fn: (m: CameraMode) => void): void { this.onModeChange = fn; }
@@ -440,6 +458,7 @@ export class CameraController implements ICameraController {
     const [sx, sy] = this.local(e);
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx, sy, button: e.button, type: e.pointerType });
     this.stopCinematic();
+    if (e.pointerType === 'touch') this.lastDevice = 'touch';
     if (this.pointers.size === 1) {
       if (this.mode === 'street') { this.gesture = 'look'; return; }
       if (e.pointerType === 'mouse' && (e.button === 2 || e.button === 1)) { this.gesture = e.button === 2 ? 'orbit-pending' : 'orbit'; return; }
@@ -481,6 +500,7 @@ export class CameraController implements ICameraController {
   private pointerMove(e: PointerEvent): void {
     const p = this.pointers.get(e.pointerId);
     const [sx, sy] = this.local(e);
+    if (e.pointerType === 'mouse') { this.mouse.x = e.clientX; this.mouse.y = e.clientY; this.mouse.over = e.target === this.dom; }
     if (!p) {
       // Survol sans bouton (souris / stylet) : aperçu des outils.
       if (this.pointers.size === 0 && e.target === this.dom) this.toolSink?.hover(sx, sy, e.pointerType);
@@ -606,14 +626,76 @@ export class CameraController implements ICameraController {
     } else if (this.pointers.size === 2) this.resetPinch();
   }
 
+  /** Périphérique retenu pour un événement `wheel` : réglage imposé, sinon détection (`WheelClassifier`). */
+  wheelDevice(e: WheelSample): WheelDevice {
+    const detected = this.wheelKind.classify(e);
+    this.lastDevice = detected;
+    return this.inputPref === 'auto' ? detected : this.inputPref;
+  }
+
   private wheel(e: WheelEvent): void {
     e.preventDefault();
     this.stopCinematic();
     const [sx, sy] = this.local(e);
-    // deltaMode 1 = lignes (Firefox) : ~16 px par ligne.
-    const d = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
-    if (this.mode === 'aerial') this.zoomAt(sx, sy, Math.exp(clamp(d, -300, 300) * 0.0015));
-    else this.moveStreet(-d * 0.02, 0);
+    const device = this.wheelDevice(e as WheelEvent & { wheelDeltaY?: number });
+    // deltaMode 1 = lignes (Firefox) : ~16 px par ligne ; 2 = pages.
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? (this.dom.clientHeight || 800) : 1;
+    const d = e.deltaY * unit;
+    const dx = e.deltaX * unit;
+    if (this.mode !== 'aerial') {
+      // Vue rue : deux doigts = avancer / pas latéral ; molette = avancer (inchangé).
+      if (device === 'touchpad' && !e.ctrlKey) this.moveStreet(-d * 0.02, dx * 0.02);
+      else this.moveStreet(-d * 0.02, 0);
+      return;
+    }
+    if (e.ctrlKey) {
+      // Pincement (Chrome / Edge : Ctrl + petits deltas) ou Ctrl + molette : zoom vers le curseur.
+      if (device === 'touchpad' && Math.abs(d) < NOTCH_MIN) this.zoomAt(sx, sy, Math.exp(clamp(d, -40, 40) * 0.012));
+      else this.zoomAt(sx, sy, Math.exp(clamp(d, -300, 300) * 0.0015));
+      return;
+    }
+    if (device === 'touchpad') {
+      if (e.shiftKey || e.altKey) {
+        // Maj / Alt + deux doigts : horizontal = pivoter, vertical = incliner, dans le même sens qu'un glisser du clic
+        // droit (doigts vers le bas = vue plus plongeante ; défilement « naturel » : deltaY < 0 quand les doigts
+        // descendent). Chrome sous Windows peut convertir Maj + vertical en horizontal : on pivote alors ; Alt l'évite.
+        this.goal.yaw += dx * 0.005;
+        this.goal.pitchOffset = this.clampOffset(this.goal.pitchOffset - d * 0.004);
+        return;
+      }
+      // Deux doigts : la carte suit les doigts (défilement « naturel »), proportionnellement à l'altitude.
+      this.panScreen(-dx, -d);
+      return;
+    }
+    // Molette : Maj + molette = pivoter (Chrome / Firefox transforment Maj + molette en défilement horizontal).
+    if (e.shiftKey) { this.goal.yaw += clamp(d || dx, -300, 300) * 0.0025; return; }
+    this.zoomAt(sx, sy, Math.exp(clamp(d, -300, 300) * 0.0015));
+  }
+
+  /** Pincement / torsion du pavé tactile sous Safari (gesturechange : échelle cumulée, rotation en degrés). */
+  private gesture3(e: { scale?: number; rotation?: number; clientX?: number; clientY?: number; timeStamp: number }): void {
+    const last = this.gestureLast;
+    if (!last || this.pointers.size || typeof e.scale !== 'number' || !(e.scale > 0)) return;
+    this.wheelKind.markTouchpad(e.timeStamp);
+    this.lastDevice = 'touchpad';
+    this.stopCinematic();
+    const r = this.dom.getBoundingClientRect();
+    const sx = (e.clientX ?? r.left + r.width / 2) - r.left, sy = (e.clientY ?? r.top + r.height / 2) - r.top;
+    const rot = typeof e.rotation === 'number' ? e.rotation : 0;
+    if (this.mode === 'aerial') {
+      this.zoomAt(sx, sy, last.scale / e.scale);
+      this.goal.yaw += ((rot - last.rotation) * Math.PI) / 180;
+    } else this.moveStreet((e.scale - last.scale) * 30, 0);
+    this.gestureLast = { scale: e.scale, rotation: rot };
+  }
+
+  /**
+   * Déplacement de la carte d'un vecteur écran (px CSS), comme si le sol au centre de la vue était saisi :
+   * proportionnel à l'altitude (plan du sol), amorti (seule la pose visée bouge).
+   */
+  private panScreen(dx: number, dy: number): void {
+    const w = this.dom.clientWidth || 2, h = this.dom.clientHeight || 2;
+    this.panGrab(w / 2, h / 2, w / 2 + dx, h / 2 + dy, h, false);
   }
 
   private clampOffset(o: number): number {
@@ -641,7 +723,7 @@ export class CameraController implements ICameraController {
   }
 
   /** Déplacement par « saisie » du sol : le point sous le doigt suit le doigt. */
-  private panGrab(sx0: number, sy0: number, sx1: number, sy1: number, h: number): void {
+  private panGrab(sx0: number, sy0: number, sx1: number, sy1: number, h: number, direct = true): void {
     const a = this.planeAt(sx0, sy0, this.cur.ty);
     const b = this.planeAt(sx1, sy1, this.cur.ty);
     let dx: number; let dz: number;
@@ -656,8 +738,10 @@ export class CameraController implements ICameraController {
     const l = Math.hypot(dx, dz);
     if (l > lim) { dx *= lim / l; dz *= lim / l; }
     this.goal.tx += dx; this.goal.tz += dz;
+    this.clampTarget(this.goal);
+    if (!direct) return; // pavé tactile : la caméra rejoint la pose visée avec l'amortissement habituel
     this.cur.tx += dx; this.cur.tz += dz; // saisie directe : pas de traînée
-    this.clampTarget(this.goal); this.clampTarget(this.cur);
+    this.clampTarget(this.cur);
   }
 
   private panLocal(right: number, forward: number): void {
@@ -712,6 +796,16 @@ export class CameraController implements ICameraController {
       const fast = k.has('ShiftLeft') || k.has('ShiftRight') ? 2.2 : 1;
       const speed = g.dist * 0.9 * dt * fast;
       if (f || r) this.panLocal(r * speed, f * speed);
+      // Glissement au bord (option) : curseur de la souris immobile ou non au bord de la fenêtre, au-dessus de la vue 3D,
+      // aucun bouton enfoncé ; vitesse croissante vers le bord (même échelle que le clavier).
+      const m = this.mouse;
+      if (this.edgeScroll && m.over && this.pointers.size === 0 && typeof window !== 'undefined') {
+        const W = window.innerWidth, H = window.innerHeight;
+        const ramp = (v: number): number => clamp((EDGE_SCROLL_PX - v) / EDGE_SCROLL_PX, 0, 1);
+        const er = ramp(W - 1 - m.x) - ramp(m.x);
+        const ef = ramp(m.y) - ramp(H - 1 - m.y);
+        if (er || ef) { this.stopCinematic(); this.panLocal(er * g.dist * 0.9 * dt, ef * g.dist * 0.9 * dt); }
+      }
       if (k.has('KeyE')) g.yaw -= 1.4 * dt;
       if (k.has('KeyQ')) g.yaw += 1.4 * dt;
       if (k.has('KeyR') || k.has('PageUp')) g.pitchOffset = this.clampOffset(g.pitchOffset + 0.9 * dt);

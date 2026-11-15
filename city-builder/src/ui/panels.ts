@@ -16,6 +16,7 @@ import type { CameraController } from '../input/camera';
 import { CATEGORY_FR } from './buildbar';
 import { $, el, fmt, money } from './dom';
 import type { ThumbnailSource } from './thumbnails';
+import { explainBuilding } from './why';
 
 export interface InfoPanelDeps {
   mirror: WorldMirror;
@@ -45,6 +46,7 @@ export class InfoPanel {
   private title = $('info-title');
   private rows = $('info-rows');
   private actions = $('info-actions');
+  private why = $('info-why');
   private thumb = $<HTMLImageElement>('info-thumb');
   /** Bâtiment affiché (réponses asynchrones ignorées si la fiche a changé). */
   private shownBuilding = -1;
@@ -75,6 +77,7 @@ export class InfoPanel {
     this.root.classList.remove('folded');
     this.rows.replaceChildren();
     this.actions.replaceChildren();
+    this.why.replaceChildren();
     this.thumb.classList.add('hidden');
     const cam = this.d.camera;
     this.shownBuilding = p.kind === 'building' ? p.record.id : -1;
@@ -100,6 +103,7 @@ export class InfoPanel {
           const node = (k: string): HTMLElement | undefined => occRows.find((r) => r.key === k)?.node;
           void this.d.inspect(rec.id).then((o) => {
             if (!o || this.shownBuilding !== shownId) return;
+            this.renderWhy(o, pm, isService);
             const res = node('res'); if (res) res.textContent = `${fmt(o.residents)} / ${fmt(o.residentCapacity)}${share(o.residents, o.residentCapacity)}`;
             const hp = node('happy');
             if (hp) {
@@ -199,6 +203,22 @@ export class InfoPanel {
       }
       this.action('Centrer', () => cam.flyTo({ targetX: p.x, targetZ: p.z, distance: 40 }));
     }
+  }
+
+  /** Fiche « Pourquoi » : raisons classées par importance, action conseillée pour chacune (src/ui/why.ts). */
+  private renderWhy(o: BuildingOccupancy, alertMask: number, isService: boolean): void {
+    const sections = explainBuilding(o, alertMask, { isService });
+    const nodes: HTMLElement[] = [];
+    for (const s of sections) {
+      nodes.push(el('section', { cls: 'why-box', attrs: { 'data-why': s.kind } },
+        el('p', { cls: 'why-title', text: s.title }),
+        el('ul', { cls: 'why-list' }, ...s.items.map((it) => el('li', { cls: it.severity, attrs: { 'data-key': it.key } }, el('span', { cls: 'why-cause', text: it.cause }), ...(it.action ? [el('span', { cls: 'why-act', text: it.action })] : []))))));
+    }
+    // Logement habité sans raison de mécontentement notable : le dire aussi (le joueur sait que tout va bien).
+    if (!sections.length && o.diagnosis && o.residents > 0 && o.diagnosis.factors.length) {
+      nodes.push(el('section', { cls: 'why-box ok', attrs: { 'data-why': 'ok' } }, el('p', { cls: 'why-title', text: 'Habitants sans sujet de mécontentement notable' })));
+    }
+    this.why.replaceChildren(...nodes);
   }
 
   private setThumb(assetId: string, alt: string): void {

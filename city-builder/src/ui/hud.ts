@@ -33,6 +33,7 @@ import { FinanceHistory } from './finance';
 import { MONTHS_SHORT } from './charts';
 import { setNotifyDate, toast as showToast } from './notify';
 import { loadOptions, sanitizeOptions, saveOptions, type GraphicsOptions } from './options';
+import { initControlsHelp } from './controls-help';
 import { InfoPanel } from './panels';
 import { listSlotsAsync, removeSlotAsync, slotIdKeepCase, slotLabel } from './save-slots';
 import type { ThumbnailSource } from './thumbnails';
@@ -218,19 +219,27 @@ export function initUI(h: UIHandlers): UIHandle {
     (optForm.elements.namedItem('theme') as HTMLSelectElement).value = o.theme;
     const ev = optForm.elements.namedItem('events') as HTMLSelectElement | null;
     if (ev) ev.value = o.events;
+    const ptr = optForm.elements.namedItem('pointer') as HTMLSelectElement | null;
+    if (ptr) ptr.value = o.pointer;
+    const edge = optForm.elements.namedItem('edgeScroll') as HTMLInputElement | null;
+    if (edge) edge.checked = o.edgeScroll;
     distOut.textContent = `${fmt(o.viewDistance)} m`;
     $<HTMLInputElement>('opt-tutorial').checked = tutorial.enabled;
   };
   optForm.addEventListener('input', (e) => {
     if ((e.target as HTMLElement | null)?.id === 'opt-tutorial') return; // case « Premiers pas » : gérée à part
     const f = new FormData(optForm);
-    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'], dynRes: String(f.get('dynRes') ?? 'auto') as GraphicsOptions['dynRes'], aa: String(f.get('aa') ?? 'auto') as GraphicsOptions['aa'], events: String(f.get('events') ?? 'normal') as GraphicsOptions['events'] });
+    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'], dynRes: String(f.get('dynRes') ?? 'auto') as GraphicsOptions['dynRes'], aa: String(f.get('aa') ?? 'auto') as GraphicsOptions['aa'], events: String(f.get('events') ?? 'normal') as GraphicsOptions['events'], pointer: String(f.get('pointer') ?? 'auto') as GraphicsOptions['pointer'], edgeScroll: f.get('edgeScroll') !== null });
     distOut.textContent = `${fmt(o.viewDistance)} m`;
     saveOptions(o);
     sendEventsSetting(o.events);
     h.onOptions?.(o);
   });
   optForm.addEventListener('submit', (e) => e.preventDefault());
+
+  /* ---------- Fiche des contrôles (touche ?, bouton du menu), astuce pavé tactile, boutons d'orientation ---------- */
+  const controlsHelp = initControlsHelp(() => api?.camera ?? null);
+  $('btn-controls').addEventListener('click', () => controlsHelp.open());
 
   /* ---------- Barre supérieure : sauvegarde, menu, vitesses ---------- */
   $('btn-camera').addEventListener('click', () => h.onToggleCamera());
@@ -586,6 +595,7 @@ export function initUI(h: UIHandlers): UIHandle {
       document.body.classList.add('in-game');
       measure();
       minimap?.invalidate();
+      controlsHelp.maybeShowTip();
     },
     updateStats(s) {
       lastStats = s;

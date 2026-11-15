@@ -48,6 +48,7 @@ export function createElectricitePlugin(): ElectricitePlugin {
     isPowered: (id) => system.powerFactor(id) >= 1,
     hasNetwork: () => system.facilityCount() > 0 || system.importOn,
     serviceState: (id) => system.serviceState(id),
+    isConnectedFacility: (id) => system.isConnectedFacility(id),
     satisfactionCell: (k) => system.satisfactionCell(k),
     exportableKw: () => system.exportableKw(),
     summary: () => system.summary(),

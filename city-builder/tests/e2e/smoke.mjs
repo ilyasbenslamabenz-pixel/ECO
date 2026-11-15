@@ -8,6 +8,7 @@
 import { mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { collectErrors, dist, launch, root, serve } from './lib.mjs';
+import { checkLaptopNavigation } from './navigation-portable.mjs';
 
 if (!existsSync(join(dist, 'index.html'))) { console.error('dist/ absent : lancer npm run build'); process.exit(1); }
 const out = join(root, 'tests/e2e/out');
@@ -48,6 +49,8 @@ async function run(label, path) {
   await page.keyboard.press('KeyV');
   await page.evaluate(() => window.__aube.renderNow(2, 0.5));
   await page.screenshot({ path: join(out, `smoke-${label}-aerien.png`), timeout: 600000 });
+  // PC portable (1280 × 800) : pavé tactile (deux doigts = déplacer, pincer = zoom), molette, panneaux, boutons.
+  if (label === 'index') await checkLaptopNavigation(page, check, label);
   check(errors.length === 0, `[${label}] aucune erreur de page${errors.length ? ' :\n   ' + errors.join('\n   ') : ''}`);
   await page.close();
 }

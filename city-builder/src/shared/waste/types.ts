@@ -97,6 +97,20 @@ export interface WasteFacilityInfo {
   capacity: number;
   /** Décharge : masse enfouie (kg). Tri / incinérateur : masse traitée la veille (kg). */
   amount: number;
+  /**
+   * Tri / incinérateur : masse traitée lors du dernier jour où il y a eu quelque chose à traiter (kg) et index de
+   * ce jour. La collecte n'a lieu que certains jours : « traité hier » vaut 0 le lendemain d'un jour sans collecte.
+   */
+  lastAmount?: number;
+  lastAmountDay?: number;
+}
+
+/** Diagnostic en clair (panneau) : ce qui cloche et le réglage à toucher. */
+export interface WasteDiagnostic {
+  level: 'info' | 'warn';
+  text: string;
+  /** Réglage ou action à toucher (libellé du panneau), s'il y en a un. */
+  fix?: string;
 }
 
 /** Statistiques journalières (dernier jour clos) et cumuls. */
@@ -115,6 +129,8 @@ export interface WasteDayStats {
   energyMWh: number;
   tours: number;
   stops: number;
+  /** Arrêts prévus non desservis faute de temps (service de 7 h, 2 vidages). */
+  missedStops?: number;
 }
 
 export interface WasteTotals {
@@ -156,8 +172,34 @@ export interface WasteSummary {
   pollution: { air: number; soil: number; water: number; nuisance: number; airMax: number; soilMax: number; nuisanceMax: number };
   /** Raison pour laquelle la collecte ne fonctionne pas (null si elle fonctionne). */
   blocked: string | null;
-  /** Prochain jour de collecte (index de jour). */
+  /** Prochain jour de collecte (index de jour) ; le jour même seulement avant l'heure de départ. */
   nextCollectionDay: number;
+  /** Statistiques du jour en cours (tournées lancées, arrêts, collecté). */
+  today?: WasteDayStats;
+  /** Jours de collecte de la semaine (0 = lundi) et heure de départ (minute du jour). */
+  collectionDays?: readonly number[];
+  departureMinute?: number;
+  /** Bâtiments producteurs qu'aucun camion ne peut atteindre (pas de route reliée au dépôt), au dernier passage. */
+  unservedProducers?: number;
+  /** Fréquence minimale qui évite le débordement des bacs (passages / semaine). */
+  recommendedCollectsPerWeek?: number;
+  /** Diagnostics en clair, du plus grave au moins grave. */
+  diagnostics?: WasteDiagnostic[];
+}
+
+/**
+ * Plus petite fréquence hebdomadaire dont le plus long intervalle entre deux collectes (plus la durée d'un service)
+ * reste sous la réserve des bacs (`storageDays`) : en dessous, les bacs débordent avant le passage suivant.
+ */
+export function recommendedCollectsPerWeek(storageDays: number = WASTE_PARAMS.storageDays): number {
+  const margin = WASTE_PARAMS.shiftMinutes / 1440;
+  for (let n = 1; n <= 7; n++) {
+    const days = COLLECTION_DAYS[n]!;
+    let gap = 0;
+    for (let i = 0; i < days.length; i++) gap = Math.max(gap, ((days[(i + 1) % days.length]! - days[i]! + 7) % 7) || 7);
+    if (gap + margin < storageDays) return n;
+  }
+  return 7;
 }
 
 /** Valeur bornée d'un réglage. */

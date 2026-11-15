@@ -20,7 +20,9 @@ import { barRow } from './city-panels';
 import { drawChart, MONTHS_SHORT } from './charts';
 import { $, el, fmt, money, moneyShort, pct, signedMoney } from './dom';
 import { iconEl } from './icons';
-import { clearLog, markAllRead, notifyLog, onNotify, unreadCount, type NotifyEntry } from './notify';
+import { clearLog, journal, markAllRead, markEntryRead, markSeverityRead, notifyLog, onNotify, unreadCount, type NotifyEntry, type Severity } from './notify';
+import { SEVERITY_FR, SEVERITY_ORDER } from './notify-log';
+import { HistoryView, type HistTab } from './history-view';
 
 export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications' | 'policy' | 'research' | 'energy' | 'water' | 'waste' | 'progression';
 
@@ -29,7 +31,7 @@ const META: Record<DashId, { title: string; icon: string; cls: string; kicker: s
   services: { title: 'Services publics', icon: 'services', cls: 't-services', kicker: 'Tableau de bord' },
   transport: { title: 'Transports', icon: 'transport', cls: 't-transport', kicker: 'Tableau de bord' },
   environment: { title: 'Environnement', icon: 'leaf', cls: 't-nature', kicker: 'Tableau de bord' },
-  stats: { title: 'Statistiques', icon: 'stats', cls: 't-stats', kicker: 'Historique mensuel' },
+  stats: { title: 'Statistiques', icon: 'stats', cls: 't-stats', kicker: 'Évolution de la ville' },
   notifications: { title: 'Notifications', icon: 'bell', cls: 't-notif', kicker: 'Journal' },
   policy: { title: 'Politiques', icon: 'policy', cls: 't-city', kicker: 'Gouvernance' },
   research: { title: 'Recherche', icon: 'research', cls: 't-city', kicker: 'Progression' },
@@ -101,7 +103,14 @@ export class Dashboards {
   private mountedKey = '';
   private renderedKey = '';
 
+  /** Graphiques d'évolution (module « historique »). */
+  private readonly history: HistoryView;
+
   constructor(private d: DashDeps) {
+    this.history = new HistoryView(
+      async () => (d.modules.bridge ? await d.modules.bridge.pluginCommand('historique', 'etat') as { today: number; state: import('../shared/protocol-ext/historique').HistoriqueState } | null : null),
+      () => { if (this.current === 'stats') this.render(true); },
+    );
     for (const b of Array.from(this.sidebar.querySelectorAll<HTMLButtonElement>('button[data-dash]'))) {
       b.addEventListener('click', () => {
         if (b.disabled) return;
@@ -122,7 +131,7 @@ export class Dashboards {
     $('dash-fold').addEventListener('click', () => this.panel.classList.toggle('folded'));
     $('btn-stats').addEventListener('click', () => this.toggle('stats'));
     $('btn-notif').addEventListener('click', () => this.toggle('notifications'));
-    onNotify(() => { this.syncBadge(); if (this.current === 'notifications') { markAllReadSoon(); this.render(true); } });
+    onNotify(() => { this.syncBadge(); if (this.current === 'notifications') { markInfoReadSoon(); this.render(true); } });
     this.syncBadge();
     window.addEventListener('resize', () => { if (this.current === 'stats') this.render(true); });
   }
@@ -136,7 +145,7 @@ export class Dashboards {
     $('btn-sidebar').classList.toggle('has-notif', n > 0);
     const sb = document.getElementById('sb-notif-badge');
     if (sb) { sb.textContent = b.textContent; sb.classList.toggle('hidden', n === 0); }
-    $('btn-notif').setAttribute('aria-label', n ? `Notifications (${n} non lues)` : 'Notifications');
+    $('btn-notif').setAttribute('aria-label', n ? `Notifications (${n} importante${n > 1 ? 's' : ''} non lue${n > 1 ? 's' : ''})` : 'Notifications');
   }
 
   /** Bouton actif de la barre latérale = panneau ouvert. */
@@ -168,7 +177,8 @@ export class Dashboards {
     ico.replaceChildren(iconEl(m.icon));
     this.panel.classList.remove('hidden', 'folded');
     this.panel.dataset['dash'] = id;
-    if (id === 'notifications') markAllRead();
+    // Journal : les infos sont lues à l'ouverture ; urgentes et importantes restent signalées jusqu'à « Tout marquer comme lu ».
+    if (id === 'notifications') markSeverityRead('info');
     this.render(true);
     this.syncSidebar();
   }
@@ -244,7 +254,7 @@ export class Dashboards {
       services: [{ id: 'coverage', label: 'Couverture' }, { id: 'equip', label: 'Équipements' }],
       transport: [{ id: 'traffic', label: 'Trafic' }, { id: 'network', label: 'Réseau' }],
       environment: [{ id: 'env', label: 'Qualité' }],
-      stats: [{ id: 'pop', label: 'Habitants' }, { id: 'money', label: 'Trésorerie' }, { id: 'happy', label: 'Satisfaction' }, { id: 'jobs', label: 'Emploi' }],
+      stats: [{ id: 'pop', label: 'Habitants' }, { id: 'money', label: 'Trésorerie' }, { id: 'jobs', label: 'Emploi' }, { id: 'happy', label: 'Satisfaction' }],
       notifications: [{ id: 'log', label: 'Journal' }],
       policy: [], research: [], energy: [], water: [], waste: [], progression: [],
     };
@@ -382,49 +392,69 @@ export class Dashboards {
     ];
   }
 
-  private buildStats(r: SimReport | null, tab: string): HTMLElement[] {
-    const titles: Record<string, string> = { pop: 'Habitants en fin de mois', money: 'Trésorerie en fin de mois (CHF)', happy: 'Satisfaction moyenne (0 à 100)', jobs: 'Taux de chômage (%)' };
-    const out: HTMLElement[] = [el('div', { cls: 'chart-wrap' }, el('div', { cls: 'chart-title', text: titles[tab] ?? '' }), el('canvas', { cls: 'chart', attrs: { id: 'stats-chart', height: '190', role: 'img', 'aria-label': titles[tab] ?? '' } }))];
-    const h = r?.economy.history ?? [];
-    out.push(el('p', { cls: 'muted small', text: h.length ? `${h.length} mois clos (24 derniers au plus).` : 'Les statistiques mensuelles apparaissent à la clôture du premier mois (le 1er du mois suivant).' }));
-    return out;
+  private buildStats(_r: SimReport | null, tab: string): HTMLElement[] {
+    // Évolution sur 3 mois, 1 an ou toute la partie (relevés quotidiens sauvegardés : module « historique »).
+    this.history.refresh();
+    return this.history.build(tab as HistTab, this.d.stats());
   }
 
   private drawStats(tab: string): void {
-    const c = document.getElementById('stats-chart') as HTMLCanvasElement | null;
-    if (!c) return;
-    const h = (this.d.report()?.economy.history ?? []).slice(-24);
-    const pick: Record<string, { v: number[]; kind: 'bar' | 'line'; color: string; unit: string }> = {
-      pop: { v: h.map((x) => x.population), kind: 'line', color: '#7cc4ff', unit: 'hab.' },
-      money: { v: h.map((x) => x.moneyEnd), kind: 'line', color: '#3ddc84', unit: 'CHF' },
-      happy: { v: h.map((x) => x.happiness), kind: 'line', color: '#ffd166', unit: '/100' },
-      jobs: { v: h.map((x) => x.unemploymentRate * 100), kind: 'bar', color: '#ff8f6b', unit: '%' },
-    };
-    const p = pick[tab] ?? pick['pop']!;
-    drawChart(c, { labels: h.map((x) => MONTHS_SHORT[x.month - 1] ?? ''), series: [{ kind: p.kind, axis: 'left', name: tab, values: p.v, color: p.color }], leftUnit: p.unit, empty: 'Aucun mois clos pour l’instant' });
+    this.history.draw(tab as HistTab, this.d.stats());
   }
+
+  /** Filtre du journal (toutes les gravités ou une seule). */
+  private notifFilter: Severity | 'all' = 'all';
 
   private buildNotifications(): HTMLElement[] {
     if (!notifyLog.length) return [el('p', { cls: 'muted small', text: 'Aucune notification pour l’instant.' })];
-    const clear = el('button', { cls: 'chip', attrs: { 'data-act': 'clear' } }, iconEl('close'), el('span', { text: 'Tout effacer' }));
-    clear.addEventListener('click', () => { clearLog(); this.render(true); });
+    const chip = (label: string, icon: string, act: string, fn: () => void): HTMLButtonElement => {
+      const b = el('button', { cls: 'chip', attrs: { 'data-act': act, type: 'button' } }, iconEl(icon), el('span', { text: label }));
+      b.addEventListener('click', fn);
+      return b;
+    };
+    const readAll = chip('Tout marquer comme lu', 'check', 'read-all', () => { markAllRead(); this.render(true); });
+    readAll.disabled = journal.unreadCount() === 0;
+    const clear = chip('Tout effacer', 'close', 'clear', () => { clearLog(); this.render(true); });
     // Date de jeu (jour, mois, an) ; à défaut, date réelle complète (jamais une heure seule, ambiguë).
     const fmtT = (n: NotifyEntry): string => n.gameDate || new Date(n.at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const item = (n: NotifyEntry, pinned = false): HTMLElement => el('li', { cls: `${n.kind}${pinned ? ' notif-pinned' : ''}` },
-      el('span', { cls: 'nico' }, iconEl(n.kind === 'error' ? 'alert' : n.kind === 'ok' ? 'check' : 'info')),
-      el('span', { cls: 'ntext', text: n.count > 1 && !n.group ? `${n.text} (×${n.count})` : n.text }), el('span', { cls: 'ntime', text: fmtT(n) }));
-    // Alertes épinglées en tête (les 3 plus récentes), puis tout le journal du plus récent au plus ancien.
-    const alerts = notifyLog.filter((n) => n.kind === 'error').slice(-3).reverse();
-    const out: HTMLElement[] = [];
-    if (alerts.length) out.push(el('div', { cls: 'sec-title', text: 'Alertes récentes' }), el('ul', { cls: 'notif-list' }, ...alerts.map((n) => item(n, true))), el('div', { cls: 'sec-title', text: 'Journal' }));
-    out.push(el('ul', { cls: 'notif-list' }, ...notifyLog.slice().reverse().map((n) => item(n))), el('div', { cls: 'chips' }, clear));
+    const item = (n: NotifyEntry): HTMLElement => {
+      // Regroupement : le texte est déjà un résumé (« 12 constructions ») ; sinon compteur ×n.
+      const summarized = n.count > 1 && n.text !== n.last;
+      const li = el('li', { cls: `${n.kind} ${n.severity}${n.unread ? ' unread' : ''}`, attrs: { 'data-sev': n.severity, 'data-key': n.key, 'data-count': String(n.count) } },
+        el('span', { cls: 'nico' }, iconEl(n.kind === 'error' ? 'alert' : n.kind === 'ok' ? 'check' : 'info')),
+        el('span', { cls: 'ntext' }, el('span', { cls: 'nsev', text: SEVERITY_FR[n.severity] }), n.text, ...(n.count > 1 && !summarized ? [el('span', { cls: 'ncount', text: `×${n.count}` })] : [])),
+        el('span', { cls: 'ntime', text: fmtT(n) }));
+      if (summarized) li.dataset['tip'] = `Dernier : ${n.last}`;
+      if (n.unread) li.addEventListener('click', () => { markEntryRead(n); this.render(true); });
+      return li;
+    };
+    const counts = SEVERITY_ORDER.map((sv) => journal.unreadCount(sv));
+    const summary = counts[0]! + counts[1]! > 0
+      ? `${counts[0] ? `${counts[0]} urgente${counts[0] > 1 ? 's' : ''}` : ''}${counts[0] && counts[1] ? ' · ' : ''}${counts[1] ? `${counts[1]} importante${counts[1] > 1 ? 's' : ''}` : ''} non lue${counts[0]! + counts[1]! > 1 ? 's' : ''}`
+      : 'Rien d’urgent ni d’important à traiter.';
+    const out: HTMLElement[] = [el('div', { cls: 'notif-head' }, el('span', { cls: 'muted small', attrs: { 'data-notif-summary': '' }, text: summary }), el('div', { cls: 'chips' }, readAll, clear))];
+    const filters = el('div', { cls: 'notif-filters', attrs: { role: 'tablist', 'aria-label': 'Gravité' } });
+    for (const f of ['all', ...SEVERITY_ORDER] as const) {
+      const n = f === 'all' ? notifyLog.length : notifyLog.filter((e) => e.severity === f).length;
+      const b = el('button', { cls: this.notifFilter === f ? 'on' : '', text: `${f === 'all' ? 'Toutes' : SEVERITY_FR[f]} (${n})`, attrs: { type: 'button', 'data-filter': f, role: 'tab', 'aria-selected': String(this.notifFilter === f) } });
+      b.addEventListener('click', () => { this.notifFilter = f; this.render(true); });
+      filters.append(b);
+    }
+    out.push(filters);
+    // Classement par gravité (urgent, important, info), du plus récent au plus ancien dans chaque groupe.
+    for (const sev of SEVERITY_ORDER) {
+      if (this.notifFilter !== 'all' && this.notifFilter !== sev) continue;
+      const list = journal.bySeverity(sev);
+      if (!list.length) continue;
+      out.push(el('div', { cls: 'sec-title', text: `${SEVERITY_FR[sev]} (${list.length})` }), el('ul', { cls: 'notif-list', attrs: { 'data-sev-list': sev } }, ...list.map(item)));
+    }
     return out;
   }
 }
 
 let pendingRead = false;
-function markAllReadSoon(): void {
+function markInfoReadSoon(): void {
   if (pendingRead) return;
   pendingRead = true;
-  queueMicrotask(() => { pendingRead = false; markAllRead(); });
+  queueMicrotask(() => { pendingRead = false; markSeverityRead('info'); });
 }

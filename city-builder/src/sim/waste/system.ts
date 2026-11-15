@@ -16,8 +16,8 @@
 import { governanceModifiers } from '../../shared/governance';
 import {
   COLLECTION_DAYS, DEFAULT_FACILITY_CAPACITY, DEFAULT_WASTE_SETTINGS, WASTE_FACILITY_FR, WASTE_PARAMS as P, clampSetting,
-  facilityKindOfTags, tagNumber, type WasteDayStats, type WasteFacilityInfo, type WasteFacilityKind, type WasteSettings,
-  type WasteSummary, type WasteTotals,
+  facilityKindOfTags, recommendedCollectsPerWeek, tagNumber, type WasteDayStats, type WasteDiagnostic, type WasteFacilityInfo,
+  type WasteFacilityKind, type WasteSettings, type WasteSummary, type WasteTotals,
 } from '../../shared/waste/types';
 import { weekdayOf } from '../clock';
 import { rotAngle } from '../../shared/footprint';
@@ -31,7 +31,19 @@ export const NUISANCE_ID = 'dechets:nuisance' as const;
 const MIN_PER_DAY = 1440;
 
 /** Bacs d'un bâtiment : part triée (rec) et résiduelle (res), kg. */
-export interface Bin { rec: number; res: number; cap: number; /** Débordement du jour (kg). */ over: number }
+export interface Bin {
+  rec: number; res: number; cap: number; /** Débordement du jour (kg). */ over: number;
+  /** Production courante du bâtiment (kg/j), recalculée chaque heure (non sauvegardée). */
+  rate?: number;
+}
+
+/**
+ * Marge (jours) ajoutée à l'intervalle entre deux collectes pour décider qu'un bac presque vide doit quand même
+ * être vidé : un passage peut avoir lieu jusqu'à la fin du service (7 h après le départ).
+ */
+const PICKUP_MARGIN_DAYS = P.shiftMinutes / MIN_PER_DAY;
+/** Une tournée qui dure plus que le service + cette marge est anormale (diagnostic « camions retenus »). */
+const STUCK_RUN_MINUTES = P.shiftMinutes + 180;
 
 /** Installation suivie. */
 export interface Facility {
@@ -50,6 +62,9 @@ export interface Facility {
   /** Débordement du jour autour de l'installation (kg). */
   overToday: number;
   connected: boolean;
+  /** Tri / incinérateur : masse traitée au dernier jour non vide et index de ce jour (panneau). */
+  lastProcessed?: number;
+  lastProcessedDay?: number;
 }
 
 export type TruckEventKind = 'pickup' | 'unload' | 'end';
@@ -111,6 +126,8 @@ export class WasteSystem {
   /** Production courante (kg/j) et nombre de producteurs, recalculés chaque heure. */
   productionPerDay = 0;
   producers = 0;
+  /** Producteurs qu'aucun camion ne peut atteindre depuis un dépôt (calculé à chaque planification ; -1 inconnu). */
+  unserved = -1;
   private notified = new Set<string>();
 
   constructor(private readonly muni: () => Municipal | undefined) {}
@@ -130,6 +147,7 @@ export class WasteSystem {
     this.blocked = null;
     this.productionPerDay = 0;
     this.producers = 0;
+    this.unserved = -1;
     this.notified.clear();
     this.version++;
   }
@@ -213,14 +231,14 @@ export class WasteSystem {
       live.add(id);
       const a = ctx.buildings.assetOf(id);
       const jobs = st.workers[i]!, res = st.residents[i]!;
-      if (jobs <= 0 && res <= 0) continue;
-      const kgDay = res * P.kgPerResident + jobs * (P.kgPerJob[a?.category ?? ''] ?? P.kgPerJobDefault);
-      if (kgDay <= 0) continue;
+      const kgDay = jobs <= 0 && res <= 0 ? 0 : res * P.kgPerResident + jobs * (P.kgPerJob[a?.category ?? ''] ?? P.kgPerJobDefault);
+      if (kgDay <= 0) { const b0 = this.bins.get(id); if (b0) b0.rate = 0; continue; }
       producers++;
       perDay += kgDay;
       let b = this.bins.get(id);
       if (!b) this.bins.set(id, (b = { rec: 0, res: 0, cap: 0, over: 0 }));
       b.cap = Math.max(P.storageMinKg, kgDay * P.storageDays);
+      b.rate = kgDay;
       const kg = (kgDay * minutes) / MIN_PER_DAY;
       b.rec += kg * share;
       b.res += kg * (1 - share);
@@ -265,10 +283,21 @@ export class WasteSystem {
     const st = ctx.buildings.store, n = ctx.buildings.count;
     const reqs: AttachRequest[] = [];
     for (const f of this.facilities.values()) reqs.push({ ref: f.id, x: f.x, z: f.z });
+    // Arrêts : bacs d'au moins `minStopKg`, ou bacs presque vides qui déborderaient avant la collecte suivante (un
+    // petit producteur sauté à chaque passage parce qu'il avait < 20 kg finissait par déborder entre deux collectes).
+    const day = Math.floor(departAbs / MIN_PER_DAY);
+    const gapDays = this.nextCollectionDay(day + 1) - day + PICKUP_MARGIN_DAYS;
+    const wanted = new Set<number>();
     for (let i = 0; i < n; i++) {
       const id = st.id[i]!;
       const b = this.bins.get(id);
-      if (b && b.rec + b.res >= P.minStopKg && !this.facilities.has(id)) reqs.push({ ref: id, x: st.x[i]!, z: st.z[i]! });
+      if (!b || this.facilities.has(id)) continue;
+      const kg = b.rec + b.res;
+      const producing = (b.rate ?? 0) > 0;
+      if (!producing && kg < P.minStopKg) continue;
+      // Tous les producteurs sont rattachés (pour compter ceux qu'aucun camion n'atteint) ; arrêts : `wanted`.
+      reqs.push({ ref: id, x: st.x[i]!, z: st.z[i]! });
+      if (kg >= P.minStopKg || (kg > 0.5 && kg + (b.rate ?? 0) * gapDays >= b.cap)) wanted.add(id);
     }
     const g = TruckGraph.build(ctx.roads, reqs, P.truckSpeedKmh);
     for (const f of this.facilities.values()) {
@@ -280,6 +309,19 @@ export class WasteSystem {
     const incs = [...this.facilities.values()].filter((f) => f.kind === 'incinerateur' && f.connected);
     const lands = [...this.facilities.values()].filter((f) => f.kind === 'decharge' && f.connected);
     const fleet = depots.reduce((s, f) => s + f.capacity, 0);
+    // Nœuds atteignables depuis au moins un dépôt relié ; producteurs inatteignables (rue isolée, trop loin d'une rue).
+    const reached = new Uint8Array(g.n);
+    for (const d of depots) {
+      const dist = g.shortest(g.attached.get(d.id)!.node);
+      for (let v = 0; v < g.n; v++) if (Number.isFinite(dist[v]!)) reached[v] = 1;
+    }
+    let unserved = 0;
+    for (const r of reqs) {
+      if (this.facilities.has(r.ref) || !((this.bins.get(r.ref)?.rate ?? 0) > 0)) continue;
+      const a = g.attached.get(r.ref);
+      if (!a || !reached[a.node]) unserved++;
+    }
+    if (unserved !== this.unserved) { this.unserved = unserved; this.version++; }
     // Grève des éboueurs (module `evenements`) : une part seulement des camions sort (au moins un, la tournée continue).
     const strike = governanceModifiers((n) => ctx.use(n)).wasteCollectionFactor;
     const funded = activeTrucksFor(fleet, this.settings.funding);
@@ -294,10 +336,10 @@ export class WasteSystem {
     const stops = new Map<number, Stop>();
     let totalKg = 0;
     for (const r of reqs) {
-      if (this.facilities.has(r.ref)) continue;
+      if (this.facilities.has(r.ref) || !wanted.has(r.ref)) continue;
       const a = g.attached.get(r.ref);
       const b = this.bins.get(r.ref);
-      if (!a || !b) continue;
+      if (!a || !b || !reached[a.node]) continue;
       const kg = b.rec + b.res;
       stops.set(a.node, { ref: r.ref, node: a.node, kg });
       totalKg += kg;
@@ -320,11 +362,14 @@ export class WasteSystem {
         ?? best(lands, (f) => f.stock + (planned.get(f.id) ?? 0) < f.capacity)
         ?? best(lands, () => true) ?? best(incs, () => true);
     };
-    const nearest = (list: Facility[], dist: Float64Array): Facility | null => {
+    const nearest = (list: Facility[], dist: Float64Array, ok: (f: Facility) => boolean = () => true): Facility | null => {
       let r: Facility | null = null, rd = Infinity;
-      for (const f of list) { const d = dist[g.attached.get(f.id)!.node]!; if (d < rd) { rd = d; r = f; } }
+      for (const f of list) { const d = dist[g.attached.get(f.id)!.node]!; if (d < rd && ok(f)) { rd = d; r = f; } }
       return r;
     };
+    // Centre de tri : le plus proche qui a encore de la capacité aujourd'hui, sinon le plus proche.
+    const pickTri = (dist: Float64Array, kg: number): Facility | null =>
+      nearest(tris, dist, (f) => f.stock + f.inToday + (planned.get(f.id) ?? 0) + kg <= f.capacity) ?? nearest(tris, dist);
 
     let launched = 0;
     for (let k = 0; k < active && stops.size; k++) {
@@ -344,7 +389,7 @@ export class WasteSystem {
       const unload = (): void => {
         if (load <= 0) return;
         let dist = g.shortest(pos);
-        const tri = rec > 0 ? nearest(tris, dist) : null;
+        const tri = rec > 0 ? pickTri(dist, rec) : null;
         if (tri) {
           if (pushLeg(g.attached.get(tri.id)!.node)) {
             t += P.unloadMinutes / 2; hold(run, t);
@@ -396,6 +441,8 @@ export class WasteSystem {
       launched++;
       this.today.stops += run.stops;
     }
+    // Arrêts atteignables laissés de côté (service de 7 h ou vidages épuisés) : diagnostic « tournée trop longue ».
+    this.today.missedStops = (this.today.missedStops ?? 0) + stops.size;
     this.today.tours += launched;
     this.totals.tours += launched;
     this.version++;
@@ -495,6 +542,7 @@ export class WasteSystem {
       if (f.kind !== 'tri') continue;
       const p = Math.min(f.stock, f.capacity);
       f.stock -= p; f.processed = p;
+      if (p > 0) { f.lastProcessed = p; f.lastProcessedDay = dayIndex - 1; }
       const recovered = p * P.sortRecoveryRate;
       day.recycledKg += recovered; this.totals.recycledKg += recovered;
       const income = (recovered / 1000) * P.recyclePricePerTonne * governanceModifiers((n) => ctx.use(n)).recyclingFactor;
@@ -508,6 +556,7 @@ export class WasteSystem {
       if (f.kind !== 'incinerateur') continue;
       const burn = Math.min(f.stock, f.capacity);
       f.stock -= burn; f.processed = burn;
+      if (burn > 0) { f.lastProcessed = burn; f.lastProcessedDay = dayIndex - 1; }
       day.burnedKg += burn; this.totals.burnedKg += burn;
       const mwh = (burn / 1000) * P.incinerationMWhPerTonne;
       day.energyMWh += mwh; this.totals.energyMWh += mwh;
@@ -667,10 +716,15 @@ export class WasteSystem {
     return [...this.facilities.values()].sort((a, b) => a.id - b.id).map((f) => ({
       buildingId: f.id, kind: f.kind, x: f.x, z: f.z, rot: f.rot, connected: f.connected, capacity: f.capacity,
       amount: f.kind === 'decharge' ? f.stock : f.processed,
+      ...(f.lastProcessed !== undefined ? { lastAmount: f.lastProcessed, lastAmountDay: f.lastProcessedDay ?? 0 } : {}),
     }));
   }
 
-  summary(dayIndex: number): WasteSummary {
+  /**
+   * Synthèse. `nowMinutes` (minute absolue de jeu) précise la prochaine collecte (le jour même seulement avant l'heure
+   * de départ) et permet de repérer des tournées anormalement longues.
+   */
+  summary(dayIndex: number, nowMinutes?: number): WasteSummary {
     let stored = 0, storage = 0, overflowing = 0;
     for (const b of this.bins.values()) { stored += b.rec + b.res; storage += b.cap; if (b.rec + b.res >= b.cap - 1e-6) overflowing++; }
     const st = (id: 'pollution_air' | 'pollution_sol' | 'pollution_eau' | typeof NUISANCE_ID): { mean: number; max: number } => {
@@ -681,19 +735,67 @@ export class WasteSystem {
     };
     const air = st('pollution_air'), soil = st('pollution_sol'), water = st('pollution_eau'), nuis = st(NUISANCE_ID);
     const fleet = this.connectedFleet() || this.fleet();
+    const minuteOfDay = nowMinutes === undefined ? 0 : nowMinutes - dayIndex * MIN_PER_DAY;
+    const next = this.isCollectionDay(dayIndex) && minuteOfDay > P.departureMinute ? this.nextCollectionDay(dayIndex + 1) : this.nextCollectionDay(dayIndex);
+    const facilities = this.facilityInfos();
     return {
       settings: { ...this.settings },
       storedKg: stored, storageKg: storage, overflowingBuildings: overflowing, producers: this.producers,
       productionPerDay: this.productionPerDay,
       fleet, activeTrucks: activeTrucksFor(fleet, this.settings.funding), trucksOnRoad: this.runs.length,
       monthlyBudget: monthlyTruckBudget(fleet, this.settings.funding),
-      facilities: this.facilityInfos(),
+      facilities,
       lastDay: this.lastDay ? { ...this.lastDay } : null,
       totals: { ...this.totals },
       pollution: { air: air.mean, soil: soil.mean, water: water.mean, nuisance: nuis.mean, airMax: air.max, soilMax: soil.max, nuisanceMax: nuis.max },
       blocked: this.blocked,
-      nextCollectionDay: this.nextCollectionDay(dayIndex),
+      nextCollectionDay: next,
+      today: { ...this.today },
+      collectionDays: [...(COLLECTION_DAYS[this.settings.collectsPerWeek] ?? COLLECTION_DAYS[3]!)],
+      departureMinute: P.departureMinute,
+      unservedProducers: Math.max(0, this.unserved),
+      recommendedCollectsPerWeek: recommendedCollectsPerWeek(),
+      diagnostics: this.diagnose(facilities, overflowing, nowMinutes),
     };
+  }
+
+  /** Diagnostics en clair : ce qui empêche la collecte de suivre, avec le réglage ou l'action à toucher. */
+  diagnose(facilities: WasteFacilityInfo[], overflowing: number, nowMinutes?: number): WasteDiagnostic[] {
+    const out: WasteDiagnostic[] = [];
+    const label = facilityLabels(facilities);
+    for (const f of facilities) {
+      if (f.connected) continue;
+      const name = label.get(f.buildingId)!;
+      const what = f.kind === 'depot' ? `ses ${f.capacity} camions ne peuvent pas sortir` : f.kind === 'tri' ? 'les camions ne peuvent pas y vider la part triée' : 'les camions ne peuvent pas y vider les déchets';
+      out.push({ level: 'warn', text: `${name} non relié : aucune rue carrossable à moins de 70 m, ${what}.`, fix: `Tracez une rue jusqu'à l'entrée du ${name.toLowerCase()}.` });
+    }
+    if (nowMinutes !== undefined) {
+      const stuck = this.runs.filter((r) => nowMinutes - r.depart > STUCK_RUN_MINUTES).length;
+      if (stuck > 0) out.push({ level: 'warn', text: `${stuck} camion${stuck > 1 ? 's sont' : ' est'} en tournée depuis plus de ${Math.round(STUCK_RUN_MINUTES / 60)} h : tournée anormalement longue.`, fix: 'Vérifiez que le dépôt et les filières sont reliés au même réseau de rues.' });
+    }
+    if (this.unserved > 0) {
+      out.push({ level: 'warn', text: `${this.unserved} bâtiment${this.unserved > 1 ? 's' : ''} producteur${this.unserved > 1 ? 's' : ''} hors d'atteinte des camions (rue isolée ou à plus de 70 m d'une rue) : leurs bacs ne sont jamais vidés et débordent.`, fix: 'Reliez ces rues au réseau qui mène au dépôt.' });
+    }
+    const missed = Math.max(this.today.missedStops ?? 0, this.lastDay?.missedStops ?? 0);
+    if (missed > 0) {
+      out.push({ level: 'warn', text: `Tournées trop longues : ${missed} arrêt${missed > 1 ? 's' : ''} non desservi${missed > 1 ? 's' : ''} (service de 7 h, 2 vidages par camion).`, fix: 'Financement du service (plus de camions en service), ou un dépôt plus proche des quartiers.' });
+    }
+    const rec = recommendedCollectsPerWeek();
+    if (this.settings.collectsPerWeek < rec) {
+      out.push({ level: 'warn', text: `Collecte ${this.settings.collectsPerWeek} fois par semaine : les bacs (${P.storageDays} jours de réserve) sont pleins avant la collecte suivante.`, fix: `Fréquence de collecte : ${rec} / semaine au moins.` });
+    } else if ((this.lastDay?.uncollectedKg ?? 0) > 0 && this.unserved <= 0 && missed === 0 && overflowing > 0 && !this.blocked) {
+      out.push({ level: 'info', text: 'Des bacs ont débordé : la réserve de certains bâtiments ne tient pas jusqu\'au passage suivant.', fix: 'Fréquence de collecte : un passage de plus par semaine.' });
+    }
+    // Centres de tri : un centre qui ne reçoit jamais rien alors qu'un autre suffit.
+    const tris = facilities.filter((f) => f.kind === 'tri' && f.connected);
+    const used = tris.filter((f) => (f.lastAmount ?? 0) > 0);
+    if (used.length > 0) {
+      for (const f of tris) {
+        if ((f.lastAmount ?? 0) > 0) continue;
+        out.push({ level: 'info', text: `${label.get(f.buildingId)} inutilisé : ${used.map((u) => label.get(u.buildingId)!.toLowerCase()).join(', ')}, plus proche des tournées, suffit (${Math.round(used[0]!.capacity / 1000)} t/jour).` });
+      }
+    }
+    return out;
   }
 
   /** Positions des camions à la minute `now` : [x, z, cap, charge 0..1] par camion. */
@@ -734,6 +836,20 @@ export class WasteSystem {
 
   /** Libellé français d'une installation (panneau). */
   static facilityName(kind: WasteFacilityKind): string { return WASTE_FACILITY_FR[kind]; }
+}
+
+/** Libellés des installations, numérotés quand il y en a plusieurs du même rôle (« Centre de tri n° 2 »). */
+export function facilityLabels(facilities: readonly WasteFacilityInfo[]): Map<number, string> {
+  const count = new Map<WasteFacilityKind, number>();
+  for (const f of facilities) count.set(f.kind, (count.get(f.kind) ?? 0) + 1);
+  const seen = new Map<WasteFacilityKind, number>();
+  const out = new Map<number, string>();
+  for (const f of [...facilities].sort((a, b) => a.buildingId - b.buildingId)) {
+    const k = (seen.get(f.kind) ?? 0) + 1;
+    seen.set(f.kind, k);
+    out.set(f.buildingId, WASTE_FACILITY_FR[f.kind] + ((count.get(f.kind) ?? 0) > 1 ? ` n° ${k}` : ''));
+  }
+  return out;
 }
 
 /** Ajoute une polyligne de trajet (temps répartis au prorata des distances). */

@@ -109,7 +109,9 @@ export function computeAlerts(ctx: PluginContext): AlertesPayload {
     // Bâtiments seulement (pas le décor ni les pièces des ports et aéroports).
     if (!a || !isBuildingCategory(a.category)) continue;
     let m = 0;
-    if (!st.roadAccess[i]) m |= ALERT_BITS.road;
+    // Une centrale reliée au réseau (éolienne au milieu des champs, raccordée par ligne haute tension) fonctionne
+    // sans route : pas d'icône « accès routier », qui laissait croire qu'elle ne produisait pas.
+    if (!st.roadAccess[i] && !power?.isConnectedFacility?.(id)) m |= ALERT_BITS.road;
     if (powerOn && !power!.isPowered(id)) m |= ALERT_BITS.power;
     if (eau && needsWater(a) && !eau.growthAllowed(id)) m |= ALERT_BITS.water;
     if (wasteService && dechets?.binFull(id)) m |= ALERT_BITS.waste;

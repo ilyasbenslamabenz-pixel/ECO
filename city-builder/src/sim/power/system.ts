@@ -628,6 +628,11 @@ export class PowerSystem {
     return out;
   }
 
+  /** Installations reliées au réseau au dernier relevé (pour les alertes). */
+  private lastFed: Set<number> = new Set();
+  /** Vrai si le bâtiment est une installation électrique reliée au réseau (centrale, poste, batterie). */
+  isConnectedFacility(id: number): boolean { return this.facilities.has(id) && this.lastFed.has(id); }
+
   /** Installations reliées (lignes en service) à une centrale disponible. */
   private energizedSet(avail?: Map<number, number>): Set<number> {
     const adj = new Map<number, number[]>();
@@ -700,6 +705,7 @@ export class PowerSystem {
     // Installations reliées à une centrale (topologie, pannes comprises) : un poste isolé plus proche ne doit pas
     // « capter » un bâtiment qu'un poste ou une centrale alimenté(e) peut desservir.
     const fed = this.energizedSet();
+    this.lastFed = fed;
     const geom = m?.grids.defaultGeometry;
     const consumers: Consumer[] = [];
     const st = ctx.buildings.store;

@@ -1,5 +1,6 @@
 /**
- * Options graphiques : qualité (résolution), ombres, distance d'affichage.
+ * Options graphiques : qualité (résolution), ombres, distance d'affichage ; navigation (pavé tactile / souris,
+ * glissement au bord de l'écran).
  * Mémorisées dans le navigateur (localStorage, erreurs tolérées) et appliquées pour de vrai
  * au renderer Three.js par `applyGraphicsOptions`.
  * Propriétaire : agent construction/caméra/UI.
@@ -30,9 +31,16 @@ export interface GraphicsOptions {
   aa: 'auto' | 'on' | 'off';
   /** Événements de la ville (canicule, épidémie…, docs/PROGRESSION.md) : fréquence, envoyée à la simulation. */
   events: 'normal' | 'rares' | 'off';
+  /**
+   * Navigation : périphérique des gestes de défilement. « auto » : pavé tactile ou molette détecté à chaque session
+   * de défilement (src/input/camera.ts, `WheelClassifier`) ; « touchpad » : deux doigts = déplacer ; « mouse » : molette = zoom.
+   */
+  pointer: 'auto' | 'touchpad' | 'mouse';
+  /** Navigation : glissement de la carte quand le curseur touche le bord de la fenêtre (désactivé par défaut). */
+  edgeScroll: boolean;
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal' };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal', pointer: 'auto', edgeScroll: false };
 
 /** Applique le thème de l'interface (attribut lu par les feuilles de style). */
 export function applyTheme(t: GraphicsOptions['theme']): void {
@@ -53,6 +61,8 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     dynRes: o?.dynRes === 'on' || o?.dynRes === 'off' || o?.dynRes === 'auto' ? o.dynRes : DEFAULT_OPTIONS.dynRes,
     aa: o?.aa === 'on' || o?.aa === 'off' || o?.aa === 'auto' ? o.aa : DEFAULT_OPTIONS.aa,
     events: o?.events === 'normal' || o?.events === 'rares' || o?.events === 'off' ? o.events : DEFAULT_OPTIONS.events,
+    pointer: o?.pointer === 'auto' || o?.pointer === 'touchpad' || o?.pointer === 'mouse' ? o.pointer : DEFAULT_OPTIONS.pointer,
+    edgeScroll: typeof o?.edgeScroll === 'boolean' ? o.edgeScroll : DEFAULT_OPTIONS.edgeScroll,
   };
 }
 
@@ -127,8 +137,8 @@ export interface GraphicsTargets {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   sun?: THREE.DirectionalLight;
-  /** Contrôleur de caméra : reçoit la distance d'affichage (plan lointain). */
-  camera?: { viewDistance: number };
+  /** Contrôleur de caméra : reçoit la distance d'affichage (plan lointain) et les réglages de navigation. */
+  camera?: { viewDistance: number; inputPref?: GraphicsOptions['pointer']; edgeScroll?: boolean };
   /** Cadence du rendu (src/render/scene.ts) : plafond d'images, ombres, résolution adaptative. */
   perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number };
 }
@@ -183,7 +193,11 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
     if (!m) return;
     for (const mat of Array.isArray(m) ? m : [m]) mat.needsUpdate = true;
   });
-  if (t.camera) t.camera.viewDistance = o.viewDistance;
+  if (t.camera) {
+    t.camera.viewDistance = o.viewDistance;
+    if ('inputPref' in t.camera) t.camera.inputPref = o.pointer;
+    if ('edgeScroll' in t.camera) t.camera.edgeScroll = o.edgeScroll;
+  }
   if (t.scene.fog instanceof THREE.Fog) {
     t.scene.fog.far = o.viewDistance;
     t.scene.fog.near = o.viewDistance * 0.33;
