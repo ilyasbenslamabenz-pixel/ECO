@@ -7,7 +7,7 @@
  * (src/render/plugins/dechets.ts : touche J, `window.__dechets.openPanel()`).
  */
 import type { DechetsDelta } from '../../shared/protocol-ext/dechets';
-import { WASTE_FACILITY_FR, type WasteSummary } from '../../shared/waste/types';
+import { facilityLabels, type WasteSummary } from '../../shared/waste/types';
 import { el, fmt, money } from '../dom';
 import type { UiPanel, UiPanelApi } from './types';
 
@@ -22,6 +22,9 @@ const WEEKDAYS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', '
 const CSS = `
 .dechets-panel { width: min(380px, calc(100vw - 24px)); }
 .dechets-panel h4 { margin: 4px 0 2px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent, #7cc4ff); }
+.dechets-panel .diag { border-left: 3px solid var(--warn, #e3b341); padding: 5px 10px; border-radius: 8px; background: rgba(227,179,65,.10); font-size: 12.5px; margin: 4px 0; }
+.dechets-panel .diag.info { border-left-color: var(--accent, #7cc4ff); background: rgba(124,196,255,.08); }
+.dechets-panel .diag small { display: block; opacity: .85; margin-top: 2px; }
 .dechets-panel .blocked { border-left: 3px solid var(--danger, #e5534b); padding: 6px 10px; border-radius: 8px; background: rgba(229,83,75,.12); font-size: 12.5px; }
 .dechets-panel .reglage { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; font-size: 13px; }
 .dechets-panel .reglage input[type=range] { grid-column: 1 / -1; width: 100%; }
@@ -41,7 +44,12 @@ function rows(pairs: [string, string][]): HTMLDListElement {
 export function renderSummary(s: WasteSummary, dayIndex?: number): HTMLElement {
   const box = el('div', { cls: 'dechets-content' });
   if (s.blocked) box.append(el('div', { cls: 'blocked', text: `Collecte arrêtée : ${s.blocked}` }));
+  // Diagnostics en clair (ce qui cloche, et le réglage ou l'action à toucher).
+  for (const g of s.diagnostics ?? []) {
+    box.append(el('div', { cls: `diag ${g.level}`, attrs: { 'data-diag': g.level } }, g.text, ...(g.fix ? [el('small', { text: `→ ${g.fix}` })] : [])));
+  }
   const d = s.lastDay;
+  const today = dayIndex ?? s.today?.day;
   box.append(el('h4', { text: 'Production et stocks' }), rows([
     ['Production', `${t(s.productionPerDay)} / jour`],
     ['Bâtiments producteurs', fmt(s.producers)],
@@ -49,19 +57,33 @@ export function renderSummary(s: WasteSummary, dayIndex?: number): HTMLElement {
     ['Bacs qui débordent', fmt(s.overflowingBuildings)],
   ]));
   const nextWd = WEEKDAYS[((s.nextCollectionDay % 7) + 7) % 7] ?? '';
+  const n = s.settings.collectsPerWeek;
+  const dep = Math.round((s.departureMinute ?? 360) / 60);
+  const days = s.collectionDays ? s.collectionDays.map((k) => WEEKDAYS[k]).join(', ') : '';
+  // La collecte n'a lieu que certains jours : on le dit, pour que « 0 hier » ne passe pas pour une panne.
+  const calendar = n >= 7 ? `tous les jours, départ à ${dep} h` : `${n} fois par semaine${days ? ` (${days})` : ''}, départ à ${dep} h ; les bacs se remplissent entre deux collectes`;
+  const nextTxt = today !== undefined && s.nextCollectionDay === today ? `aujourd'hui (${nextWd}) à ${dep} h` : nextWd;
+  const onRoad = s.trucksOnRoad > 0 ? ` · collecte en cours : ${s.today?.tours ?? s.trucksOnRoad} tournée${(s.today?.tours ?? 0) > 1 ? 's' : ''}, ${s.today?.stops ?? 0} arrêts prévus` : '';
   box.append(el('h4', { text: 'Collecte' }), rows([
-    ['Camions (flotte · en service · en tournée)', `${s.fleet} · ${s.activeTrucks} · ${s.trucksOnRoad}`],
-    ['Prochaine collecte', dayIndex !== undefined && s.nextCollectionDay === dayIndex ? `aujourd'hui (${nextWd})` : nextWd],
+    ['Calendrier', calendar],
+    ['Camions (flotte · en service · en tournée)', `${s.fleet} · ${s.activeTrucks} · ${s.trucksOnRoad}${onRoad}`],
+    ['Prochaine tournée', nextTxt],
     ['Hier : collectés', d ? t(d.collectedKg) : '—'],
     ['Hier : non collectés (débordement des bacs)', d ? t(d.uncollectedKg) : '—'],
     ['Hier : tournées · arrêts', d ? `${d.tours} · ${d.stops}` : '—'],
     ['Depuis le début : collectés / non collectés', `${t(s.totals.collectedKg)} / ${t(s.totals.uncollectedKg)}`],
   ]));
+  // Installations numérotées quand il y en a plusieurs du même rôle (« Centre de tri n° 1 / n° 2 »).
+  const labels = facilityLabels(s.facilities);
   const fac: [string, string][] = s.facilities.map((f) => {
-    const name = WASTE_FACILITY_FR[f.kind] + (f.connected ? '' : ' (non reliée)');
+    const name = (labels.get(f.buildingId) ?? f.kind) + (f.connected ? '' : ' (non reliée)');
+    // Tri / incinérateur : rien n'arrive les jours sans collecte ; on montre aussi le dernier traitement non nul.
+    const lastTxt = f.amount <= 0 && (f.lastAmount ?? 0) > 0 && f.lastAmountDay !== undefined
+      ? ` (dernier traitement : ${t(f.lastAmount!)} le ${WEEKDAYS[((f.lastAmountDay % 7) + 7) % 7]})`
+      : f.amount <= 0 && f.kind !== 'depot' && f.kind !== 'decharge' && f.lastAmount === undefined ? ' (encore rien reçu)' : '';
     const v = f.kind === 'depot' ? `${f.capacity} camions`
       : f.kind === 'decharge' ? `${pct(f.capacity > 0 ? f.amount / f.capacity : 0)} pleine (${t(f.amount)} / ${t(f.capacity)})`
-        : `${t(f.amount)} traités hier / ${t(f.capacity)} par jour`;
+        : `${t(f.amount)} traités hier / ${t(f.capacity)} par jour${lastTxt}`;
     return [name, v];
   });
   box.append(el('h4', { text: 'Filières' }), fac.length ? rows(fac) : el('div', { cls: 'muted', text: 'Aucune installation : posez un dépôt de camions-bennes et une filière (Services publics).' }));
@@ -116,7 +138,7 @@ export const dechetsPanel: UiPanel = {
     let editing = false;
     const show = (s: WasteSummary): void => {
       last = s;
-      content.replaceChildren(renderSummary(s));
+      content.replaceChildren(renderSummary(s, s.today?.day));
       if (!editing) {
         freq.value = String(s.settings.collectsPerWeek);
         sort.value = String(Math.round(s.settings.sortShare * 100));

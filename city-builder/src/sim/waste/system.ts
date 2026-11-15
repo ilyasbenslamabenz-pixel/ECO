@@ -16,7 +16,7 @@
 import { governanceModifiers } from '../../shared/governance';
 import {
   COLLECTION_DAYS, DEFAULT_FACILITY_CAPACITY, DEFAULT_WASTE_SETTINGS, WASTE_FACILITY_FR, WASTE_PARAMS as P, clampSetting,
-  facilityKindOfTags, recommendedCollectsPerWeek, tagNumber, type WasteDayStats, type WasteDiagnostic, type WasteFacilityInfo,
+  facilityKindOfTags, facilityLabels, recommendedCollectsPerWeek, tagNumber, type WasteDayStats, type WasteDiagnostic, type WasteFacilityInfo,
   type WasteFacilityKind, type WasteSettings, type WasteSummary, type WasteTotals,
 } from '../../shared/waste/types';
 import { weekdayOf } from '../clock';
@@ -767,13 +767,13 @@ export class WasteSystem {
       if (f.connected) continue;
       const name = label.get(f.buildingId)!;
       const what = f.kind === 'depot' ? `ses ${f.capacity} camions ne peuvent pas sortir` : f.kind === 'tri' ? 'les camions ne peuvent pas y vider la part triée' : 'les camions ne peuvent pas y vider les déchets';
-      out.push({ level: 'warn', text: `${name} non relié : aucune rue carrossable à moins de 70 m, ${what}.`, fix: `Tracez une rue jusqu'à l'entrée du ${name.toLowerCase()}.` });
+      out.push({ level: 'warn', text: `${name} non relié${f.kind === 'decharge' ? 'e' : ''} : aucune rue carrossable à moins de 70 m, ${what}.`, fix: 'Tracez une rue carrossable jusqu\'à son entrée (à moins de 70 m).' });
     }
     if (nowMinutes !== undefined) {
       const stuck = this.runs.filter((r) => nowMinutes - r.depart > STUCK_RUN_MINUTES).length;
       if (stuck > 0) out.push({ level: 'warn', text: `${stuck} camion${stuck > 1 ? 's sont' : ' est'} en tournée depuis plus de ${Math.round(STUCK_RUN_MINUTES / 60)} h : tournée anormalement longue.`, fix: 'Vérifiez que le dépôt et les filières sont reliés au même réseau de rues.' });
     }
-    if (this.unserved > 0) {
+    if (this.unserved > 0 && !this.blocked) {
       out.push({ level: 'warn', text: `${this.unserved} bâtiment${this.unserved > 1 ? 's' : ''} producteur${this.unserved > 1 ? 's' : ''} hors d'atteinte des camions (rue isolée ou à plus de 70 m d'une rue) : leurs bacs ne sont jamais vidés et débordent.`, fix: 'Reliez ces rues au réseau qui mène au dépôt.' });
     }
     const missed = Math.max(this.today.missedStops ?? 0, this.lastDay?.missedStops ?? 0);
@@ -836,20 +836,6 @@ export class WasteSystem {
 
   /** Libellé français d'une installation (panneau). */
   static facilityName(kind: WasteFacilityKind): string { return WASTE_FACILITY_FR[kind]; }
-}
-
-/** Libellés des installations, numérotés quand il y en a plusieurs du même rôle (« Centre de tri n° 2 »). */
-export function facilityLabels(facilities: readonly WasteFacilityInfo[]): Map<number, string> {
-  const count = new Map<WasteFacilityKind, number>();
-  for (const f of facilities) count.set(f.kind, (count.get(f.kind) ?? 0) + 1);
-  const seen = new Map<WasteFacilityKind, number>();
-  const out = new Map<number, string>();
-  for (const f of [...facilities].sort((a, b) => a.buildingId - b.buildingId)) {
-    const k = (seen.get(f.kind) ?? 0) + 1;
-    seen.set(f.kind, k);
-    out.set(f.buildingId, WASTE_FACILITY_FR[f.kind] + ((count.get(f.kind) ?? 0) > 1 ? ` n° ${k}` : ''));
-  }
-  return out;
 }
 
 /** Ajoute une polyligne de trajet (temps répartis au prorata des distances). */

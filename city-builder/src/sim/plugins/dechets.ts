@@ -26,6 +26,7 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
   let sentVersion = -1;
   let layerHour = -1;
   let lastTrucks = 0;
+  let lastRuns = 0;
   /** Le module n'émet rien tant qu'aucun bâtiment n'a produit de déchets ni aucune installation n'existe. */
   const active = (): boolean => !!muni && (waste.producers > 0 || waste.facilities.size > 0 || waste.runs.length > 0);
   /**
@@ -111,7 +112,7 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
       ctxRef = ctx;
       waste.reset();
       waste.today.day = ctx.clock.dayIndex;
-      sentVersion = -1; layerHour = -1; lastTrucks = 0;
+      sentVersion = -1; layerHour = -1; lastTrucks = 0; lastRuns = 0;
       waste.ensureGrids();
     },
 
@@ -131,10 +132,14 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
         lastTrucks = waste.runs.length;
       }
       const hour = Math.floor(ctx.clock.totalMinutes / 60);
-      if (waste.version !== sentVersion && hour !== layerHour) {
+      // Fin des tournées : la synthèse repart tout de suite (sinon le panneau affichait « en tournée » jusqu'à l'heure
+      // suivante alors que les camions étaient rentrés).
+      const toursEnded = lastRuns > 0 && waste.runs.length === 0;
+      lastRuns = waste.runs.length;
+      if (waste.version !== sentVersion && (hour !== layerHour || toursEnded)) {
         sentVersion = waste.version;
         layerHour = hour;
-        d.summary = waste.summary(ctx.clock.dayIndex);
+        d.summary = waste.summary(ctx.clock.dayIndex, ctx.clock.totalMinutes);
         const l = layer(ctx);
         if (l) { d.layer = l; transfer.push(l.nuisance, l.soil, l.bins); }
         d.containers = containers(ctx);
@@ -149,7 +154,7 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
       if (!active()) return undefined;
       sentVersion = waste.version;
       layerHour = Math.floor(ctx.clock.totalMinutes / 60);
-      return { trucks: waste.truckPoses(ctx.clock.totalMinutes), summary: waste.summary(ctx.clock.dayIndex), layer: layer(ctx), containers: containers(ctx) };
+      return { trucks: waste.truckPoses(ctx.clock.totalMinutes), summary: waste.summary(ctx.clock.dayIndex, ctx.clock.totalMinutes), layer: layer(ctx), containers: containers(ctx) };
     },
 
     command(ctx, name, payload): PluginCommandResult {
@@ -158,7 +163,7 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
       switch (name) {
         case 'etat':
           waste.syncFacilities(ctx);
-          return { ok: true, data: waste.summary(ctx.clock.dayIndex) };
+          return { ok: true, data: waste.summary(ctx.clock.dayIndex, ctx.clock.totalMinutes) };
         case 'reglages': {
           waste.setSettings({
             collectsPerWeek: typeof p.collectsPerWeek === 'number' ? p.collectsPerWeek : undefined,
@@ -166,7 +171,7 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
             funding: typeof p.funding === 'number' ? p.funding : undefined,
           }, ctx.clock.totalMinutes);
           layerHour = -1; // la synthèse repart au prochain delta
-          return { ok: true, data: waste.summary(ctx.clock.dayIndex) };
+          return { ok: true, data: waste.summary(ctx.clock.dayIndex, ctx.clock.totalMinutes) };
         }
         case 'collecter':
           return { ok: true, data: { tours: waste.planTours(ctx, ctx.clock.totalMinutes) } };

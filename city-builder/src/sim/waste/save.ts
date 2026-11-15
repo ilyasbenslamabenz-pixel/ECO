@@ -15,7 +15,7 @@ export interface DechetsSaveV1 {
   settings: WasteSettings;
   /** Bacs : [id, rec, res, cap, débordement du jour] (kg). */
   bins: [number, number, number, number, number][];
-  facilities: { id: number; kind: WasteFacilityKind; x: number; z: number; rot: number; capacity: number; stock: number; inToday: number; processed: number; overToday: number; connected: boolean }[];
+  facilities: { id: number; kind: WasteFacilityKind; x: number; z: number; rot: number; capacity: number; stock: number; inToday: number; processed: number; overToday: number; connected: boolean; lastProcessed?: number; lastProcessedDay?: number }[];
   runs: TruckRun[];
   today: WasteDayStats | null;
   lastDay: WasteDayStats | null;
@@ -96,6 +96,8 @@ export function loadWaste(w: WasteSystem, s: DechetsSave): void {
   for (const f of s.facilities) {
     if (!isObj(f) || !WASTE_FACILITY_KINDS.includes(f.kind)) continue;
     const fac: Facility = { id: fin(f.id), kind: f.kind, x: fin(f.x), z: fin(f.z), rot: fin(f.rot), capacity: fin(f.capacity), stock: fin(f.stock), inToday: fin(f.inToday), processed: fin(f.processed), overToday: fin(f.overToday), connected: !!f.connected };
+    // Champs ajoutés sans changer de version (absents des anciennes sauvegardes) : dernier traitement non vide.
+    if (typeof f.lastProcessed === 'number' && Number.isFinite(f.lastProcessed)) { fac.lastProcessed = f.lastProcessed; fac.lastProcessedDay = fin(f.lastProcessedDay); }
     w.facilities.set(fac.id, fac);
   }
   w.runs = s.runs.filter((r) => isObj(r) && Array.isArray(r.pts) && Array.isArray(r.times) && Array.isArray(r.events)).map((r) => ({ ...r }));

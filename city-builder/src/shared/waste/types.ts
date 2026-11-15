@@ -188,18 +188,33 @@ export interface WasteSummary {
 }
 
 /**
- * Plus petite fréquence hebdomadaire dont le plus long intervalle entre deux collectes (plus la durée d'un service)
- * reste sous la réserve des bacs (`storageDays`) : en dessous, les bacs débordent avant le passage suivant.
+ * Plus petite fréquence hebdomadaire dont le plus long intervalle entre deux collectes tient dans la réserve des bacs
+ * (`storageDays`) : en dessous, les bacs débordent avant le passage suivant. Mesure (tests/dechets/scenario-joueur) :
+ * 1 passage/semaine -> débordements massifs ; 2 -> aucun débordement mais bacs pleins à ~100 % la veille du passage ;
+ * 3 (réglage par défaut) -> aucun débordement, bacs à 75 % au plus.
  */
 export function recommendedCollectsPerWeek(storageDays: number = WASTE_PARAMS.storageDays): number {
-  const margin = WASTE_PARAMS.shiftMinutes / 1440;
   for (let n = 1; n <= 7; n++) {
     const days = COLLECTION_DAYS[n]!;
     let gap = 0;
     for (let i = 0; i < days.length; i++) gap = Math.max(gap, ((days[(i + 1) % days.length]! - days[i]! + 7) % 7) || 7);
-    if (gap + margin < storageDays) return n;
+    if (gap <= storageDays) return n;
   }
   return 7;
+}
+
+/** Libellés des installations, numérotés quand il y en a plusieurs du même rôle (« Centre de tri n° 2 »). */
+export function facilityLabels(facilities: readonly WasteFacilityInfo[]): Map<number, string> {
+  const count = new Map<WasteFacilityKind, number>();
+  for (const f of facilities) count.set(f.kind, (count.get(f.kind) ?? 0) + 1);
+  const seen = new Map<WasteFacilityKind, number>();
+  const out = new Map<number, string>();
+  for (const f of [...facilities].sort((a, b) => a.buildingId - b.buildingId)) {
+    const k = (seen.get(f.kind) ?? 0) + 1;
+    seen.set(f.kind, k);
+    out.set(f.buildingId, WASTE_FACILITY_FR[f.kind] + ((count.get(f.kind) ?? 0) > 1 ? ` n° ${k}` : ''));
+  }
+  return out;
 }
 
 /** Valeur bornée d'un réglage. */
