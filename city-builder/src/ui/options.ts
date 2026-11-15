@@ -13,9 +13,11 @@ export interface GraphicsOptions {
   shadows: 'off' | 'low' | 'high' | 'ultra';
   /** Distance d'affichage (m) : plan lointain de la caméra et brouillard. */
   viewDistance: number;
+  /** Images par seconde maximales : « auto » = 60 sur téléphone, sans limite ailleurs. */
+  fps: 'auto' | '30' | '60' | 'max';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500 };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto' };
 const KEY = 'aube-urbaine:options:v1';
 
 export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined): GraphicsOptions {
@@ -26,6 +28,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     quality: q === 'auto' || q === 'basse' || q === 'moyenne' || q === 'haute' ? q : DEFAULT_OPTIONS.quality,
     shadows: s === 'off' || s === 'low' || s === 'high' || s === 'ultra' ? s : DEFAULT_OPTIONS.shadows,
     viewDistance: Number.isFinite(d) ? Math.min(8000, Math.max(1500, d)) : DEFAULT_OPTIONS.viewDistance,
+    fps: o?.fps === '30' || o?.fps === '60' || o?.fps === 'max' || o?.fps === 'auto' ? o.fps : DEFAULT_OPTIONS.fps,
   };
 }
 
@@ -45,6 +48,8 @@ export interface GraphicsTargets {
   sun?: THREE.DirectionalLight;
   /** Contrôleur de caméra : reçoit la distance d'affichage (plan lointain). */
   camera?: { viewDistance: number };
+  /** Cadence du rendu (src/render/scene.ts) : plafond d'images, ombres, résolution adaptative. */
+  perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number };
 }
 
 export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): void {
@@ -52,6 +57,14 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
   const prof = deviceProfile(o.quality);
   const ratio = o.quality === 'basse' ? Math.min(dpr, 1) * 0.75 : o.quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, prof.lite ? prof.maxPixelRatio : 1.5);
   t.renderer.setPixelRatio(ratio);
+  if (t.perf) {
+    t.perf.maxFps = o.fps === '30' ? 30 : o.fps === '60' ? 60 : o.fps === 'max' ? 0 : prof.lite ? 60 : 0;
+    // Téléphone : ombres recalculées au plus 1 image sur 4 tant que rien ne bouge autour du soleil.
+    t.perf.shadowEvery = prof.lite ? 4 : 1;
+    // Téléphone : résolution qui monte quand l'appareil suit (plafond prudent : 1,25 en auto/basse, 1,5 en moyenne).
+    t.perf.adaptive = prof.lite && o.quality !== 'haute' ? { min: ratio, max: Math.min(dpr, o.quality === 'moyenne' ? 1.5 : 1.25) } : null;
+    t.perf.ratio = ratio;
+  }
   const size = new THREE.Vector2();
   t.renderer.getSize(size);
   t.renderer.setSize(size.x, size.y, false);

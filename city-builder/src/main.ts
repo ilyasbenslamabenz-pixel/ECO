@@ -181,7 +181,7 @@ async function boot(): Promise<void> {
       state.inGame = false;
       void refreshMenu();
     },
-    onOptions: (o) => { if (o.quality !== 'auto') setSafeMode(false); applyGraphicsOptions(o, { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera }); },
+    onOptions: (o) => { if (o.quality !== 'auto') setSafeMode(false); applyGraphicsOptions(o, { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf }); },
     onSpeed: (speed) => { void needBridge().send('setSpeed', { speed }).catch((e: unknown) => ui.toast(errText(e), 'error')); },
     onToggleCamera: () => {
       if (input.camera.mode === 'aerial') {
@@ -350,7 +350,7 @@ async function boot(): Promise<void> {
     for (const o of render.ctx.scene.children) { names.push(o.name || o.type); if (o.name === name) o.visible = visible; }
     return names;
   };
-  applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera });
+  applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf });
 
   // LOD de simulation : point focal envoyé quand la caméra s'est déplacée de plus de 50 m.
   let focusX = Infinity, focusZ = Infinity;
@@ -400,6 +400,20 @@ async function boot(): Promise<void> {
     if (wantWater && waterView.mode === 'off') { waterView.set('desserte'); autoWater = true; }
     else if (!wantWater && autoWater) { waterView.set('off'); autoWater = false; }
   });
+  // Rendu au ralenti (4 images/s) quand rien ne bouge : partie en pause, caméra immobile, aucun geste depuis 2 s.
+  {
+    let lastInput = performance.now(), poseKey = '';
+    for (const ev of ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'] as const) window.addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true, capture: true });
+    render.ctx.perf.idle = () => {
+      const st = debug.lastStats as { speed?: number } | undefined;
+      if (!st || st.speed !== 0) return false;
+      const p = input.camera.getPose();
+      const k = `${p.targetX.toFixed(2)},${p.targetZ.toFixed(2)},${p.distance.toFixed(2)},${p.yaw.toFixed(3)},${p.pitch.toFixed(3)}`;
+      if (k !== poseKey) { poseKey = k; lastInput = Math.max(lastInput, performance.now()); return false; }
+      return performance.now() - lastInput > 2000;
+    };
+  }
+  (debug as unknown as Record<string, unknown>).renderPerf = () => ({ ...render.ctx.perf, idle: render.ctx.perf.idle(), ratio: render.ctx.renderer.getPixelRatio() });
   debug.constructionApplied = () => cons.machine.applied;
   // Diagnostic (e2e) : ouvre la fiche d'un bâtiment.
   (debug as unknown as Record<string, unknown>).selectBuilding = (id: number) => { const r = cons.machine.mirror.buildings.get(id); if (r) cons.machine.onSelect({ kind: 'building', id, record: r, asset: cons.machine.mirror.asset(r.assetId), distance: 0 }); return !!r; };
@@ -533,7 +547,7 @@ async function boot(): Promise<void> {
     contextLost = false;
     try {
       render.rebuildGpu();
-      applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera });
+      applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf });
     } catch (err) { console.warn('Reconstruction après perte du contexte WebGL :', err); }
     startLoop();
     if (params.has('norender')) render.ctx.renderNow(1 / 60);

@@ -18,6 +18,21 @@ export interface RenderContext {
   renderNow(dt?: number): void;
   /** Nombre de frames rendues (diagnostic / e2e). */
   readonly frames: number;
+  /** Réglages de cadence (téléphone : moins de chaleur, pas de ralentissement thermique). */
+  perf: RenderPerf;
+}
+
+export interface RenderPerf {
+  /** Images par seconde maximales (0 = sans limite : cadence de l'écran). */
+  maxFps: number;
+  /** Vrai quand rien ne bouge (jeu en pause, caméra immobile, aucun geste) : 4 images par seconde suffisent. */
+  idle: () => boolean;
+  /** Ombres recalculées seulement quand le soleil ou la zone regardée bouge, sinon une image sur `shadowEvery`. */
+  shadowEvery: number;
+  /** Résolution adaptative (rapport de pixels) : null = fixe. */
+  adaptive: { min: number; max: number } | null;
+  /** Rapport de pixels courant choisi par la résolution adaptative (diagnostic). */
+  ratio: number;
 }
 
 export function initScene(canvas: HTMLCanvasElement): RenderContext {
@@ -63,24 +78,64 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
   let last = performance.now();
   let frames = 0;
   let running = false;
+  const perf: RenderPerf = { maxFps: 0, idle: () => false, shadowEvery: 1, adaptive: null, ratio: 0 };
+  // Ombres : clé (position du soleil et de sa cible) ; recalcul si elle change, sinon une image sur N.
+  let shadowKey = '', shadowCount = 0;
+  const updateShadows = (): void => {
+    if (perf.shadowEvery <= 1 || !renderer.shadowMap.enabled) { renderer.shadowMap.autoUpdate = true; return; }
+    renderer.shadowMap.autoUpdate = false;
+    const p = sun.position, t = sun.target.position;
+    const key = `${Math.round(p.x / 4)},${Math.round(p.y / 4)},${Math.round(p.z / 4)}|${Math.round(t.x / 8)},${Math.round(t.z / 8)}`;
+    if (key !== shadowKey || ++shadowCount >= perf.shadowEvery) { shadowKey = key; shadowCount = 0; renderer.shadowMap.needsUpdate = true; }
+  };
+  // Résolution adaptative : monte d'un cran si la cadence visée tient 3 s, descend si elle décroche 1,5 s.
+  let winStart = performance.now(), winFrames = 0, holdUntil = 0;
+  const adapt = (now: number): void => {
+    const a = perf.adaptive;
+    if (!a) return;
+    if (perf.ratio <= 0) perf.ratio = renderer.getPixelRatio();
+    winFrames++;
+    const span = now - winStart;
+    const target = perf.maxFps > 0 ? perf.maxFps : 60;
+    const fps = (1000 * winFrames) / Math.max(1, span);
+    let next = perf.ratio;
+    if (span > 1500 && fps < target * 0.8) { next = Math.max(a.min, perf.ratio - 0.25); holdUntil = now + 20000; }
+    else if (span > 3000 && fps > target * 0.93 && now > holdUntil) next = Math.min(a.max, perf.ratio + 0.25);
+    else if (span <= 3000) return;
+    winStart = now; winFrames = 0;
+    if (Math.abs(next - perf.ratio) > 1e-3) {
+      perf.ratio = next;
+      renderer.setPixelRatio(next);
+      const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
+      renderer.setSize(w, h, false);
+    }
+  };
+  let lastDraw = 0;
   const loop = (): void => {
     if (!running) return;
+    requestAnimationFrame(loop);
     const now = performance.now();
+    // Cadence : plafond choisi, ou 4 images/s quand rien ne bouge (petite marge pour l'irrégularité de l'écran).
+    const cap = perf.idle() ? 4 : perf.maxFps;
+    if (cap > 0 && now - lastDraw < 1000 / cap - 2) return;
+    lastDraw = now;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     for (const f of onFrame) f(dt);
+    updateShadows();
     // L'ombre suit la zone regardée par la caméra.
     renderer.render(scene, camera);
     frames++;
-    requestAnimationFrame(loop);
+    if (cap !== 4) adapt(now); else { winStart = now; winFrames = 0; }
   };
 
   return {
-    renderer, scene, camera, sun, hemi, onFrame,
+    renderer, scene, camera, sun, hemi, onFrame, perf,
     start() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(loop); } },
     stop() { running = false; },
     renderNow(dt = 1 / 30) {
       for (const f of onFrame) f(dt);
+      renderer.shadowMap.needsUpdate = true;
       renderer.render(scene, camera);
       frames++;
     },

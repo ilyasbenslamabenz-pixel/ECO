@@ -93,6 +93,15 @@ for (const engine of ['chromium', 'webkit']) {
       console.log(`[${engine}] ${ph.name} : ${m.fps} img/s · médiane ${m.p50} ms · 95e ${m.p95} ms · 99e ${m.p99} ms · lentes ${m.slow33} % · simulation ${m.tickMs} ms · tas ${m.heapMo} Mo · textures ${m.gpuMo} Mo`);
     }
     await page.evaluate(() => clearInterval(window.__orbit));
+    // Partie en pause, caméra immobile, aucun geste : le rendu doit tomber à environ 4 images/s.
+    await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
+    await page.waitForTimeout(4000);
+    const f0 = await page.evaluate(() => window.__aube.frames());
+    await page.waitForTimeout(5000);
+    const f1 = await page.evaluate(() => window.__aube.frames());
+    r.idleFps = Math.round(((f1 - f0) / 5) * 10) / 10;
+    r.perf = await page.evaluate(() => window.__aube.renderPerf?.() ?? null);
+    console.log(`[${engine}] en pause : ${r.idleFps} img/s dessinées · réglages ${JSON.stringify(r.perf)}`);
     await page.screenshot({ path: join(out, `${engine}.png`) });
     r.ok = true;
   } catch (e) {
@@ -104,7 +113,7 @@ server.close();
 writeFileSync(join(out, 'resultats.json'), JSON.stringify(results, null, 2));
 const md = ['## Fluidité avec processeur graphique (profil iPhone, ville de démo)', ''];
 for (const r of results) {
-  md.push(`### ${r.engine} — ${r.gpu?.renderer ?? 'processeur inconnu'}`, '', `Chargement ${r.loadSeconds ?? '—'} s · erreurs ${r.errors.length}`, '', '| Phase | img/s | médiane | 95e | 99e | lentes > 33 ms | simulation | tas | textures |', '|---|---|---|---|---|---|---|---|---|');
+  md.push(`### ${r.engine} — ${r.gpu?.renderer ?? 'processeur inconnu'}`, '', `Chargement ${r.loadSeconds ?? '—'} s · erreurs ${r.errors.length} · en pause ${r.idleFps ?? '—'} img/s · résolution ${r.perf?.ratio ?? '—'} · plafond ${r.perf?.maxFps ?? '—'}`, '', '| Phase | img/s | médiane | 95e | 99e | lentes > 33 ms | simulation | tas | textures |', '|---|---|---|---|---|---|---|---|---|');
   for (const p of r.phases) md.push(`| ${p.name} | ${p.fps} | ${p.p50} ms | ${p.p95} ms | ${p.p99} ms | ${p.slow33} % | ${p.tickMs} ms | ${p.heapMo ?? '—'} Mo | ${p.gpuMo ?? '—'} Mo |`);
   if (r.errors.length) md.push('', '```', ...r.errors.slice(0, 8), '```');
   md.push('');
