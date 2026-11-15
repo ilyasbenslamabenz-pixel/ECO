@@ -288,12 +288,17 @@ export class Simulation {
     // Économie vivante : valeur foncière de la grille municipale (base 100 ¢/m² : nuisances des déchets, bruit des
     // pôles), secteurs du joueur comme quartiers, taux d'imposition des entreprises.
     this.demography.landValueOffset = (id) => {
+      // Services (docs/SERVICES.md) : la criminalité du bâtiment fait baisser la valeur foncière.
+      const crime = this.demography?.services.landPenalty(id) ?? 0;
       const g = this.plugins.service<Muni>('municipal')?.grids.get('valeur_fonciere');
       const i = g ? this.buildings.indexOf(id) : -1;
-      if (!g || i < 0) return 0;
+      if (!g || i < 0) return -crime;
       const d = (g.at(this.buildings.x[i]!, this.buildings.z[i]!) - 100) / 200;
-      return d < -0.3 ? -0.3 : d > 0.3 ? 0.3 : d;
+      return (d < -0.3 ? -0.3 : d > 0.3 ? 0.3 : d) - crime;
     };
+    // Services : une ruine de lot privé est reconstruite par son promoteur ; le module `services` pilote les incendies.
+    this.demography.isPrivate = (id) => this.privateIds.has(id);
+    this.plugins.service<{ attachCore?(core: unknown): void }>('services')?.attachCore?.(this.demography.services);
     this.demography.districtOf = (id) => this.plugins.service<SecteursService>('secteurs')?.sectorOf?.(id) ?? null;
     this.demography.companyTaxRate = (sector) => (sector === 1 ? this.economy.taxRates.commercial : sector === 2 ? this.economy.taxRates.industrial : sector === 3 ? this.economy.taxRates.office : 0);
   }

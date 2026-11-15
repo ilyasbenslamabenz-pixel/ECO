@@ -8,7 +8,7 @@ import { ALERT_BITS, ALERT_KINDS, type AlertKind, type AlertesPayload } from '..
 import type { RenderPlugin, RenderPluginContext } from './types';
 
 // Typé par AlertKind : un nouveau bit d'alerte sans couleur ne compile pas.
-const COLORS: Record<AlertKind, string> = { road: '#8a8f98', power: '#f2b01e', water: '#2f8de4', waste: '#7a9b3a', isolated: '#e0701e' };
+const COLORS: Record<AlertKind, string> = { road: '#8a8f98', power: '#f2b01e', water: '#2f8de4', waste: '#7a9b3a', isolated: '#e0701e', fire: '#e2361c', ruin: '#4a3f3a', crime: '#7b3fa8' };
 
 /** Glyphe blanc de chaque problème, dessiné dans une case de 64 px centrée en (32, 32). */
 function glyph(g: CanvasRenderingContext2D, kind: string): void {
@@ -23,6 +23,28 @@ function glyph(g: CanvasRenderingContext2D, kind: string): void {
     g.moveTo(41, 22); g.lineTo(55, 22); g.moveTo(41, 42); g.lineTo(55, 42);
     g.stroke();
     g.beginPath(); g.lineWidth = 4; g.moveTo(32, 13); g.lineTo(27, 23); g.lineTo(37, 32); g.lineTo(27, 41); g.lineTo(32, 51); g.stroke();
+    return;
+  }
+  if (kind === 'fire') {
+    // Flamme.
+    g.moveTo(32, 10); g.bezierCurveTo(44, 24, 48, 32, 46, 40); g.bezierCurveTo(44, 50, 38, 54, 32, 54);
+    g.bezierCurveTo(24, 54, 18, 49, 18, 40); g.bezierCurveTo(18, 33, 23, 29, 26, 22); g.bezierCurveTo(28, 30, 31, 31, 32, 10); g.fill();
+    g.beginPath(); g.fillStyle = COLORS.fire; g.arc(32, 44, 6, 0, Math.PI * 2); g.fill();
+    return;
+  }
+  if (kind === 'ruin') {
+    // Maison effondrée : murs brisés et toit tombé.
+    g.moveTo(14, 50); g.lineTo(50, 50); g.stroke();
+    g.beginPath(); g.moveTo(18, 50); g.lineTo(18, 30); g.lineTo(26, 36); g.lineTo(30, 28); g.stroke();
+    g.beginPath(); g.moveTo(46, 50); g.lineTo(46, 34); g.lineTo(38, 40); g.stroke();
+    g.beginPath(); g.moveTo(16, 22); g.lineTo(34, 12); g.lineTo(50, 24); g.stroke();
+    return;
+  }
+  if (kind === 'crime') {
+    // Masque de voleur.
+    g.moveTo(10, 28); g.bezierCurveTo(20, 20, 44, 20, 54, 28); g.lineTo(52, 38); g.bezierCurveTo(44, 44, 36, 38, 32, 36);
+    g.bezierCurveTo(28, 38, 20, 44, 12, 38); g.closePath(); g.fill();
+    g.fillStyle = COLORS.crime; g.beginPath(); g.ellipse(23, 31, 5, 3.5, 0, 0, Math.PI * 2); g.ellipse(41, 31, 5, 3.5, 0, 0, Math.PI * 2); g.fill();
     return;
   }
   // Déchets : poubelle.

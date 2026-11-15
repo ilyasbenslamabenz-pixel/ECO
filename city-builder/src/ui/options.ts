@@ -17,9 +17,14 @@ export interface GraphicsOptions {
   fps: 'auto' | '30' | '60' | 'max';
   /** Thème de l'interface : nuit (bleu nuit, par défaut), clair (verre dépoli) ou sombre (thème d'origine). */
   theme: 'nuit' | 'clair' | 'sombre';
+  /**
+   * Résolution dynamique (ordinateur) : seule la résolution de la 3D baisse pour tenir la cadence de l'écran
+   * (interface toujours nette), jusqu'à 0,6 × la densité de la qualité choisie. « auto » : activée en qualité Auto.
+   */
+  dynRes: 'auto' | 'on' | 'off';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit' };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto' };
 
 /** Applique le thème de l'interface (attribut lu par les feuilles de style). */
 export function applyTheme(t: GraphicsOptions['theme']): void {
@@ -37,6 +42,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     viewDistance: Number.isFinite(d) ? Math.min(8000, Math.max(1500, d)) : DEFAULT_OPTIONS.viewDistance,
     fps: o?.fps === '30' || o?.fps === '60' || o?.fps === 'max' || o?.fps === 'auto' ? o.fps : DEFAULT_OPTIONS.fps,
     theme: o?.theme === 'sombre' || o?.theme === 'clair' || o?.theme === 'nuit' ? o.theme : DEFAULT_OPTIONS.theme,
+    dynRes: o?.dynRes === 'on' || o?.dynRes === 'off' || o?.dynRes === 'auto' ? o.dynRes : DEFAULT_OPTIONS.dynRes,
   };
 }
 
@@ -46,18 +52,33 @@ export function urlQuality(search = typeof location !== 'undefined' ? location.s
   return q === 'auto' || q === 'basse' || q === 'moyenne' || q === 'haute' ? q : null;
 }
 
+/** Résolution dynamique imposée par l'adresse (`?dyn=1|0`, page de mesure), jamais mémorisée seule. */
+export function urlDynRes(search = typeof location !== 'undefined' ? location.search : ''): GraphicsOptions['dynRes'] | null {
+  const d = new URLSearchParams(search).get('dyn');
+  return d === '1' ? 'on' : d === '0' ? 'off' : null;
+}
+
+/** Résolution dynamique effective (option « auto » : activée en qualité Auto). */
+export function dynResEnabled(o: Pick<GraphicsOptions, 'quality' | 'dynRes'>): boolean {
+  return o.dynRes === 'on' || (o.dynRes === 'auto' && o.quality === 'auto');
+}
+
 export function loadOptions(): GraphicsOptions {
   let o: GraphicsOptions;
   try { o = sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null); } catch { o = { ...DEFAULT_OPTIONS }; }
-  const q = urlQuality();
-  return q ? { ...o, quality: q } : o;
+  const q = urlQuality(), d = urlDynRes();
+  if (q) o = { ...o, quality: q };
+  if (d) o = { ...o, dynRes: d };
+  return o;
 }
 
 export function saveOptions(o: GraphicsOptions): void {
   try {
     // Qualité imposée par l'adresse : la qualité mémorisée du joueur reste celle d'avant.
-    const q = urlQuality();
-    if (q && o.quality === q) o = { ...o, quality: sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null).quality };
+    const q = urlQuality(), d = urlDynRes();
+    const stored = sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null);
+    if (q && o.quality === q) o = { ...o, quality: stored.quality };
+    if (d && o.dynRes === d) o = { ...o, dynRes: stored.dynRes };
     localStorage.setItem(KEY, JSON.stringify(o));
   } catch { /* navigation privée : réglage non mémorisé */ }
 }
@@ -85,6 +106,16 @@ export function desktopAdaptive(dpr: number, cssPixels = typeof window !== 'unde
   return max - min > 1e-3 ? { min, max } : null;
 }
 
+/**
+ * Ordinateur, résolution dynamique : plage du rapport de pixels de la 3D. Plancher 0,6 × la densité de la qualité
+ * choisie ; plafond = cette densité (qualité Auto : jusqu'à 2 sur écran Retina / 4K, comme avant).
+ */
+export function desktopDynamic(quality: GraphicsOptions['quality'], ratio: number, dpr: number): { min: number; max: number } | null {
+  const max = quality === 'auto' ? Math.max(ratio, Math.min(dpr, 2)) : ratio;
+  const min = Math.max(0.5, Math.round(ratio * 0.6 * 20) / 20);
+  return max - min > 1e-3 ? { min, max } : null;
+}
+
 export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): void {
   applyTheme(o.theme);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -99,7 +130,7 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
     // Téléphone : résolution qui monte quand l'appareil suit (plafond prudent : 1,25 en auto/basse, 1,5 en moyenne).
     t.perf.adaptive = prof.lite
       ? (o.quality !== 'haute' ? { min: ratio, max: Math.min(dpr, o.quality === 'moyenne' ? 1.5 : 1.25) } : null)
-      : o.quality === 'auto' ? desktopAdaptive(dpr) : null;
+      : dynResEnabled(o) ? desktopDynamic(o.quality, ratio, dpr) : null;
     t.perf.ratio = ratio;
   }
   const size = new THREE.Vector2();

@@ -203,6 +203,8 @@ export function initUI(h: UIHandlers): UIHandle {
     const o = loadOptions();
     (optForm.elements.namedItem('quality') as HTMLSelectElement).value = o.quality;
     (optForm.elements.namedItem('shadows') as HTMLSelectElement).value = o.shadows;
+    const dyn = optForm.elements.namedItem('dynRes') as HTMLSelectElement | null;
+    if (dyn) dyn.value = o.dynRes;
     (optForm.elements.namedItem('viewDistance') as HTMLInputElement).value = String(o.viewDistance);
     (optForm.elements.namedItem('fps') as HTMLSelectElement).value = o.fps;
     (optForm.elements.namedItem('theme') as HTMLSelectElement).value = o.theme;
@@ -212,7 +214,7 @@ export function initUI(h: UIHandlers): UIHandle {
   optForm.addEventListener('input', (e) => {
     if ((e.target as HTMLElement | null)?.id === 'opt-tutorial') return; // case « Premiers pas » : gérée à part
     const f = new FormData(optForm);
-    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'] });
+    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'], dynRes: String(f.get('dynRes') ?? 'auto') as GraphicsOptions['dynRes'] });
     distOut.textContent = `${fmt(o.viewDistance)} m`;
     saveOptions(o);
     h.onOptions?.(o);

@@ -106,7 +106,7 @@ const CELL_M = 100;
 const MAX_LOG = 24;
 
 /** Nom d'îlot de la grille de 500 m (colonne en lettre, rangée en chiffre). */
-function gridName(cx: number, cz: number): string {
+export function gridName(cx: number, cz: number): string {
   const col = Math.max(0, Math.min(25, cx + 13));
   return `Îlot ${String.fromCharCode(65 + col)}${cz + 14}`;
 }

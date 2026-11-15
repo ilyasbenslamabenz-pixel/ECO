@@ -14,8 +14,9 @@ import type { PluginContext, SimPlugin } from './types';
 
 interface EauLike { growthAllowed(id: number): boolean }
 interface DechetsLike { binFull(id: number): boolean }
+interface ServicesLike { burning(id: number): boolean; ruined(id: number): boolean; crimeHigh(id: number): boolean }
 
-const emptyCounts = (): Record<AlertKind, number> => ({ road: 0, power: 0, water: 0, waste: 0, isolated: 0 });
+const emptyCounts = (): Record<AlertKind, number> => ({ road: 0, power: 0, water: 0, waste: 0, isolated: 0, fire: 0, ruin: 0, crime: 0 });
 
 /** Services techniques (énergie, déchets, eau) : ouvrages sans personnel permanent, sans besoin d'eau. */
 const TECH_SERVICES = ['service:electricite', 'service:dechets', 'service:eau', 'service:assainissement'];
@@ -91,6 +92,7 @@ export function computeAlerts(ctx: PluginContext): AlertesPayload {
   const power = ctx.use<ElectriciteService>('electricite');
   const eau = ctx.use<EauLike>('eau');
   const dechets = ctx.use<DechetsLike>('dechets');
+  const services = ctx.use<ServicesLike>('services');
   const powerOn = !!power && (power.hasNetwork?.() ?? true);
   const st = ctx.buildings.store;
   const assets = ctx.catalog?.assets ?? [];
@@ -112,6 +114,11 @@ export function computeAlerts(ctx: PluginContext): AlertesPayload {
     if (eau && needsWater(a) && !eau.growthAllowed(id)) m |= ALERT_BITS.water;
     if (wasteService && dechets?.binFull(id)) m |= ALERT_BITS.waste;
     if (isolated.has(id)) m |= ALERT_BITS.isolated;
+    if (services) {
+      if (services.burning(id)) m |= ALERT_BITS.fire;
+      else if (services.ruined(id)) m |= ALERT_BITS.ruin;
+      else if (services.crimeHigh(id)) m |= ALERT_BITS.crime;
+    }
     if (!m) continue;
     for (const k of ALERT_KINDS) if (m & ALERT_BITS[k]) counts[k]++;
     items.push(id, m, Math.round(st.x[i]! * 10) / 10, Math.round((st.y[i]! + (a.dimensions?.height ?? 10)) * 10) / 10, Math.round(st.z[i]! * 10) / 10);
