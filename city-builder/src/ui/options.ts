@@ -60,6 +60,17 @@ export interface GraphicsTargets {
   perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number };
 }
 
+/**
+ * Ordinateur, qualité « auto » : résolution adaptative autour de 60 images/s. Écran Retina / 4K (densité > 1) :
+ * de 1 à 2 pixels par point (départ 1,5 ; monte si la machine suit, redescend sinon). Très grand écran à densité 1
+ * (4K à 100 %, > 3,5 millions de points) : peut descendre à 0,75. Écran ordinaire : résolution fixe (null).
+ */
+export function desktopAdaptive(dpr: number, cssPixels = typeof window !== 'undefined' ? window.innerWidth * window.innerHeight : 0): { min: number; max: number } | null {
+  const max = Math.min(dpr, 2);
+  const min = dpr > 1 ? 1 : cssPixels > 3_500_000 ? 0.75 : max;
+  return max - min > 1e-3 ? { min, max } : null;
+}
+
 export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): void {
   applyTheme(o.theme);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
@@ -72,7 +83,9 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
     // Téléphone : ombres recalculées au plus 1 image sur 4 tant que rien ne bouge autour du soleil.
     t.perf.shadowEvery = prof.lite ? 4 : 1;
     // Téléphone : résolution qui monte quand l'appareil suit (plafond prudent : 1,25 en auto/basse, 1,5 en moyenne).
-    t.perf.adaptive = prof.lite && o.quality !== 'haute' ? { min: ratio, max: Math.min(dpr, o.quality === 'moyenne' ? 1.5 : 1.25) } : null;
+    t.perf.adaptive = prof.lite
+      ? (o.quality !== 'haute' ? { min: ratio, max: Math.min(dpr, o.quality === 'moyenne' ? 1.5 : 1.25) } : null)
+      : o.quality === 'auto' ? desktopAdaptive(dpr) : null;
     t.perf.ratio = ratio;
   }
   const size = new THREE.Vector2();

@@ -46,6 +46,20 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
   // même rendu, sans l'avertissement.
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
+  // Objets opaques groupés par PROGRAMME (shader) avant le matériau : three triait par matériau seul, et les
+  // ≈ 500 matériaux des bâtiments alternaient leurs programmes (≈ 400 changements par image, chacun suivi du renvoi
+  // des uniformes caméra / lumières). L'ordre n'influe que sur l'état GL, jamais sur l'image (objets opaques,
+  // test de profondeur) ; un identifiant périmé après recompilation ne change que l'ordre.
+  const props = renderer.properties;
+  const progKey = (m: THREE.Material): number => {
+    const c = m as THREE.Material & { __aubePk?: number };
+    let k = c.__aubePk;
+    if (!k) { k = (props.get(m) as { currentProgram?: { id: number } }).currentProgram?.id ?? 0; c.__aubePk = k; }
+    return k;
+  };
+  renderer.setOpaqueSort((a, b) => a.groupOrder - b.groupOrder || a.renderOrder - b.renderOrder
+    || progKey(a.material) - progKey(b.material) || a.material.id - b.material.id || a.z - b.z || a.id - b.id);
+
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fb8cf);
   scene.fog = new THREE.Fog(0xa9bccd, 1400, 4200);
@@ -92,6 +106,8 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
   };
   // Résolution adaptative : monte d'un cran si la cadence visée tient 3 s, descend si elle décroche 1,5 s.
   let winStart = performance.now(), winFrames = 0, holdUntil = 0;
+  // Rapport auquel la cadence a décroché : on n'y remonte pas avant 2 min (pas d'oscillation montée / descente).
+  let failRatio = Infinity, failUntil = 0;
   const adapt = (now: number): void => {
     const a = perf.adaptive;
     if (!a) return;
@@ -101,8 +117,11 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
     const target = perf.maxFps > 0 ? perf.maxFps : 60;
     const fps = (1000 * winFrames) / Math.max(1, span);
     let next = perf.ratio;
-    if (span > 1500 && fps < target * 0.8) { next = Math.max(a.min, perf.ratio - 0.25); holdUntil = now + 20000; }
-    else if (span > 3000 && fps > target * 0.93 && now > holdUntil) next = Math.min(a.max, perf.ratio + 0.25);
+    if (span > 1500 && fps < target * 0.8) { next = Math.max(a.min, perf.ratio - 0.25); holdUntil = now + 20000; failRatio = perf.ratio; failUntil = now + 120000; }
+    else if (span > 3000 && fps > target * 0.93 && now > holdUntil) {
+      next = Math.min(a.max, perf.ratio + 0.25);
+      if (next >= failRatio - 1e-3 && now < failUntil) next = perf.ratio;
+    }
     else if (span <= 3000) return;
     winStart = now; winFrames = 0;
     if (Math.abs(next - perf.ratio) > 1e-3) {

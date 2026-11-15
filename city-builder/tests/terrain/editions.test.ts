@@ -301,3 +301,17 @@ test('rivière : tracé courbe en eau, berges en pente sans mur, eau descendante
   assert.ok(!s.terrainEdit({ edit: { k: 'river', pts: [0, 0, 1, 1], w: 24 }, dryRun: true }).ok);
   assert.ok(!s.terrainEdit({ edit: { k: 'river', pts: [0, 0, 'x'], w: 24 } as unknown as TerrainEdit, dryRun: true }).ok);
 });
+
+test('canal en biais : murs de quai continus (pas de tronçons en dents de scie)', () => {
+  const t = generateWorld({ seed: 7, mapChunks: 4 });
+  for (const [ax, az, bx, bz] of [[-80, -60, 70, 50], [-90, -20, 90, 25]] as const) { // sur terre sèche (pas d'eau existante à traverser)
+    const plan = planEdit({ ...t, heights: t.heights.slice(), waterSurface: t.waterSurface.slice(), forest: t.forest.slice() }, { k: 'dig', ax, az, bx, bz, w: 24 });
+    assert.ok(plan.ok, 'canal accepté');
+    const walls = plan.ok ? plan.plan.walls : [];
+    // 2 côtés longs + 2 extrémités au plus : un côté long ne doit pas être découpé en morceaux.
+    assert.ok(walls.length <= 4, `${walls.length} murs pour un canal droit en biais`);
+    const L = Math.hypot(bx - ax, bz - az);
+    const long = walls.filter((w) => Math.hypot(w.bx - w.ax, w.bz - w.az) > L * 0.6).length;
+    assert.equal(long, 2, 'deux murs longs, un par berge');
+  }
+});

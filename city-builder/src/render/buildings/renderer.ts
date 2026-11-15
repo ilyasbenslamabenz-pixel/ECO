@@ -231,7 +231,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     }
     if (b.mVis[i]) return;
     const ids = b.mInst[i]!, parts = b.lods[l]!.parts;
-    for (let p = 0; p < ids.length; p++) parts[p]!.bm!.setVisibleAt(ids[p]!, true);
+    for (let p = 0; p < ids.length; p++) this.pool!.show(parts[p]!.bm!, ids[p]!);
     b.mVis[i] = 1;
   }
 
@@ -239,7 +239,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   private hideBatched(b: Batch, i: number): void {
     if (!b.mVis[i] || b.mLod[i]! < 0) return;
     const ids = b.mInst[i]!, parts = b.lods[b.mLod[i]!]!.parts;
-    for (let p = 0; p < ids.length; p++) parts[p]!.bm!.setVisibleAt(ids[p]!, false);
+    for (let p = 0; p < ids.length; p++) this.pool!.hide(parts[p]!.bm!, ids[p]!);
     b.mVis[i] = 0;
   }
 
@@ -249,7 +249,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     const ids = b.mInst[i];
     if (l >= 0 && ids) {
       const parts = b.lods[l]!.parts;
-      for (let p = 0; p < ids.length; p++) parts[p]!.bm!.deleteInstance(ids[p]!);
+      for (let p = 0; p < ids.length; p++) this.pool!.remove(parts[p]!.bm!, ids[p]!);
     }
     b.mInst[i] = null;
     b.mLod[i] = -1;

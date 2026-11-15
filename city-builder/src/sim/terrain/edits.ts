@@ -85,6 +85,8 @@ export const RIVER_BANK = 14;
 const RIVER_BANK_SLOPE = 0.55;
 /** Largeur (en cases) de la bande préparée de part et d'autre d'un mur. */
 const BAND = 1.5;
+/** Arasement des berges d'un canal (en cases) : couvre la plateforme de quai rendue (12,5 m) plus une case d'interpolation. */
+const DECK_CLEAR_CELLS = 3;
 
 /**
  * Mur de quai (rendu) : segment (ax,az)-(bx,bz), dessus `top`, pied `bottom`, normale (nx,nz) vers l'EAU.
@@ -419,12 +421,18 @@ export function planEdit(t: EditableTerrain, raw: TerrainEdit): PlanOutcome {
   const top = ref + QUAY_FREEBOARD;
   const bed = ref - DIG_DEPTH;
   for (const k of inner) c.set(k, Math.min(t.heights[k]!, bed), ref);
-  const banks = samplesNear(hw + band, band);
+  // Berges au niveau du quai sur `band`, puis jusqu'à DECK_CLEAR au-delà du bord : relief seulement ARASÉ au niveau
+  // du quai (jamais rehaussé). La plateforme rendue (12,5 m) dépasse la bande ; sans cet arasement, le relief plus
+  // haut derrière la perçait par l'arrière, en dents de scie.
+  const clear = DECK_CLEAR_CELLS * sp;
+  const banks = samplesNear(hw + clear, clear);
   for (const k of banks) {
     const [lt, ln] = local(k);
     if (Math.abs(ln) <= hw && lt >= 0 && lt <= L) continue;
     if (wetK(t, k)) continue; // eau existante : le canal s'y raccorde
-    c.set(k, top, NO_WATER);
+    const dn = Math.abs(ln) - hw, dt = lt < 0 ? -lt : lt > L ? lt - L : 0;
+    if (Math.max(dn, dt) <= band) c.set(k, top, NO_WATER);
+    else if (c.h(k) > top) c.set(k, top, NO_WATER);
   }
   const walls: QuayWall[] = [];
   const nx = -uz, nz = ux; // normale (côté +n)

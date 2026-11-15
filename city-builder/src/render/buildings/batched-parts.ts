@@ -38,6 +38,8 @@ export class BuildingBatchPool {
       bm.frustumCulled = false;
       bm.perObjectFrustumCulled = false;
       bm.sortObjects = false;
+      bm.visible = false;
+      bm.userData['vis'] = 0;
       this.pools.set(key, bm);
       this.parent.add(bm);
     }
@@ -54,8 +56,23 @@ export class BuildingBatchPool {
     const id = bm.addInstance(gid);
     bm.setMatrixAt(id, _mat.fromArray(mats, mo));
     if (tints) bm.setColorAt(id, _col.setRGB(tints[to]!, tints[to + 1]!, tints[to + 2]!));
+    this.count(bm, 1);
     return id;
   }
+
+  /**
+   * Instances visibles par lot : un lot sans instance visible est masqué (three préparerait sinon programme,
+   * uniformes et textures pour un appel vide, ≈ 50 lots dans la vue aérienne de la démo).
+   */
+  private count(bm: THREE.BatchedMesh, d: number): void {
+    const n = ((bm.userData['vis'] as number | undefined) ?? 0) + d;
+    bm.userData['vis'] = n;
+    bm.visible = n > 0;
+  }
+
+  show(bm: THREE.BatchedMesh, id: number): void { if (!bm.getVisibleAt(id)) { bm.setVisibleAt(id, true); this.count(bm, 1); } }
+  hide(bm: THREE.BatchedMesh, id: number): void { if (bm.getVisibleAt(id)) { bm.setVisibleAt(id, false); this.count(bm, -1); } }
+  remove(bm: THREE.BatchedMesh, id: number): void { if (bm.getVisibleAt(id)) this.count(bm, -1); bm.deleteInstance(id); }
 
   /** Lots (diagnostic) : nombre de BatchedMesh et d'instances. */
   stats(): { meshes: number; instances: number } {
