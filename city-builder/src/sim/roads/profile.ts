@@ -114,8 +114,25 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
   const g = maxGrade * step * 0.98;
   const lower = new Float64Array(count).fill(-Infinity);
   for (let i = 0; i < count; i++) if (ground[i]! < wl[i]! + 0.4) lower[i] = wl[i]! + BRIDGE_CLEARANCE;
+  // Tablier à plat au-dessus de l'eau, prolongé de ~8 m sur chaque rive (culées) : pas de pointe au sommet du pont.
+  {
+    const ext = Math.max(1, Math.round(8 / step));
+    const base = lower.slice();
+    for (let i = 0; i < count; i++) {
+      if (base[i] === -Infinity) continue;
+      for (let k = -ext; k <= ext; k++) { const j = i + k; if (j >= 0 && j < count) lower[j] = Math.max(lower[j]!, base[i]!); }
+    }
+    // Plat continu entre deux sections mouillées proches (moins de 24 m) : un seul tablier.
+    let last = -1;
+    for (let i = 0; i < count; i++) {
+      if (base[i] === -Infinity) continue;
+      if (last >= 0 && i - last > 1 && (i - last) * step <= 24) { const v = Math.max(base[last]!, base[i]!); for (let j = last + 1; j < i; j++) lower[j] = Math.max(lower[j]!, v); }
+      last = i;
+    }
+  }
   for (let i = 1; i < count; i++) lower[i] = Math.max(lower[i]!, lower[i - 1]! - g);
   for (let i = count - 2; i >= 0; i--) lower[i] = Math.max(lower[i]!, lower[i + 1]! - g);
+  const lowerOrig = lower.slice();
   // Hors eau, la chaussée ne descend pas sous l'eau.
   const h = new Float64Array(count);
   for (let i = 0; i < count; i++) {
@@ -139,6 +156,34 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
   for (let pass = 0; pass < 3; pass++) {
     for (let i = 1; i < count - 1; i++) h[i] = Math.min(h[i - 1]! + g, Math.max(h[i - 1]! - g, h[i]!));
     for (let i = count - 2; i > 0; i--) h[i] = Math.min(h[i + 1]! + g, Math.max(h[i + 1]! - g, h[i]!));
+  }
+  // 4 bis) Ponts : pas de creux en V entre la berge et le tablier. Près des bornes basses (eau franchie), les creux
+  //    sont comblés (niveau = min des plus hauts points à gauche et à droite dans la zone), puis le tablier est
+  //    arrondi en arc doux ; la pente maximale est ensuite réappliquée.
+  {
+    const zone = new Uint8Array(count);
+    for (let i = 0; i < count; i++) if (lowerOrig[i]! > -Infinity && lowerOrig[i]! > smooth[i]! - 1.5) zone[i] = 1;
+    const grow = Math.max(1, Math.round(16 / step));
+    const z2 = zone.slice();
+    for (let i = 0; i < count; i++) if (zone[i]) for (let k = -grow; k <= grow; k++) { const j = i + k; if (j > 0 && j < count - 1) z2[j] = 1; }
+    let a = 1;
+    while (a < count - 1) {
+      if (!z2[a]) { a++; continue; }
+      let b = a;
+      while (b + 1 < count - 1 && z2[b + 1]) b++;
+      const L = new Float64Array(b - a + 1), R = new Float64Array(b - a + 1);
+      let m = -Infinity;
+      for (let i = a; i <= b; i++) { m = Math.max(m, h[i]!); L[i - a] = m; }
+      m = -Infinity;
+      for (let i = b; i >= a; i--) { m = Math.max(m, h[i]!); R[i - a] = m; }
+      for (let i = a; i <= b; i++) h[i] = Math.max(h[i]!, Math.min(L[i - a]!, R[i - a]!));
+      for (let pass = 0; pass < 12; pass++) for (let i = Math.max(1, a); i <= Math.min(count - 2, b); i++) h[i] = Math.max((h[i - 1]! + 2 * h[i]! + h[i + 1]!) / 4, lowerOrig[i]! > -Infinity ? Math.min(lowerOrig[i]!, h[i]!) : -Infinity);
+      a = b + 1;
+    }
+    for (let pass = 0; pass < 3; pass++) {
+      for (let i = 1; i < count - 1; i++) h[i] = Math.min(h[i - 1]! + g, Math.max(h[i - 1]! - g, h[i]!));
+      for (let i = count - 2; i > 0; i--) h[i] = Math.min(h[i + 1]! + g, Math.max(h[i + 1]! - g, h[i]!));
+    }
   }
   // 5) Lissage final léger (courbe de raccordement), sans descendre sous les bornes basses atteignables
   //    (si la rampe manque de longueur, la borne n'est pas forcée : le planificateur refusera le tracé).
