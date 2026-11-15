@@ -285,18 +285,6 @@ async function boot(): Promise<void> {
     }
     return out;
   };
-  (debug as unknown as Record<string, unknown>).__tmpBatched = () => {
-    const o: Record<string, { n: number; bytes: number; usedV: number; maxV: number; usedI: number; maxI: number; idx32: number }> = {};
-    render.ctx.scene.traverse((x) => { const bm = x as THREE.BatchedMesh & { _nextVertexStart: number; _maxVertexCount: number; _nextIndexStart: number; _maxIndexCount: number }; if (!bm.isBatchedMesh) return; const k = bm.name.startsWith('ombres') ? 'ombres' : 'lots'; const c = o[k] ?? (o[k] = { n: 0, bytes: 0, usedV: 0, maxV: 0, usedI: 0, maxI: 0, idx32: 0 }); c.n++; for (const a of Object.values(bm.geometry.attributes)) c.bytes += (a as THREE.BufferAttribute).array.byteLength; c.bytes += bm.geometry.index?.array.byteLength ?? 0; c.usedV += bm._nextVertexStart; c.maxV += bm._maxVertexCount; c.usedI += bm._nextIndexStart; c.maxI += bm._maxIndexCount; if (bm.geometry.index?.array instanceof Uint32Array) c.idx32++; });
-    for (const c of Object.values(o)) c.bytes = Math.round(c.bytes / 1048576);
-    return o;
-  };
-  (debug as unknown as Record<string, unknown>).__tmpMeshes = (group: string) => {
-    const out: Record<string, { n: number; inst: number; tris: number; shadowTris: number }> = {};
-    const top = render.ctx.scene.getObjectByName(group); if (!top) return null;
-    top.traverseVisible((o) => { const m = o as THREE.InstancedMesh; if (!m.isMesh) return; const k = m.name.replace(/_[0-9a-f]{6,}|\d+$/g, '') || m.type; const n = m.isInstancedMesh ? m.count : 1; const g = m.geometry; const t = ((g.index ? g.index.count : g.getAttribute('position')?.count ?? 0) / 3) * n; const c = out[k] ?? (out[k] = { n: 0, inst: 0, tris: 0, shadowTris: 0 }); c.n++; c.inst += n; c.tris += Math.round(t); if (m.castShadow) c.shadowTris += Math.round(t); });
-    return out;
-  };
   // Diagnostic (e2e mémoire) : objets et géométries par groupe de premier niveau de la scène.
   (debug as unknown as Record<string, unknown>).sceneCensus = () => {
     const out: Record<string, { obj: number; geo: number }> = {};

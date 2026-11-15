@@ -80,52 +80,6 @@ function disposeDecorMesh(m: THREE.InstancedMesh): void {
 }
 const LAMP_GLASS_COLOR = new THREE.Color(0xffc887);
 
-type DecorPart = { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] };
-
-/** UV du sommet de `g` le plus proche de `p` (couleur réelle du modèle à cet endroit). */
-function uvNear(g: THREE.BufferGeometry, x: number, y: number, z: number): [number, number] {
-  const pos = g.getAttribute('position'), uv = g.getAttribute('uv');
-  if (!uv) return [0.5, 0.5];
-  let best = Infinity, k = 0;
-  for (let i = 0; i < pos.count; i++) {
-    const d = (pos.getX(i) - x) ** 2 + (pos.getY(i) - y) ** 2 + (pos.getZ(i) - z) ** 2;
-    if (d < best) { best = d; k = i; }
-  }
-  return [uv.getX(k), uv.getY(k)];
-}
-
-/** Pavé [x0,x1]×[y0,y1]×[z0,z1] (12 triangles) dont toutes les UV pointent sur `uv` : teinte unie prise au modèle. */
-function proxyBox(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, uv: [number, number]): THREE.BufferGeometry {
-  const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
-  g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
-  const a = g.getAttribute('uv') as THREE.BufferAttribute;
-  for (let i = 0; i < a.count; i++) a.setXY(i, uv[0], uv[1]);
-  return g;
-}
-
-/**
- * Lampadaire vu de très loin (au-delà de DECOR_NEAR, quelques pixels de haut) : 3 pavés (mât, lanterne vitrée,
- * chapeau) au lieu des 797 triangles du dernier LOD, mêmes matériaux (vitrage allumé la nuit). Dérivé des
- * boîtes englobantes du dernier LOD ; null si sa structure n'est pas celle attendue (mât + vitrage).
- */
-function lampFarProxy(parts: readonly DecorPart[], isGlass: (m: THREE.Material) => boolean): DecorPart[] | null {
-  const glass = parts.find((p) => !Array.isArray(p.material) && isGlass(p.material));
-  const posts = parts.filter((p) => p !== glass && !Array.isArray(p.material));
-  if (!glass || posts.length === 0) return null;
-  const post = posts.reduce((a, b) => (b.geometry.getAttribute('position').count > a.geometry.getAttribute('position').count ? b : a));
-  post.geometry.computeBoundingBox(); glass.geometry.computeBoundingBox();
-  const pb = post.geometry.boundingBox!, gb = glass.geometry.boundingBox!;
-  if (!(gb.min.y > pb.min.y && gb.max.y <= pb.max.y)) return null;
-  const cx = (pb.min.x + pb.max.x) / 2, cz = (pb.min.z + pb.max.z) / 2, r = 0.06;
-  const gx = (gb.max.x - gb.min.x) / 2, gz = (gb.max.z - gb.min.z) / 2;
-  const midY = (pb.min.y + gb.min.y) / 2;
-  return [
-    { geometry: proxyBox(cx - r, cx + r, pb.min.y, gb.min.y, cz - r, cz + r, uvNear(post.geometry, cx, midY, cz)), material: post.material },
-    { geometry: proxyBox(gb.min.x, gb.max.x, gb.min.y, gb.max.y, gb.min.z, gb.max.z, uvNear(glass.geometry, cx, (gb.min.y + gb.max.y) / 2, cz)), material: glass.material },
-    { geometry: proxyBox(cx - gx * 1.1, cx + gx * 1.1, gb.max.y, Math.max(gb.max.y + 0.05, pb.max.y), cz - gz * 1.1, cz + gz * 1.1, uvNear(post.geometry, cx, pb.max.y, cz)), material: post.material },
-  ];
-}
-
 export class RoadNetworkRenderer implements IRoadRenderer {
   readonly group = new THREE.Group();
   net: RoadNetwork;
@@ -246,11 +200,6 @@ export class RoadNetworkRenderer implements IRoadRenderer {
           parts.push({ geometry: g, material: mat });
         });
         lods.push(parts);
-      }
-      // Lampadaires (≈ 750 dans la démo, dessinés jusqu'à 1,4 km et dans la carte d'ombre) : version pavés au-delà de DECOR_NEAR.
-      if (id === 'lampadaire_fonte' && lods.length === 2) {
-        const proxy = lampFarProxy(lods[1]!, (m) => this.lampGlass.includes(m as THREE.MeshStandardMaterial));
-        if (proxy) lods.push(proxy);
       }
       this.decorProto.set(id, lods);
     }));
