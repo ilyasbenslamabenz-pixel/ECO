@@ -275,9 +275,6 @@ export class BuildBar {
       this.syncFinish();
     });
     this.finishBtn.addEventListener('click', () => { d.tools.cancel(); d.machine.finishRoad(); this.sync(); });
-    // « Terminer le tracé » hors de la zone de jeu : juste au-dessus de la barre d'outils (sous les options d'outil),
-    // à l'emplacement de la barre de confirmation, et non plus au milieu de l'écran où tombait le point d'arrivée.
-    this.toolbar.before(this.finishBtn);
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement | null;

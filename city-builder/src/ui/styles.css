@@ -352,8 +352,16 @@ body.drawer-open #tool-options, body.confirming #tool-options { display: none; }
 .tool-actions .ta-break { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--line-2); }
 /* « Terminer le tracé » : grand bouton au-dessus des options, visible tant qu'un tracé enchaîné est en cours. */
 #road-finish { align-self: center; min-height: 46px; padding: 0 24px; font-size: 15px; font-weight: 700; border-radius: 999px; box-shadow: var(--shadow); animation: rise .2s ease-out; }
-/* Le bouton est juste au-dessus de la barre d'outils ; la barre de confirmation tactile se place au-dessus de lui. */
-body.confirming.road-drawing:not(.drawer-open) #touch-confirm { bottom: calc(var(--tb-h) + 66px); }
+body.confirming #road-finish { margin-bottom: 86px; }
+/* Écran tactile / téléphone : « Terminer le tracé » hors de la zone de jeu, juste au-dessus de la barre d'outils
+   (sous les options d'outil, qui passent sur plusieurs lignes), et non plus au milieu de l'écran où tombait le
+   point d'arrivée ; la barre de confirmation tactile se place juste au-dessus de lui. */
+@media (pointer: coarse), (max-width: 760px) {
+  #road-finish { order: 1; }
+  #toolbar { order: 2; }
+  body.confirming #road-finish { margin-bottom: 0; }
+  body.confirming.road-drawing:not(.drawer-open) #touch-confirm { bottom: calc(var(--tb-h) + 66px); }
+}
 /* Bulle du curseur : masquée pendant qu'une sous-barre est ouverte (elle décrivait l'outil précédent). */
 body.drawer-open #cursor-tag { display: none; }
 body.drawer-open #road-finish { display: none; }

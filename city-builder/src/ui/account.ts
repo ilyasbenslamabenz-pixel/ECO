@@ -26,6 +26,7 @@ const CSS = `
 #account-panel h2 svg.ic { color: var(--accent); width: 24px; height: 24px; }
 #account-panel .form input { font-size: 16px; min-height: 44px; }
 #account-panel button { min-height: 44px; }
+:root[data-theme] #account-panel button.primary:hover:not(:disabled) { background: linear-gradient(180deg, #62f0a2, #2fcf76); }
 #account-panel .acc-tabs { display: flex; gap: 6px; }
 #account-panel .acc-tabs button { flex: 1; }
 #account-panel .acc-note { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
@@ -44,7 +45,7 @@ const CSS = `
 #account-panel .acc-box { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: rgba(var(--ink), .03); }
 #account-panel .acc-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 #account-panel .acc-actions button { flex: 1 1 140px; }
-#btn-account .acc-sub { margin-left: auto; font-size: 12.5px; color: var(--muted); max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#btn-account .acc-sub { margin-left: auto; align-self: center; line-height: 1.2; font-size: 12.5px; color: var(--muted); max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 `;
 
 const PASS_MIN = 6;
@@ -74,6 +75,8 @@ export function installAccountUi(mgr: AccountManager, h: AccountUiHooks): { open
   let busy = false;
   let candidates: SlotInfo[] = [];
   let snap = mgr.snapshot;
+  /** Saisie en cours, conservée d'un rendu à l'autre (effacée à la fermeture ; jamais stockée ailleurs). */
+  const draft = new Map<string, string>();
 
   const card = el('div', { cls: 'menu-card account-card' });
   const panel = el('div', { cls: 'overlay hidden', attrs: { id: 'account-panel', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'account-title' } }, card);
@@ -92,6 +95,7 @@ export function installAccountUi(mgr: AccountManager, h: AccountUiHooks): { open
   function close(): void {
     panel.classList.add('hidden');
     setMsg('');
+    draft.clear();
     if (snap.redirect) mgr.clearRedirect();
   }
 
@@ -107,6 +111,10 @@ export function installAccountUi(mgr: AccountManager, h: AccountUiHooks): { open
 
   const field = (label: string, attrs: Record<string, string>): { wrap: HTMLLabelElement; input: HTMLInputElement } => {
     const input = el('input', { attrs });
+    const key = `${view}:${attrs['name'] ?? ''}`;
+    const shared = attrs['name'] === 'email' ? 'email' : key; // l'e-mail suit d'un onglet à l'autre
+    input.value = draft.get(shared) ?? '';
+    input.addEventListener('input', () => draft.set(shared, input.value));
     return { wrap: el('label', {}, label, input), input };
   };
   const emailField = (): ReturnType<typeof field> => field('E-mail', {
@@ -159,6 +167,7 @@ export function installAccountUi(mgr: AccountManager, h: AccountUiHooks): { open
           if (view === 'signup') {
             const r = await mgr.signUp(em, pw);
             if (!r.ok) { setMsg(r.message, 'err'); return; }
+            for (const k of [...draft.keys()]) if (k !== 'email') draft.delete(k);
             if (r.value.needsConfirmation) {
               view = 'signin';
               setMsg(`Presque fini ! Un e-mail de confirmation a été envoyé à ${em}. Ouvrez le lien qu'il contient (pensez aux courriers indésirables), puis revenez vous connecter ici.`, 'ok');
@@ -166,6 +175,7 @@ export function installAccountUi(mgr: AccountManager, h: AccountUiHooks): { open
           } else {
             const r = await mgr.signIn(em, pw);
             if (!r.ok) { setMsg(r.message, 'err'); return; }
+            draft.clear();
             setMsg('');
             h.toast(`Connecté : ${r.value.email}`, 'ok');
           }
@@ -207,7 +217,7 @@ export function installAccountUi(mgr: AccountManager, h: AccountUiHooks): { open
       if (confirm.input.value !== pass.input.value) { setMsg('Les deux mots de passe ne correspondent pas.', 'err'); render(); return; }
       void run(async () => {
         const r = await mgr.updatePassword(pass.input.value);
-        if (r.ok) { view = 'signin'; mgr.clearRedirect(); setMsg('Mot de passe modifié.', 'ok'); } else setMsg(r.message, 'err');
+        if (r.ok) { view = 'signin'; draft.clear(); mgr.clearRedirect(); setMsg('Mot de passe modifié.', 'ok'); } else setMsg(r.message, 'err');
       });
     });
     return form;
