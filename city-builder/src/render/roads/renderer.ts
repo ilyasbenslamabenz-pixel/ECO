@@ -48,6 +48,8 @@ export const DECOR_ASSETS: Record<DecorKind, string[]> = {
 const DECOR_LOD0 = 40;
 const DECOR_NEAR = 300;
 const DECOR_HIDE = 1400;
+/** Lampadaire en pavés au-delà de cette distance 3D (m) au décor du chunk (≈ 20 px de haut en 1080p). */
+const LAMP_PROXY = 200;
 
 interface DecorBatch { meshes: THREE.InstancedMesh[][]; } // [lod][sous-maillage]
 
@@ -63,6 +65,9 @@ interface Chunk {
   batches: DecorBatch[];
   pools: THREE.InstancedMesh | null;
   lod: number;
+  /** Hauteurs extrêmes du décor du chunk (distance 3D du palier « pavés » des lampadaires). */
+  decorMinY: number;
+  decorMaxY: number;
 }
 
 /** Couleurs de repli (sans bibliothèque de matériaux : tests isolés). */
@@ -79,6 +84,52 @@ function disposeDecorMesh(m: THREE.InstancedMesh): void {
   m.dispose();
 }
 const LAMP_GLASS_COLOR = new THREE.Color(0xffc887);
+
+type DecorPart = { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] };
+
+/** UV du sommet de `g` le plus proche de `p` (couleur réelle du modèle à cet endroit). */
+function uvNear(g: THREE.BufferGeometry, x: number, y: number, z: number): [number, number] {
+  const pos = g.getAttribute('position'), uv = g.getAttribute('uv');
+  if (!uv) return [0.5, 0.5];
+  let best = Infinity, k = 0;
+  for (let i = 0; i < pos.count; i++) {
+    const d = (pos.getX(i) - x) ** 2 + (pos.getY(i) - y) ** 2 + (pos.getZ(i) - z) ** 2;
+    if (d < best) { best = d; k = i; }
+  }
+  return [uv.getX(k), uv.getY(k)];
+}
+
+/** Pavé [x0,x1]×[y0,y1]×[z0,z1] (12 triangles) dont toutes les UV pointent sur `uv` : teinte unie prise au modèle. */
+function proxyBox(x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, uv: [number, number]): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0);
+  g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  const a = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < a.count; i++) a.setXY(i, uv[0], uv[1]);
+  return g;
+}
+
+/**
+ * Lampadaire vu de très loin (au-delà de DECOR_NEAR, quelques pixels de haut) : 3 pavés (mât, lanterne vitrée,
+ * chapeau) au lieu des 797 triangles du dernier LOD, mêmes matériaux (vitrage allumé la nuit). Dérivé des
+ * boîtes englobantes du dernier LOD ; null si sa structure n'est pas celle attendue (mât + vitrage).
+ */
+function lampFarProxy(parts: readonly DecorPart[], isGlass: (m: THREE.Material) => boolean): DecorPart[] | null {
+  const glass = parts.find((p) => !Array.isArray(p.material) && isGlass(p.material));
+  const posts = parts.filter((p) => p !== glass && !Array.isArray(p.material));
+  if (!glass || posts.length === 0) return null;
+  const post = posts.reduce((a, b) => (b.geometry.getAttribute('position').count > a.geometry.getAttribute('position').count ? b : a));
+  post.geometry.computeBoundingBox(); glass.geometry.computeBoundingBox();
+  const pb = post.geometry.boundingBox!, gb = glass.geometry.boundingBox!;
+  if (!(gb.min.y > pb.min.y && gb.max.y <= pb.max.y)) return null;
+  const cx = (pb.min.x + pb.max.x) / 2, cz = (pb.min.z + pb.max.z) / 2, r = 0.06;
+  const gx = (gb.max.x - gb.min.x) / 2, gz = (gb.max.z - gb.min.z) / 2;
+  const midY = (pb.min.y + gb.min.y) / 2;
+  return [
+    { geometry: proxyBox(cx - r, cx + r, pb.min.y, gb.min.y, cz - r, cz + r, uvNear(post.geometry, cx, midY, cz)), material: post.material },
+    { geometry: proxyBox(gb.min.x, gb.max.x, gb.min.y, gb.max.y, gb.min.z, gb.max.z, uvNear(glass.geometry, cx, (gb.min.y + gb.max.y) / 2, cz)), material: glass.material },
+    { geometry: proxyBox(cx - gx * 1.1, cx + gx * 1.1, gb.max.y, Math.max(gb.max.y + 0.05, pb.max.y), cz - gz * 1.1, cz + gz * 1.1, uvNear(post.geometry, cx, pb.max.y, cz)), material: post.material },
+  ];
+}
 
 export class RoadNetworkRenderer implements IRoadRenderer {
   readonly group = new THREE.Group();
@@ -201,6 +252,11 @@ export class RoadNetworkRenderer implements IRoadRenderer {
         });
         lods.push(parts);
       }
+      // Lampadaires (≈ 750 dans la démo, dessinés jusqu'à 1,4 km et dans la carte d'ombre) : version pavés au-delà de DECOR_NEAR.
+      if (id === 'lampadaire_fonte' && lods.length === 2) {
+        const proxy = lampFarProxy(lods[1]!, (m) => this.lampGlass.includes(m as THREE.MeshStandardMaterial));
+        if (proxy) lods.push(proxy);
+      }
       this.decorProto.set(id, lods);
     }));
     this.setNight(this.night);
@@ -314,7 +370,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       const group = new THREE.Group();
       group.name = `roads_chunk_${key}`;
       this.group.add(group);
-      c = { key, cx, cz, group, segs: new Set(), nodes: new Set(), layerMeshes: [], decor: [], batches: [], pools: null, lod: 0 };
+      c = { key, cx, cz, group, segs: new Set(), nodes: new Set(), layerMeshes: [], decor: [], batches: [], pools: null, lod: 0, decorMinY: 0, decorMaxY: 0 };
       this.chunks.set(key, c);
     }
     return c;
@@ -449,6 +505,8 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       c.layerMeshes.push(mesh);
     }
     c.decor = out.decor;
+    c.decorMinY = Infinity; c.decorMaxY = -Infinity;
+    for (const d of c.decor) { c.decorMinY = Math.min(c.decorMinY, d.y); c.decorMaxY = Math.max(c.decorMaxY, d.y + 5); }
     this.rebuildDecor(c);
     this.rebuilds++;
   }
@@ -533,9 +591,18 @@ export class RoadNetworkRenderer implements IRoadRenderer {
   private applyLod(c: Chunk): void {
     const d = Math.max(0, Math.hypot(this.cam.x - c.cx, this.cam.z - c.cz) - CHUNK_SIZE * 0.5);
     const lod = d > DECOR_HIDE ? 3 : d > DECOR_NEAR ? 2 : d > DECOR_LOD0 ? 1 : 0;
-    if (lod === c.lod) return;
-    c.lod = lod;
-    for (const b of c.batches) b.meshes.forEach((list, i) => { const want = Math.min(lod, b.meshes.length - 1); for (const m of list) m.visible = lod < 3 && i === want; });
+    // Palier « pavés » (3 niveaux : lampadaires) : distance 3D exacte à la boîte du chunk (jamais sous-estimée près de la caméra).
+    const h = CHUNK_SIZE / 2;
+    const ax = Math.max(0, Math.abs(this.cam.x - c.cx) - h), az = Math.max(0, Math.abs(this.cam.z - c.cz) - h);
+    const ay = this.cam.y > c.decorMaxY ? this.cam.y - c.decorMaxY : this.cam.y < c.decorMinY ? c.decorMinY - this.cam.y : 0;
+    const far = lod < 3 && lod >= 1 && Math.hypot(ax, ay, az) > LAMP_PROXY;
+    const key = lod * 2 + (far ? 1 : 0);
+    if (key === c.lod) return;
+    c.lod = key;
+    for (const b of c.batches) b.meshes.forEach((list, i) => {
+      const want = b.meshes.length > 2 ? (lod === 0 ? 0 : far ? 2 : 1) : Math.min(lod, b.meshes.length - 1);
+      for (const m of list) m.visible = lod < 3 && i === want;
+    });
   }
 
   private disposeChunk(c: Chunk): void {
