@@ -5,3 +5,4 @@ tests/e2e/out
 *.log
 tests/*/out
 tests/*/demo-build
+tests/perf/out/

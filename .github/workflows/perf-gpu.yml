@@ -1,0 +1,41 @@
+name: Mesure de fluidité avec processeur graphique (macOS)
+
+# Lance la ville de démo de Meknes City dans Chromium (Metal) et WebKit (moteur de Safari) sur une machine macOS
+# à puce Apple, profil iPhone, et publie images/s, temps d'image, mémoire et erreurs (résumé + fichiers joints).
+on:
+  push:
+    branches: [claude/amazing-meitner-vtryts]
+    paths: [".github/workflows/perf-gpu.yml", "city-builder/tests/perf/**"]
+  workflow_dispatch:
+
+jobs:
+  mesure:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: city-builder/package-lock.json
+      - name: Installer et compiler le jeu
+        working-directory: city-builder
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Installer Playwright (Chromium et WebKit)
+        working-directory: city-builder
+        run: |
+          npm i --no-save --no-audit --no-fund playwright@1.63.0
+          npx playwright install chromium webkit
+      - name: Informations machine
+        run: system_profiler SPDisplaysDataType || true
+      - name: Mesurer
+        working-directory: city-builder
+        run: node tests/perf/gpu-fluidity.mjs dist 60
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fluidite-gpu
+          path: city-builder/tests/perf/out/
