@@ -3,10 +3,12 @@
  *
  * Croissance (chaque heure de jeu, si la croissance est active) : pour chaque type de zone dont le secteur a une
  * demande positive, `demande × naissancesParHeure` tentatives (partie fractionnaire tirée au sort, PRNG du module).
- * Une tentative choisit une case zonée de première rangée (bordant la route), libre et desservie, puis un bâtiment
+ * Une tentative choisit une case zonée libre et desservie à au plus trois rangées de la route, puis un bâtiment
  * du niveau 1 de la zone ; il est posé FAÇADE VERS LA ROUTE avec la même règle que l'outil de pose du joueur
  * (src/client/tools/snapping.ts : façade perpendiculaire à la tangente locale, recul de 0,6 m après le trottoir),
- * et seulement si son emprise tient dans des cases de la même zone. La pose passe par `ctx.development.place`
+ * et seulement si son emprise tient dans des cases de la même zone. Case INTÉRIEURE (2e ou 3e rangée) : le
+ * bâtiment est posé derrière la rangée de devant, façade au bord de la case, desservi par une allée (accès des lots
+ * privés : PRIVATE_ACCESS_MARGIN_M, src/sim/world.ts) — toute la profondeur peinte par l'outil se construit. La pose passe par `ctx.development.place`
  * (contrôles de la simulation de base, sans coût pour la ville) : le module « chantiers », s'il est présent,
  * ouvre alors un chantier comme pour toute pose.
  *
@@ -79,6 +81,10 @@ const DEFAULT_TUNING: Readonly<ZonageTuning> = Object.freeze({ ...DEFAULT_DEMAND
 export const FRONT_GAP = 0.6;
 /** Une case est « de première rangée » si son centre est à moins de cette distance du bord de la route. */
 const FRONT_ROW_M = TILE_SIZE + 1.5;
+/** Cases constructibles : centre à moins de cette distance du bord de la route (trois rangées, profondeur par défaut de l'outil). */
+export const BUILD_DEPTH_M = 3 * TILE_SIZE + 1.5;
+/** Échecs consécutifs de croissance résidentielle au-delà desquels la zone est considérée pleine (indice « need-roads »). */
+const FULL_AFTER_FAILS = 6;
 const SAMPLE_INSET = 1.2;
 const MINUTES_PER_DAY = 1440;
 
@@ -124,6 +130,9 @@ export class ZoningSystem {
   /** Vrai dès qu'une zone a été peinte (ou chargée) : sinon le module est totalement inerte. */
   active = false;
   private lastHour = -1;
+  /** Cases résidentielles zonées / libres constructibles (recomptées chaque heure), échecs consécutifs de croissance R. */
+  private lots = { zoned: 0, free: 0 };
+  private resFails = 0;
   private demandDirty = false;
   private statsDirty = false;
   private settingsDirty = false;
@@ -144,6 +153,8 @@ export class ZoningSystem {
     this.grown = 0;
     this.densified = 0;
     this.active = false;
+    this.lots = { zoned: 0, free: 0 };
+    this.resFails = 0;
     this.lastHour = Math.floor(ctx.clock.totalMinutes / 60);
     this.demandDirty = this.statsDirty = this.settingsDirty = false;
     this.zcat = buildZoneCatalog(ctx.catalog);
@@ -169,6 +180,30 @@ export class ZoningSystem {
     this.prune(ctx);
     this.updateDemand(ctx);
     if (this.growth) this.growHour(ctx);
+    this.countLots(ctx);
+  }
+
+  /** Cases résidentielles zonées et libres constructibles (desservies, à trois rangées au plus, non bâties). */
+  private countLots(ctx: PluginContext): void {
+    let zoned = 0, free = 0;
+    for (const t of ['res_faible', 'res_moyen', 'res_dense'] as const) {
+      const code = ZONE_TYPES.indexOf(t) + 1;
+      for (const idx of this.grid.cellsOf(code as ZoneCode)) {
+        zoned++;
+        if (this.grid.edgeM(idx) > BUILD_DEPTH_M || !this.grid.connected(idx)) continue;
+        if (!this.occupied(ctx, this.grid.centerX(idx), this.grid.centerZ(idx), 2.5)) free++;
+      }
+    }
+    this.lots = { zoned, free };
+  }
+
+  /**
+   * Zonage résidentiel pour l'indice de croissance de la démographie : cases zonées, cases libres constructibles
+   * (0 si les dernières tentatives de croissance ont toutes échoué : il reste des cases, mais trop petites ou
+   * enclavées), demande R lissée.
+   */
+  residentialLots(): { zoned: number; free: number; demand: number } {
+    return { zoned: this.lots.zoned, free: this.resFails >= FULL_AFTER_FAILS ? 0 : this.lots.free, demand: this.demand.R };
   }
 
   day(ctx: PluginContext): void {
@@ -261,7 +296,12 @@ export class ZoningSystem {
       if (d < this.tuning.demandeMin) continue;
       const expected = d * this.tuning.naissancesParHeure;
       const n = Math.min(this.tuning.maxParHeure, Math.floor(expected + ctx.rng.next()));
-      for (let k = 0; k < n; k++) if (this.tryGrow(ctx, code as ZoneCode)) grown++;
+      const residential = ZONE_SECTOR[zoneOf(code)!] === 'R';
+      for (let k = 0; k < n; k++) {
+        const ok = this.tryGrow(ctx, code as ZoneCode);
+        if (ok) grown++;
+        if (residential) this.resFails = ok ? 0 : this.resFails + 1;
+      }
     }
     return grown;
   }
@@ -279,15 +319,17 @@ export class ZoningSystem {
     const starters = list.filter((e) => e.level === minLevel);
     for (let attempt = 0; attempt < 16; attempt++) {
       const idx = cells[Math.floor(ctx.rng.next() * cells.length)]!;
-      if (this.grid.edgeM(idx) > FRONT_ROW_M) continue;
+      const edge = this.grid.edgeM(idx);
+      if (edge > BUILD_DEPTH_M) continue;
+      const interior = edge > FRONT_ROW_M;
       const cx = this.grid.centerX(idx), cz = this.grid.centerZ(idx);
       if (this.occupied(ctx, cx, cz, 2.5)) continue;
-      const hit = this.roads.nearest(cx, cz, FRONT_ROW_M);
+      const hit = this.roads.nearest(cx, cz, interior ? BUILD_DEPTH_M + 2 : FRONT_ROW_M);
       if (!hit) continue;
       // Ordre aléatoire des modèles, en préférant les moins représentés (variété des rues).
       const order = this.shuffleByRarity(ctx, starters);
       for (const e of order.slice(0, 4)) {
-        const id = this.placeFacing(ctx, e, code, hit, cx, cz);
+        const id = interior ? this.placeBehind(ctx, e, code, hit, cx, cz, edge) : this.placeFacing(ctx, e, code, hit, cx, cz);
         if (id > 0) {
           this.owned.set(id, { zone: code, level: e.level, born: ctx.clock.totalMinutes });
           this.grown++;
@@ -366,6 +408,31 @@ export class ZoningSystem {
       const variant = a.variants.length > 0 ? Math.floor(ctx.rng.next() * a.variants.length) : -1;
       const r = ctx.development!.place({ assetId: a.id, x, z, rot, variant });
       if (r.ok) return r.data.buildingId;
+    }
+    return 0;
+  }
+
+  /**
+   * Case intérieure (2e ou 3e rangée) : pose `e` face à la route, façade au bord de la case côté route (derrière la
+   * rangée de devant), desservi par une allée. Collisions vérifiées avant la pose (essais peu coûteux).
+   */
+  private placeBehind(ctx: PluginContext, e: ZoneAsset, code: ZoneCode, hit: RoadHit, cx: number, cz: number, edge: number): number {
+    const a = e.asset;
+    const { rot, nx, nz } = this.orient(a, hit, cx, cz);
+    const probe = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, 0, 0, rot);
+    const halfDepth = extentAlong(probe, nx, nz);
+    const front0 = Math.max(FRONT_GAP, edge - TILE_SIZE / 2);
+    for (const df of [0, 1.2, 2.4]) {
+      const s = hit.half + front0 + df + halfDepth;
+      for (const shift of [0, 4, -4]) {
+        const x = Math.round((hit.x + hit.tx * shift + nx * s) * 100) / 100;
+        const z = Math.round((hit.z + hit.tz * shift + nz * s) * 100) / 100;
+        if (!this.fits(a, x, z, rot, code, hit.segId)) continue;
+        if (this.collidesOthers(ctx, a, x, z, rot, -1)) continue;
+        const variant = a.variants.length > 0 ? Math.floor(ctx.rng.next() * a.variants.length) : -1;
+        const r = ctx.development!.place({ assetId: a.id, x, z, rot, variant });
+        if (r.ok) return r.data.buildingId;
+      }
     }
     return 0;
   }

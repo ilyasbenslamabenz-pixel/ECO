@@ -42,6 +42,9 @@ test('commandes étendues : impôts, emprunt, rapport, inspection, peuplement', 
   buildTown(s);
   const t = cmd(s, 'setTaxRate', { sector: 'residential', rate: 0.3 });
   assert.ok(t.ok && (t.data as { rate: number }).rate === 0.25);
+  // Taux maximal : plus personne n'emménage (effet voulu des impôts au-delà de 12 %) ; retour à un taux courant
+  // pour vérifier le peuplement.
+  assert.ok(cmd(s, 'setTaxRate', { sector: 'residential', rate: 0.1 }).ok);
   const offer = cmd(s, 'loanOffer', { amount: 500_000, months: 60 });
   assert.ok(offer.ok && (offer.data as { monthlyPayment: number }).monthlyPayment > 500_000 / 60);
   const money0 = s.economy.money;

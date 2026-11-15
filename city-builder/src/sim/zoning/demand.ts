@@ -7,7 +7,8 @@
  *
  *   écart d'emploi  G = actifs − emplois                     (> 0 : chômage ; < 0 : postes vacants)
  *   R = baseR + attraitEmploiR · (−G) / max(échelleMin, actifs)
- *            − pousséeVacanceR · (logements libres / max(échelleVacance, capacité) − vacanceCible) − sensibilitéImpôt · (tauxR − tauxRéf)
+ *            − pousséeVacanceR · (logements libres / max(échelleVacance, capacité) − vacanceCible) − sensibilitéImpôt · impôt(tauxR)
+ *       impôt(t) = (t − tauxRéf) + surcroîtImpôt · max(0, t − seuilImpôt)   (au-delà de 12 %, la demande chute nettement)
  *       (l'échelle minimale évite qu'un hameau de trois maisons, dont une encore vide, bloque toute croissance)
  *   C = (cibleC − emploisC) / max(échelleMinC, cibleC · 0,5)        cibleC = commercesParHabitant · population
  *   I = baseI + partIndustrie · G / max(échelleMin, actifs · 0,3)
@@ -41,6 +42,9 @@ export interface DemandTuning {
   echelleMin: number;
   sensibiliteImpot: number;
   tauxRef: number;
+  /** Au-delà de ce taux, chaque point d'impôt pèse `surcroitImpot` fois plus lourd sur la demande (taux élevé visible). */
+  seuilImpot: number;
+  surcroitImpot: number;
   /** Part de la nouvelle valeur intégrée à chaque heure (0..1). */
   lissage: number;
 }
@@ -61,6 +65,8 @@ export const DEFAULT_DEMAND_TUNING: Readonly<DemandTuning> = Object.freeze({
   echelleMin: 40,
   sensibiliteImpot: 3,
   tauxRef: 0.09,
+  seuilImpot: 0.12,
+  surcroitImpot: 4,
   lissage: 0.25,
 });
 
@@ -93,7 +99,12 @@ export function computeDemand(inp: DemandInputs, t: Readonly<DemandTuning> = DEF
   const L = Math.max(0, inp.workforce);
   const J = totalJobs(inp.jobsBySector);
   const G = L - J;
-  const tax = (s: DemandSector): number => (inp.tax?.[s] ?? t.tauxRef) - t.tauxRef;
+  // Effet de l'impôt (en points de taux équivalents) : linéaire autour du taux de référence, beaucoup plus fort
+  // au-delà du seuil (ex. 15 % : 0,06 + 4 × 0,03 = 0,18, soit −0,54 de demande avec la sensibilité 3).
+  const tax = (s: DemandSector): number => {
+    const r = inp.tax?.[s] ?? t.tauxRef;
+    return r - t.tauxRef + (t.surcroitImpot ?? 0) * Math.max(0, r - (t.seuilImpot ?? Infinity));
+  };
   const vacancy = inp.housingFree / Math.max(t.echelleVacance, inp.housingCapacity, 1);
   const R = t.baseR + (t.attraitEmploiR * -G) / Math.max(t.echelleMin, L) - t.pousseeVacanceR * (vacancy - t.vacanceCible) - t.sensibiliteImpot * tax('R');
   const targetC = t.commercesParHabitant * Math.max(0, inp.population);

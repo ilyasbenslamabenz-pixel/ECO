@@ -93,10 +93,14 @@ const PLANT_DISTRIBUTION_MIN_KW = 20_000;
 /** Raccordement local automatique (moyenne tension) entre installations proches : capacité (kW), pertes / km. */
 const LOCAL_LINK_KW = 20_000;
 const LOCAL_LINK_LOSS_PER_KM = 0.015;
-/** Pénalité de satisfaction : +3/h quand coupé (plafond 20), −1,5/h quand alimenté. */
-const PENALTY_STEP_CUT = 3;
-const PENALTY_RECOVER = 1.5;
-const PENALTY_MAX = 20;
+/**
+ * Pénalité de satisfaction des logements raccordés et coupés : +2/h quand coupé (plafond 12), −2/h quand alimenté.
+ * Des coupures intermittentes (moins d'une heure sur deux) ne s'accumulent pas ; une pénurie durable coûte un peu
+ * plus que l'absence de service (NO_POWER_PENALTY = 10, src/sim/demography.ts), sans faire chuter toute la ville.
+ */
+const PENALTY_STEP_CUT = 2;
+const PENALTY_RECOVER = 2;
+const PENALTY_MAX = 12;
 /** Pseudo-installation « réseau extérieur » (identifiant de bâtiment jamais attribué : les ids commencent à 1). */
 const IMPORT_HUB = 0;
 
@@ -208,6 +212,8 @@ export class PowerSystem {
     if (this.noService.has(id)) return 'aucun';
     return (this.served.get(id) ?? 1) >= 1 ? 'ok' : 'coupe';
   }
+  /** Contribution du module à la satisfaction dans une cellule de la grille municipale (pénalité des coupures, ≤ 0). */
+  satisfactionCell(k: number): number { return -(this.penaltyGrid?.[k] ?? 0); }
   /** Raccordement au réseau extérieur actif. */
   get importOn(): boolean { return this.state.settings.raccordement === true; }
   /** Installations connues (état sauvegardé : identique avant et après un rechargement). */

@@ -82,7 +82,8 @@ et dans la barre latérale (bouton « Compte » au-dessus de « Réglages »).
 | `src/save/sync.ts` | moteur commun « local d'abord » (aussi utilisé par `cloud.ts`) |
 | `src/ui/account.ts` | fenêtre « Compte joueur », boutons du menu et de la barre latérale (styles injectés) |
 
-Pas de SDK `@supabase/supabase-js` : quelques appels REST suffisent (≈ 8 Ko minifiés au lieu de ~100 Ko).
+Pas de SDK `@supabase/supabase-js` : quelques appels REST suffisent (comptes + interface ≈ 20 Ko minifiés, contre plus de 100 Ko pour le
+SDK), et le SDK n'apporterait pas de sécurité supplémentaire : la protection repose sur la RLS côté serveur.
 
 ### Requêtes
 

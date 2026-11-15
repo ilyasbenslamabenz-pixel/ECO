@@ -70,6 +70,47 @@ const SERVICE_TAG: Record<string, number> = {
   'service:patrimoine': Service.Leisure,
 };
 
+/**
+ * Capacité des équipements : habitants desservis par unité de `capacite_service` (lits, patrouilles, engins). Un
+ * équipement couvre les logements les plus proches de son rayon jusqu'à cette limite (au-delà : non couverts, il faut
+ * un deuxième équipement ou une amélioration, +50 % de capacité par niveau). Sans étiquette : capacité illimitée.
+ * L'éducation est limitée par les places d'élèves (`findSchool`).
+ */
+export const RESIDENTS_PER_SERVICE_UNIT: Partial<Record<number, number>> = { [Service.Health]: 20, [Service.Police]: 600, [Service.Fire]: 900 };
+
+/** Pénalité de satisfaction (points) d'un logement sans électricité / sans eau, une fois la période de grâce passée. */
+export const NO_POWER_PENALTY = 10;
+export const NO_WATER_PENALTY = 10;
+/** Croissance d'un logement sans service (part des arrivées conservée par service manquant, à pleine pénalité). */
+export const NO_SERVICE_GROWTH = 0.4;
+
+/**
+ * Effet des impôts résidentiels sur la satisfaction (points, positif = pénalité) : linéaire autour du taux de
+ * référence (9 %), puis nettement plus fort au-delà de 12 % (un taux élevé se voit tout de suite).
+ */
+export function residentialTaxPenalty(rate: number): number {
+  return (rate - 0.09) * 150 + Math.max(0, rate - 0.12) * 450;
+}
+/** Effet des impôts résidentiels sur l'attractivité (0..1, positif = baisse). */
+export function residentialTaxAttraction(rate: number): number {
+  return (rate - 0.09) * 2 + Math.max(0, rate - 0.12) * 6;
+}
+
+/** Facteurs de satisfaction détaillés (rapport `satisfactionFactors`), dans l'ordre d'affichage. */
+export const SATISFACTION_FACTORS = [
+  ['emploi', 'Emploi'], ['logement', 'Accès routier'], ['electricite', 'Électricité'], ['eau', 'Eau'], ['dechets', 'Déchets'],
+  ['sante', 'Santé'], ['police', 'Police'], ['pompiers', 'Pompiers'], ['education', 'Éducation'], ['loisirs', 'Loisirs'],
+  ['equipements', 'Équipements remarquables'], ['pollution', 'Pollution'], ['bruit', 'Bruit et nuisances'], ['trajet', 'Temps de trajet'],
+  ['impots', 'Impôts'], ['politiques', 'Politiques et quartier'],
+] as const;
+const F = Object.fromEntries(SATISFACTION_FACTORS.map(([k], i) => [k, i])) as Record<(typeof SATISFACTION_FACTORS)[number][0], number>;
+const FACTOR_COUNT = SATISFACTION_FACTORS.length;
+
+/** Raisons des logements vides (rapport `vacancyReasons`). */
+export interface VacancyReasons { sansAcces: number; sansEau: number; sansElectricite: number; demandeFaible: number }
+/** Indice de croissance bloquée (rapport `growthHint`). */
+export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water' | null;
+
 /** Étiquette `service:*` dont la démographie lit la couverture (rayon, capacité, niveau d'amélioration). */
 export const isCoverageServiceTag = (tag: string): boolean => SERVICE_TAG[tag] !== undefined;
 
@@ -117,6 +158,15 @@ export interface DemographyReport {
   lod: { detailed: number; simplified: number; statistical: number };
   tripsEmitted: number;
   companies: number;
+  /**
+   * Détail de la satisfaction : points moyens par habitant apportés (+) ou retirés (−) par chaque facteur, mesurés au
+   * dernier calcul quotidien (avant bornage 0..100 et lissage). Satisfaction cible ≈ 55 + somme des deltas.
+   */
+  satisfactionFactors: { key: string; label: string; delta: number }[];
+  /** Logements (bâtiments résidentiels) entièrement vides, par raison principale (accès > eau > électricité > demande). */
+  vacancyReasons: VacancyReasons;
+  /** Croissance bloquée : ce qui manque à la ville (null si rien de particulier). */
+  growthHint: GrowthHint;
 }
 
 export interface CitizenInfo {
@@ -361,6 +411,8 @@ export class DemographySystem {
     this.attractAt.fill(0, 0, n);
     this.leisureTarget.fill(-1, 0, n);
     const bestLeisure = new Float32Array(n).fill(Infinity);
+    const near: number[] = [];
+    const nearD: number[] = [];
     for (let s = 0; s < n; s++) {
       const m = this.metaOfIndex(s);
       if (!m || !b.roadAccess[s]) continue;
@@ -371,15 +423,32 @@ export class DemographySystem {
       const rad = m.radius * (1 + 0.25 * (lvl - 1));
       const R = Math.max(m.service >= 0 ? rad : 0, m.attract > 0 ? Math.max(m.radius, 800) : 0, m.pollution > 0 ? 400 : 0, m.leisureVenue ? 1500 : 0);
       this.ctx.buildingIndex.query(sx - R, sz - R, sx + R, sz + R, this.tmp);
+      // Capacité (lits, patrouilles, engins) : habitants couverts au plus, logements les plus proches d'abord.
+      const perUnit = m.service >= 0 && m.serviceCapacity > 0 ? RESIDENTS_PER_SERVICE_UNIT[m.service] ?? 0 : 0;
+      const capped = perUnit > 0;
+      if (capped) { near.length = 0; nearD.length = 0; }
       for (const id of this.tmp) {
         const j = b.indexOf(id);
         if (j < 0) continue;
         const dx = b.x[j]! - sx, dz = b.z[j]! - sz;
         const d = Math.sqrt(dx * dx + dz * dz);
-        if (m.service >= 0 && d <= rad) this.coverage[m.service]![j] = 1;
+        if (m.service >= 0 && d <= rad) { if (capped) { near.push(j); nearD.push(d); } else this.coverage[m.service]![j] = 1; }
         if (m.attract > 0 && d <= Math.max(m.radius, 800)) this.attractAt[j]! += m.attract * (1 - d / Math.max(m.radius, 800));
         if (m.pollution > 0 && d <= 400) this.pollutionAt[j]! += m.pollution * (1 - d / 400) * this.pollutionFactor * this.pollutionFactorOf(id);
         if (m.leisureVenue && j !== s && d <= 1500 && d < bestLeisure[j]!) { bestLeisure[j] = d; this.leisureTarget[j] = b.id[s]!; }
+      }
+      if (capped) {
+        let room = m.serviceCapacity * (1 + 0.5 * (lvl - 1)) * perUnit;
+        const order = near.map((_, k) => k).sort((p, q) => nearD[p]! - nearD[q]! || near[p]! - near[q]!);
+        const cov = this.coverage[m.service]!;
+        for (const k of order) {
+          const j = near[k]!;
+          if (cov[j]) continue; // déjà couvert par un autre équipement : ne consomme pas cette capacité
+          const r = b.residents[j]!;
+          if (r > 0 && room <= 0) continue;
+          cov[j] = 1;
+          room -= r;
+        }
       }
     }
   }
@@ -405,6 +474,34 @@ export class DemographySystem {
   serviceLevel: (buildingId: number) => number = () => 1;
   /** Filtres de croissance des modules (eau, électricité) : faux = le bâtiment n'accueille pas de nouveaux ménages. */
   growthGates: ((buildingId: number) => boolean)[] = [];
+  /** État des réseaux d'un bâtiment (branchés par la simulation) : 0 desservi, 1 coupé (raccordé mais délesté), 2 hors de tout réseau. */
+  powerState: (buildingId: number) => number = () => 0;
+  waterState: (buildingId: number) => number = () => 0;
+  /** Part (0..1) de la pénalité « sans service » appliquée : 0 pendant la période de grâce du début de partie. */
+  noServiceRamp: () => number = () => 0;
+  /**
+   * Détail de `serviceSatisfaction` : remplit `out` (électricité, eau, déchets, bruit et nuisances, politiques et
+   * quartier) et renvoie le total. Absent : tout `serviceSatisfaction` est compté dans « Bruit et nuisances ».
+   */
+  serviceSatisfactionParts: ((buildingId: number, out: Float64Array) => number) | null = null;
+  /** Zonage résidentiel : cases zonées, cases libres constructibles, demande R (-1..1) ; null sans zonage actif. */
+  residentialLots: () => { zoned: number; free: number; demand: number } | null = () => null;
+  /** Vrai si la ville a au moins une route (indice de croissance). */
+  hasRoads: () => boolean = () => true;
+  /** Somme des points de satisfaction par facteur (dernier calcul quotidien) et habitants comptés. */
+  private factorSum = new Float64Array(FACTOR_COUNT);
+  private factorCount = 0;
+  private readonly parts = new Float64Array(5);
+
+  /** Poids de croissance d'un logement (1 desservi ; réduit par service manquant après la période de grâce). */
+  private growthWeight(id: number): number {
+    const ramp = this.noServiceRamp();
+    if (ramp <= 0) return 1;
+    let w = 1;
+    if (this.powerState(id) === 2) w *= 1 - (1 - NO_SERVICE_GROWTH) * ramp;
+    if (this.waterState(id) === 2) w *= 1 - (1 - NO_SERVICE_GROWTH) * ramp;
+    return w;
+  }
 
   private active(bi: number): boolean { return this.activity(this.ctx.buildings.id[bi]!) >= 1; }
 
@@ -652,6 +749,8 @@ export class DemographySystem {
    * revenus, bonheur, naissances, décohabitation.
    */
   daily(now: number, residentialTaxRate: number): void {
+    // Couverture recalculée chaque jour : la capacité des équipements suit les habitants logés.
+    this.coverageDirty = true;
     this.ensureCoverage();
     const c = this.citizens.col;
     const b = this.ctx.buildings;
@@ -712,27 +811,52 @@ export class DemographySystem {
     this.ensureHouseholdBuffers();
     const nh = this.households.count;
     this.hhAdults.fill(0, 0, nh); this.hhFertile.fill(0, 0, nh); this.hhHappy.fill(0, 0, nh); this.hhMembers.fill(0, 0, nh);
-    const taxPenalty = (residentialTaxRate - 0.09) * 150;
+    const taxPenalty = residentialTaxPenalty(residentialTaxRate);
     const pending: number[] = [];
+    // Détail par facteur (rapport) ; états des réseaux et satisfaction des modules calculés une fois par logement.
+    const fs = this.factorSum;
+    fs.fill(0);
+    const ramp = this.noServiceRamp();
+    const parts = this.parts;
+    const homeCache = new Map<number, Float64Array>();
+    const homeParts = (bi: number): Float64Array => {
+      const id = b.id[bi]!;
+      let v = homeCache.get(id);
+      if (v) return v;
+      v = new Float64Array(7); // électricité, eau, déchets, bruit, politiques, total, (réservé)
+      parts.fill(0);
+      if (this.serviceSatisfactionParts) { v[5] = this.serviceSatisfactionParts(id, parts); for (let k = 0; k < 5; k++) v[k] = parts[k]!; }
+      else { const t = this.serviceSatisfaction(id); v[3] = t; v[5] = t; }
+      // Sans électricité / sans eau (hors de tout réseau, y compris avant la première installation) : pénalité
+      // progressive après la période de grâce du début de partie.
+      if (ramp > 0) {
+        if (this.powerState(id) === 2) { v[0]! -= NO_POWER_PENALTY * ramp; v[5]! -= NO_POWER_PENALTY * ramp; }
+        if (this.waterState(id) === 2) { v[1]! -= NO_WATER_PENALTY * ramp; v[5]! -= NO_WATER_PENALTY * ramp; }
+      }
+      homeCache.set(id, v);
+      return v;
+    };
     for (let i = 0; i < this.citizens.count; i++) {
       const age = this.ageOf(i, now);
       const bi = b.indexOf(c.home[i]!);
       let t = 55;
-      if (bi < 0 || !b.roadAccess[bi]) t -= 30;
-      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) t += c.job[i]! >= 0 ? 12 : -18;
+      const add = (f: number, v: number): void => { t += v; fs[f]! += v; };
+      if (bi < 0 || !b.roadAccess[bi]) add(F.logement, -30);
+      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) add(F.emploi, c.job[i]! >= 0 ? 12 : -18);
       if (bi >= 0) {
         const cov = this.coverage;
-        if (age < 18) t += cov[Service.Education]![bi] ? 8 : -10;
-        t += cov[Service.Health]![bi] ? 7 : -7;
-        t += cov[Service.Police]![bi] ? 5 : -5;
-        t += cov[Service.Fire]![bi] ? 5 : -5;
-        t += cov[Service.Leisure]![bi] ? 6 : -2;
-        t += Math.min(8, this.attractAt[bi]! * 2);
-        t -= Math.min(20, this.pollutionAt[bi]! * 6);
-        t += this.serviceSatisfaction(b.id[bi]!);
+        if (age < 18) add(F.education, cov[Service.Education]![bi] ? 8 : -10);
+        add(F.sante, cov[Service.Health]![bi] ? 7 : -7);
+        add(F.police, cov[Service.Police]![bi] ? 5 : -5);
+        add(F.pompiers, cov[Service.Fire]![bi] ? 5 : -5);
+        add(F.loisirs, cov[Service.Leisure]![bi] ? 6 : -2);
+        add(F.equipements, Math.min(8, this.attractAt[bi]! * 2));
+        add(F.pollution, -Math.min(20, this.pollutionAt[bi]! * 6));
+        const hp = homeParts(bi);
+        add(F.electricite, hp[0]!); add(F.eau, hp[1]!); add(F.dechets, hp[2]!); add(F.bruit, hp[3]!); add(F.politiques, hp[4]!);
       }
-      t -= Math.min(15, c.commute[i]! / 400);
-      t -= taxPenalty;
+      add(F.trajet, -Math.min(15, c.commute[i]! / 400));
+      add(F.impots, -taxPenalty);
       t = t < 0 ? 0 : t > 100 ? 100 : t;
       c.happiness[i] = c.happiness[i]! * 0.8 + t * 0.2;
       const hk = this.households.indexOf(c.household[i]!);
@@ -745,6 +869,8 @@ export class DemographySystem {
       // Décohabitation : jeunes adultes actifs vivant chez leurs parents.
       if (c.role[i] === Role.Child && age >= 20 && c.job[i]! >= 0 && rng.next() < 0.3 / DAYS_PER_YEAR) pending.push(c.id[i]!);
     }
+
+    this.factorCount = this.citizens.count;
 
     // 4) Naissances.
     for (let hk = 0; hk < nh; hk++) {
@@ -795,7 +921,7 @@ export class DemographySystem {
     let services = 0;
     for (let k = 0; k < SERVICE_COUNT; k++) services += s.covered[k]! / Math.max(1, s.population);
     services /= SERVICE_COUNT;
-    const a = 0.3 + 0.25 * jobAvail + 0.2 * ((happy - 50) / 50) + 0.15 * services + Math.min(0.1, s.attractSum * 0.01) - (residentialTaxRate - 0.09) * 2;
+    const a = 0.3 + 0.25 * jobAvail + 0.2 * ((happy - 50) / 50) + 0.15 * services + Math.min(0.1, s.attractSum * 0.01) - residentialTaxAttraction(residentialTaxRate);
     return clamp01(a);
   }
 
@@ -806,7 +932,8 @@ export class DemographySystem {
     const b = this.ctx.buildings;
     const rng = this.ctx.rng;
     let free = 0;
-    for (let i = 0; i < b.count; i++) free += this.freeHousingAt(i);
+    // Logements sans électricité / sans eau (hors de tout réseau, après la période de grâce) : arrivées freinées.
+    for (let i = 0; i < b.count; i++) { const f = this.freeHousingAt(i); if (f > 0) free += f * this.growthWeight(b.id[i]!); }
     if (free <= 0) return 0;
     // Proportionnel aux logements libres, avec un flux de base pour qu'une petite ville naissante (quelques
     // maisons desservies) se peuple en un ou deux jours de jeu au lieu d'une semaine (recette QA phase 1).
@@ -1126,6 +1253,33 @@ export class DemographySystem {
     const services: Record<string, number> = {};
     SERVICE_NAMES_FR.forEach((n, k) => { services[n] = pop ? covered[k]! / pop : 0; });
     const freeJobs = jobsTotal - jobsFilled;
+    // Logements vides par raison, indice de croissance bloquée.
+    const ramp = this.noServiceRamp();
+    const vacancyReasons: VacancyReasons = { sansAcces: 0, sansEau: 0, sansElectricite: 0, demandeFaible: 0 };
+    let resBuildings = 0;
+    for (let i = 0; i < b.count; i++) {
+      const m = this.metaOfIndex(i);
+      if (!m || m.resCap <= 0) continue;
+      resBuildings++;
+      if (b.residents[i]! > 0) continue;
+      const id = b.id[i]!;
+      const ws = this.waterState(id), ps = this.powerState(id);
+      if (!b.roadAccess[i]) vacancyReasons.sansAcces++;
+      else if (ws === 1 || (ws === 2 && ramp > 0)) vacancyReasons.sansEau++;
+      else if (ps === 1 || (ps === 2 && ramp > 0)) vacancyReasons.sansElectricite++;
+      else vacancyReasons.demandeFaible++;
+    }
+    const demandR = clampS((freeJobs - housingFree * 0.5) / Math.max(50, jobsTotal * 0.2) + (this.attractiveness - 0.5));
+    const lots = this.residentialLots();
+    const blocked = Math.max(3, resBuildings * 0.2);
+    let growthHint: GrowthHint = null;
+    if (!this.hasRoads()) growthHint = 'need-roads';
+    else if (vacancyReasons.sansEau >= blocked) growthHint = 'need-water';
+    else if (vacancyReasons.sansElectricite >= blocked) growthHint = 'need-power';
+    else if (!lots || lots.zoned === 0) growthHint = pop === 0 || (lots?.demand ?? demandR) > 0.2 ? 'need-zones' : null;
+    else if (lots.free === 0 && (lots.demand > 0.3 || demandR > 0.3) && housingFree <= Math.max(4, housingCapacity * 0.03)) growthHint = 'need-roads';
+    const fc = Math.max(1, this.factorCount);
+    const satisfactionFactors = SATISFACTION_FACTORS.map(([key, label], k) => ({ key, label, delta: Math.round((this.factorSum[k]! / fc) * 10) / 10 }));
     return {
       population: pop, households: this.households.count, children, adults, seniors, ageBands, education,
       educationNames: EDUCATION_NAMES_FR, laborForce, employed, unemployed,
@@ -1141,6 +1295,7 @@ export class DemographySystem {
       },
       month: { ...this.month }, lastMonth: { ...this.lastMonth }, activities, lod,
       tripsEmitted: this.tripsEmitted, companies: this.companies.count,
+      satisfactionFactors, vacancyReasons, growthHint,
     };
   }
 

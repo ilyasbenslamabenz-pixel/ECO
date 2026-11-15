@@ -204,6 +204,9 @@ export class WaterSystem {
   private noSource = new Set<number>();
   /** Eau achetée au réseau extérieur au dernier pas (m³/h). */
   importedM3h = 0;
+  /** Exutoires « réseau extérieur » par composante (nœud du réseau `egouts`) et eaux usées confiées au voisin (m³/h). */
+  private sewerImportNode: number[] = [];
+  importedSewage = 0;
 
   /* ------------------------------------------------------------------ */
   /* Cycle de vie                                                         */
@@ -237,8 +240,10 @@ export class WaterSystem {
     this.dischargeCause = -1;
     this.pending = [];
     this.importNode = [];
+    this.sewerImportNode = [];
     this.noSource.clear();
     this.importedM3h = 0;
+    this.importedSewage = 0;
   }
 
   /** Façade municipale courante (lève si `reset` n'a pas été appelé). */
@@ -372,13 +377,17 @@ export class WaterSystem {
     }
 
     // Raccordement extérieur : un producteur par composante (au premier nœud de la composante).
+    // Les eaux usées repartent chez le voisin (station d'épuration extérieure), appelée après les installations.
     this.importNode = new Array<number>(this.compCount).fill(-1);
+    this.sewerImportNode = new Array<number>(this.compCount).fill(-1);
     if (this.settings.raccordement) {
       for (let i = 0; i < n; i++) {
         const c = this.roadComp[i]!;
         if (this.importNode[c]! >= 0) continue;
         this.importNode[c] = water.addNode({ role: 'producer', x: this.roadX[i]!, z: this.roadZ[i]!, ref: -2, capacity: 0, cost: 8 });
         water.addEdge(this.importNode[c]!, this.waterJunction[i]!, BIG, 0);
+        this.sewerImportNode[c] = sewer.addNode({ role: 'producer', x: this.roadX[i]!, z: this.roadZ[i]!, ref: -2, capacity: 0, cost: 20 });
+        sewer.addEdge(this.sewerImportNode[c]!, this.sewerJunction[i]!, BIG, 0);
       }
     }
     // Bâtiments : installations et consommateurs.
@@ -712,6 +721,7 @@ export class WaterSystem {
       sewage += v;
     }
     for (let r = 0; r < nRoad; r++) if (this.sewerConsumer[r]! >= 0) sewer.setDemand(this.sewerConsumer[r]!, nodeSewage[r]!);
+    for (let c = 0; c < C; c++) { const sn = this.sewerImportNode[c] ?? -1; if (sn >= 0) sewer.setCapacity(sn, importCap[c]! * SEWAGE_RATIO); }
     const srep = muni.networks.allocate(NET_SEWER);
     const sOut = new Map<number, number>();
     for (const p of srep.producers) sOut.set(p.node, p.output);
@@ -732,6 +742,11 @@ export class WaterSystem {
       if (f.outfallCell >= 0) { em[f.outfallCell]! += residual; load += residual; }
       else soil.stamp(f.x, f.z, 48, residual * 0.01, 'linear');
     }
+    // Eaux usées traitées chez le voisin : comptées comme épurées, sans rejet local.
+    let sewageOut = 0;
+    for (let c = 0; c < C; c++) { const sn = this.sewerImportNode[c] ?? -1; if (sn >= 0) sewageOut += sOut.get(sn) ?? 0; }
+    this.importedSewage = sewageOut;
+    sewageTreated += sewageOut;
     for (let r = 0; r < nRoad; r++) {
       const cn = this.sewerConsumer[r]!;
       if (cn < 0) continue;
@@ -918,11 +933,12 @@ export class WaterSystem {
     add('vente:eau', b.delivered * s.tariff, 'income');
     add('exploitation:pompage', b.pumped * WATER_FACILITIES.pompage.costPerM3 * s.fundingWater, 'expense');
     add('exploitation:potabilisation', b.treated * WATER_FACILITIES.potabilisation.costPerM3 * s.fundingWater, 'expense');
-    add('exploitation:epuration', b.sewageTreated * WATER_FACILITIES.epuration.costPerM3 * s.fundingSewer, 'expense');
+    add('exploitation:epuration', (b.sewageTreated - this.importedSewage) * WATER_FACILITIES.epuration.costPerM3 * s.fundingSewer, 'expense');
     let towers = 0;
     for (const f of fac) if (f.kind === 'chateau') towers += f.output;
     add('exploitation:chateaux', towers * WATER_FACILITIES.chateau.costPerM3 * s.fundingWater, 'expense');
     add('achat:eau_exterieure', this.importedM3h * WATER_IMPORT.pricePerM3, 'expense');
+    add('achat:assainissement_exterieur', this.importedSewage * WATER_IMPORT.sewagePricePerM3, 'expense');
     // Entretien des canalisations, réparti par heure (mois de 30 jours).
     add('entretien:canalisations', (this.pipeKm * PIPE_UPKEEP_PER_KM * (s.fundingWater + s.fundingSewer) / 2) / (30 * 24), 'expense');
   }
@@ -1088,6 +1104,9 @@ export class WaterSystem {
     if (ema === undefined) return this.consumerIndex.has(id) ? 'coupe' : 'ok';
     return ema >= SERVED_THRESHOLD ? 'ok' : 'coupe';
   }
+
+  /** Contribution du module à la satisfaction dans une cellule de la grille municipale (desserte, qualité, égouts). */
+  satisfactionCell(k: number): number { return this.satApplied[k] ?? 0; }
 
   /** Raccordement extérieur : frais uniques à l'activation (refusé sans trésorerie suffisante). */
   setRaccordement(ctx: PluginContext, on: boolean): { ok: true } | { ok: false; code: string; message: string } {

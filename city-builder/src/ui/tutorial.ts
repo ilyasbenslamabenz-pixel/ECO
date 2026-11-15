@@ -133,7 +133,7 @@ export class Tutorial {
     const f = this.facts;
     const on = this.enabled;
     this.box.classList.toggle('tuto-off', !on);
-    if (!on || !f) { this.setTarget(null); return; }
+    if (!on || !f) { this.setTarget(null); delete document.body.dataset['tutoCat']; return; }
     const idx = TUTO_STEPS.findIndex((s) => !stepDone(s, f));
     const step = idx >= 0 ? TUTO_STEPS[idx]! : null;
     const key = `${idx}|${step ? step.parts.map((p) => (p.ok(f) ? 1 : 0)).join('') : 'fin'}|${this.prefs.open}`;
@@ -158,6 +158,7 @@ export class Tutorial {
       this.body.replaceChildren(el('p', { cls: 'obj-text', text: 'Votre ville a ses réseaux et ses services de base. Suivez la satisfaction (Population) et la demande R C I B pour la faire grandir.' }),
         el('div', { cls: 'obj-actions' }, close));
       this.setTarget(null);
+      delete document.body.dataset['tutoCat'];
       return;
     }
     this.title.textContent = step.title;
@@ -186,6 +187,9 @@ export class Tutorial {
       if (e && e.offsetParent !== null && getComputedStyle(e).display !== 'none') { t = e; break; }
     }
     this.setTarget(t);
+    // Choix « Réseaux » du téléphone : la catégorie de l'étape y est aussi mise en évidence (voir styles.css).
+    const cat = step?.targets.map((s) => /data-cat=(\w+)/.exec(s)?.[1]).find((c) => !!c) ?? '';
+    if (document.body.dataset['tutoCat'] !== cat) { if (cat) document.body.dataset['tutoCat'] = cat; else delete document.body.dataset['tutoCat']; }
   }
 
   private setTarget(t: HTMLElement | null): void {

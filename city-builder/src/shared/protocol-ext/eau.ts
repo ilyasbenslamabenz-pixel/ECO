@@ -49,4 +49,6 @@ export interface EauCommands {
   building: { payload: { id: number }; result: { served: number; pressure: number; quality: number; sewer: boolean; growthAllowed: boolean } | null };
   /** Historique horaire des 48 derniers bilans. */
   history: { payload: undefined; result: WaterBalance[] };
+  /** Raccordement au réseau d'eau extérieur (frais uniques à l'activation, achat au m³ ensuite). */
+  raccordement: { payload: { on: boolean }; result: WaterSettings };
 }

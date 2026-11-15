@@ -207,6 +207,7 @@ export function initUI(h: UIHandlers): UIHandle {
     (optForm.elements.namedItem('fps') as HTMLSelectElement).value = o.fps;
     (optForm.elements.namedItem('theme') as HTMLSelectElement).value = o.theme;
     distOut.textContent = `${fmt(o.viewDistance)} m`;
+    $<HTMLInputElement>('opt-tutorial').checked = tutorial.enabled;
   };
   optForm.addEventListener('input', (e) => {
     if ((e.target as HTMLElement | null)?.id === 'opt-tutorial') return; // case « Premiers pas » : gérée à part

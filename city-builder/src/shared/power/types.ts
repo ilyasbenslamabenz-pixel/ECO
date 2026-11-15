@@ -265,6 +265,8 @@ export interface ElectriciteService {
    * de tout réseau (aucune installation ni raccordement extérieur ne le dessert). 'ok' si inconnu (non consommateur).
    */
   serviceState?(buildingId: number): 'ok' | 'coupe' | 'aucun';
+  /** Contribution du module à la satisfaction (pénalité des coupures, ≤ 0) dans une cellule de la grille municipale. */
+  satisfactionCell?(cell: number): number;
   /** Surplus exportable (kW) à la dernière répartition — pour le module des exportations (2B). */
   exportableKw(): number;
   /** Dernier bilan horaire (undefined avant la première répartition). */

@@ -80,7 +80,12 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
     init(ctx) {
       ctxRef = ctx;
       // Service lu par le module « alertes » : bac plein ou débordé (icône au-dessus du bâtiment).
-      ctx.provide('dechets', { binFull: (id: number): boolean => { const b = waste.bins.get(id); return !!b && b.cap > 0 && (b.over > 0 || b.rec + b.res >= b.cap); } });
+      // `satisfactionCell` : contribution des nuisances à la satisfaction (cellule de la grille municipale), lue par le
+      // détail de la satisfaction des habitants (src/sim/world.ts).
+      ctx.provide('dechets', {
+        binFull: (id: number): boolean => { const b = waste.bins.get(id); return !!b && b.cap > 0 && (b.over > 0 || b.rec + b.res >= b.cap); },
+        satisfactionCell: (k: number): number => waste.appliedSat?.[k] ?? 0,
+      });
       muni = ctx.use<Municipal>(MUNICIPAL_SERVICE);
       if (!muni) return;
       const s = muni.scheduler;

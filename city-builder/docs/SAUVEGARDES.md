@@ -58,6 +58,12 @@ markup.html et hud.ts inchangés), branchement dans `src/main.ts`.
 - **Stockage persistant** : `navigator.storage.persist()` au lancement (sauf si déjà accordé) ;
   résultat dans `window.__aube.storagePersisted`.
 
+## En ligne avec un compte joueur (GitHub Pages, Supabase)
+
+Comptes e-mail + mot de passe et sauvegardes liées au compte : voir `docs/COMPTES.md`
+(`src/save/account.ts`, désactivé tant que `src/save/account-config.ts` est vide). Même moteur de
+synchronisation que ci-dessous (`src/save/sync.ts`).
+
 ## En ligne (artifact claude.ai)
 
 `src/save/cloud.ts` — sauvegardes privées par joueur, synchronisées entre appareils, quand le jeu

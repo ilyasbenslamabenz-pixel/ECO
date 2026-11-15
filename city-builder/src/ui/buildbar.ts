@@ -467,7 +467,7 @@ export class BuildBar {
   private showHint(): void {
     const [main = '', tip] = this.hintText().split('\n');
     this.hint.textContent = main;
-    if (tip) this.hint.append(el('span', { cls: 'hint-tip', text: tip }));
+    if (tip) this.hint.append(el('span', { cls: 'hint-tip', text: ` ${tip}` }));
   }
 
   private hintText(): string {

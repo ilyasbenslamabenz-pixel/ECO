@@ -76,6 +76,17 @@ const MAX_ROAD_HALF_WIDTH = Math.max(...(Object.keys(ROAD_KINDS) as RoadKindId[]
 /** Trajets individuels transmis au trafic au plus par tick. */
 const TRIPS_PER_TICK = 8;
 /**
+ * Accès des lots PRIVÉS (zonage) : desservis par une allée jusqu'à cette distance de la route (m), soit les trois
+ * rangées de cases d'une zone peinte (les bâtiments du joueur gardent ROAD_ACCESS_MARGIN_M).
+ */
+export const PRIVATE_ACCESS_MARGIN_M = 3 * TILE_SIZE + 2;
+/**
+ * Période de grâce du début de partie (jours) pendant laquelle un logement sans électricité ni eau n'est pas
+ * pénalisé, puis montée progressive de la pénalité « sans service » sur NO_SERVICE_RAMP_DAYS jours.
+ */
+export const NO_SERVICE_GRACE_DAYS = 30;
+export const NO_SERVICE_RAMP_DAYS = 30;
+/**
  * Périodes (minutes de jeu) des événements au rythme réel fixe, indépendant de la durée de la journée :
  * une vague d'immigration toutes les 180 ticks (18 s réelles à x1), une synchronisation bâtiments -> trafic
  * toutes les 30 ticks (3 s).
@@ -215,14 +226,34 @@ export class Simulation {
     this.plugins.init();
     // Effets réels des réseaux (dès que le joueur a construit une installation ; avant : aucun effet) :
     // sans courant, un bâtiment n'embauche plus et n'accueille plus de ménages ; sans eau suffisante, plus de ménages.
-    type Elec = { powerFactor(id: number): number; hasNetwork?(): boolean };
-    type Eau = { growthAllowed(id: number): boolean };
+    // Hors de tout réseau (aucune installation ni raccordement ne dessert le bâtiment) : le bâtiment fonctionne comme
+    // avant la première installation (embauche, croissance freinée mais pas bloquée) et ses habitants subissent la
+    // pénalité progressive « sans service » ; seul un bâtiment RACCORDÉ et délesté est coupé (ni embauche ni ménage).
+    type NetState = 'ok' | 'coupe' | 'aucun';
+    type Elec = { powerFactor(id: number): number; hasNetwork?(): boolean; serviceState?(id: number): NetState; satisfactionCell?(k: number): number };
+    type Eau = { growthAllowed(id: number): boolean; serviceState?(id: number): NetState; system?: { satisfactionCell?(k: number): number } };
     const elec = (): Elec | undefined => this.plugins.service<Elec>('electricite');
-    this.demography.activity = (id) => { const e = elec(); return e && e.hasNetwork?.() ? e.powerFactor(id) : 1; };
+    const eau = (): Eau | undefined => this.plugins.service<Eau>('eau');
+    const elecState = (e: Elec, id: number): NetState => e.serviceState?.(id) ?? (e.powerFactor(id) >= 1 ? 'ok' : 'coupe');
+    const code = (st: NetState | undefined): number => (st === 'coupe' ? 1 : st === 'aucun' ? 2 : 0);
+    this.demography.activity = (id) => { const e = elec(); return e && e.hasNetwork?.() && elecState(e, id) === 'coupe' ? 0 : 1; };
     this.demography.growthGates = [
-      (id) => { const e = elec(); return !e || !e.hasNetwork?.() || e.powerFactor(id) >= 1; },
-      (id) => this.plugins.service<Eau>('eau')?.growthAllowed(id) ?? true,
+      (id) => { const e = elec(); return !e || !e.hasNetwork?.() || elecState(e, id) !== 'coupe'; },
+      (id) => eau()?.growthAllowed(id) ?? true,
     ];
+    this.demography.powerState = (id) => { const e = elec(); if (!e) return 0; return e.hasNetwork?.() ? code(elecState(e, id)) : 2; };
+    this.demography.waterState = (id) => { const w = eau(); return w ? code(w.serviceState?.(id) ?? (w.growthAllowed(id) ? 'ok' : 'coupe')) : 0; };
+    this.demography.noServiceRamp = () => {
+      const days = (this.clock.totalMinutes - this.gameStartMinute()) / MINUTES_PER_DAY;
+      return Math.max(0, Math.min(1, (days - NO_SERVICE_GRACE_DAYS) / NO_SERVICE_RAMP_DAYS));
+    };
+    this.demography.hasRoads = () => this.roadLength > 0;
+    this.demography.residentialLots = () => {
+      const zp = this.plugins.plugins.find((p) => p.id === ZONAGE_ID) as ZonagePlugin | undefined;
+      const zctx = this.plugins.contextOf(ZONAGE_ID);
+      const z = zp?.systemOf && zctx ? zp.systemOf(zctx) : undefined;
+      return z && z.active ? z.residentialLots() : null;
+    };
     // Satisfaction des services (grille municipale, base 50) : écart borné ajouté au bonheur des habitants.
     type Muni = { grids: { get(id: string): { at(x: number, z: number): number } | undefined } };
     this.demography.serviceSatisfaction = (id) => {
@@ -233,8 +264,34 @@ export class Simulation {
       const d = g.at(this.buildings.x[i]!, this.buildings.z[i]!) - 50;
       return (d < -40 ? -40 : d > 20 ? 20 : d) + this.govMods.happiness + local;
     };
+    // Même total, détaillé par module (électricité, eau, déchets, reste = bruit et nuisances) pour le rapport.
+    type MuniGrid = { at(x: number, z: number): number; cellAt?(x: number, z: number): number };
+    this.demography.serviceSatisfactionParts = (id, out) => {
+      out.fill(0);
+      const g = this.plugins.service<Muni>('municipal')?.grids.get('satisfaction') as MuniGrid | undefined;
+      const i = g ? this.buildings.indexOf(id) : -1;
+      out[4] = this.govMods.happiness + (this.plugins.service<SecteursService>('secteurs')?.happinessOf(id) ?? 0);
+      if (!g || i < 0) return out[4]!;
+      const x = this.buildings.x[i]!, z = this.buildings.z[i]!;
+      const total = g.at(x, z) - 50;
+      const clamped = total < -40 ? -40 : total > 20 ? 20 : total;
+      const k = g.cellAt ? g.cellAt(x, z) : -1;
+      const pw = k >= 0 ? elec()?.satisfactionCell?.(k) ?? 0 : 0;
+      const wt = k >= 0 ? eau()?.system?.satisfactionCell?.(k) ?? 0 : 0;
+      const ws = k >= 0 ? this.plugins.service<{ satisfactionCell?(k: number): number }>('dechets')?.satisfactionCell?.(k) ?? 0 : 0;
+      const f = total !== 0 ? clamped / total : 1;
+      out[0] = pw * f; out[1] = wt * f; out[2] = ws * f; out[3] = (total - pw - wt - ws) * f;
+      return clamped + out[4]!;
+    };
     this.demography.pollutionFactorOf = (id) => this.plugins.service<SecteursService>('secteurs')?.pollutionFactorOf(id) ?? 1;
     this.demography.serviceLevel = (id) => this.plugins.service<AmeliorationsService>('ameliorations')?.levelOf(id) ?? 1;
+  }
+
+  /** Minute de jeu du début de la partie (heure et mois de départ ; période de grâce « sans service »). */
+  gameStartMinute(): number {
+    const p = this.params;
+    if (!p) return 0;
+    return Math.round(Math.max(0, Math.min(23.99, p.startHour ?? 0)) * 60) + (Math.max(1, Math.min(12, Math.floor(p.startMonth ?? 1))) - 1) * MINUTES_PER_MONTH;
   }
 
   getAsset(id: string): CatalogAsset | undefined {
@@ -507,14 +564,16 @@ export class Simulation {
       if (!this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
     }
     // Avertissement (pas un refus) : aucune route assez proche pour desservir le bâtiment.
-    const access = this.roadClearance(o, MAX_ROAD_HALF_WIDTH + ROAD_ACCESS_MARGIN_M) <= ROAD_ACCESS_MARGIN_M;
+    const margin = privateDev ? PRIVATE_ACCESS_MARGIN_M : ROAD_ACCESS_MARGIN_M;
+    const access = this.roadClearance(o, MAX_ROAD_HALF_WIDTH + margin) <= margin;
     const warn = access ? {} : { noRoadAccess: true as const, warning: 'Pas d’accès routier : le bâtiment ne sera ni desservi ni occupé tant qu’aucune route ne passe à proximité' };
     if (a.dryRun) return { ok: true, data: { buildingId: 0, cost, ...warn } };
 
     const id = this.nextBuildingId++;
     const y = hSum / n;
-    this.insertBuilding({ id, assetId: asset.id, variant, x, z, y, rot });
+    // Privé AVANT l'insertion : entretien non facturé à la ville, accès par allée (PRIVATE_ACCESS_MARGIN_M).
     if (privateDev || receipt?.private) this.privateIds.add(id);
+    this.insertBuilding({ id, assetId: asset.id, variant, x, z, y, rot });
     if (receipt) this.restoreReceipts.delete(a.restoreToken!);
     if (cost > 0) this.economy.spend(cost);
     return { ok: true, data: { buildingId: id, cost, ...warn } };
@@ -574,23 +633,26 @@ export class Simulation {
     const bb = obbAabb(o);
     this.buildingIndex.insert(r.id, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
     this.buildings.roadAccess[bi] = this.computeRoadAccess(bi) ? 1 : 0;
-    this.economy.addUpkeep(asset.upkeepPerMonth, 'buildings');
+    // Bâtiment privé (promotion du zonage) : son entretien est à la charge de ses propriétaires, pas de la ville.
+    if (!this.privateIds.has(r.id)) this.economy.addUpkeep(asset.upkeepPerMonth, 'buildings');
     this.demography?.onBuildingAdded(r.id, this.clock.totalMinutes);
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;
     if (!silent) this.pendingBuildingsAdded.push({ ...r });
   }
 
-  /** Accès route : une route passe à moins de ROAD_ACCESS_MARGIN_M de l'empreinte. */
+  /** Accès route : une route passe à moins de ROAD_ACCESS_MARGIN_M de l'empreinte (PRIVATE_ACCESS_MARGIN_M pour un lot privé). */
   private computeRoadAccess(bi: number): boolean {
-    const o = this.obbs.get(this.buildings.id[bi]!);
+    const id = this.buildings.id[bi]!;
+    const o = this.obbs.get(id);
     if (!o) return false;
-    return this.roadClearance(o, MAX_ROAD_HALF_WIDTH + ROAD_ACCESS_MARGIN_M) <= ROAD_ACCESS_MARGIN_M;
+    const margin = this.privateIds.has(id) ? PRIVATE_ACCESS_MARGIN_M : ROAD_ACCESS_MARGIN_M;
+    return this.roadClearance(o, MAX_ROAD_HALF_WIDTH + margin) <= margin;
   }
 
   /** Recalcule l'accès route des bâtiments proches d'une zone (après ajout/suppression de route). */
   private refreshRoadAccessNear(minX: number, minZ: number, maxX: number, maxZ: number): void {
-    const m = MAX_ROAD_HALF_WIDTH + ROAD_ACCESS_MARGIN_M;
+    const m = MAX_ROAD_HALF_WIDTH + PRIVATE_ACCESS_MARGIN_M;
     this.buildingIndex.query(minX - m, minZ - m, maxX + m, maxZ + m, this.q);
     let changed = false;
     for (const id of this.q) {
@@ -623,9 +685,10 @@ export class Simulation {
     this.demography?.onBuildingRemoved(a.buildingId, this.clock.totalMinutes);
     this.buildings.remove(a.buildingId);
     this.buildingIndex.remove(a.buildingId);
-    this.economy.removeUpkeep(asset.upkeepPerMonth, 'buildings');
-    // Bâtiment privé (né du zonage, jamais payé par la ville) : aucun remboursement, même démoli par le joueur.
+    // Bâtiment privé (né du zonage, jamais payé par la ville) : aucun remboursement, même démoli par le joueur ;
+    // son entretien n'était pas facturé à la ville.
     const wasPrivate = this.privateIds.delete(a.buildingId);
+    if (!wasPrivate) this.economy.removeUpkeep(asset.upkeepPerMonth, 'buildings');
     const refund = privateDev || wasPrivate ? 0 : Math.round(asset.cost * DEMOLISH_REFUND_RATE);
     if (refund > 0) this.economy.refund(refund);
     this.pendingBuildingsRemoved.push(a.buildingId);
@@ -1466,6 +1529,15 @@ export class Simulation {
       const zctx = this.plugins.contextOf(ZONAGE_ID);
       if (zp?.systemOf && zctx) for (const id of zp.systemOf(zctx).owned.keys()) if (this.buildings.indexOf(id) >= 0) this.privateIds.add(id);
     }
+    // Lots privés connus seulement maintenant : entretien retiré de la charge de la ville, accès par allée.
+    for (const id of this.privateIds) {
+      const bi = this.buildings.indexOf(id);
+      if (bi < 0) continue;
+      const a = this.catalog!.assets[this.buildings.assetIndex[bi]!];
+      if (a) this.economy.removeUpkeep(a.upkeepPerMonth, 'buildings');
+      this.buildings.roadAccess[bi] = this.computeRoadAccess(bi) ? 1 : 0;
+    }
+    if (this.privateIds.size) this.demography?.markCoverageDirty();
     this.clearPending();
     return null;
   }
