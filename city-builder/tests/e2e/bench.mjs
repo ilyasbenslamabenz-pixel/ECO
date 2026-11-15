@@ -49,8 +49,9 @@ async function run(label, path) {
   check(r?.load.playableS > 0, `[${label}] temps jusqu'à « jouable » : ${r?.load.playableS} s, plus longue image au chargement ${r?.load.maxLoadFrameMs} ms`);
   check(typeof r?.env.carteGraphique === 'string' && r.env.carteGraphique.length > 0, `[${label}] carte graphique : ${r?.env.carteGraphique}`);
   check(r?.version && r.version !== 'inconnue', `[${label}] version du jeu : ${r?.version}`);
-  const rows = await page.$$eval('#bench-results tbody tr', (trs) => trs.length);
+  const rows = await page.$$eval('#bench-results > div > table > tbody > tr', (trs) => trs.length);
   check(rows === 4, `[${label}] tableau : ${rows} lignes`);
+  check(r?.breakdown?.length === 2 && r.breakdown.every((b) => b.totalMs > 0 && b.layers.length > 0), `[${label}] coût GPU par calque (${r?.breakdown?.map((b) => `${b.view} : ${b.totalMs} ms, ${b.layers.slice(0, 3).map((l) => `${l.layer} ${l.share} %`).join(', ')}`).join(' | ')})`);
   check(await page.isVisible('#bench-copy'), `[${label}] bouton « Copier les résultats » visible`);
   const links = await page.$$eval('#bench-results a', (as) => as.map((a) => a.getAttribute('href')));
   check(links.some((h) => /[?&]qualite=haute/.test(h)) && links.some((h) => /[?&]lots=0/.test(h)) && links.every((h) => /[?&]bench(=court)?(&|$)/.test(h)),

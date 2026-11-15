@@ -28,8 +28,8 @@ import { initRender, type RenderStats } from './render';
 import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
-import { applyGraphicsOptions, applyTheme, loadOptions, urlQuality } from './ui/options';
-import { benchMode, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
+import { applyGraphicsOptions, applyTheme, loadOptions, urlQuality, wantMsaa } from './ui/options';
+import { benchMode, benchWatchRenderer, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
 import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
 import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
 import { autoPrefixFor } from './save/autosave';
@@ -249,7 +249,9 @@ async function boot(): Promise<void> {
 
   ui.setLoading(0.2, 'Préparation du rendu 3D (ciel, terrain, végétation)…');
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
-  const render = await initRender(canvas, lib, catalog, assetsBase, undefined, ui.currentOptions().quality);
+  const render = await initRender(canvas, lib, catalog, assetsBase, undefined, ui.currentOptions().quality,
+    wantMsaa(ui.currentOptions(), window.devicePixelRatio || 1, bootProfile.lite, bootProfile.maxPixelRatio));
+  if (bench) benchWatchRenderer(render.ctx.renderer);
   debug.frames = () => render.ctx.frames;
   debug.renderStats = () => render.stats();
   debug.gpuMemory = () => estimateGpuMemory(render.ctx.scene, render.ctx.renderer);
@@ -822,7 +824,13 @@ async function boot(): Promise<void> {
       render.terrain.refineAround(ax, az, 560);
       // Première image rendue sous l'écran de chargement (envois de textures et de géométrie, derniers shaders) :
       // pas d'image figée juste après son retrait.
-      if (!render.profile.lite) render.ctx.renderNow(1 / 60);
+      if (!render.profile.lite) {
+        // Aussi la vue rue et la vue large (LOD proches, terrain lointain, leurs textures et shaders), puis retour :
+        // le premier passage dans ces vues ne fige plus l'image (mesures de la page ?bench).
+        setDemoCamera('street'); render.ctx.renderNow(1 / 60);
+        input.camera.setPose({ distance: 900 }); setDemoCamera('aerial'); input.camera.setPose({ distance: 900 }); render.ctx.renderNow(1 / 60);
+        setDemoCamera('aerial'); render.ctx.renderNow(1 / 60);
+      }
       debug.demo = { ...city, decor: city.decor.length };
       ui.hideLoading();
       ui.toast(asGame ? `Nouvelle partie : ville de départ de ${city.buildings} bâtiments, sauvegarde automatique activée.` : `Démonstration : ${city.buildings} bâtiments (${city.distinctBuildings} modèles différents), ${city.vehicles} véhicules. Touche V : vue rue.`, 'info');
@@ -903,6 +911,7 @@ async function boot(): Promise<void> {
       setSpeed: (speed) => b.send('setSpeed', { speed: speed as SimSpeed }), pixelRatio: () => render.ctx.renderer.getPixelRatio(),
       shadowSize: () => (render.ctx.sun.castShadow ? render.ctx.sun.shadow.mapSize.x : 0),
       dynamicRange: () => render.ctx.perf.adaptive,
+      scene: render.ctx.scene, camera: render.ctx.camera, pauseRender: (p) => { if (p) render.ctx.stop(); else render.ctx.start(); },
     }, bench, readyAt).catch((e: unknown) => debug.errors.push(`bench: ${errText(e)}`));
   }
   else if (params.has('demo')) await startDemo();

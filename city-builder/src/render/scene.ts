@@ -35,10 +35,9 @@ export interface RenderPerf {
   ratio: number;
 }
 
-export function initScene(canvas: HTMLCanvasElement): RenderContext {
-  // ?msaa=0 (page de mesure) : sans antialiasing matériel, pour mesurer son coût sur la machine du joueur.
-  const msaa = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('msaa') !== '0'; } catch { return true; } })();
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: msaa, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+/** `antialias` : MSAA du contexte (fixé à sa création ; réglage « Anticrénelage », src/ui/options.ts). */
+export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderContext {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance', preserveDrawingBuffer: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -107,7 +106,9 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
     if (key !== shadowKey || ++shadowCount >= perf.shadowEvery) { shadowKey = key; shadowCount = 0; renderer.shadowMap.needsUpdate = true; }
   };
   // Résolution adaptative : monte d'un cran si la cadence visée tient 3 s, descend si elle décroche 1,5 s.
-  let winStart = performance.now(), winFrames = 0, holdUntil = 0;
+  // Images lentes (> 1,3 × le budget) : une cadence qui alterne 16,7 / 33 ms (synchronisation de l'écran) garde une
+  // moyenne correcte mais saccade ; plus de 12 % d'images lentes suffit à faire baisser la résolution.
+  let winStart = performance.now(), winFrames = 0, winSlow = 0, holdUntil = 0, lastAdapt = 0;
   // Rapport auquel la cadence a décroché : on n'y remonte pas avant 2 min (pas d'oscillation montée / descente).
   let failRatio = Infinity, failUntil = 0;
   const adapt = (now: number): void => {
@@ -117,15 +118,18 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
     winFrames++;
     const span = now - winStart;
     const target = perf.maxFps > 0 ? perf.maxFps : 60;
+    if (lastAdapt > 0 && now - lastAdapt > (1000 / target) * 1.3) winSlow++;
+    lastAdapt = now;
     const fps = (1000 * winFrames) / Math.max(1, span);
+    const slow = winSlow / Math.max(1, winFrames);
     let next = perf.ratio;
-    if (span > 1500 && fps < target * 0.8) { next = Math.max(a.min, perf.ratio - 0.25); holdUntil = now + 20000; failRatio = perf.ratio; failUntil = now + 120000; }
-    else if (span > 3000 && fps > target * 0.93 && now > holdUntil) {
+    if ((span > 1500 && fps < target * 0.8) || (span > 1000 && winFrames >= 30 && slow > 0.12)) { next = Math.max(a.min, perf.ratio - 0.25); holdUntil = now + 20000; failRatio = perf.ratio; failUntil = now + 120000; }
+    else if (span > 3000 && fps > target * 0.93 && slow < 0.03 && now > holdUntil) {
       next = Math.min(a.max, perf.ratio + 0.25);
       if (next >= failRatio - 1e-3 && now < failUntil) next = perf.ratio;
     }
     else if (span <= 3000) return;
-    winStart = now; winFrames = 0;
+    winStart = now; winFrames = 0; winSlow = 0;
     if (Math.abs(next - perf.ratio) > 1e-3) {
       perf.ratio = next;
       renderer.setPixelRatio(next);
@@ -149,7 +153,7 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
     // L'ombre suit la zone regardée par la caméra.
     renderer.render(scene, camera);
     frames++;
-    if (cap !== 4) adapt(now); else { winStart = now; winFrames = 0; }
+    if (cap !== 4) adapt(now); else { winStart = now; winFrames = 0; winSlow = 0; lastAdapt = 0; }
   };
 
   return {
@@ -159,7 +163,7 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
       running = true; last = performance.now();
       // Fenêtre de mesure de la résolution adaptative remise à zéro : sinon, au retour d'arrière-plan, la durée
       // passée boucle arrêtée compte comme des images manquées et la résolution baisse à tort.
-      winStart = last; winFrames = 0;
+      winStart = last; winFrames = 0; winSlow = 0; lastAdapt = 0;
       requestAnimationFrame(loop);
     },
     stop() { running = false; },

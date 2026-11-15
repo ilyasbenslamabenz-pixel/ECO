@@ -91,9 +91,9 @@ export interface RenderHandle {
 
 export async function initRender(
   canvas: HTMLCanvasElement, lib: AssetLibrary, catalog: AssetCatalog, assetsBase: URL, renderPlugins: readonly RenderPlugin[] = RENDER_PLUGINS,
-  quality: QualitySetting = 'auto',
+  quality: QualitySetting = 'auto', antialias = true,
 ): Promise<RenderHandle> {
-  const ctx = initScene(canvas);
+  const ctx = initScene(canvas, antialias);
   const profile = deviceProfile(quality);
   // Mode allégé : toute texture d'image plus grande est réduite par three avant l'envoi au GPU (resizeImage).
   // Fixé AVANT tout envoi ; la carte d'ombre a déjà lu la vraie limite à la création du rendu.

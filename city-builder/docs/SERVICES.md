@@ -9,6 +9,7 @@ city-builders modernes ; formules, textes et valeurs propres au jeu.
 | `src/sim/services/city-services.ts` | `CityServices` (dans la démographie) : calcul quotidien, incendies horaires, rapport, fiche, sauvegarde |
 | `src/sim/plugins/services.ts` | module `services` : pilote les incendies chaque heure, notifications, carte, commandes, service lu par `alertes` |
 | `src/sim/demography.ts` | qualité de couverture, mortalité, malades absents, satisfaction, attractivité, évacuation d'un bâtiment |
+| `src/sim/population.ts` | colonne facultative `sick` (jours de maladie restants) ; colonnes en « propriétés rapides » (§9) |
 | `src/sim/world.ts` | branchements : criminalité dans la valeur foncière, lots privés, rattachement du système au module |
 | `src/shared/protocol-ext/services.ts` | carte d'information (grille de cellules de 32 m) |
 | `src/render/plugins/services.ts` | rendu des cartes (maillage drapé, couleurs de sommets) — nouveau fichier, aucun fichier cœur du rendu modifié |
@@ -129,7 +130,23 @@ restants, 0 si absente). La reprise d'une partie rechargée est identique (test)
 
 Par jour : O(bâtiments + citoyens) (agrégats par logement, criminalité, risque, santé, délits, maladies). Par heure :
 O(bâtiments) pour les départs de feu, plus les feux en cours (voisinage par l'index spatial, envoi des pompiers sur la
-liste des casernes). Aucune boucle en n². Mesures : voir le rapport de livraison de la vague 2.
+liste des casernes). Aucune boucle en n². Rapport mis en cache (une fois par heure de jeu ou par événement).
+
+Mesures (Node 22, ce conteneur, ville de charge `buildCity stress` : 500 bâtiments, 21 111 habitants, 90 jours, mesures
+alternées avant / après) :
+
+| Poste | Avant | Après |
+|---|---|---|
+| tick de 0,2 min (moyenne) | 2,50 – 2,64 ms | 2,47 – 2,78 ms |
+| dont `demography.tick` | 0,72 ms | 0,70 ms |
+| passe quotidienne (`daily`) | 84 – 126 ms | 85 – 87 ms (dont services 7,4 – 7,7 ms) |
+| heure de jeu des services (`hourly`, aucun feu) | — | 0,08 – 0,09 ms |
+| clôture mensuelle | 6,8 – 7,4 ms | 7,0 – 7,1 ms |
+| rapport des services (recalcul) | — | 0,35 – 0,38 ms |
+
+`SoaTable` (`src/sim/population.ts`) : l'objet des colonnes, construit par clés dynamiques, passait en mode dictionnaire
+du moteur V8 avec une colonne de plus (`sick`) et doublait le coût des boucles par citoyen (`demography.tick` 0,72 ->
+1,6 ms) ; il est désormais forcé en « propriétés rapides » (`fastProperties`), sans effet sur les valeurs.
 
 ## 10. Limites connues
 

@@ -33,6 +33,15 @@ let recording = false;
 let hiddenSeen = false;
 /** Dernier retrait de l'écran de chargement (performance.now) : la ville devient visible et jouable. */
 let revealAt = 0;
+/** Rendu observé (compteurs de shaders, textures, géométries pendant les premières secondes de jeu). */
+let watched: THREE.WebGLRenderer | null = null;
+let firstCounts: { programs: number; textures: number; geometries: number } | null = null;
+let revealSnap: { programs: number; textures: number; geometries: number } | null = null;
+let firstTimer: ReturnType<typeof setTimeout> | null = null;
+const snap = (r: THREE.WebGLRenderer): { programs: number; textures: number; geometries: number } => ({ programs: r.info.programs?.length ?? 0, textures: r.info.memory.textures, geometries: r.info.memory.geometries });
+
+/** Compteurs du rendu relevés au retrait de l'écran de chargement puis 3 s après (page de mesure). */
+export function benchWatchRenderer(r: THREE.WebGLRenderer): void { watched = r; }
 
 /** Démarre l'enregistrement des images (au tout début du démarrage, pour mesurer le chargement). */
 export function startBenchRecorder(): void {
@@ -40,7 +49,15 @@ export function startBenchRecorder(): void {
   recording = true;
   document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenSeen = true; });
   const loading = document.getElementById('loading');
-  if (loading) new MutationObserver(() => { if (loading.classList.contains('hidden')) revealAt = performance.now(); }).observe(loading, { attributes: true, attributeFilter: ['class'] });
+  if (loading) new MutationObserver(() => {
+    if (!loading.classList.contains('hidden')) return;
+    revealAt = performance.now();
+    if (!watched) return;
+    const r = watched;
+    revealSnap = snap(r);
+    if (firstTimer) clearTimeout(firstTimer);
+    firstTimer = setTimeout(() => { const b = revealSnap!, e = snap(r); firstCounts = { programs: e.programs - b.programs, textures: e.textures - b.textures, geometries: e.geometries - b.geometries }; }, 3000);
+  }).observe(loading, { attributes: true, attributeFilter: ['class'] });
   const tick = (): void => {
     const now = performance.now();
     stamps.push(now);
@@ -85,6 +102,75 @@ export interface BenchHost {
   shadowSize: () => number;
   /** Résolution dynamique : plage du rapport de pixels de la 3D (null : résolution fixe). */
   dynamicRange: () => { min: number; max: number } | null;
+  scene: THREE.Scene;
+  camera: THREE.Camera;
+  /** Suspend / reprend la boucle d'affichage du jeu. */
+  pauseRender: (paused: boolean) => void;
+}
+
+export interface LayerCost { layer: string; ms: number; share: number }
+export interface LayerBreakdown { view: string; method: string; totalMs: number; layers: LayerCost[] }
+
+const LAYER_LABELS: Record<string, string> = {
+  batiments: 'Bâtiments', vegetation: 'Végétation', pietons: 'Piétons', vehicules: 'Véhicules', roads: 'Routes et décor routier',
+  eau: 'Eau', terrain: 'Terrain', ciel: 'Ciel', feux_tricolores: 'Feux tricolores', decor_urbain: 'Décor urbain',
+};
+
+/**
+ * Coût GPU de l'image par calque (boucle du jeu suspendue) : temps de l'image complète, puis sans chaque calque
+ * de premier niveau, et sans la passe d'ombre (carte gardée). EXT_disjoint_timer_query_webgl2 si exposé, sinon
+ * temps de rendu attendu jusqu'à la fin du travail GPU (lecture d'un pixel).
+ */
+async function layerBreakdown(h: BenchHost, view: string, n: number): Promise<LayerBreakdown> {
+  const r = h.renderer, gl = r.getContext() as WebGL2RenderingContext;
+  const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number } | null;
+  const px = new Uint8Array(4);
+  const frame = (): Promise<void> => new Promise((res) => requestAnimationFrame(() => res()));
+  const draw = (): void => r.render(h.scene, h.camera);
+  const measure = async (): Promise<number> => {
+    draw(); // image de préparation (listes, uniformes)
+    const vals: number[] = [];
+    if (ext) {
+      const qs: WebGLQuery[] = [];
+      for (let i = 0; i < n; i++) {
+        const q = gl.createQuery()!;
+        gl.beginQuery(ext.TIME_ELAPSED_EXT, q); draw(); gl.endQuery(ext.TIME_ELAPSED_EXT);
+        qs.push(q);
+      }
+      for (let tries = 0; tries < 120 && !gl.getQueryParameter(qs[qs.length - 1]!, gl.QUERY_RESULT_AVAILABLE); tries++) await frame();
+      const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT) as boolean;
+      for (const q of qs) { if (!disjoint && gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) vals.push((gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6); gl.deleteQuery(q); }
+    }
+    if (!vals.length) {
+      for (let i = 0; i < n; i++) {
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const t0 = performance.now(); draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); vals.push(performance.now() - t0);
+      }
+    }
+    vals.sort((a, b) => a - b);
+    return vals[Math.floor(vals.length / 2)]!;
+  };
+  h.pauseRender(true);
+  const sm = r.shadowMap, auto = sm.autoUpdate;
+  try {
+    sm.autoUpdate = true;
+    const total = await measure();
+    const layers: LayerCost[] = [];
+    for (const o of h.scene.children) {
+      const name = o.name;
+      if (!name || !o.visible || !LAYER_LABELS[name] && !/^[a-z_-]+$/.test(name)) continue;
+      o.visible = false;
+      try { layers.push({ layer: LAYER_LABELS[name] ?? name, ms: total - (await measure()), share: 0 }); } finally { o.visible = true; }
+    }
+    sm.autoUpdate = false; sm.needsUpdate = false;
+    layers.push({ layer: 'Passe d\'ombre (carte d\'ombre)', ms: total - (await measure()), share: 0 });
+    for (const l of layers) { l.ms = r2(Math.max(0, l.ms)); l.share = total > 0 ? Math.round((100 * l.ms) / total) : 0; }
+    layers.sort((a, b) => b.ms - a.ms);
+    return { view, method: ext && layers.length ? 'requêtes de temps GPU (EXT_disjoint_timer_query_webgl2)' : 'temps de rendu attendu (lecture d\'un pixel)', totalMs: r2(total), layers: layers.filter((l) => l.ms > 0.05).slice(0, 12) };
+  } finally {
+    sm.autoUpdate = auto; sm.needsUpdate = true;
+    h.pauseRender(false);
+  }
 }
 
 interface SceneDef {
@@ -129,8 +215,12 @@ interface SceneResult {
 export interface BenchResult {
   version: string; date: string; mode: 'complet' | 'court';
   env: Record<string, string | number | boolean>;
-  load: { playableS: number; maxLoadFrameMs: number; maxFirstFramesMs: number; framesOver100Load: number; firstFramesOver100: number };
+  load: { playableS: number; maxLoadFrameMs: number; maxFirstFramesMs: number; framesOver100Load: number; firstFramesOver100: number;
+    /** Pendant les 3 premières secondes de jeu : shaders compilés, textures et géométries nouvellement envoyées. */
+    firstPrograms: number | null; firstTextures: number | null; firstGeometries: number | null };
   scenes: SceneResult[];
+  /** Coût GPU par calque (vues aérienne et rue). */
+  breakdown: LayerBreakdown[];
   warnings: string[];
 }
 
@@ -187,10 +277,12 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
   badge(`Mesure : préchauffe (${warmS} s)…`);
   h.setCamera('demo-aerial');
   await wait(warmS * 1000);
-  const loadIv = intervals(0, readyAt), firstIv = intervals(readyAt - 1500, firstEnd);
+  // Premières images : à partir du retrait de l'écran de chargement (l'image rendue dessous n'est pas vue).
+  const loadIv = intervals(0, readyAt), firstIv = intervals(readyAt, firstEnd);
   const p0 = h.cameraPose();
   const home: Home = { x: p0.targetX, z: p0.targetZ, yaw: p0.yaw, pitch: p0.pitch };
   const scenes: SceneResult[] = [];
+  const breakdown: LayerBreakdown[] = [];
   const startHidden = hiddenSeen;
   for (let i = 0; i < SCENES.length; i++) {
     const sc = SCENES[i]!;
@@ -224,6 +316,10 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     // Temps processeur : court échantillon séparé (attente de la carte graphique avant chaque image : gl.finish).
     let cpu: { updateMs: number; renderMs: number } | null = null;
     try { cpu = h.cpuFrames(cpuN, sc.cpuYaw); } catch { cpu = null; }
+    if (sc.id === 'aerien' || sc.id === 'rue') {
+      badge(`Mesure : ${i + 1}/${SCENES.length} — coût par calque (${sc.label})`);
+      try { breakdown.push(await layerBreakdown(h, sc.label, opts.short ? 2 : 8)); } catch (e) { warnings.push(`Coût par calque indisponible : ${String(e)}`); }
+    }
     frameHooks.splice(frameHooks.indexOf(hook), 1);
     const s = [...iv].sort((a, b) => a - b);
     const total = iv.reduce((a, b) => a + b, 0);
@@ -270,8 +366,9 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       playableS: r1(readyAt / 1000),
       maxLoadFrameMs: Math.round(Math.max(0, ...loadIv)), framesOver100Load: loadIv.filter((v) => v > 100).length,
       maxFirstFramesMs: Math.round(Math.max(0, ...firstIv)), firstFramesOver100: firstIv.filter((v) => v > 100).length,
+      firstPrograms: firstCounts?.programs ?? null, firstTextures: firstCounts?.textures ?? null, firstGeometries: firstCounts?.geometries ?? null,
     },
-    scenes, warnings,
+    scenes, breakdown, warnings,
   };
   showResults(res);
   return res;
@@ -302,12 +399,16 @@ export function resultsText(r: BenchResult): string {
     `Carte graphique : ${e['carteGraphique']} (${e['fabricant']}, ${e['webgl']}, multi_draw ${e['multiDraw'] ? 'oui' : 'non'})`,
     `Navigateur : ${e['navigateur']} sur ${e['systeme']} · ${e['coeursProcesseur']} cœurs`,
     `Écran ${e['ecran']} · fenêtre ${e['fenetre']} · densité ${e['densitePixels']} · qualité ${e['qualite']}${e['modeAllege'] ? ' (allégé)' : ''}${e['modeSur'] ? ' (mode sûr)' : ''} · lots par matériau ${e['lotsParMateriau'] ? 'oui' : 'non'} · ombres ${e['carteOmbre']} · résolution dynamique ${e['resolutionDynamique']} · antialiasing ${e['antialiasing']}`,
-    `Chargement : jouable en ${fmt(r.load.playableS)} s · plus longue image au chargement ${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms) · premières images ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms)`,
+    `Chargement : jouable en ${fmt(r.load.playableS)} s · plus longue image au chargement ${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms) · premières images ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms ; ${fmt(r.load.firstPrograms)} shaders / ${fmt(r.load.firstTextures)} textures / ${fmt(r.load.firstGeometries)} géométries)`,
     '',
     'Scène | img/s méd. | img/s moy. | p95 ms | p99 ms | max ms (à s) | > 33 ms | CPU màj+rendu ms | appels | triangles | rendu px (ratio) | nouveaux shaders/textures/géom.',
   ];
   for (const s of r.scenes) {
     lines.push(`${s.label} | ${fmt(s.fpsMedian)} | ${fmt(s.fpsMean)} | ${fmt(s.p95)} | ${fmt(s.p99)} | ${fmt(s.maxMs)} (${fmt(s.maxAtS)}) | ${fmt(s.over33)} % | ${fmt(s.cpuUpdateMs)} + ${fmt(s.cpuRenderMs)} | ${fmtInt(s.calls)} | ${fmtTris(s.triangles)} | ${s.renderW}×${s.renderH} (${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}) | ${s.newPrograms}/${s.newTextures}/${s.newGeometries}`);
+  }
+  for (const b of r.breakdown) {
+    lines.push('', `Coût GPU par calque — ${b.view} : image ${fmt(b.totalMs)} ms (${b.method})`);
+    for (const l of b.layers) lines.push(`  ${l.layer} : ${fmt(l.ms)} ms (${l.share} %)`);
   }
   for (const w of r.warnings) lines.push(`Attention : ${w}`);
   return lines.join('\n');
@@ -360,17 +461,20 @@ function showResults(r: BenchResult): void {
       ${kv('Résolution dynamique', e['resolutionDynamique'])}${kv('Antialiasing', e['antialiasing'])}
       ${kv('Jouable après', `${fmt(r.load.playableS)} s`)}
       ${kv('Plus longue image au chargement', `${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms)`)}
-      ${kv('Premières images de jeu (3 s)', `max ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms)`)}
+      ${kv('Premières images de jeu (3 s)', `max ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms) · ${fmt(r.load.firstPrograms)} shaders / ${fmt(r.load.firstTextures)} tex. / ${fmt(r.load.firstGeometries)} géom.`)}
     </div>
     <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:960px">
       <thead><tr><th ${th.replace('right', 'left')}>Scène</th><th ${th}>img/s<br>médiane</th><th ${th}>img/s<br>moyenne</th><th ${th}>p95<br>ms</th><th ${th}>p99<br>ms</th><th ${th}>plus longue<br>ms</th><th ${th}>images<br>&gt; 33 ms</th><th ${th}>CPU ms<br>màj + rendu</th><th ${th}>appels de<br>dessin</th><th ${th}>triangles</th><th ${th}>rendu px<br>(densité)</th><th ${th}>nouveaux<br>shaders / tex. / géom.</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px 28px;margin-top:12px">${r.breakdown.map((b) => `<div style="min-width:280px"><div style="font-weight:600">Coût GPU par calque — ${esc(b.view)} <span style="color:#93a4b8;font-weight:400">(image ${fmt(b.totalMs)} ms)</span></div>
+      <table style="border-collapse:collapse;margin-top:4px">${b.layers.map((l) => `<tr><td style="padding:2px 10px 2px 0">${esc(l.layer)}</td><td ${td}>${fmt(l.ms)} ms</td><td ${td}><span style="display:inline-block;height:8px;width:${Math.min(120, l.share * 1.2)}px;background:#4fd18b;border-radius:2px"></span> ${l.share} %</td></tr>`).join('')}</table>
+      <div style="color:#93a4b8;font-size:12px">${esc(b.method)} ; chaque calque compte aussi son ombre.</div></div>`).join('')}</div>
     ${r.warnings.map((w) => `<p style="margin:10px 0 0;color:#f2c94c">⚠ ${esc(w)}</p>`).join('')}
     <p style="margin:10px 0 0;color:#93a4b8;font-size:12px">img/s plafonnées par la fréquence de l'écran (60, 120 Hz…). CPU : échantillon séparé de ${r.mode === 'court' ? 3 : 20} images, carte graphique attendue avant chaque image. Appels et triangles : moyenne par image, ombres comprises. Aucune donnée n'est envoyée sur le réseau.</p>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
       <button type="button" id="bench-copy" ${btn.replace('#2a3646', '#4fd18b').replace('#e8eef5', '#0d1a12')}>Copier les résultats</button>
       ${link('Relancer', {})}${link('Relancer en Haute', { qualite: 'haute' })}${link('Relancer en Moyenne', { qualite: 'moyenne' })}${link('Relancer en Auto', { qualite: 'auto' })}
-      ${link('Relancer sans lots (?lots=0)', { lots: '0' })}${link('Lots activés', { lots: null })}${link('Résolution dynamique activée', { dyn: '1' })}${link('Résolution fixe', { dyn: '0' })}${link('Sans MSAA', { msaa: '0' })}${link('Avec MSAA', { msaa: null })}${link('Ombres 1K', { ombres: 'low' })}${link('Sans ombres', { ombres: 'off' })}${link('Ombres du réglage', { ombres: null })}
+      ${link('Relancer sans lots (?lots=0)', { lots: '0' })}${link('Lots activés', { lots: null })}${link('Résolution dynamique activée', { dyn: '1' })}${link('Résolution fixe', { dyn: '0' })}${link('Sans MSAA', { msaa: '0' })}${link('MSAA ×4', { msaa: '1' })}${link('Anticrénelage auto', { msaa: null })}${link('Ombres 1K', { ombres: 'low' })}${link('Sans ombres', { ombres: 'off' })}${link('Ombres du réglage', { ombres: null })}
       <button type="button" id="bench-close" ${btn}>Fermer</button>
     </div>
     <textarea id="bench-text" readonly style="display:none;width:100%;box-sizing:border-box;margin-top:10px;min-height:180px;background:#0b1016;color:#e8eef5;border:1px solid #2c3a4a;border-radius:8px;font:12px ui-monospace,monospace"></textarea>`;

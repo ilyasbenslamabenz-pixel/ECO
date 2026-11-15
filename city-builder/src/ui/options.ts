@@ -22,9 +22,15 @@ export interface GraphicsOptions {
    * (interface toujours nette), jusqu'à 0,6 × la densité de la qualité choisie. « auto » : activée en qualité Auto.
    */
   dynRes: 'auto' | 'on' | 'off';
+  /**
+   * Anticrénelage (MSAA ×4 du contexte WebGL, appliqué au prochain chargement). « auto » : désactivé sur ordinateur
+   * quand la densité de rendu est ≥ 1,25 (pixels déjà fins ; c'était le coût dominant mesuré sur processeur
+   * graphique intégré), activé sinon ; téléphone : inchangé (activé).
+   */
+  aa: 'auto' | 'on' | 'off';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto' };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto' };
 
 /** Applique le thème de l'interface (attribut lu par les feuilles de style). */
 export function applyTheme(t: GraphicsOptions['theme']): void {
@@ -43,6 +49,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     fps: o?.fps === '30' || o?.fps === '60' || o?.fps === 'max' || o?.fps === 'auto' ? o.fps : DEFAULT_OPTIONS.fps,
     theme: o?.theme === 'sombre' || o?.theme === 'clair' || o?.theme === 'nuit' ? o.theme : DEFAULT_OPTIONS.theme,
     dynRes: o?.dynRes === 'on' || o?.dynRes === 'off' || o?.dynRes === 'auto' ? o.dynRes : DEFAULT_OPTIONS.dynRes,
+    aa: o?.aa === 'on' || o?.aa === 'off' || o?.aa === 'auto' ? o.aa : DEFAULT_OPTIONS.aa,
   };
 }
 
@@ -69,11 +76,30 @@ export function urlShadows(search = typeof location !== 'undefined' ? location.s
   return s === 'off' || s === 'low' || s === 'high' || s === 'ultra' ? s : null;
 }
 
+/** Anticrénelage imposé par l'adresse (`?msaa=1|0`, page de mesure), jamais mémorisé seul. */
+export function urlAa(search = typeof location !== 'undefined' ? location.search : ''): GraphicsOptions['aa'] | null {
+  const a = new URLSearchParams(search).get('msaa');
+  return a === '1' ? 'on' : a === '0' ? 'off' : null;
+}
+
+/** Rapport de pixels de départ d'une qualité (avant résolution dynamique). */
+export function baseRatio(quality: GraphicsOptions['quality'], dpr: number, lite: boolean, liteMax: number): number {
+  return quality === 'basse' ? Math.min(dpr, 1) : quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, lite ? liteMax : 1.5);
+}
+
+/** MSAA du contexte : « auto » = sur ordinateur, seulement si la densité de rendu est < 1,25 ; téléphone : toujours. */
+export function wantMsaa(o: Pick<GraphicsOptions, 'quality' | 'aa'>, dpr: number, lite: boolean, liteMax = 1.5): boolean {
+  if (o.aa !== 'auto') return o.aa === 'on';
+  if (lite) return true;
+  return baseRatio(o.quality, dpr, lite, liteMax) < 1.25;
+}
+
 export function loadOptions(): GraphicsOptions {
   let o: GraphicsOptions;
   try { o = sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null); } catch { o = { ...DEFAULT_OPTIONS }; }
-  const q = urlQuality(), d = urlDynRes(), sh = urlShadows();
+  const q = urlQuality(), d = urlDynRes(), sh = urlShadows(), aa = urlAa();
   if (q) o = { ...o, quality: q };
+  if (aa) o = { ...o, aa };
   if (d) o = { ...o, dynRes: d };
   if (sh) o = { ...o, shadows: sh };
   return o;
@@ -82,11 +108,12 @@ export function loadOptions(): GraphicsOptions {
 export function saveOptions(o: GraphicsOptions): void {
   try {
     // Qualité imposée par l'adresse : la qualité mémorisée du joueur reste celle d'avant.
-    const q = urlQuality(), d = urlDynRes(), sh = urlShadows();
+    const q = urlQuality(), d = urlDynRes(), sh = urlShadows(), aa = urlAa();
     const stored = sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null);
     if (q && o.quality === q) o = { ...o, quality: stored.quality };
     if (d && o.dynRes === d) o = { ...o, dynRes: stored.dynRes };
     if (sh && o.shadows === sh) o = { ...o, shadows: stored.shadows };
+    if (aa && o.aa === aa) o = { ...o, aa: stored.aa };
     localStorage.setItem(KEY, JSON.stringify(o));
   } catch { /* navigation privée : réglage non mémorisé */ }
 }
@@ -118,7 +145,7 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const prof = deviceProfile(o.quality);
   // Basse : 1 pixel par point au plus (0,75 rendait l'image trop floue) ; la résolution adaptative remonte au-delà si l'appareil suit.
-  const ratio = o.quality === 'basse' ? Math.min(dpr, 1) : o.quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, prof.lite ? prof.maxPixelRatio : 1.5);
+  const ratio = baseRatio(o.quality, dpr, prof.lite, prof.maxPixelRatio);
   t.renderer.setPixelRatio(ratio);
   if (t.perf) {
     t.perf.maxFps = o.fps === '30' ? 30 : o.fps === '60' ? 60 : o.fps === 'max' ? 0 : prof.lite ? 60 : 0;
