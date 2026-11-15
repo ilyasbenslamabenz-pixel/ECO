@@ -86,7 +86,7 @@ export const OBJECTIVE_TEMPLATES: readonly Template[] = [
   { id: 'satisfaction', dash: 'population',
     severity: (f) => (f.pop >= 200 && f.happiness < 68 ? 0.2 + clamp01((70 - f.happiness) / 40) * 0.5 : 0),
     make: (f) => {
-      const target = Math.max(60, Math.min(80, Math.ceil((f.happiness + 6) / 5) * 5));
+      const target = Math.max(60, Math.min(80, Math.ceil((f.happiness + 4) / 5) * 5));
       return { title: `Atteins ${target} de satisfaction`, hint: 'Population › Aperçu détaille ce qui pèse sur la satisfaction : services, emploi, loyers, pollution, impôts.', target, unit: '/100', higher: true, need: 3, difficulty: 1.2 };
     },
     value: (f) => Math.round(f.happiness * 10) / 10 },
@@ -302,7 +302,7 @@ export function createObjectifsPlugin(): SimPlugin & { readonly state: () => Obj
   };
 
   const service: ObjectifsService = {
-    active: () => s.active.map((a) => ({ key: a.key, title: a.title, rewardMoney: a.money })),
+    active: () => s.active.map((a) => ({ key: a.key, title: a.title, rewardMoney: a.money, progress: progressOf(a) })),
     completed: (key) => s.doneKeys.includes(key),
     achieve: (id) => { if (ctxRef) achieve(ctxRef, id); },
   };

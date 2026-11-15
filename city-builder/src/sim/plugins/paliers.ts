@@ -30,7 +30,7 @@ export interface PaliersSave {
 export const emptyPaliersSave = (): PaliersSave => ({ reached: [], at: {}, xp: 0, xpBy: {}, record: 0, locked: false, xpLastDay: 0 });
 
 /** Points de bonheur par habitant et par jour, à pleine satisfaction utile (au-delà de 45, plafonné à 75). */
-export const XP_HAPPY_PER_RESIDENT = 0.002;
+export const XP_HAPPY_PER_RESIDENT = 0.001;
 export const XP_HAPPY_FLOOR = 45;
 export const XP_HAPPY_SPAN = 15;
 export const XP_HAPPY_MAX = 2;

@@ -221,10 +221,12 @@ export function createEvenementsPlugin(): SimPlugin & { readonly state: () => Ev
       if (pop >= 1000) out.push(['epidemie', month >= 10 || month <= 3 ? 2 : 0.5]);
       if (pop >= 500 && hasTag(ctx, 'dechets:depot')) out.push(['greve_eboueurs', 1.5]);
     }
-    if (r.housingFree >= 20 || r.demand.residential > 0.2) out.push(['afflux', 1.5]);
+    if (r.housingFree >= 20) out.push(['afflux', 1.5]);
     const obj = ctx.use<ObjectifsService>(OBJECTIFS_SERVICE)?.active() ?? [];
-    if (pop >= 500 && obj.some((o) => !o.title.startsWith('Atteins'))) out.push(['investisseur', 1.5]);
-    return out.filter(([, w]) => w > 0);
+    if (pop >= 500 && obj.some((o) => !o.title.startsWith('Atteins'))) out.push(['investisseur', 1]);
+    // Jamais deux fois de suite le même événement.
+    const last = s.history[s.history.length - 1]?.kind;
+    return out.filter(([k, w]) => w > 0 && k !== last);
   };
 
   const announce = (ctx: PluginContext, kind: EventKind): void => {
@@ -236,7 +238,8 @@ export function createEvenementsPlugin(): SimPlugin & { readonly state: () => Ev
     const c: Current = { kind, phase: d.notice > 0 ? 'annonce' : 'actif', announcedAt: now, startAt, endAt: startAt + d.duration * MINUTES_PER_DAY, base: 0, baseMonth: ctx.clock.monthIndex, peak: 0 };
     if (kind === 'investisseur') {
       const list = (ctx.use<ObjectifsService>(OBJECTIFS_SERVICE)?.active() ?? []).filter((o) => !o.title.startsWith('Atteins'));
-      const o = list[Math.floor(ctx.rng.next() * list.length)]!;
+      // Objectif le plus avancé (le plus à portée) ; à égalité, le plus ancien.
+      const o = list.reduce((best, x) => (x.progress > best.progress ? x : best), list[0]!);
       c.objKey = o.key; c.objTitle = o.title;
       c.bonus = Math.round((o.rewardMoney * 1.5) / 1000) * 1000;
     }

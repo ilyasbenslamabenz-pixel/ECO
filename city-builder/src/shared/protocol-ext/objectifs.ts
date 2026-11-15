@@ -53,7 +53,7 @@ export interface ObjectifsState {
 
 /** Service publié par le module (lu par les événements : investisseur). */
 export interface ObjectifsService {
-  active(): { key: string; title: string; rewardMoney: number }[];
+  active(): { key: string; title: string; rewardMoney: number; progress: number }[];
   /** Vrai si l'instance `key` a été accomplie. */
   completed(key: string): boolean;
   /** Débloque une réalisation (événements : crise surmontée). */
