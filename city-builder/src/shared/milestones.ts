@@ -206,5 +206,10 @@ export interface PaliersService {
   gap(): number;
   xp(): number;
   reachedCount(): number;
+  /**
+   * Rapport de la démographie calculé par le module au début du jour courant (minute `at`), partagé pour éviter de le
+   * recalculer (objectifs) ; undefined s'il date d'une autre minute.
+   */
+  dayReport(at: number): unknown;
 }
 export const PALIERS_SERVICE = 'paliers';

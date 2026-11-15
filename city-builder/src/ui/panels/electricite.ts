@@ -80,7 +80,7 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
   const cls = s.byClass.filter((b) => b.buildings > 0).map((b) => `<tr><td>${esc(CLASS_LABELS_FR[b.cls])}</td><td>${fmtPower(b.demandKw)}</td><td>${fmtPower(b.deliveredKw)}</td>
       <td class="${b.cut ? 'warn' : 'ok'}">${b.cut}</td><td class="${b.unlinked ? 'warn' : 'muted'}">${b.unlinked}</td></tr>`).join('');
   const bud = st.budget;
-  return `
+  return `${zeroReason(s, st)}
   <div class="kpis">
     <div class="kpi"><span>Production</span><b data-k="production">${fmtPower(s.producedKw)}</b><span>dispo. ${fmtPower(s.availableKw)}</span></div>
     <div class="kpi"><span>Consommation</span><b data-k="demande">${fmtPower(s.demandKw)}</b><span>livré ${fmtPower(s.deliveredKw)} · pertes ${fmtPower(s.lossesKw)}</span></div>
@@ -103,6 +103,27 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
     <tr><td>Ce mois : produit / livré / délesté</td><td>${fmtEnergy(bud.monthProducedKwh)} / ${fmtEnergy(bud.monthDeliveredKwh)} / ${fmtEnergy(bud.monthShedKwh)}</td></tr>
     <tr><td>Pannes : ce mois / mois passé</td><td>${bud.monthFailures} / ${bud.lastMonthFailures}</td></tr>
   </table>` : ''}`;
+}
+
+/**
+ * Explication quand la production affichée est nulle. La production comptée est l'énergie réellement livrée :
+ * une centrale capable de produire affiche 0 tant qu'aucun bâtiment ne lui est rattaché.
+ */
+function zeroReason(s: ElectriciteSummary, st: ElectriciteDelta): string {
+  if (s.producedKw > 0) return '';
+  const facs = (st.facilities ?? []).filter((f) => f.kind !== 'poste');
+  let why: string;
+  if (facs.length && facs.every((f) => f.failedUntil > 0)) why = 'Vos centrales sont en panne : la réparation est en cours (un meilleur financement de l\'entretien l\'accélère).';
+  else if (facs.length && facs.every((f) => !f.siteOk)) why = 'Site invalide : un barrage doit être posé au bord d\'un cours d\'eau.';
+  else if (s.availableKw <= 0) {
+    const kinds = new Set(facs.map((f) => f.kind));
+    why = kinds.has('solaire') && kinds.size === 1 ? 'Vos panneaux solaires ne produisent pas en ce moment (nuit ou ciel couvert).'
+      : kinds.has('eolien') && kinds.size === 1 ? `Pas assez de vent pour vos éoliennes en ce moment (${nf1.format(s.windMs)} m/s).`
+      : 'Vos centrales ne peuvent rien produire en ce moment (vent, soleil ou panne).';
+  } else if (s.buildings === 0 || s.demandKw <= 0) why = `Votre centrale est prête (${fmtPower(s.availableKw)} disponibles), mais rien ne consomme encore : la production affichée est l'électricité réellement consommée. Construisez des zones le long d'une route reliée à la centrale.`;
+  else if (s.unlinked >= s.buildings) why = `Votre centrale peut fournir ${fmtPower(s.availableKw)}, mais aucun bâtiment n'y est relié. Le courant suit les routes : la centrale doit toucher une route du même réseau que vos bâtiments (ou reliez un poste de transformation par une ligne haute tension avec « Relier »).`;
+  else why = `Votre centrale peut fournir ${fmtPower(s.availableKw)}, mais rien n'a encore été livré ce relevé ; attendez l'heure de jeu suivante.`;
+  return `<p class="warn" data-k="zero-raison" style="margin:4px 0 8px">⚠ Production à 0 : ${esc(why)}</p>`;
 }
 
 /** Interrupteur du raccordement au réseau électrique voisin (frais uniques, plafond, prix du kWh). */

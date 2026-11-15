@@ -55,9 +55,9 @@ export const EVENT_DEFS: Record<EventKind, KindDef> = {
   },
   panne_reseau: {
     title: EVENT_TITLES.panne_reseau, notice: 2, duration: 2, negative: true, dash: 'energy',
-    effect: { powerImportFactor: 0.5 },
-    effects: ['Électricité achetée au réseau voisin : capacité −50 %'],
-    text: 'Le réseau électrique voisin annonce des travaux : la ville ne pourra acheter que la moitié de l’électricité habituelle.',
+    effect: { powerImportFactor: 0.65 },
+    effects: ['Électricité achetée au réseau voisin : capacité −35 %'],
+    text: 'Le réseau électrique voisin annonce des travaux : la ville ne pourra acheter qu’environ deux tiers de l’électricité habituelle.',
     advice: 'Construisez une centrale (même petite) pour compléter, ou adoptez la politique « Sobriété énergétique » pendant la panne.',
   },
   epidemie: {

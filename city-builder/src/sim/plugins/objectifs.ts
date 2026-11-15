@@ -17,6 +17,7 @@ import {
 import type { ElectriciteService } from '../../shared/power/types';
 import type { BusSummary } from '../../shared/protocol-ext/bus';
 import { MINUTES_PER_DAY } from '../clock';
+import type { DemographyReport } from '../demography';
 import { runMigrations } from '../save-sections/types';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 
@@ -192,7 +193,7 @@ interface DechetsLike { binFull(id: number): boolean }
 
 /** Relevé des faits de la ville (une fois par jour). */
 export function cityFacts(ctx: PluginContext, cutMax: number): CityFacts {
-  const r = ctx.demography!.report();
+  const r = (ctx.use<PaliersService>(PALIERS_SERVICE)?.dayReport(ctx.clock.totalMinutes) as DemographyReport | undefined) ?? ctx.demography!.report();
   const cs = r.cityServices;
   const lv = r.living;
   const bus = ctx.use<BusLike>('bus');

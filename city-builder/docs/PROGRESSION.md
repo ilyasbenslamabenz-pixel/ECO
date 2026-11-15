@@ -85,7 +85,7 @@ notification de fin avec l'issue mesurée.
 | Événement | Condition | Préavis / durée | Effet |
 |---|---|---|---|
 | Canicule | juin–août, temps sec, ≥ 20 °C (météo), 400 hab. | 2 j / 4 j (fin si pluie ou orage) | électricité +15 %, eau +25 %, risque de feu ×2, satisfaction −1 |
-| Panne du réseau voisin | électricité achetée au raccordement | 2 j / 2 j | capacité du raccordement −50 % |
+| Panne du réseau voisin | électricité achetée au raccordement | 2 j / 2 j | capacité du raccordement −35 % |
 | Épidémie de grippe | 1 000 hab. (plus probable en hiver) | 3 j / 6 j | maladie ×2,5, satisfaction −1 |
 | Grève des éboueurs | dépôt de camions-bennes | 2 j / 4 j | un camion sur quatre en service |
 | Afflux d'habitants | ≥ 20 logements libres | 1 j / 5 j | arrivées ×1,8, demande résidentielle +0,25 |

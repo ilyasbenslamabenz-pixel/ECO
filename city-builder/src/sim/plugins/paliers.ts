@@ -13,6 +13,7 @@ import {
   computeLocks, loanBonus, MILESTONES, PALIERS_SERVICE, milestoneForAsset, milestoneForBusLines, milestoneForLevel, milestoneForPolicy, milestoneForZone,
   type MilestoneDef, type PaliersLocks, type PaliersService, type PaliersState,
 } from '../../shared/milestones';
+import type { DemographyReport } from '../demography';
 import { runMigrations } from '../save-sections/types';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 
@@ -76,6 +77,7 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
   let ctxRef: PluginContext | null = null;
   let locksCache: { key: string; locks: PaliersLocks } | null = null;
   let loanCache = { n: -1, v: 0 };
+  let dayRep: { at: number; r: DemographyReport } | null = null;
   const pop = (ctx: PluginContext | null): number => ctx?.demography?.population ?? 0;
   const reachedSet = (): Set<string> => new Set(s.reached);
   const locks = (): PaliersLocks => {
@@ -130,6 +132,7 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
     },
     xp: () => s.xp,
     reachedCount: () => s.reached.length,
+    dayReport: (at) => (dayRep && dayRep.at === at ? dayRep.r : undefined),
   };
   const view = (ctx: PluginContext): PaliersState => {
     const done = reachedSet();
@@ -175,7 +178,9 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
       let gained = 0;
       if (p > s.record) { gained += p - s.record; add(p - s.record, 'croissance'); s.record = p; }
       if (p >= 50 && ctx.demography) {
-        const h = happinessXp(p, ctx.demography.report().happiness);
+        const r = ctx.demography.report();
+        dayRep = { at: ctx.clock.totalMinutes, r };
+        const h = happinessXp(p, r.happiness);
         gained += h;
         add(h, 'bonheur');
       }
