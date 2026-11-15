@@ -252,6 +252,35 @@ async function boot(): Promise<void> {
     render.ctx.scene.traverse((o) => { objects++; if ((o as THREE.InstancedMesh).isInstancedMesh) instanced++; else if ((o as THREE.Mesh).isMesh) meshes++; });
     return { geometries: r.info.memory.geometries, textures: r.info.memory.textures, programs: r.info.programs?.length ?? 0, objects, instanced, meshes, dom: document.getElementsByTagName('*').length };
   };
+  // Diagnostic (performance) : appels de rendu probables par groupe de premier niveau (maillages visibles, dont
+  // ceux qui projettent une ombre : un appel de plus dans la carte d'ombre), instances et triangles dessinés.
+  (debug as unknown as Record<string, unknown>).drawBreakdown = () => {
+    const out: Record<string, { draws: number; shadow: number; instances: number; tris: number; materials: number }> = {};
+    const mats = new Map<string, Set<unknown>>();
+    for (const top of render.ctx.scene.children) {
+      const k = top.name || top.type;
+      const cur = out[k] ?? (out[k] = { draws: 0, shadow: 0, instances: 0, tris: 0, materials: 0 });
+      const ms = mats.get(k) ?? new Set<unknown>();
+      mats.set(k, ms);
+      top.traverseVisible((o) => {
+        const m = o as THREE.InstancedMesh;
+        if (!m.isMesh) return;
+        const bm = o as THREE.BatchedMesh;
+        if (bm.isBatchedMesh) { cur.draws++; if (bm.castShadow) cur.shadow++; cur.instances += bm.instanceCount; return; }
+        const n = m.isInstancedMesh ? m.count : 1;
+        if (n <= 0) return;
+        const g = m.geometry;
+        const groups = Array.isArray(m.material) ? Math.max(1, g.groups.length) : 1;
+        cur.draws += groups;
+        if (m.castShadow) cur.shadow += groups;
+        for (const mt of Array.isArray(m.material) ? m.material : [m.material]) ms.add(mt);
+        cur.materials = ms.size;
+        cur.instances += n;
+        cur.tris += Math.round(((g.index ? g.index.count : g.getAttribute('position')?.count ?? 0) / 3) * n);
+      });
+    }
+    return out;
+  };
   // Diagnostic (e2e mémoire) : objets et géométries par groupe de premier niveau de la scène.
   (debug as unknown as Record<string, unknown>).sceneCensus = () => {
     const out: Record<string, { obj: number; geo: number }> = {};

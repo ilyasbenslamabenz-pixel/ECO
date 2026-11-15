@@ -683,7 +683,11 @@ export class VegetationSystem {
     for (const r of this.renders) {
       for (let li = 0; li < r.lods.length; li++) {
         const l = r.lods[li]!;
-        for (let mi = 0; mi < l.meshes.length; mi++) { const m = l.meshes[mi]!; m.count = l.count; m.castShadow = li <= 1 || r.sp.role !== 'arbuste'; }
+        for (let mi = 0; mi < l.meshes.length; mi++) { const m = l.meshes[mi]!; m.count = l.count; m.visible = l.count > 0; m.castShadow = li <= 1 || r.sp.role !== 'arbuste'; }
+        // (masqué à 0 instance : three préparerait quand même programme, uniformes et tampons pour un appel vide)
+        // Aucun envoi pour un LOD vide : une plage de longueur 0 fait envoyer par WebGL 2 TOUT le tampon
+        // (bufferSubData : longueur 0 = jusqu'à la fin), soit ≈ 10 Mo par recalcul pour les espèces non visibles.
+        if (l.count === 0) continue;
         l.matrices.needsUpdate = true;
         l.colors.needsUpdate = true;
         l.matrices.clearUpdateRanges();
@@ -693,6 +697,8 @@ export class VegetationSystem {
       }
       if (r.imp) {
         r.imp.mesh.count = r.imp.count;
+        r.imp.mesh.visible = r.imp.count > 0;
+        if (r.imp.count === 0) continue;
         const ia = r.imp.mesh.instanceMatrix;
         ia.clearUpdateRanges();
         ia.addUpdateRange(0, r.imp.count * 16);

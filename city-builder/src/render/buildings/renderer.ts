@@ -17,6 +17,7 @@ import type { AssetCatalog, CatalogAsset } from '../../shared/catalog';
 import type { BuildingRecord, IBuildingRenderer } from '../../shared/contracts';
 import { rotAngle } from '../../shared/footprint';
 import { FrontYardLayer, frontOffset } from './front-yards';
+import { BuildingShadowLayer, mergeableForShadow } from './shadow-proxy';
 
 const _off = new THREE.Vector3();
 import { BuildingMaterials, nightFactorForHour, VARYING_ROLES } from './materials';
@@ -53,6 +54,12 @@ interface Batch {
   tints: Float32Array;
   capacity: number;
   dirty: boolean;
+  /** Ombres fusionnées (si activées) : géométrie d'ombre par LOD et par côté (−1 : aucune), gardée au déchargement. */
+  proxy: (Int32Array | null)[];
+  /** Instance d'ombre par bâtiment et par côté (−1 : aucune). */
+  sInst: Int32Array;
+  /** LOD dont l'ombre est affichée par bâtiment (−1 : masquée). */
+  sLod: Int8Array;
 }
 
 const _m = new THREE.Matrix4();
@@ -67,6 +74,9 @@ const _sphere = new THREE.Sphere();
 const _camPos = new THREE.Vector3();
 const _lastPos = new THREE.Vector3(Infinity, Infinity, Infinity);
 const _lastQ = new THREE.Quaternion();
+/** Par LOD du lot en cours de mise à jour : nombre d'instances précédent et contenu modifié (sans allocation). */
+const _prevCount = new Int32Array(8);
+const _changed = new Uint8Array(8);
 /** Lot sans instance : ses LOD sont libérés au bout de 30 s (une démolition suivie d'une reconstruction les garde). */
 const LOD_RELEASE_EMPTY_MS = 30_000;
 /** LOD détaillé non dessiné depuis 90 s (caméra partie ailleurs) : libéré. */
@@ -125,6 +135,11 @@ export interface BuildingRendererOptions {
   lodBias?: number;
   anisotropy?: number;
   castShadow?: boolean;
+  /**
+   * Ombres en lots fusionnés (shadow-proxy.ts) : ≈ 1 appel de rendu par côté de matériau dans la carte d'ombre au
+   * lieu d'un par sous-maillage et par lot. Mémoire graphique en plus (positions des LOD 0 et 1) : ordinateur.
+   */
+  shadowProxies?: boolean;
 }
 
 export class InstancedBuildingRenderer implements IBuildingRenderer {
@@ -146,6 +161,10 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   private forceUpdate = true;
   private readonly lodBias: number;
   private readonly castShadow: boolean;
+  /** Ombres fusionnées (null : chaque sous-maillage projette sa propre ombre). */
+  private readonly shadows: BuildingShadowLayer | null;
+  /** Bâtiments masqués (chantier en cours) : API de visibilité publiée aux modules (setBuildingsVisible). */
+  private readonly hidden = new Set<number>();
   /** Débogage / vitrine : impose un LOD (−1 = selon la distance). */
   forceLod = -1;
   /** Statistiques de la dernière mise à jour (instances visibles par LOD). */
@@ -160,6 +179,32 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     this.materials = new BuildingMaterials(lib.catalog, (f) => lib.url(f), opts.anisotropy ?? 8);
     this.lodBias = opts.lodBias ?? 1;
     this.castShadow = opts.castShadow ?? true;
+    this.shadows = opts.shadowProxies && this.castShadow ? new BuildingShadowLayer(this.group) : null;
+  }
+
+  /** Masque / réaffiche des bâtiments (chantiers) : instances et ombres retirées du rendu, sans les supprimer. */
+  setBuildingsVisible(ids: readonly number[], visible: boolean): void {
+    for (const id of ids) { if (visible) this.hidden.delete(id); else this.hidden.add(id); }
+    this.forceUpdate = true;
+  }
+
+  /** Ombres fusionnées (diagnostic) : lots et instances, null si désactivées. */
+  shadowStats(): { meshes: number; instances: number } | null { return this.shadows?.stats() ?? null; }
+
+  /** Affiche l'ombre du bâtiment `i` du lot au LOD `l` (−1 : masquée). */
+  private setShadow(b: Batch, i: number, l: number): void {
+    const sh = this.shadows!;
+    const geo = l >= 0 ? b.proxy[l] ?? null : null;
+    if (!geo) l = -1;
+    if (b.sLod[i] === l) return;
+    b.sLod[i] = l;
+    for (let s = 0; s < 3; s++) {
+      const g = geo ? geo[s]! : -1;
+      const inst = b.sInst[i * 3 + s]!;
+      if (g < 0) { if (inst >= 0) sh.hide(s, inst); continue; }
+      if (inst < 0) b.sInst[i * 3 + s] = sh.addInstance(s, g, b.mats, i * 16);
+      else sh.show(s, inst, g);
+    }
   }
 
   get count(): number { return this.idToBatch.size; }
@@ -225,6 +270,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
           lods: a.lods.map(() => ({ state: 0, parts: [], matrices: null, colors: null, count: 0, lastUsed: 0 })),
           ids: [], mats: new Float32Array(16 * 16), spheres: new Float32Array(4 * 16), tints: new Float32Array(3 * 16),
           capacity: 16, dirty: true,
+          proxy: a.lods.map(() => null), sInst: new Int32Array(16 * 3).fill(-1), sLod: new Int8Array(16).fill(-1),
         };
         this.batches.set(key, b);
         this.batchList.push(b);
@@ -232,6 +278,8 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       const i = b.ids.length;
       if (i >= b.capacity) this.grow(b, b.capacity * 2);
       b.ids.push(r.id);
+      b.sInst.fill(-1, i * 3, i * 3 + 3);
+      b.sLod[i] = -1;
       _q.setFromAxisAngle(_up, rotAngle(r.rot));
       frontOffset(a, r.rot, _off);
       _p.set(r.x + _off.x, r.y, r.z + _off.z);
@@ -263,7 +311,10 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       if (!b) continue;
       const i = b.ids.indexOf(id);
       const last = b.ids.length - 1;
+      if (this.shadows) for (let s = 0; s < 3; s++) { const inst = b.sInst[i * 3 + s]!; if (inst >= 0) this.shadows.remove(s, inst); }
       if (i !== last) {
+        b.sInst.copyWithin(i * 3, last * 3, last * 3 + 3);
+        b.sLod[i] = b.sLod[last]!;
         b.ids[i] = b.ids[last]!;
         b.mats.copyWithin(i * 16, last * 16, last * 16 + 16);
         b.spheres.copyWithin(i * 4, last * 4, last * 4 + 4);
@@ -280,6 +331,8 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     const m = new Float32Array(cap * 16); m.set(b.mats); b.mats = m;
     const s = new Float32Array(cap * 4); s.set(b.spheres); b.spheres = s;
     const t = new Float32Array(cap * 3); t.set(b.tints); b.tints = t;
+    const si = new Int32Array(cap * 3).fill(-1); si.set(b.sInst); b.sInst = si;
+    const sl = new Int8Array(cap).fill(-1); sl.set(b.sLod); b.sLod = sl;
     b.capacity = cap;
     for (let l = 0; l < b.lods.length; l++) if (b.lods[l]!.state === 2) this.allocLod(b, l);
   }
@@ -329,6 +382,13 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
         slot.parts.push({ mesh, vary: VARYING_ROLES.has(name) });
         this.group.add(mesh);
       });
+      // Ombres fusionnées : les sous-maillages opaques des LOD 0 et 1 n'ont plus d'ombre propre ; leur géométrie
+      // d'ombre (créée une fois par LOD, gardée si le LOD est déchargé puis rechargé) la remplace.
+      if (this.shadows) {
+        const merged = slot.parts.filter((p) => p.mesh.castShadow && mergeableForShadow(p.mesh.material as THREE.Material));
+        if (merged.length && !b.proxy[l]) b.proxy[l] = this.shadows.addLod(merged.map((p) => ({ geometry: p.mesh.geometry, side: (p.mesh.material as THREE.Material).side })));
+        if (b.proxy[l]) for (const p of merged) p.mesh.castShadow = false;
+      }
       const finish = (): void => {
         slot.state = 2;
         slot.lastUsed = performance.now();
@@ -435,18 +495,20 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     for (let bi = 0; bi < this.batchList.length; bi++) {
       const b = this.batchList[bi]!;
       const nl = b.lods.length;
-      for (let l = 0; l < nl; l++) b.lods[l]!.count = 0;
+      for (let l = 0; l < nl; l++) { _prevCount[l] = b.lods[l]!.count; _changed[l] = 0; b.lods[l]!.count = 0; }
       const d0 = b.asset.lods[0]!.maxDistance * this.lodBias;
       const d1 = nl > 1 ? b.asset.lods[1]!.maxDistance * this.lodBias : Infinity;
+      const sh = this.shadows !== null;
       for (let i = 0; i < b.ids.length; i++) {
         const sx = b.spheres[i * 4]!;
         const sy = b.spheres[i * 4 + 1]!;
         const sz = b.spheres[i * 4 + 2]!;
         const sr = b.spheres[i * 4 + 3]!;
+        if (this.hidden.size && this.hidden.has(b.ids[i]!)) { if (sh) this.setShadow(b, i, -1); continue; }
         if (cam) {
           _sphere.center.set(sx, sy, sz);
           _sphere.radius = sr;
-          if (!_frustum.intersectsSphere(_sphere)) continue;
+          if (!_frustum.intersectsSphere(_sphere)) { if (sh) this.setShadow(b, i, -1); continue; }
         }
         const dist = Math.max(0, Math.hypot(sx - cx, sy - cy, sz - cz) - sr * 0.5);
         let want = this.forceLod >= 0 ? this.forceLod : dist < d0 ? 0 : dist < d1 ? 1 : 2;
@@ -461,16 +523,19 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
             else if (want - k >= 0 && b.lods[want - k]!.state === 2) use = want - k;
           }
         }
+        if (sh) this.setShadow(b, i, use);
         if (use < 0) continue;
         const slot = b.lods[use]!;
         const c = slot.count++;
         const ma = slot.matrices!.array as Float32Array;
         const src = b.mats;
-        for (let k = 0, o = c * 16, si = i * 16; k < 16; k++) ma[o + k] = src[si + k]!; // copie sans allocation
+        // Copie sans allocation ; on note si le contenu change (sinon rien n'est renvoyé à la carte graphique).
+        let ch = 0;
+        for (let k = 0, o = c * 16, si = i * 16; k < 16; k++) { const v = src[si + k]!; if (ma[o + k] !== v) { ma[o + k] = v; ch = 1; } }
         const ca = slot.colors!.array as Float32Array;
-        ca[c * 3] = b.tints[i * 3]!;
-        ca[c * 3 + 1] = b.tints[i * 3 + 1]!;
-        ca[c * 3 + 2] = b.tints[i * 3 + 2]!;
+        const t0 = b.tints[i * 3]!, t1 = b.tints[i * 3 + 1]!, t2 = b.tints[i * 3 + 2]!;
+        if (ca[c * 3] !== t0 || ca[c * 3 + 1] !== t1 || ca[c * 3 + 2] !== t2) { ca[c * 3] = t0; ca[c * 3 + 1] = t1; ca[c * 3 + 2] = t2; ch = 1; }
+        if (ch) _changed[use] = 1;
         this.visible[use < 3 ? use : 2]!++;
       }
       for (let l = 0; l < nl; l++) {
@@ -478,9 +543,12 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
         if (slot.state !== 2) continue;
         // Un InstancedMesh à 0 instance coûte quand même un appel de rendu (et un dans la carte d'ombre) : masqué.
         for (let p = 0; p < slot.parts.length; p++) { const m = slot.parts[p]!.mesh; m.count = slot.count; m.visible = slot.count > 0; }
-        if (slot.count > 0) {
-          slot.matrices!.needsUpdate = true;
-          slot.colors!.needsUpdate = true;
+        // Envoi limité aux instances dessinées (plage) et seulement si la liste a changé : avant, chaque recalcul
+        // (caméra en mouvement) renvoyait les tampons entiers (capacité du lot) de tous les lots visibles.
+        if (slot.count > 0 && (_changed[l] || slot.count !== _prevCount[l])) {
+          const ma = slot.matrices!, ca = slot.colors!;
+          ma.clearUpdateRanges(); ma.addUpdateRange(0, slot.count * 16); ma.needsUpdate = true;
+          ca.clearUpdateRanges(); ca.addUpdateRange(0, slot.count * 3); ca.needsUpdate = true;
         }
       }
       b.dirty = false;
@@ -489,6 +557,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
 
   dispose(): void {
     for (const b of this.batchList) for (const s of b.lods) for (const p of s.parts) { p.mesh.dispose(); p.mesh.geometry.dispose(); }
+    this.shadows?.dispose();
     this.batches.clear();
     this.batchList.length = 0;
     this.idToBatch.clear();

@@ -98,6 +98,13 @@ function silhouetteTexture(): THREE.DataTexture {
   return t;
 }
 
+
+/** Marque les `n` premières instances d'un attribut à renvoyer à la carte graphique (n > 0). */
+function sendRange(a: THREE.BufferAttribute, n: number): void {
+  a.clearUpdateRanges();
+  a.addUpdateRange(0, n * a.itemSize);
+  a.needsUpdate = true;
+}
 export class PedestrianCrowdRenderer {
   readonly group = new THREE.Group();
   private manifest: PedManifest | null = null;
@@ -362,10 +369,11 @@ export class PedestrianCrowdRenderer {
       if (seen.has(g)) continue;
       seen.add(g);
       g.mesh.count = g.n;
-      if (g.n > 0) { g.mesh.instanceMatrix.needsUpdate = true; g.aPed.needsUpdate = true; calls++; drawn += g.n; }
+      // Envoi limité aux instances dessinées (sans plage : tampon entier, capacité comprise).
+      if (g.n > 0) { sendRange(g.mesh.instanceMatrix, g.n); sendRange(g.aPed, g.n); calls++; drawn += g.n; }
     }
     imp.mesh.count = imp.n;
-    if (imp.n > 0) { imp.mesh.instanceMatrix.needsUpdate = true; imp.aPed.needsUpdate = true; this.impostorColor!.needsUpdate = true; calls++; drawn += imp.n; }
+    if (imp.n > 0) { sendRange(imp.mesh.instanceMatrix, imp.n); sendRange(imp.aPed, imp.n); sendRange(this.impostorColor!, imp.n); calls++; drawn += imp.n; }
     if (this.impostorMat) this.impostorMat.uniforms.uNight!.value = night;
     this.stats.dessines = drawn;
     this.stats.lod = lodCount;

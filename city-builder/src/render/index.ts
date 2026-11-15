@@ -25,6 +25,7 @@ import { isWorldTerrain } from '../sim/terrain';
 import type { TerrainPatch, WorldTerrain } from '../sim/terrain/types';
 import { AssetLibrary } from './assets';
 import { InstancedBuildingRenderer } from './buildings/renderer';
+import { enableShadowProxyLayer } from './buildings/shadow-proxy';
 import { nightFactorForHour } from './buildings/materials';
 import { VegetationSystem } from './nature/vegetation';
 import { RoadNetworkRenderer } from './roads/renderer';
@@ -110,7 +111,10 @@ export async function initRender(
   const veg = new VegetationSystem(ctx.scene, lib, { heightAt, renderer: ctx.renderer, distances: profile.vegDistances });
   await veg.load();
   const roads = new RoadNetworkRenderer(ctx.scene, heightAt, { lib, treeImpostor: (id) => veg.impostorMaterial(id) });
-  const buildings = new InstancedBuildingRenderer(ctx.scene, lib, { lodBias: profile.buildingLodBias });
+  // Ordinateur : ombres des bâtiments en lots fusionnés (≈ 1 000 appels de rendu de moins dans la carte d'ombre
+  // d'une grande ville) ; téléphone : inchangé (mémoire graphique comptée au plus juste).
+  const buildings = new InstancedBuildingRenderer(ctx.scene, lib, { lodBias: profile.buildingLodBias, shadowProxies: !profile.lite });
+  if (!profile.lite) enableShadowProxyLayer(ctx.sun);
   buildings.attachCamera(ctx.camera);
   buildings.attachRenderer(ctx.renderer);
   const vehicles = new InstancedVehicleRenderer(ctx.scene, lib);
@@ -123,7 +127,7 @@ export async function initRender(
   let night = 0;
   const plugins = new RenderPluginHost(renderPlugins);
   await plugins.init({
-    scene: ctx.scene, camera: ctx.camera, renderer: ctx.renderer, sun: ctx.sun, catalog, lib, heightAt, nightFactor: () => night, vegetation: veg,
+    scene: ctx.scene, camera: ctx.camera, renderer: ctx.renderer, sun: ctx.sun, catalog, lib, heightAt, nightFactor: () => night, vegetation: veg, buildings,
   });
 
   const clearVegForBuildings = (list: readonly BuildingRecord[]): void => {
