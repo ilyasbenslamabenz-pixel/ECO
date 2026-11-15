@@ -10,7 +10,7 @@ import { pietonsPanel } from './pietons';
 import { chantiersPanel } from './chantiers';
 import { electricitePanel } from './electricite';
 import { dechetsPanel } from './dechets';
-import { transportsPanel } from './transports';
+import { busPanel, transportsPanel } from './transports';
 import { eauPanel } from './eau';
 import { zonagePanel } from './zonage';
 import { politiquesPanel, recherchePanel } from './gouvernance';
@@ -34,4 +34,5 @@ export const UI_PANELS: readonly UiPanel[] = [
   recherchePanel,
   paliersPanel,
   secteursPanel,
+  busPanel,
 ];

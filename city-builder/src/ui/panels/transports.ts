@@ -7,6 +7,7 @@
  */
 import type { HubSummary } from '../../shared/hubs/types';
 import type { HubsCommands } from '../../shared/protocol-ext/hubs';
+import type { BusState } from '../../shared/protocol-ext/bus';
 import type { UiPanel } from './types';
 
 export type TransportsSummary = HubsCommands['summary']['result'];
@@ -90,5 +91,101 @@ export const transportsPanel: UiPanel = {
     const timer = setInterval(refresh, 2000);
     const off = api.onDeltaExt((p) => { if ((p as { hubs?: unknown }).hubs) refresh(); });
     return () => { alive = false; clearInterval(timer); off(); };
+  },
+};
+
+/* ------------------------------------------------------------------------------------------------------------------ */
+/* Lignes de bus (module « bus », docs/TRANSPORTS_COMMUN.md) : panneau « Bus » du tableau de bord Transports.         */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+const pctOf = (v: number): string => `${nf(v * 100, 1)} %`;
+const chf = (n: number): string => `${nf(Math.round(n))} CHF`;
+
+/** Lignes du panneau des bus (pure, testée) : synthèse, puis une section par ligne avec ses arrêts. */
+export function busLinesView(s: BusState): TransportsSection[] {
+  const m = s.summary;
+  const out: TransportsSection[] = [{
+    title: 'Réseau de bus',
+    rows: [
+      ['Lignes, arrêts', `${nf(m.lines)} lignes, ${nf(m.stops)} arrêts`],
+      ['Dépôts (places)', m.depots ? `${nf(m.depots)} (${nf(m.depotCapacity)} bus)` : 'aucun : posez un dépôt (Transports › Gares et dépôts)'],
+      ['Bus en service / demandés', `${nf(m.busesActive)} / ${nf(m.busesRequested)}`],
+      ['Voyages par jour', nf(m.ridersDay)],
+      ['Part modale bus / voiture / marche', `${pctOf(m.modal.bus)} / ${pctOf(m.modal.car)} / ${pctOf(m.modal.walk)}`],
+      ['Trafic automobile évité', pctOf(1 - m.carFactor)],
+      ['Habitants à moins de 400 m d’un arrêt', m.population ? `${nf(m.coveredResidents)} (${pctOf(m.coveredResidents / Math.max(1, m.population))})` : '—'],
+      ['Emplois desservis', nf(m.coveredJobs)],
+      ['Embauches grâce au bus (mois)', nf(m.transitHiresMonth)],
+      ['Recettes − coût du mois', `${chf(m.revenueMonth)} − ${chf(m.costMonth)}`],
+      ['Mois dernier', `${chf(m.revenueLastMonth)} − ${chf(m.costLastMonth)}`],
+    ],
+  }];
+  for (const l of s.lines) {
+    const rows: [string, string][] = [
+      ['État', l.problem ?? `en service : un bus toutes les ${nf(l.headwayMin, 1)} min`],
+      ['Bus en service / demandés, tarif', `${nf(l.activeBuses)} / ${nf(l.buses)}, ${nf(l.fare, 2)} CHF`],
+      ['Boucle, durée d’un tour', `${nf(l.lengthM / 1000, 2)} km, ${nf(l.cycleMin, 1)} min`],
+      ['Voyages par jour', `${nf(l.stats.ridersDay)}${l.stats.refusedDay ? ` (+${nf(l.stats.refusedDay)} refusés)` : ''}`],
+      ['Charge à la pointe', pctOf(l.stats.load)],
+      ['Recettes / coût du mois', `${chf(l.stats.revenueMonth)} / ${chf(l.stats.costMonth)}`],
+      ['Mois dernier (recettes / coût)', `${chf(l.stats.revenueLastMonth)} / ${chf(l.stats.costLastMonth)}`],
+    ];
+    for (const id of l.stopIds) {
+      const st = s.stops.find((q) => q.id === id);
+      if (st) rows.push([`· ${st.name}`, `${nf(st.boardings)} montées, ${nf(st.alightings)} descentes${st.ok ? '' : ' (sans route)'}`]);
+    }
+    out.push({ title: `${l.name}`, rows });
+  }
+  if (!s.lines.length) out.push({ title: 'Aucune ligne', rows: [['Tracer une ligne', 'barre d’outils › Transports › Lignes de bus']] });
+  return out;
+}
+
+export const busPanel: UiPanel = {
+  id: 'bus',
+  title: 'Bus',
+  phase: '2C',
+  mount(root, api) {
+    const doc = root.ownerDocument;
+    let alive = true;
+    const render = (s: BusState): void => {
+      root.replaceChildren();
+      const head = doc.createElement('div');
+      head.className = 'chips';
+      const open = doc.createElement('button');
+      open.className = 'chip';
+      open.type = 'button';
+      open.textContent = 'Tracer ou modifier une ligne';
+      open.dataset['busOpen'] = '1';
+      open.addEventListener('click', () => window.dispatchEvent(new CustomEvent('ui:open-bus-editor')));
+      head.append(open);
+      root.append(head);
+      busLinesView(s).forEach((sec, k) => {
+        const box = doc.createElement('section');
+        box.className = 'panel-section';
+        const h = doc.createElement('h3');
+        h.textContent = sec.title;
+        const line = s.lines[k - 1];
+        if (line) {
+          const dot = doc.createElement('span');
+          dot.textContent = '● ';
+          dot.style.color = line.color;
+          h.prepend(dot);
+        }
+        const dl = doc.createElement('dl');
+        for (const [kk, v] of sec.rows) {
+          const dt = doc.createElement('dt'); dt.textContent = kk;
+          const dd = doc.createElement('dd'); dd.textContent = v;
+          dl.append(dt, dd);
+        }
+        box.append(h, dl);
+        root.append(box);
+      });
+    };
+    const refresh = (): void => {
+      api.command('state').then((r) => { if (alive) render(r as BusState); }).catch((e: unknown) => api.toast(`Bus : ${String(e)}`, 'error'));
+    };
+    refresh();
+    const timer = setInterval(refresh, 2000);
+    return () => { alive = false; clearInterval(timer); };
   },
 };

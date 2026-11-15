@@ -285,8 +285,11 @@ export class BusSystem {
     const r = Math.ceil(reach / STOP_CELL);
     const cand: number[] = [], dist: number[] = [];
     if (!this.flatStop.length) { this.coveredResidents = 0; this.coveredJobs = 0; return; }
+    const assets = ctx.catalog?.assets ?? [];
     for (let i = 0; i < ctx.buildings.count; i++) {
-      if (!st.roadAccess[i] || st.residents[i]! + st.workers[i]! <= 0) continue;
+      // Logements et lieux d'emploi (même encore vides : un emploi libre desservi attire les chômeurs).
+      const a = assets[st.assetIndex[i]!];
+      if (!st.roadAccess[i] || !a || (a.capacity.residents <= 0 && a.capacity.jobs <= 0)) continue;
       const id = st.id[i]!, x = st.x[i]!, z = st.z[i]!;
       const cx = Math.floor(x / STOP_CELL), cz = Math.floor(z / STOP_CELL);
       cand.length = 0; dist.length = 0;

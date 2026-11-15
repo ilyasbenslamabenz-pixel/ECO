@@ -8,8 +8,8 @@ import type { SimReport } from '../sim/sim-protocol';
 import { el, fmt } from './dom';
 
 export interface SatisfactionFactor { key: string; label: string; delta: number }
-export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water' | 'high-rent' | 'need-jobs' | 'need-education';
-export const GROWTH_HINTS: readonly GrowthHint[] = ['need-roads', 'need-zones', 'need-power', 'need-water', 'high-rent', 'need-jobs', 'need-education'];
+export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water' | 'high-rent' | 'need-jobs' | 'need-education' | 'need-transit' | 'traffic-jam';
+export const GROWTH_HINTS: readonly GrowthHint[] = ['need-roads', 'need-zones', 'need-power', 'need-water', 'high-rent', 'need-jobs', 'need-education', 'need-transit', 'traffic-jam'];
 
 /** Champs ajoutés au rapport de démographie par la simulation (facultatifs tant qu'ils n'existent pas partout). */
 interface DemographyExtras {
@@ -84,6 +84,8 @@ export const GROWTH_HINT_FR: Record<GrowthHint, string> = {
   'high-rent': 'Beaucoup de ménages peinent à payer leur loyer : créez des emplois mieux payés et zonez du résidentiel moins cher (Population › Économie)',
   'need-jobs': 'Le chômage est élevé : zonez des commerces, des bureaux ou de l’industrie (Population › Économie)',
   'need-education': 'Les emplois qualifiés manquent de diplômés : construisez des écoles près des logements (Services › Éducation)',
+  'need-transit': 'Des chômeurs ne trouvent aucun emploi à leur portée : reliez leurs quartiers aux zones d’emploi par une ligne de bus (Transports › Lignes de bus)',
+  'traffic-jam': 'Les routes sont saturées : tracez des lignes de bus (Transports › Lignes de bus) pour retirer des voitures, ou élargissez les axes principaux',
 };
 
 /** Conseil d'action pour un facteur négatif (reconnu par sa clé ou son libellé) ; null si aucun conseil fixe. */

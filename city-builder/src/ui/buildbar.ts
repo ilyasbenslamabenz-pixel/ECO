@@ -17,6 +17,7 @@ import { $, el, fmt, money, phaseBadge } from './dom';
 import { iconEl } from './icons';
 import type { ThumbnailSource } from './thumbnails';
 import { zonageDrawer } from './panels/zonage';
+import { busEditor } from './bus-editor';
 import { cardInfo } from './card-info';
 import { renderTerrainDrawer, terrainHint, terrainToolActions } from './terrain-drawer';
 
@@ -58,7 +59,7 @@ export const DRAWER_TABS: Record<CatalogDrawer, Tab[]> = {
     { id: 'autres', label: 'Culte et autres', cats: ['public'], placeable: true, icon: 'church', color: '#d9b77a', filter: (a) => isService(a) && !SERVICE_TAB_KEYS.some((k) => hasSvc(a, k)) },
   ],
   transport: [
-    { id: 'station', label: 'Gares', cats: ['public'], placeable: true, icon: 'station', color: '#4fd1e8', filter: isTransport },
+    { id: 'station', label: 'Gares et dépôts', cats: ['public'], placeable: true, icon: 'station', color: '#4fd1e8', filter: isTransport },
     // Pôles de transport (module hubs) : seules les entrées `hub` du catalogue (Port, Aéroport), pas leurs pièces.
     { id: 'hubs', label: 'Port et aéroport', cats: ['transport'], placeable: true, icon: 'anchor', color: '#4aa8ff', filter: isHub },
   ],
@@ -92,7 +93,6 @@ export const PLANNED: Record<PlannedDrawer | 'transport', { label: string; icon:
     { label: 'Adoucir', icon: 'smooth', color: '#9fc98a', phase: '2B', tip: 'Adoucir les pentes' },
   ],
   transport: [
-    { label: 'Arrêt de bus', icon: 'busstop', color: '#ffb14a', phase: '2C', tip: 'Lignes de bus' },
     { label: 'Tramway', icon: 'tram', color: '#4fd1e8', phase: '2C', tip: 'Réseau de tramway' },
   ],
 };
@@ -232,13 +232,15 @@ export class BuildBar {
   private lastJunction = -2;
   private open: DrawerId | null = null;
   private tab: Record<string, string> = {};
+  /** Onglet « Lignes de bus » ajouté après les onglets du catalogue du tiroir Transports. */
+  private pendingBusChip: HTMLButtonElement | null = null;
 
   constructor(private d: BuildBarDeps) {
     // Active les outils réellement disponibles ; les catégories prévues ouvrent un aperçu grisé (avec leur phase).
     const tips: Record<string, string> = {
       road: 'Routes : 6 types (rue, avenue, boulevard, sens unique, piétonne, autoroute), droites ou courbes', building: 'Bâtiments : maisons, immeubles, tours, commerces, industrie',
       services: 'Services publics : mairie, école, hôpital, pompiers, police…', environment: 'Nature : parcs ; arbres, végétation, mobilier (bientôt)',
-      transport: 'Transports : gare de voyageurs, port et aéroport ; bus, tramway (bientôt)',
+      transport: 'Transports : lignes de bus et dépôts, gare de voyageurs, port et aéroport ; tramway (bientôt)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
       zones: 'Zones : résidentiel, commercial, industriel, bureaux', energy: 'Énergie : centrales, éoliennes, solaire, barrage, postes ; lignes haute tension depuis le tableau de bord',
       water: 'Eau et égouts : pompage, potabilisation, château d’eau, épuration (canalisations le long des routes)', waste: 'Déchets : dépôt de camions-bennes, centre de tri, incinérateur, décharge', terrain: 'Terrain : défricher, quais et remblais, bassins et canaux',
@@ -268,6 +270,8 @@ export class BuildBar {
       if (drawer === 'road') d.tools.setTool('road');
     });
     $('drawer-close').addEventListener('click', () => this.closeDrawer());
+    // Panneau « Bus » du tableau de bord : ouvre l'éditeur de lignes.
+    window.addEventListener('ui:open-bus-editor', () => { this.tab['transport'] = 'bus'; if (this.open === 'transport') this.renderDrawer(); else this.openDrawer('transport'); });
     d.machine.onToolChange(() => this.sync());
     d.machine.onPreview(() => {
       this.syncUndo();
@@ -289,6 +293,7 @@ export class BuildBar {
 
   openDrawer(id: DrawerId): void {
     if (this.open && this.open !== id) DRAWER_PROVIDERS[this.open]?.closed?.();
+    if (this.open === 'transport' && id !== 'transport') busEditor.closed();
     this.open = id;
     this.d.onDrawerOpen?.();
     this.drawer.classList.remove('hidden');
@@ -300,6 +305,7 @@ export class BuildBar {
 
   closeDrawer(): void {
     if (this.open) DRAWER_PROVIDERS[this.open]?.closed?.();
+    busEditor.closed();
     this.open = null;
     this.drawer.classList.add('hidden');
     document.body.classList.remove('drawer-open');
@@ -315,7 +321,27 @@ export class BuildBar {
     this.titleEl.className = `drawer-title ${meta.cls}`;
     this.titleEl.replaceChildren(iconEl(meta.icon), el('span', { text: meta.title }));
     this.body.classList.toggle('road-body', id === 'road');
+    this.body.classList.remove('bus-body');
     if (id === 'road') { this.renderRoads(); return; }
+    // Transports › Lignes de bus : éditeur du module « bus » (src/ui/bus-editor.ts) à la place des cartes.
+    if (id === 'transport') {
+      const bus = el('button', { cls: `chip-tab${this.tab[id] === 'bus' ? ' active' : ''}`, attrs: { role: 'tab', type: 'button', 'aria-selected': String(this.tab[id] === 'bus'), 'data-tab': 'bus', style: '--ic:#ffb14a' } }, iconEl('busstop'), el('span', { text: 'Lignes de bus' }));
+      bus.dataset['tip'] = 'Tracer des lignes de bus : arrêts sur les routes, dans l’ordre ; fréquence, tarif, couleur';
+      bus.addEventListener('click', () => { this.tab[id] = 'bus'; this.renderDrawer(); });
+      if (this.tab[id] === 'bus') {
+        const others = DRAWER_TABS.transport.filter((t) => assetsForTab(this.d.catalog, t).length > 0);
+        for (const t of others) {
+          const b = el('button', { cls: 'chip-tab', attrs: { role: 'tab', type: 'button', 'aria-selected': 'false', 'data-tab': t.id, style: `--ic:${t.color}` } }, iconEl(t.icon), el('span', { text: t.label }));
+          b.addEventListener('click', () => { busEditor.closed(); this.tab[id] = t.id; this.renderDrawer(); });
+          this.tabsEl.append(b);
+        }
+        this.tabsEl.append(bus);
+        busEditor.render({ tabs: this.tabsEl, body: this.body, deps: { tools: this.d.tools, machine: this.d.machine, notify: this.d.notify, openDepots: () => { busEditor.closed(); this.tab[id] = 'station'; this.renderDrawer(); } } });
+        return;
+      }
+      busEditor.closed();
+      this.pendingBusChip = bus;
+    }
     const provider = DRAWER_PROVIDERS[id];
     if (provider) {
       provider.render({ tabs: this.tabsEl, body: this.body, deps: this.d, close: () => this.closeDrawer(), rerender: () => { if (this.open === id) this.renderDrawer(); } });
@@ -351,6 +377,7 @@ export class BuildBar {
       }
       for (const a of assetsForTab(this.d.catalog, current)) this.body.append(this.card(a, current.placeable, current.color));
     }
+    if (id === 'transport' && this.pendingBusChip) { this.tabsEl.append(this.pendingBusChip); this.pendingBusChip = null; }
     if (id === 'transport') for (const p of PLANNED.transport) this.body.append(this.plannedTile(p));
     this.body.scrollLeft = 0;
   }

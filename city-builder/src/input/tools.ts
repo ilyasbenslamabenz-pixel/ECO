@@ -164,7 +164,8 @@ export class ToolController implements IToolController, PointerToolSink {
    * le doigt le tenait) ; ailleurs, la caméra se déplace et un simple tap y amène le bâtiment.
    */
   capturesAt(sx: number, sy: number, type: string): boolean {
-    if (this.override) return true;
+    // Outil d'un module : il décide lui-même (ex. lignes de bus : seulement en partant d'un arrêt, sinon la carte bouge).
+    if (this.override) return this.override.capturesAt?.(sx, sy, type) ?? true;
     const d = this.deps;
     if (!d || type !== 'touch' || this.activeTool !== 'building') return true;
     const pv = d.machine.preview;

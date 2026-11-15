@@ -108,11 +108,14 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
   // sauvegardé avec la démographie, onglet du tableau de bord Population (pas de panneau de module).
   // Alertes (icônes de problèmes) : simulation et rendu, rien de sauvegardé, pas de panneau.
   const alerts = ['services', 'alertes'];
+  // Lignes de bus (vague 3, tests/jeu/bus.test.ts) : simulation, rendu, panneau « Bus » et section de sauvegarde ; sans
+  // ligne, aucun effet (contrôle « modules vides » ci-dessous).
+  const transit = ['bus'];
   assert.deepEqual([...PHASE2_MODULES].sort(), [...ids, ...LATE_MODULES].sort());
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts]);
-  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late, 'alertes', 'secteurs', 'services']);
-  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov.filter((g) => g !== 'ameliorations')]);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late, ...gov]);
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit]);
+  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late, 'alertes', 'secteurs', 'services', ...transit]);
+  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov.filter((g) => g !== 'ameliorations'), ...transit]);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late, ...gov, ...transit]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
   const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];
   for (const p of SIM_PLUGINS) {
@@ -127,7 +130,7 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts]);
+  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit]);
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 
