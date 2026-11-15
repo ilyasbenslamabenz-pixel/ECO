@@ -46,6 +46,8 @@ const CSS = `
 .bus-ed button.line-chip { display: inline-flex; align-items: center; gap: 8px; }
 .bus-ed .dot { width: 16px; height: 16px; border-radius: 50%; display: inline-block; flex: none; border: 2px solid rgba(255,255,255,.7); }
 .bus-ed .sw { width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 3px solid transparent; }
+.bus-ed .row.swatches { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+.bus-ed .sw { flex: none; }
 .bus-ed .sw.on { border-color: #fff; }
 .bus-ed input.name { min-height: 44px; font-size: 16px; border-radius: 10px; padding: 0 10px; flex: 1 1 140px; min-width: 120px; }
 .bus-ed .stepper { display: inline-flex; align-items: center; gap: 6px; }
@@ -238,7 +240,7 @@ export class BusEditor implements PointerToolSink {
   }
 
   private swatches(current: string, pick: (c: string) => void): HTMLElement {
-    const row = el('div', { cls: 'row', attrs: { role: 'radiogroup', 'aria-label': 'Couleur de la ligne' } });
+    const row = el('div', { cls: 'row swatches', attrs: { role: 'radiogroup', 'aria-label': 'Couleur de la ligne' } });
     for (const c of BUS_COLORS) {
       const b = this.btn('', () => pick(c), `sw${c === current ? ' on' : ''}`, { style: `background:${c}`, 'aria-label': `Couleur ${c}`, 'data-color': c });
       row.append(b);
@@ -386,7 +388,7 @@ export class BusEditor implements PointerToolSink {
 
   capturesPrimary(): boolean { return this.mode.kind !== 'list'; }
   /** Le geste n'est pris que s'il commence sur un arrêt (glisser) ; ailleurs, la carte se déplace et un toucher pose. */
-  capturesAt(sx: number, sy: number, type: string): boolean { const h = this.hit(sx, sy, type); this.log(`at ${Math.round(sx)},${Math.round(sy)} hit=${h}`); return h >= 0; }
+  capturesAt(sx: number, sy: number, type: string): boolean { return this.hit(sx, sy, type) >= 0; }
 
   hover(): void { /* rien : les arrêts sont toujours visibles */ }
 
@@ -406,12 +408,7 @@ export class BusEditor implements PointerToolSink {
     this.syncDraftView();
   }
 
-  /** Derniers gestes reçus (diagnostic e2e, 20 au plus). */
-  readonly trace: string[] = [];
-  private log(t: string): void { this.trace.push(t); if (this.trace.length > 20) this.trace.shift(); }
-
   up(sx: number, sy: number, type: string, tap: boolean): void {
-    this.log(`up ${Math.round(sx)},${Math.round(sy)} ${type} tap=${tap} drag=${!!this.drag} hit=${this.hit(sx, sy, type)} mode=${this.mode.kind}`);
     const d = this.drag;
     this.drag = null;
     const m = this.mode;
@@ -452,7 +449,6 @@ export class BusEditor implements PointerToolSink {
     if (m.kind !== 'draft') return;
     try {
       const s = await busCommand<{ x: number; z: number }>('snap', { x, z });
-      this.log(`snap ${Math.round(x)},${Math.round(z)} -> ${Math.round(s.x)},${Math.round(s.z)} same=${this.mode === m}`);
       if (this.mode !== m) return;
       m.stops.push({ x: s.x, z: s.z, ok: true });
       m.selected = -1;
@@ -479,4 +475,3 @@ export class BusEditor implements PointerToolSink {
 }
 
 export const busEditor = new BusEditor();
-if (typeof window !== 'undefined') (window as unknown as { __busEditor?: unknown }).__busEditor = { trace: () => [...busEditor.trace] };

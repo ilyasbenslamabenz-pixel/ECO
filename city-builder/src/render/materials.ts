@@ -107,7 +107,9 @@ export class MaterialLibrary {
     const tex = t;
     tex.name = file;
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.anisotropy = this.anisotropy;
+    // Couleur : anisotropie complète ; normales, rugosité, occlusion : 4 au plus (chaussées et trottoirs, vus très
+    // à plat en vue rue, payaient l'anisotropie maximale à chaque lecture de leurs trois textures).
+    tex.anisotropy = srgb ? this.anisotropy : Math.min(this.anisotropy, 4);
     tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     // Mode allégé : versions réduites générées au build (routes, trottoirs, pavés : 512 px pour rester nets ;
     // autres matériaux : 256 px). Avant : images 1024 px envoyées telles quelles au GPU.

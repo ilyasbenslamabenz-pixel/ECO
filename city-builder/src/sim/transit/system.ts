@@ -145,7 +145,7 @@ export class BusSystem {
     this.lines = [];
     this.nextLineId = 1; this.nextStopId = 1;
     this.routesVersion = -1;
-    this.depots = 0; this.depotCapacity = 0;
+    this.depots = 0; this.depotCapacity = 0; this.depotSigCount = -1; this.depotSigRoads = -1;
     this.structVersion = 0; this.geomVersion = 0; this.sentStruct = 0; this.sentGeom = 0; this.sinceTime = 0; this.clearedSent = true;
     this.covN = new Uint8Array(0); this.covStop = new Int32Array(0); this.covWalk = new Float32Array(0); this.covQ = new Float32Array(0); this.covMask = new Uint32Array(0);
     this.covDay = -1; this.covDirty = true;
@@ -167,8 +167,17 @@ export class BusSystem {
 
   /* ------------------------------- Réseau ------------------------------- */
 
+  /** Signature bâtiments + réseau : dépôts recalculés quand elle change (contrôle en O(1) à chaque tick). */
+  private depotSigCount = -1;
+  private depotSigRoads = -1;
+  private readonly pairs = new Map<number, number>();
+  private syncDepots(ctx: PluginContext): void {
+    if (ctx.buildings.count !== this.depotSigCount || ctx.roads.version !== this.depotSigRoads) this.refreshDepots(ctx);
+  }
+
   /** Dépôts reliés à la route et bus en service par ligne. */
   private refreshDepots(ctx: PluginContext): void {
+    this.depotSigCount = ctx.buildings.count; this.depotSigRoads = ctx.roads.version;
     const st = ctx.buildings.store, assets = ctx.catalog?.assets ?? [];
     let n = 0, cap = 0;
     for (let i = 0; i < ctx.buildings.count; i++) {
@@ -375,10 +384,18 @@ export class BusSystem {
         if (between < 0) between += ns;
         return d / l.speedMpm + ((between + 1) * t.dwellS) / 60;
       };
+      // Navetteurs regroupés par paire (logement, destination) : un calcul par paire, pondéré par son effectif
+      // (ordre d'insertion de la table = ordre des citoyens : sommes déterministes).
+      const pairs = this.pairs;
+      pairs.clear();
       for (let i = 0; i < demo.citizens.count; i++) {
         const tgt = c.job[i]! >= 0 ? c.job[i]! : c.school[i]!;
         if (tgt < 0) continue;
-        const home = c.home[i]!;
+        const key = c.home[i]! * 4294967296 + tgt;
+        pairs.set(key, (pairs.get(key) ?? 0) + 1);
+      }
+      for (const [key, w] of pairs) {
+        const home = Math.floor(key / 4294967296), tgt = key - home * 4294967296;
         const hi = b.indexOf(home), ti = b.indexOf(tgt);
         if (hi < 0 || ti < 0) continue;
         const dist = Math.hypot(b.store.x[hi]! - b.store.x[ti]!, b.store.z[hi]! - b.store.z[ti]!);
@@ -386,8 +403,8 @@ export class BusSystem {
         const carCost = vot * carMin + (t.carCostPerKm * dist * t.carDetour) / 1000 + t.carParkingChf - t.carBonusChf;
         const walkCost = vot * (dist * t.walkDetour) / t.walkMPerMin;
         const eC = Math.exp(-mu * carCost), eW = Math.exp(-mu * walkCost);
-        sumCar0 += eC / (eC + eW); sumWalk0 += eW / (eC + eW);
-        n++;
+        sumCar0 += w * eC / (eC + eW); sumWalk0 += w * eW / (eC + eW);
+        n += w;
         // Meilleur bus : aller (domicile -> destination) et retour, arrêts éventuellement différents, même ligne.
         let pB = 0, gm1 = -1, gm2 = -1, ge1 = -1, ge2 = -1, busCost = Infinity;
         const nh = home < this.covN.length ? this.covN[home]! : 0, nd = tgt < this.covN.length ? this.covN[tgt]! : 0;
@@ -423,8 +440,8 @@ export class BusSystem {
         const eB = Number.isFinite(busCost) ? Math.exp(-mu * busCost) : 0;
         const sum = eC + eW + eB;
         const pC = eC / sum;
-        pB = eB / sum;
-        sumCar += pC; sumWalk += eW / sum;
+        pB = w * eB / sum;
+        sumCar += w * pC; sumWalk += w * eW / sum;
         if (pB > 0) {
           sumBus += pB;
           const li = this.flatLine[gm1]!;
@@ -484,6 +501,7 @@ export class BusSystem {
 
   /** Chaque tick : tracés à jour si le réseau change ; chaque heure : vitesse des voitures, aide de croissance. */
   tick(ctx: PluginContext): void {
+    if (this.lines.length) this.syncDepots(ctx);
     const hour = Math.floor(ctx.clock.totalMinutes / 60);
     if (hour === this.lastHour) {
       if (this.lines.length && this.routesVersion !== ctx.roads.version) { this.ensureRoutes(ctx); this.refreshDepots(ctx); }
@@ -499,7 +517,7 @@ export class BusSystem {
         this.carKmh += (clamp(tr.stats.meanSpeedKmh, 2, 90) - this.carKmh) * 0.15;
         this.updateTimes();
       }
-      if (ctx.clock.hourOfDay < 1) this.refreshDepots(ctx);
+      this.refreshDepots(ctx);
     }
     this.hint = this.evalHint(ctx);
   }
@@ -708,6 +726,8 @@ export class BusSystem {
   }
 
   summary(ctx: PluginContext): BusSummary {
+    // Résultat identique à celui du tick suivant (fonction de l'état du monde seul) : sans effet sur le déterminisme.
+    this.syncDepots(ctx);
     let req = 0, act = 0, riders = 0, stops = 0;
     for (const l of this.lines) { req += l.buses; act += this.running(l) ? l.activeBuses : 0; riders += l.ridersDay; stops += l.stops.length; }
     const r3 = (v: number): number => Math.round(v * 1000) / 1000;

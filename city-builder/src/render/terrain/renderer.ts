@@ -193,6 +193,10 @@ export class TerrainSystem implements IRenderTerrain {
       c.mesh.name = `terrain_${c.cx}_${c.cz}`;
       c.mesh.matrixAutoUpdate = false;
       c.mesh.receiveShadow = true;
+      // Dessiné APRÈS les autres objets opaques (ordre 0 ; eau : 1) : ses pixels recouverts par les routes, les
+      // bâtiments ou les véhicules sont rejetés par le test de profondeur au lieu d'être calculés puis recouverts
+      // (son shader est le plus coûteux ; le tri par programme, src/render/scene.ts, ne le plaçait pas en dernier).
+      c.mesh.renderOrder = 0.5;
       this.group.add(c.mesh);
     }
     c.mesh.castShadow = lod <= 1 && !c.ring;

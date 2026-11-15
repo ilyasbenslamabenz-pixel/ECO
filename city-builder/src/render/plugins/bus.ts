@@ -195,7 +195,16 @@ class BusScene {
     return Math.atan2(bx - ax, bz - az);
   }
 
+  /** Coût CPU moyen de la mise à jour des bus par image (ms, moyenne glissante ; diagnostic). */
+  frameMs = 0;
+
   frame(dt: number): void {
+    const t0 = performance.now();
+    this.updateBuses(dt);
+    this.frameMs += (performance.now() - t0 - this.frameMs) * 0.1;
+  }
+
+  private updateBuses(dt: number): void {
     if (this.speed > 0) this.phys += Math.min(dt, 0.25) * this.speed;
     let k = 0;
     for (const l of this.lines) {
@@ -344,6 +353,7 @@ export function createBusRenderPlugin(): RenderPlugin {
       (window as unknown as { __busRender?: unknown }).__busRender = {
         lines: () => scene?.lineCount ?? 0, stops: () => scene?.stopCount ?? 0, buses: () => scene?.busCount ?? 0,
         draftPoints: () => scene?.draftPoints ?? 0, layerCells: () => scene?.layerCells ?? 0, phys: () => scene?.phys ?? 0,
+        frameMs: () => scene?.frameMs ?? 0, drawCalls: () => (scene ? scene.lineCount + 5 : 0),
       };
     },
     applySnapshotExt(p) { scene?.apply(p as BusDelta | undefined, true); },

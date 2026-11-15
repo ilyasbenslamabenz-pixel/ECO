@@ -293,19 +293,18 @@ export async function initRender(
   };
 
   const camPos = new THREE.Vector3();
+  const steps: [string, (dt: number) => void][] = [
+    ['terrain', () => terrain.update(ctx.camera)], ['eau', (dt) => water.update(dt)], ['ciel', (dt) => sky.update(dt, ctx.camera)],
+    ['végétation', () => veg.update(ctx.camera)], ['routes', () => roads.update(camPos.x, camPos.y, camPos.z)],
+    ['bâtiments', () => buildings.update(camPos.x, camPos.y, camPos.z)], ['feux', () => signals.update(camPos.x, camPos.y, camPos.z)],
+    ['véhicules', (dt) => vehicles.update(dt)], ['modules', (dt) => plugins.frame(dt)],
+  ];
   ctx.onFrame.push((dt) => {
     const t0 = performance.now();
-    const cam = ctx.camera;
-    cam.getWorldPosition(camPos);
-    terrain.update(cam);
-    water.update(dt);
-    sky.update(dt, cam);
-    veg.update(cam);
-    roads.update(camPos.x, camPos.y, camPos.z);
-    buildings.update(camPos.x, camPos.y, camPos.z);
-    signals.update(camPos.x, camPos.y, camPos.z);
-    vehicles.update(dt);
-    plugins.frame(dt);
+    ctx.camera.getWorldPosition(camPos);
+    const tr = ctx.perf.trace;
+    if (tr) for (const [name, f] of steps) { const a = performance.now(); f(dt); tr(`mise à jour : ${name}`, performance.now() - a); }
+    else for (const [, f] of steps) f(dt);
     frameMs = frameMs * 0.9 + (performance.now() - t0) * 0.1;
   });
   return handle;

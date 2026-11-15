@@ -36,7 +36,7 @@ try {
   await send('setSpeed', { speed: 0 });
 
   // 1) Boucle de rues (zone plate repérée par le test mobile existant) et dépôt.
-  const cx = 116, cz = 356, W = 110, H = 50;
+  const cx = 116, cz = 356, W = 110, H = 35;
   for (const p of [[cx - W, cz - H, cx + W, cz - H], [cx - W, cz + H, cx + W, cz + H], [cx - W, cz - H, cx - W, cz + H], [cx + W, cz - H, cx + W, cz + H]]) {
     const r = await send('buildRoad', { type: 'street', kind: 'street', points: p });
     check(r.ok, `rue ${p.join(',')}${r.ok ? '' : ` : ${r.e}`}`);
@@ -52,7 +52,7 @@ try {
   check(depot, 'dépôt de bus posé (catalogue : depot_bus)');
 
   // 2) Tiroir Transports › Lignes de bus, au doigt.
-  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 360, 1.25, 0), [cx, cz]);
+  await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 420, 1.25, 0), [cx, cz]);
   await render(4);
   // Téléphone : famille « Réseaux » puis « Transports » (même tiroir que le bouton de bureau).
   await page.tap('#toolbar button[data-family=reseaux]');
@@ -68,24 +68,25 @@ try {
   let tx = cx, tz = cz;
   for (let it = 0; it < 3; it++) {
     const s0 = await w2s(cx, cz), sx = await w2s(cx + 50, cz), sz = await w2s(cx, cz + 50);
-    const want = { x: 195, y: Math.max(150, drawerTop * 0.55) };
+    const want = { x: 200, y: Math.max(150, drawerTop * 0.56) };
     const a = (sx.x - s0.x) / 50, b = (sz.x - s0.x) / 50, c = (sx.y - s0.y) / 50, d = (sz.y - s0.y) / 50;
     const det = a * d - b * c || 1;
     const ex = s0.x - want.x, ey = s0.y - want.y;
     tx += (d * ex - b * ey) / det; tz += (-c * ex + a * ey) / det;
-    await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 360, 1.25, 0), [tx, tz]);
+    await page.evaluate(([x, z]) => window.__aube.lookAt(x, z, 420, 1.25, 0), [tx, tz]);
     await render(3);
   }
-  const stops = [[cx - 60, cz - H], [cx + 60, cz - H], [cx + 60, cz + H], [cx - 60, cz + H]];
+  const stops = [[cx - 50, cz - H], [cx + 50, cz - H], [cx + 50, cz + H], [cx - 50, cz + H]];
   const targets = await page.evaluate(() => [...document.querySelectorAll('.bus-ed button')].map((b) => { const r = b.getBoundingClientRect(); return { h: r.height, w: r.width, t: b.textContent }; }));
   check(targets.length > 0 && targets.every((t) => t.h >= 44 && t.w >= 44), `boutons de l’éditeur ≥ 44 px (${targets.map((t) => `${Math.round(t.w)}×${Math.round(t.h)}`).join(', ')})`);
   for (const [x, z] of stops) {
     const p = await w2s(x, z);
     check(p.y > 60 && p.y < drawerTop - 10 && p.x > 10 && p.x < 380, `arrêt (${x}, ${z}) visible au-dessus du tiroir : écran ${Math.round(p.x)}, ${Math.round(p.y)} (tiroir à ${Math.round(drawerTop)})`);
-    if (process.env.BUS_DEBUG) console.log('    sous le doigt :', await page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return `${e?.tagName}#${e?.id}.${e?.className}`; }, [p.x, p.y]));
+    const before = await page.evaluate(() => document.querySelector('.bus-ed .note')?.textContent ?? '');
     await page.touchscreen.tap(p.x, p.y);
-    await page.waitForTimeout(600);
-    if (process.env.BUS_DEBUG) console.log('   ', await page.evaluate(() => (document.querySelector('.bus-ed')?.innerText ?? '').slice(0, 30) + ' | ' + JSON.stringify(window.__busEditor?.trace())));
+    // Arrêt posé quand la simulation a répondu (accroche à la route puis aperçu du tracé).
+    await page.waitForFunction((b) => (document.querySelector('.bus-ed .note')?.textContent ?? '') !== b, before, { timeout: 8000, polling: 100 }).catch(() => undefined);
+    await page.waitForTimeout(250);
   }
   const placed = await page.evaluate(() => document.querySelector('.bus-ed .note')?.textContent ?? '');
   check(/^4 arrêts/.test(placed), `quatre arrêts posés au doigt (« ${placed} »)`);
@@ -110,7 +111,7 @@ try {
 
   // 4) Glisser un arrêt au doigt (le long de la rue), puis Annuler.
   const s1 = st.stops.find((q) => q.id === st.lines[0].stopIds[1]);
-  const a = await w2s(s1.x, s1.z), b = await w2s(s1.x - 40, s1.z);
+  const a = await w2s(s1.x, s1.z), b = await w2s(s1.x - 30, s1.z);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: a.x, y: a.y }] });
   for (let k = 1; k <= 8; k++) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: a.x + ((b.x - a.x) * k) / 8, y: a.y + ((b.y - a.y) * k) / 8 }] });
@@ -120,7 +121,7 @@ try {
   await page.waitForTimeout(900);
   st = await bus('state');
   const moved = st.stops.find((q) => q.id === s1.id);
-  check(moved && Math.abs(moved.x - (s1.x - 40)) < 8, `arrêt déplacé au doigt (${Math.round(s1.x)} → ${Math.round(moved?.x)})`);
+  check(moved && Math.abs(moved.x - (s1.x - 30)) < 8, `arrêt déplacé au doigt (${Math.round(s1.x)} → ${Math.round(moved?.x)})`);
   await page.tap('#btn-undo');
   await page.waitForTimeout(900);
   st = await bus('state');
@@ -139,6 +140,15 @@ try {
   const buses = await page.evaluate(() => window.__busRender.buses());
   check(buses === 4, `bus visibles sur la ligne (${buses})`);
   await shot('ligne');
+  // Coût de rendu des bus : 20 bus (capacité du dépôt), mise à jour des instances mesurée sur 30 images.
+  await bus('updateLine', { id: st.lines[0].id, buses: 20 });
+  await send('setSpeed', { speed: 1 });
+  await page.waitForTimeout(1200);
+  await render(30);
+  const cost = await page.evaluate(() => ({ buses: window.__busRender.buses(), ms: window.__busRender.frameMs(), draws: window.__busRender.drawCalls() }));
+  await send('setSpeed', { speed: 0 });
+  console.log(`     coût CPU des bus par image : ${cost.ms.toFixed(3)} ms pour ${cost.buses} bus ; ${cost.draws} appels de dessin du module`);
+  check(cost.buses === 20 && cost.ms < 2, `20 bus mis à jour en ${cost.ms.toFixed(3)} ms par image`);
   check(errors.length === 0, `aucune erreur de page (${errors.length}) ${errors.slice(0, 3).join(' | ')}`);
 } catch (e) {
   console.error(e);

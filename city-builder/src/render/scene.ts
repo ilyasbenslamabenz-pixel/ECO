@@ -33,6 +33,8 @@ export interface RenderPerf {
   adaptive: { min: number; max: number } | null;
   /** Rapport de pixels courant choisi par la résolution adaptative (diagnostic). */
   ratio: number;
+  /** Trace des durées processeur par phase (page de mesure ?bench ; null hors mesure : aucun coût). */
+  trace?: ((phase: string, ms: number) => void) | null;
 }
 
 /** `antialias` : MSAA du contexte (fixé à sa création ; réglage « Anticrénelage », src/ui/options.ts). */
@@ -148,10 +150,14 @@ export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderCo
     lastDraw = now;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
+    const tr = perf.trace;
+    const t0 = tr ? performance.now() : 0;
     for (const f of onFrame) f(dt);
     updateShadows();
+    const t1 = tr ? performance.now() : 0;
     // L'ombre suit la zone regardée par la caméra.
     renderer.render(scene, camera);
+    if (tr) { const t2 = performance.now(); tr('image : mises à jour', t1 - t0); tr('image : rendu three', t2 - t1); }
     frames++;
     if (cap !== 4) adapt(now); else { winStart = now; winFrames = 0; winSlow = 0; lastAdapt = 0; }
   };

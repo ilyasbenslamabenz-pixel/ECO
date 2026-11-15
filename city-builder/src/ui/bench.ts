@@ -40,6 +40,32 @@ let revealSnap: { programs: number; textures: number; geometries: number } | nul
 let firstTimer: ReturnType<typeof setTimeout> | null = null;
 const snap = (r: THREE.WebGLRenderer): { programs: number; textures: number; geometries: number } => ({ programs: r.info.programs?.length ?? 0, textures: r.info.memory.textures, geometries: r.info.memory.geometries });
 
+/** Durées processeur par phase (≥ 0,5 ms) : instant de fin, phase, durée. */
+const traceT: number[] = [], traceMs: number[] = [], tracePh: string[] = [];
+/** Collecteur branché sur `perf.trace` (src/render/scene.ts) et le traitement des messages du worker (src/main.ts). */
+export function benchTrace(phase: string, ms: number): void {
+  if (ms < 0.5) return;
+  if (traceT.length > 200_000) { traceT.splice(0, 100_000); traceMs.splice(0, 100_000); tracePh.splice(0, 100_000); }
+  traceT.push(performance.now()); traceMs.push(ms); tracePh.push(phase);
+}
+/** Ventilation processeur de l'intervalle ]a, b] : phases les plus longues, reste non attribué. */
+function phasesBetween(a: number, b: number): string {
+  const by = new Map<string, number>();
+  let sum = 0;
+  for (let i = 0; i < traceT.length; i++) { const t = traceT[i]!; if (t > a && t <= b) { by.set(tracePh[i]!, (by.get(tracePh[i]!) ?? 0) + traceMs[i]!); sum += traceMs[i]!; } }
+  // Les mises à jour détaillées sont incluses dans « image : mises à jour » : on ne compte pas deux fois.
+  let detail = 0; for (const [k, v] of by) if (k.startsWith('mise à jour')) detail += v;
+  sum -= detail;
+  const top = [...by].sort((x, y) => y[1] - x[1]).slice(0, 5).map(([k, v]) => `${k} ${Math.round(v)} ms`);
+  return `${top.join(', ') || 'aucune phase tracée'} ; non attribué (ramasse-miettes, navigateur…) ${Math.max(0, Math.round(b - a - sum))} ms`;
+}
+/** Plus longue image de ]t0, t1] : durée, instant de fin, ventilation. */
+function longestFrame(t0: number, t1: number): { ms: number; at: number; detail: string } | null {
+  let best = -1, k = -1;
+  for (let i = 1; i < stamps.length; i++) { const t = stamps[i]!; if (t > t0 && t <= t1 && t - stamps[i - 1]! > best) { best = t - stamps[i - 1]!; k = i; } }
+  return k < 0 ? null : { ms: Math.round(best), at: stamps[k]!, detail: phasesBetween(stamps[k - 1]!, stamps[k]!) };
+}
+
 /** Compteurs du rendu relevés au retrait de l'écran de chargement puis 3 s après (page de mesure). */
 export function benchWatchRenderer(r: THREE.WebGLRenderer): void { watched = r; }
 
@@ -114,6 +140,9 @@ export interface LayerBreakdown { view: string; method: string; totalMs: number;
 const LAYER_LABELS: Record<string, string> = {
   batiments: 'Bâtiments', vegetation: 'Végétation', pietons: 'Piétons', vehicules: 'Véhicules', roads: 'Routes et décor routier',
   eau: 'Eau', terrain: 'Terrain', ciel: 'Ciel', feux_tricolores: 'Feux tricolores', decor_urbain: 'Décor urbain',
+  panneaux_carrefours: 'Panneaux de carrefour', 'dechets-camions': 'Camions de déchets', 'dechets-installations': 'Installations de déchets',
+  'dechets-conteneurs': 'Conteneurs de déchets', 'selection-marker': 'Marqueur de sélection', hubs: 'Pôles d\'échanges', electricite: 'Réseau électrique',
+  quais: 'Quais', chantiers: 'Chantiers', zonage: 'Zonage', meteo: 'Météo', 'reseau-eau': 'Réseau d\'eau',
 };
 
 /**
@@ -152,21 +181,32 @@ async function layerBreakdown(h: BenchHost, view: string, n: number, mainOnly = 
   };
   h.pauseRender(true);
   const sm = r.shadowMap, auto = sm.autoUpdate;
+  // Écart image complète − image modifiée, mesurés EN ALTERNANCE (même état de cache, même dérive) et répétés :
+  // médiane des écarts. Le témoin (rien de modifié) donne le bruit de la méthode, soustrait de chaque calque.
+  const reps = Math.max(1, Math.min(3, n));
+  const diff = async (apply: () => void, undo: () => void): Promise<number> => {
+    const d: number[] = [];
+    for (let k = 0; k < reps; k++) { const full = await measure(); apply(); try { d.push(full - (await measure())); } finally { undo(); } }
+    d.sort((x, y) => x - y);
+    return d[Math.floor(d.length / 2)]!;
+  };
   try {
     sm.autoUpdate = true;
     const total = await measure();
+    const floor = await diff(() => undefined, () => undefined);
     const layers: LayerCost[] = [];
     for (const o of h.scene.children) {
       const name = o.name;
       if (!name || !o.visible || (!LAYER_LABELS[name] && (mainOnly || !/^[a-z_-]+$/.test(name)))) continue;
-      o.visible = false;
-      try { layers.push({ layer: LAYER_LABELS[name] ?? name, ms: total - (await measure()), share: 0 }); } finally { o.visible = true; }
+      layers.push({ layer: LAYER_LABELS[name] ?? name, ms: (await diff(() => { o.visible = false; }, () => { o.visible = true; })) - floor, share: 0 });
     }
-    sm.autoUpdate = false; sm.needsUpdate = false;
-    layers.push({ layer: 'Passe d\'ombre (carte d\'ombre)', ms: total - (await measure()), share: 0 });
+    layers.push({ layer: 'Passe d\'ombre (carte d\'ombre)', ms: (await diff(() => { sm.autoUpdate = false; sm.needsUpdate = false; }, () => { sm.autoUpdate = true; })) - floor, share: 0 });
     for (const l of layers) { l.ms = r2(Math.max(0, l.ms)); l.share = total > 0 ? Math.round((100 * l.ms) / total) : 0; }
     layers.sort((a, b) => b.ms - a.ms);
-    return { view, method: ext && layers.length ? 'requêtes de temps GPU (EXT_disjoint_timer_query_webgl2)' : 'temps de rendu attendu (lecture d\'un pixel)', totalMs: r2(total), layers: layers.filter((l) => l.ms > 0.05).slice(0, 12) };
+    return {
+      view, method: `${ext ? 'requêtes de temps GPU (EXT_disjoint_timer_query_webgl2)' : 'temps de rendu attendu (lecture d\'un pixel)'}, ${reps} mesures alternées par calque, témoin ${fmt(r2(floor))} ms soustrait`,
+      totalMs: r2(total), layers: layers.filter((l) => l.ms > 0.05).slice(0, 12),
+    };
   } finally {
     sm.autoUpdate = auto; sm.needsUpdate = true;
     h.pauseRender(false);
@@ -210,6 +250,8 @@ interface SceneResult {
   newPrograms: number; newTextures: number; newGeometries: number;
   /** Instant de la plus longue image (s depuis le début de la mesure). */
   maxAtS: number;
+  /** Ventilation processeur de la plus longue image. */
+  maxDetail: string | null;
 }
 
 export interface BenchResult {
@@ -217,7 +259,9 @@ export interface BenchResult {
   env: Record<string, string | number | boolean>;
   load: { playableS: number; maxLoadFrameMs: number; maxFirstFramesMs: number; framesOver100Load: number; firstFramesOver100: number;
     /** Pendant les 3 premières secondes de jeu : shaders compilés, textures et géométries nouvellement envoyées. */
-    firstPrograms: number | null; firstTextures: number | null; firstGeometries: number | null };
+    firstPrograms: number | null; firstTextures: number | null; firstGeometries: number | null;
+    /** Ventilation processeur de la plus longue des premières images. */
+    firstDetail: string | null };
   scenes: SceneResult[];
   /** Coût GPU par calque (vues aérienne et rue). */
   breakdown: LayerBreakdown[];
@@ -319,7 +363,7 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     // Parcours court (tests, rendu logiciel très lent) : vue rue seule, calques principaux, une mesure par calque.
     if (sc.id === 'rue' || (sc.id === 'aerien' && !opts.short)) {
       badge(`Mesure : ${i + 1}/${SCENES.length} — coût par calque (${sc.label})`);
-      try { breakdown.push(await layerBreakdown(h, sc.label, opts.short ? 1 : 8, opts.short)); } catch (e) { warnings.push(`Coût par calque indisponible : ${String(e)}`); }
+      try { breakdown.push(await layerBreakdown(h, sc.label, opts.short ? 1 : 4, opts.short)); } catch (e) { warnings.push(`Coût par calque indisponible : ${String(e)}`); }
     }
     frameHooks.splice(frameHooks.indexOf(hook), 1);
     const s = [...iv].sort((a, b) => a - b);
@@ -336,14 +380,14 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       calls: samples ? Math.round(calls / samples) : 0, triangles: samples ? Math.round(tris / samples) : 0,
       renderW: buf.x, renderH: buf.y,
       ratioMin: Number.isFinite(ratioMin) ? r2(ratioMin) : r2(h.pixelRatio()), ratioMax: ratioMax > 0 ? r2(ratioMax) : r2(h.pixelRatio()),
-      newPrograms, newTextures, newGeometries, maxAtS: r1(maxAt / 1000),
+      newPrograms, newTextures, newGeometries, maxAtS: r1(maxAt / 1000), maxDetail: longestFrame(t0, t1)?.detail ?? null,
     });
   }
   await h.setSpeed(1).catch(() => undefined);
   h.setCamera('demo-aerial');
   badge(null);
   if (h.safeMode) warnings.push(`Mode sûr actif (affichage allégé, qualité basse) : ${h.safeMode}. Les liens « Relancer en … » ci-dessous le retirent.`);
-  for (const s of scenes) if (s.maxMs > 100) warnings.push(`${s.label} : image de ${fmt(s.maxMs)} ms à ${fmt(s.maxAtS)} s ; pendant la scène, ${s.newPrograms} shader(s) compilé(s), ${s.newTextures} texture(s) et ${s.newGeometries} géométrie(s) envoyées.`);
+  for (const s of scenes) if (s.maxMs > 100) warnings.push(`${s.label} : image de ${fmt(s.maxMs)} ms à ${fmt(s.maxAtS)} s ; pendant la scène, ${s.newPrograms} shader(s) compilé(s), ${s.newTextures} texture(s) et ${s.newGeometries} géométrie(s) envoyées. Processeur pendant cette image : ${s.maxDetail ?? '—'}.`);
   if (hiddenSeen && !startHidden) warnings.push('Onglet masqué pendant la mesure : résultats faussés (le navigateur ralentit les onglets cachés).');
   if (scenes.some((s) => s.ratioMin !== s.ratioMax)) warnings.push('Résolution adaptative (qualité « auto ») : la résolution de rendu a changé pendant au moins une scène.');
   const g = gpuInfo(h.renderer);
@@ -368,6 +412,7 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       maxLoadFrameMs: Math.round(Math.max(0, ...loadIv)), framesOver100Load: loadIv.filter((v) => v > 100).length,
       maxFirstFramesMs: Math.round(Math.max(0, ...firstIv)), firstFramesOver100: firstIv.filter((v) => v > 100).length,
       firstPrograms: firstCounts?.programs ?? null, firstTextures: firstCounts?.textures ?? null, firstGeometries: firstCounts?.geometries ?? null,
+      firstDetail: longestFrame(readyAt, firstEnd)?.detail ?? null,
     },
     scenes, breakdown, warnings,
   };
@@ -401,6 +446,7 @@ export function resultsText(r: BenchResult): string {
     `Navigateur : ${e['navigateur']} sur ${e['systeme']} · ${e['coeursProcesseur']} cœurs`,
     `Écran ${e['ecran']} · fenêtre ${e['fenetre']} · densité ${e['densitePixels']} · qualité ${e['qualite']}${e['modeAllege'] ? ' (allégé)' : ''}${e['modeSur'] ? ' (mode sûr)' : ''} · lots par matériau ${e['lotsParMateriau'] ? 'oui' : 'non'} · ombres ${e['carteOmbre']} · résolution dynamique ${e['resolutionDynamique']} · antialiasing ${e['antialiasing']}`,
     `Chargement : jouable en ${fmt(r.load.playableS)} s · plus longue image au chargement ${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms) · premières images ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms ; ${fmt(r.load.firstPrograms)} shaders / ${fmt(r.load.firstTextures)} textures / ${fmt(r.load.firstGeometries)} géométries)`,
+    `Plus longue des premières images, processeur : ${r.load.firstDetail ?? '—'}`,
     '',
     'Scène | img/s méd. | img/s moy. | p95 ms | p99 ms | max ms (à s) | > 33 ms | CPU màj+rendu ms | appels | triangles | rendu px (ratio) | nouveaux shaders/textures/géom.',
   ];
@@ -463,6 +509,7 @@ function showResults(r: BenchResult): void {
       ${kv('Jouable après', `${fmt(r.load.playableS)} s`)}
       ${kv('Plus longue image au chargement', `${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms)`)}
       ${kv('Premières images de jeu (3 s)', `max ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms) · ${fmt(r.load.firstPrograms)} shaders / ${fmt(r.load.firstTextures)} tex. / ${fmt(r.load.firstGeometries)} géom.`)}
+      ${kv('Plus longue des premières images, processeur', r.load.firstDetail ?? '—')}
     </div>
     <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:960px">
       <thead><tr><th ${th.replace('right', 'left')}>Scène</th><th ${th}>img/s<br>médiane</th><th ${th}>img/s<br>moyenne</th><th ${th}>p95<br>ms</th><th ${th}>p99<br>ms</th><th ${th}>plus longue<br>ms</th><th ${th}>images<br>&gt; 33 ms</th><th ${th}>CPU ms<br>màj + rendu</th><th ${th}>appels de<br>dessin</th><th ${th}>triangles</th><th ${th}>rendu px<br>(densité)</th><th ${th}>nouveaux<br>shaders / tex. / géom.</th></tr></thead>

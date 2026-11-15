@@ -520,6 +520,9 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       g.computeBoundingSphere();
       const mesh = new THREE.Mesh(g, this.materials.get(layer)!);
       mesh.name = `roads_${layer}`;
+      // Surfaces dessinées après les objets ordinaires (véhicules, arbres, décor : ordre 0) et avant le terrain (0,5) :
+      // leurs pixels cachés sont rejetés par le test de profondeur au lieu d'être calculés puis recouverts.
+      mesh.renderOrder = 0.25;
       mesh.receiveShadow = true;
       mesh.castShadow = layer === 'concrete' || layer === 'curb' || layer === 'metal';
       c.group.add(mesh);

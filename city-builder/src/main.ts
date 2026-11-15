@@ -29,7 +29,7 @@ import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
 import { applyGraphicsOptions, applyTheme, loadOptions, urlQuality, wantMsaa } from './ui/options';
-import { benchMode, benchWatchRenderer, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
+import { benchMode, benchTrace, benchWatchRenderer, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
 import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
 import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
 import { autoPrefixFor } from './save/autosave';
@@ -251,7 +251,7 @@ async function boot(): Promise<void> {
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const render = await initRender(canvas, lib, catalog, assetsBase, undefined, ui.currentOptions().quality,
     wantMsaa(ui.currentOptions(), window.devicePixelRatio || 1, bootProfile.lite, bootProfile.maxPixelRatio));
-  if (bench) benchWatchRenderer(render.ctx.renderer);
+  if (bench) { benchWatchRenderer(render.ctx.renderer); render.ctx.perf.trace = benchTrace; }
   debug.frames = () => render.ctx.frames;
   debug.renderStats = () => render.stats();
   debug.gpuMemory = () => estimateGpuMemory(render.ctx.scene, render.ctx.renderer);
@@ -543,7 +543,9 @@ async function boot(): Promise<void> {
     debug.deltas++;
     // Copie pour les tests (les tampons sont ensuite confiés au rendu) : quelques centaines de nombres par trame.
     if (debug.trackVehicles && d.vehicles) debug.lastVehicles = { tick: d.tick, ids: Array.from(d.vehicles.ids ?? []), positions: Array.from(d.vehicles.positions.subarray(0, d.vehicles.count * 4)) };
+    const tr = render.ctx.perf.trace, ta = tr ? performance.now() : 0;
     render.applyDelta(d);
+    const tb = tr ? performance.now() : 0;
     if (d.ext) ui.moduleDelta(d.ext);
     state.stats = d.stats;
     debug.lastStats = d.stats;
@@ -559,6 +561,7 @@ async function boot(): Promise<void> {
         if (seenNotices.size > 1 && state.inGame) ui.toast(n.message, n.level === 'info' ? 'info' : 'error');
       }
     }
+    if (tr) { const tc = performance.now(); tr('simulation reçue : rendu', tb - ta); tr('simulation reçue : interface', tc - tb); }
   });
   await b.ready;
   debug.workerReady = true;
