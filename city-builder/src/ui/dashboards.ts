@@ -116,6 +116,10 @@ export class Dashboards {
     const b = $('notif-badge');
     b.textContent = n > 99 ? '99+' : String(n);
     b.classList.toggle('hidden', n === 0);
+    // Barre compacte du téléphone : pastille sur le bouton du menu latéral et compteur dans le menu.
+    $('btn-sidebar').classList.toggle('has-notif', n > 0);
+    const sb = document.getElementById('sb-notif-badge');
+    if (sb) { sb.textContent = b.textContent; sb.classList.toggle('hidden', n === 0); }
     $('btn-notif').setAttribute('aria-label', n ? `Notifications (${n} non lues)` : 'Notifications');
   }
 

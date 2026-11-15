@@ -242,7 +242,17 @@ export function initUI(h: UIHandlers): UIHandle {
   });
   $('btn-menu').addEventListener('click', () => h.onMenu());
   const speedButtons = Array.from(hud.querySelectorAll<HTMLButtonElement>('[data-speed]'));
-  for (const b of speedButtons) b.addEventListener('click', () => h.onSpeed(Number(b.dataset['speed']) as SimSpeed));
+  // Pause : un second appui reprend à la dernière vitesse ; bouton « vitesse suivante » (barre compacte du téléphone).
+  let lastSpeed: SimSpeed = 1;
+  for (const b of speedButtons) b.addEventListener('click', () => { const v = Number(b.dataset['speed']) as SimSpeed; h.onSpeed(v === 0 && currentSpeed === 0 ? lastSpeed : v); });
+  $('spd-cycle').addEventListener('click', () => {
+    const order: SimSpeed[] = [1, 2, 4, 8, 16];
+    h.onSpeed(currentSpeed === 0 ? lastSpeed : order[(order.indexOf(currentSpeed as SimSpeed) + 1) % order.length]!);
+  });
+  // Raccourcis du menu latéral (téléphone) vers les boutons de la barre du haut.
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#sidebar [data-proxy]'))) {
+    b.addEventListener('click', () => { $('sidebar').classList.add('hidden'); $('sidebar-scrim').classList.add('hidden'); $(b.dataset['proxy']!).click(); });
+  }
 
   /* ---------- Panneaux de droite : un seul ouvert à la fois ---------- */
   const history = new FinanceHistory();
@@ -443,7 +453,8 @@ export function initUI(h: UIHandlers): UIHandle {
       const d = s.date;
       elDay.textContent = `${d.day} ${MONTHS_SHORT[d.month - 1] ?? ''} an ${d.year}`;
       elClock.textContent = `${String(d.hour).padStart(2, '0')}:${String(d.minute).padStart(2, '0')}`;
-      elMoney.textContent = moneyShort(s.money);
+      // Téléphone (barre sur une ligne) : montant compact dès 10 000 (« 509 k CHF »).
+      elMoney.textContent = matchMedia('(max-width: 760px)').matches && Math.abs(s.money) >= 1e4 ? signedShort(s.money).replace(/^\+/, '').replace(/\s*CHF$/, '') : moneyShort(s.money);
       elMoney.classList.toggle('neg', s.money < 0);
       // Argent gagné ou perdu à chaque heure de jeu (versé heure par heure par la simulation : 720 h par mois).
       // Argent réellement versé chaque heure (les emprunts sont remboursés en une fois en fin de mois).
@@ -452,8 +463,14 @@ export function initUI(h: UIHandlers): UIHandle {
       elBalance.replaceChildren(perHour, el('span', { cls: 'per', text: ' / h' }));
       elBalance.classList.toggle('neg', h < 0);
       elBalance.classList.toggle('pos', h > 0);
-      elPop.textContent = fmt(s.population);
+      const phoneBar = matchMedia('(max-width: 760px)').matches;
+      // Téléphone : habitants compacts dès 1 000 (« 2,9 k »).
+      elPop.textContent = phoneBar && s.population >= 1000 ? `${(s.population / 1000).toLocaleString('fr-FR', { maximumFractionDigits: s.population >= 1e5 ? 0 : 1 })}k` : fmt(s.population);
       currentSpeed = s.speed;
+      if (s.speed !== 0) lastSpeed = s.speed;
+      const cyc = $('spd-cycle');
+      cyc.textContent = `×${s.speed === 0 ? lastSpeed : s.speed}`;
+      cyc.classList.toggle('paused', s.speed === 0);
       for (const b of speedButtons) { const on = Number(b.dataset['speed']) === s.speed; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); }
       const newDay = history.push(s);
       // Panneau Finances : trésorerie à jour, sans redessiner les graphiques à chaque delta (≤ 2 fois/s).

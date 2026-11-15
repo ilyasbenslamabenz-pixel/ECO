@@ -703,3 +703,67 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 #layers-pop .layer-check { width: 100%; margin-top: 8px; }
 #btn-layers.active { color: #c9f7dc; background: rgba(79,209,139,.18); }
 @media (max-width: 760px) { #layers-pop { bottom: calc(196px + env(safe-area-inset-bottom, 0px)); } }
+
+/* ===================== Interface compacte du téléphone (inspiration city-builders modernes) ===================== */
+.spd-cycle, [data-family], #family-pop { display: none; }
+#sidebar .sb-extra { display: none; }
+@media (max-width: 760px) {
+  /* Barre du haut sur UNE ligne : habitants, satisfaction, demande, trésorerie, pause, vitesse. Le reste est dans le menu latéral. */
+  #hud { flex-wrap: nowrap !important; row-gap: 0 !important; column-gap: 4px !important; align-items: stretch; }
+  #hud .hud-brand, #hud .hud-actions, #hud-date { display: none !important; }
+  #hud > #hud-pop-btn { order: 1; flex: 1 1 0 !important; min-width: 0; padding: 3px 5px; overflow: hidden; }
+  #hud-pop-delta { display: none !important; }
+  #hud > .hud-stat svg.ic { width: 19px; height: 19px; flex: 0 0 auto; }
+  #hud > #hud-happy-btn, #hud > #hud-money-btn { overflow: hidden; }
+  #hud > #hud-happy-btn { order: 2; flex: 0 1 auto !important; padding: 3px 6px; }
+  #hud > #hud-demand-btn { order: 3; flex: 0 0 auto !important; }
+  #hud > #hud-money-btn { order: 4; flex: 1.5 1 0 !important; min-width: 0; padding: 3px 6px; }
+  #hud-money-btn > svg.ic { display: none; }
+  #hud .speed { order: 5; flex: 0 0 auto !important; display: flex; margin: 0; }
+  #hud .speed button { display: none !important; }
+  #hud .speed button[data-speed="0"], #hud .speed .spd-cycle { display: inline-flex !important; min-width: 38px; padding: 2px; align-items: center; justify-content: center; font-weight: 700; }
+  #hud .speed .spd-cycle.paused { opacity: .55; }
+  #btn-sidebar { order: 0; position: relative; }
+  #btn-sidebar.has-notif::after { content: ''; position: absolute; top: 6px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px #10151c; }
+  #sidebar .sb-extra { display: grid; grid-template-columns: 1fr; gap: 2px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  #sidebar .sb-extra button { position: relative; }
+  #sidebar .sb-extra .badge { position: absolute; top: 4px; right: 6px; }
+  body.tool-opts #hud-pop-btn, body.tool-opts #hud-happy-btn { display: none !important; }
+
+  /* Outils : une seule rangée — Réseaux (énergie, eau, déchets, transports) et Paysage (nature, terrain) regroupés. */
+  #toolbar button[data-cat="energy"], #toolbar button[data-cat="water"], #toolbar button[data-cat="waste"],
+  #toolbar button[data-cat="transport"], #toolbar button[data-cat="environment"], #toolbar button[data-cat="terrain"] { display: none !important; }
+  #toolbar [data-family] { display: inline-flex; }
+  #toolbar { display: flex !important; flex-wrap: nowrap !important; overflow: hidden; }
+  #toolbar .tb-sep { display: none; }
+  #toolbar button { flex: 1 1 0; min-width: 0 !important; width: auto !important; padding: 4px 1px; font-size: 10px; }
+  #toolbar button .tl { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  #family-pop:not(.hidden) { display: flex; position: fixed; left: 8px; right: 8px; bottom: calc(86px + env(safe-area-inset-bottom, 0px)); z-index: 45; gap: 6px; padding: 8px;
+    background: var(--glass); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  #family-pop button { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 58px; border-radius: 12px; background: rgba(255,255,255,.05); font-size: 11.5px; color: var(--ic, #e6edf3); }
+  #family-pop button svg.ic { width: 22px; height: 22px; color: var(--ic, currentColor); }
+
+  /* Aide de l'outil : une ligne (toucher pour tout lire). */
+  #tool-hint { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  #tool-hint.open { -webkit-line-clamp: unset; }
+
+  /* Notifications : une ligne compacte, toucher pour ouvrir le journal. */
+  #toasts .toast { padding: 6px 10px; font-size: 12.5px; min-height: 0; border-radius: 12px; }
+  #toasts .toast > span:last-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* Fiche d'un bâtiment : vignette réduite (la ville reste visible). */
+  .info-thumb { aspect-ratio: 16/7; }
+}
+
+@media (max-width: 760px) {
+  /* Libellés courts de la barre d'outils sur une rangée (9 boutons). */
+  #toolbar button .tl { font-size: 9px !important; letter-spacing: -0.03em; text-overflow: clip !important; }
+  #toolbar button[data-tool="select"] .tl, #toolbar button[data-tool="building"] .tl { font-size: 0 !important; }
+  #toolbar button[data-tool="select"] .tl::after { content: 'Choisir'; font-size: 9.5px; }
+  #toolbar button[data-tool="building"] .tl::after { content: 'Bâtir'; font-size: 9.5px; }
+  #hud-money { font-size: 13px; }
+  #hud > #hud-pop-btn { flex: 0 0 auto !important; }
+  #hud > #hud-happy-btn { padding: 3px 5px; }
+  #hud .speed button[data-speed="0"], #hud .speed .spd-cycle { min-width: 40px !important; }
+  #hud > .hud-stat { column-gap: 3px; }
+}

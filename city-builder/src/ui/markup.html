@@ -112,6 +112,7 @@
     <button data-speed="4" data-tip="Vitesse ×4 (touche 3)" aria-label="Vitesse 4" class="spd-x">×4</button>
     <button data-speed="8" class="spd-x" data-tip="Vitesse ×8 (touche 4) — un mois de jeu en 9 min" aria-label="Vitesse 8">×8</button>
     <button data-speed="16" class="spd-x" data-tip="Vitesse ×16 (touche 5) — un mois de jeu en 4 min 30" aria-label="Vitesse 16">×16</button>
+    <button id="spd-cycle" class="spd-cycle" data-tip="Vitesse suivante (×1 → ×2 → ×4 → ×8 → ×16)" aria-label="Changer de vitesse">×1</button>
   </div>
   <div id="hud-date" class="hud-time" data-tip="Date de la partie (calendrier de 30 jours par mois)"><span id="hud-day" class="day"></span><span id="hud-clock" class="clock"></span></div>
   <div id="hud-weather" class="hud-stat soon" data-tip="Météo simulée : phase 2C (atmosphère, saisons). Aucune valeur affichée tant qu'elle n'est pas simulée." aria-disabled="true">
@@ -150,8 +151,15 @@
   <button data-dash="environment" data-tip="Environnement : pollution, attractivité, espaces verts"><i data-icon="leaf"></i><span class="tl">Environnement</span></button>
   <button data-dash="policy" data-tip="Politiques publiques : aides, filtres industriels, sobriété, tri, restrictions d’eau…"><i data-icon="policy"></i><span class="tl">Politiques</span></button>
   <button data-dash="research" data-tip="Recherche municipale : projets qui améliorent la ville (points des écoles et du budget)"><i data-icon="research"></i><span class="tl">Recherche</span></button>
+  <div class="sb-extra">
+    <button data-proxy="btn-notif" data-tip="Notifications"><i data-icon="bell"></i><span class="tl">Notifications</span><span id="sb-notif-badge" class="badge hidden">0</span></button>
+    <button data-proxy="btn-stats" data-tip="Statistiques mensuelles"><i data-icon="stats"></i><span class="tl">Statistiques</span></button>
+    <button data-proxy="btn-save" data-tip="Sauvegarder"><i data-icon="save"></i><span class="tl">Sauvegarder</span></button>
+    <button data-proxy="btn-menu" data-tip="Menu et réglages"><i data-icon="gear"></i><span class="tl">Réglages</span></button>
+  </div>
 </nav>
 <div id="sidebar-scrim" class="hidden"></div>
+<div id="family-pop" class="hidden" role="menu" aria-label="Outils"></div>
 
 <!-- ======================= Bas d'écran : mini-carte, outils, objectifs ======================= -->
 <div id="bottom" class="hidden">
@@ -199,6 +207,8 @@
       <button data-cat="transport" class="t-transport" disabled data-tip="Transports"><i data-icon="transport"></i><span class="tl">Transports</span></button>
       <button data-cat="environment" class="t-nature" disabled data-tip="Nature"><i data-icon="tree"></i><span class="tl">Nature</span></button>
       <button data-cat="terrain" class="t-terrain soon" disabled data-tip="Terraformation : phase 2B"><i data-icon="terrain"></i><span class="tl">Terrain</span><span class="phase">2B</span></button>
+      <button data-family="reseaux" class="t-family t-energy" data-tip="Réseaux : énergie, eau, déchets, transports"><i data-icon="pylon"></i><span class="tl">Réseaux</span></button>
+      <button data-family="paysage" class="t-family t-nature" data-tip="Paysage : nature et terrain"><i data-icon="terrain"></i><span class="tl">Paysage</span></button>
       <span class="tb-sep" aria-hidden="true"></span>
       <button data-tool="bulldoze" class="t-demolish" disabled data-tip="Démolir"><i data-icon="demolish"></i><span class="tl">Démolir</span></button>
       <button id="btn-undo" class="t-undo" disabled data-tip="Annuler la dernière action (Ctrl+Z)"><i data-icon="undo"></i><span class="tl">Annuler</span></button>

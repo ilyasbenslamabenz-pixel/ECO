@@ -25,6 +25,9 @@ export function clearLog(): void { notifyLog.length = 0; unread = 0; for (const 
 
 export function toast(raw: string, kind: NotifyKind = 'info', ms = 4200): void {
   const text = chfText(raw);
+  // Téléphone : une seule notification à la fois, plus brève (le détail reste dans la cloche).
+  const phone = typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches;
+  if (phone && kind !== 'error') ms = Math.min(ms, 2800);
   // Journal : un message identique consécutif est regroupé (compteur).
   const last = notifyLog[notifyLog.length - 1];
   if (last && last.text === text) { last.count++; last.at = Date.now(); } else notifyLog.push({ text, kind, at: Date.now(), count: 1 });
@@ -39,8 +42,9 @@ export function toast(raw: string, kind: NotifyKind = 'info', ms = 4200): void {
   const t = el('div', { cls: `toast ${kind}`, attrs: { role: kind === 'error' ? 'alert' : 'status' } }, el('span', { cls: 'tico' }, iconEl(ICONS[kind])), el('span', { text }));
   t.dataset['text'] = text;
   t.dataset['until'] = String(Date.now() + ms);
+  if (phone) t.addEventListener('click', () => document.getElementById('btn-notif')?.click());
   box.appendChild(t);
-  while (box.children.length > MAX) box.firstElementChild?.remove();
+  while (box.children.length > (phone ? 1 : MAX)) box.firstElementChild?.remove();
   const tick = (): void => {
     if (!t.isConnected) return;
     if (Date.now() < Number(t.dataset['until'])) { setTimeout(tick, 300); return; }
