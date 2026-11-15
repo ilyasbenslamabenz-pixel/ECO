@@ -487,6 +487,8 @@ async function boot(): Promise<void> {
   (debug as unknown as Record<string, unknown>).selectBuilding = (id: number) => { const r = cons.machine.mirror.buildings.get(id); if (r) cons.machine.onSelect({ kind: 'building', id, record: r, asset: cons.machine.mirror.asset(r.assetId), distance: 0 }); return !!r; };
   // Diagnostic (e2e) : outil Déplacer sur un bâtiment donné.
   (debug as unknown as Record<string, unknown>).startMove = (id: number) => { const r = cons.machine.mirror.buildings.get(id); return r ? cons.machine.startMove(r) : false; };
+  // Diagnostic (e2e) : notification par le même chemin que la simulation et les outils (journal, regroupement, badge).
+  (debug as unknown as Record<string, unknown>).toast = (text: string, kind?: 'info' | 'ok' | 'error') => ui.toast(text, kind ?? 'info');
   debug.worldToScreen = (x, z) => {
     const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);
     const r = canvas.getBoundingClientRect();

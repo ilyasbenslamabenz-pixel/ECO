@@ -193,6 +193,25 @@ test('historique : la simulation relève chaque jour, sauvegarde et recharge à 
   assert.equal(ser.bars[0]!.bars.length, st.state.months.length / 2);
 });
 
+test('historique et cartes : sans effet sur la simulation (mêmes résultats sans ces modules)', async () => {
+  const { Simulation } = await import('../../src/sim/world');
+  const { createSimPlugins } = await import('../../src/sim/plugins');
+  const { townCatalog } = await import('../sim/fixtures');
+  const mk = (drop: boolean): Simulation => {
+    const s = new Simulation(createSimPlugins().filter((p) => !drop || (p.id !== 'historique' && p.id !== 'cartes')));
+    s.setCatalog(townCatalog());
+    s.newGame({ seed: 1234, mapChunks: 4, startMoney: 50_000_000, cityName: 'Bourg-Test', terrain: { hydrology: 'aucune', rivers: 0 } });
+    buildTown(s);
+    return s;
+  };
+  const a = mk(false), b = mk(true);
+  cmd(a, 'cartes', 'calque', { kind: 'satisfaction' });
+  for (let d = 0; d < 35; d++) { runDays(a, 1, 10); runDays(b, 1, 10); a.takeDelta(); b.takeDelta(); }
+  assert.equal(a.economy.money, b.economy.money);
+  assert.equal(a.demography!.population, b.demography!.population);
+  assert.deepEqual(a.rng.getState(), b.rng.getState());
+});
+
 /* ------------------------------ Notifications ------------------------------ */
 
 test('notifications : doublons regroupés, gravité, badge limité aux importantes, tout marquer comme lu', () => {

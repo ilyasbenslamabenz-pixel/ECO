@@ -189,9 +189,10 @@ export interface WasteSummary {
 
 /**
  * Plus petite fréquence hebdomadaire dont le plus long intervalle entre deux collectes tient dans la réserve des bacs
- * (`storageDays`) : en dessous, les bacs débordent avant le passage suivant. Mesure (tests/dechets/scenario-joueur) :
- * 1 passage/semaine -> débordements massifs ; 2 -> aucun débordement mais bacs pleins à ~100 % la veille du passage ;
- * 3 (réglage par défaut) -> aucun débordement, bacs à 75 % au plus.
+ * (`storageDays`) : en dessous, les bacs débordent avant le passage suivant. Mesure sur 30 jours (ville du scénario
+ * tests/dechets/scenario-joueur.test.ts, 65 producteurs, 1,5 t/j) : 1 passage/semaine -> 15,9 t non collectées ;
+ * 2 -> 0 kg, mais bacs à 88 % de leur capacité totale à minuit la veille d'un passage ; 3 (réglage par défaut,
+ * conservé) -> 0 kg, 68 % au plus.
  */
 export function recommendedCollectsPerWeek(storageDays: number = WASTE_PARAMS.storageDays): number {
   for (let n = 1; n <= 7; n++) {
