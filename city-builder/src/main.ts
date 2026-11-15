@@ -822,6 +822,8 @@ async function boot(): Promise<void> {
       render.veg.plant(city.decor.filter((d) => vegIds.has(d.assetId)).map((d) => ({ x: d.x, z: d.z, assetId: d.assetId })));
       await props.add(city.decor.filter((d) => !vegIds.has(d.assetId)), H);
       await render.whenReady(true);
+      ui.setLoading(0.88, 'Préparation des shaders et des textures…');
+      await render.precompile();
       startLoop();
       const [ax, az] = city.views.aerial;
       demoViews = { ax, az, street: city.views.street };
@@ -831,6 +833,7 @@ async function boot(): Promise<void> {
       // Première image rendue sous l'écran de chargement (envois de textures et de géométrie, derniers shaders) :
       // pas d'image figée juste après son retrait.
       if (!render.profile.lite) {
+        ui.setLoading(0.95, 'Première image…');
         // Aussi la vue rue et la vue large (LOD proches, terrain lointain, leurs textures et shaders), puis retour :
         // le premier passage dans ces vues ne fige plus l'image (mesures de la page ?bench).
         setDemoCamera('street'); render.ctx.renderNow(1 / 60);
@@ -865,6 +868,7 @@ async function boot(): Promise<void> {
       const city = await b.sendExt('buildCity', { preset: 'stress', maxBuildings: Number(params.get('n') ?? 500), vehicles: Number(params.get('v') ?? 1000) });
       await snap;
       await render.whenReady(true);
+      await render.precompile();
       startLoop();
       const [ax, az] = city.views.aerial;
       demoViews = { ax, az, street: city.views.street };

@@ -170,6 +170,21 @@ export async function initRender(
     roads.setDecorObstacles(xz, layout.nodeIds);
   };
 
+  /** Groupes de petits objets dont l'ombre est coupée en vue aérienne lointaine. */
+  const SMALL_SHADOW_GROUPS = new Set(['feux_tricolores', 'decor_urbain', 'pietons', 'dechets-conteneurs', 'panneaux_carrefours']);
+  let smallShadowsOff = false, smallShadowTick = 0;
+  const setSmallShadows = (on: boolean): void => {
+    for (const g of ctx.scene.children) {
+      if (!SMALL_SHADOW_GROUPS.has(g.name)) continue;
+      g.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        if (!on) { if (m.castShadow) { m.userData['ombreCoupee'] = true; m.castShadow = false; } }
+        else if (m.userData['ombreCoupee']) { m.castShadow = true; delete m.userData['ombreCoupee']; }
+      });
+    }
+  };
+
   const handle: RenderHandle = {
     ctx, profile, sky, terrain, water, roads, buildings, vehicles, signals, veg, quays, plugins,
     disposePlugins() { plugins.dispose(); },
@@ -191,6 +206,9 @@ export async function initRender(
       signals.setNight(n);
     },
     followView(p) {
+      // Vue aérienne lointaine : petits objets sans ombre (1 à 2 texels de la carte d'ombre à cette distance).
+      const far = smallShadowsOff ? p.distance > 280 : p.distance > 320;
+      if (far !== smallShadowsOff || (far && ++smallShadowTick % 60 === 0)) { smallShadowsOff = far; setSmallShadows(!far); }
       sky.shadowSnapFraction = profile.lite ? 0.18 : 0;
       sky.followView(p.targetX, p.targetY, p.targetZ, Math.min(900, Math.max(60, p.distance)));
     },
@@ -261,7 +279,6 @@ export async function initRender(
       // Mode allégé : pas de préchargement de TOUS les modèles (mémoire) ; chargement à la demande.
       if (preloadAll && profile.preloadAll) { buildings.preloadAll(); vehicles.preloadAll(); }
       await Promise.all([terrain.ready, roads.whenReady(), buildings.whenReady(), vehicles.whenReady()]);
-      await handle.precompile();
     },
     async precompile(capMs = 5000) {
       if (profile.lite) return;

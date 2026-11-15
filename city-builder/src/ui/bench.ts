@@ -32,6 +32,11 @@ export function benchMode(loc: { search: string; hash: string } | undefined = gl
 
 /** Horodatages requestAnimationFrame depuis le démarrage (à-coups du chargement compris). */
 const stamps: number[] = [];
+/** Tas JS utilisé (Mo) à chaque image, quand le navigateur l'expose (Chrome, Edge) : chute = ramasse-miettes. */
+const heaps: number[] = [];
+const memApi = (): { usedJSHeapSize: number } | undefined => (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+/** Étapes du chargement (texte de l'écran de chargement) : instant de début, libellé. */
+const loadSteps: [number, string][] = [];
 const frameHooks: ((now: number) => void)[] = [];
 let recording = false;
 let hiddenSeen = false;
@@ -53,21 +58,26 @@ export function benchTrace(phase: string, ms: number): void {
   traceT.push(performance.now()); traceMs.push(ms); tracePh.push(phase);
 }
 /** Ventilation processeur de l'intervalle ]a, b] : phases les plus longues, reste non attribué. */
-function phasesBetween(a: number, b: number): string {
+function phasesBetween(a: number, b: number, frames = 1): string {
   const by = new Map<string, number>();
   let sum = 0;
   for (let i = 0; i < traceT.length; i++) { const t = traceT[i]!; if (t > a && t <= b) { by.set(tracePh[i]!, (by.get(tracePh[i]!) ?? 0) + traceMs[i]!); sum += traceMs[i]!; } }
   // Les mises à jour détaillées sont incluses dans « image : mises à jour » : on ne compte pas deux fois.
   let detail = 0; for (const [k, v] of by) if (k.startsWith('mise à jour')) detail += v;
   sum -= detail;
-  const top = [...by].sort((x, y) => y[1] - x[1]).slice(0, 5).map(([k, v]) => `${k} ${Math.round(v)} ms`);
-  return `${top.join(', ') || 'aucune phase tracée'} ; non attribué (ramasse-miettes, navigateur…) ${Math.max(0, Math.round(b - a - sum))} ms`;
+  const f = Math.max(1, frames), ms = (v: number): string => (f > 1 ? `${fmt(r1(v / f))}` : `${Math.round(v)}`);
+  const top = [...by].sort((x, y) => y[1] - x[1]).slice(0, 6).map(([k, v]) => `${k} ${ms(v)} ms`);
+  return `${top.join(', ') || 'aucune phase tracée'} ; non attribué (GPU attendu, pilote, ramasse-miettes, navigateur) ${ms(Math.max(0, b - a - sum))} ms`;
 }
 /** Plus longue image de ]t0, t1] : durée, instant de fin, ventilation. */
 function longestFrame(t0: number, t1: number): { ms: number; at: number; detail: string } | null {
   let best = -1, k = -1;
   for (let i = 1; i < stamps.length; i++) { const t = stamps[i]!; if (t > t0 && t <= t1 && t - stamps[i - 1]! > best) { best = t - stamps[i - 1]!; k = i; } }
-  return k < 0 ? null : { ms: Math.round(best), at: stamps[k]!, detail: phasesBetween(stamps[k - 1]!, stamps[k]!) };
+  if (k < 0) return null;
+  // Ramasse-miettes : tas JS en baisse nette entre l'image d'avant et celle d'après (Chrome, Edge).
+  const before = heaps[k - 1]!, after = heaps[Math.min(heaps.length - 1, k + 1)]!;
+  const gc = Number.isFinite(before) && Number.isFinite(after) && before - after > 4 ? ` ; tas JS ${Math.round(before)} → ${Math.round(after)} Mo (ramasse-miettes probable)` : Number.isFinite(before) ? ` ; tas JS stable (${Math.round(before)} Mo)` : '';
+  return { ms: Math.round(best), at: stamps[k]!, detail: phasesBetween(stamps[k - 1]!, stamps[k]!) + gc };
 }
 
 /** Compteurs du rendu relevés au retrait de l'écran de chargement puis 3 s après (page de mesure). */
@@ -79,6 +89,11 @@ export function startBenchRecorder(): void {
   recording = true;
   document.addEventListener('visibilitychange', () => { if (document.hidden) hiddenSeen = true; });
   const loading = document.getElementById('loading');
+  const lt = document.getElementById('loading-text');
+  if (lt) {
+    loadSteps.push([performance.now(), lt.textContent ?? '']);
+    new MutationObserver(() => { const t = (lt.textContent ?? '').replace(/…$/, ''); if (loadSteps[loadSteps.length - 1]?.[1] !== t) loadSteps.push([performance.now(), t]); }).observe(lt, { childList: true, characterData: true, subtree: true });
+  }
   if (loading) new MutationObserver(() => {
     if (!loading.classList.contains('hidden')) return;
     revealAt = performance.now();
@@ -91,6 +106,8 @@ export function startBenchRecorder(): void {
   const tick = (): void => {
     const now = performance.now();
     stamps.push(now);
+    const m = memApi();
+    heaps.push(m ? m.usedJSHeapSize / 1048576 : NaN);
     for (const h of frameHooks) h(now);
     requestAnimationFrame(tick);
   };
@@ -146,7 +163,7 @@ const LAYER_LABELS: Record<string, string> = {
   eau: 'Eau', terrain: 'Terrain', ciel: 'Ciel', feux_tricolores: 'Feux tricolores', decor_urbain: 'Décor urbain',
   panneaux_carrefours: 'Panneaux de carrefour', 'dechets-camions': 'Camions de déchets', 'dechets-installations': 'Installations de déchets',
   'dechets-conteneurs': 'Conteneurs de déchets', 'selection-marker': 'Marqueur de sélection', hubs: 'Pôles d\'échanges', electricite: 'Réseau électrique',
-  quais: 'Quais', chantiers: 'Chantiers', zonage: 'Zonage', meteo: 'Météo', 'reseau-eau': 'Réseau d\'eau',
+  quais: 'Quais', chantiers: 'Chantiers', 'bus-lignes': 'Lignes de bus', 'bus-arrets': 'Arrêts de bus', 'bus-vehicules': 'Bus', zonage: 'Zonage', meteo: 'Météo', 'reseau-eau': 'Réseau d\'eau',
 };
 
 /**
@@ -204,12 +221,25 @@ async function layerBreakdown(h: BenchHost, view: string, n: number, mainOnly = 
       if (!name || !o.visible || (!LAYER_LABELS[name] && (mainOnly || !/^[a-z_-]+$/.test(name)))) continue;
       layers.push({ layer: LAYER_LABELS[name] ?? name, ms: (await diff(() => { o.visible = false; }, () => { o.visible = true; })) - floor, share: 0 });
     }
+    // Sous-calques des routes : surfaces (chaussées, trottoirs, marquages), arbres d'alignement, autre décor.
+    const roadsGroup = h.scene.children.find((o) => o.name === 'roads');
+    if (roadsGroup?.visible) {
+      const subs: [string, (n: string) => boolean][] = [
+        ['Routes : surfaces et marquages', (n) => n.startsWith('roads_') && !n.startsWith('roads_decor_') && n !== 'roads_lamp_pools'],
+        ['Routes : arbres d\'alignement', (n) => n.startsWith('roads_decor_arbre')],
+        ['Routes : lampadaires, bancs, jardinières', (n) => n.startsWith('roads_decor_') && !n.startsWith('roads_decor_arbre')],
+      ];
+      for (const [label, pick] of subs) {
+        const hidden: THREE.Object3D[] = [];
+        layers.push({ layer: label, ms: (await diff(() => { roadsGroup.traverse((o) => { if (o.visible && pick(o.name)) { o.visible = false; hidden.push(o); } }); }, () => { for (const o of hidden) o.visible = true; hidden.length = 0; })) - floor, share: 0 });
+      }
+    }
     layers.push({ layer: 'Passe d\'ombre (carte d\'ombre)', ms: (await diff(() => { sm.autoUpdate = false; sm.needsUpdate = false; }, () => { sm.autoUpdate = true; })) - floor, share: 0 });
     for (const l of layers) { l.ms = r2(Math.max(0, l.ms)); l.share = total > 0 ? Math.round((100 * l.ms) / total) : 0; }
     layers.sort((a, b) => b.ms - a.ms);
     return {
       view, method: `${ext ? 'requêtes de temps GPU (EXT_disjoint_timer_query_webgl2)' : 'temps de rendu attendu (lecture d\'un pixel)'}, ${reps} mesures alternées par calque, témoin ${fmt(r2(floor))} ms soustrait`,
-      totalMs: r2(total), layers: layers.filter((l) => l.ms > 0.05).slice(0, 12),
+      totalMs: r2(total), layers: layers.filter((l) => l.ms > 0.05).slice(0, 15),
     };
   } finally {
     sm.autoUpdate = auto; sm.needsUpdate = true;
@@ -256,6 +286,8 @@ interface SceneResult {
   maxAtS: number;
   /** Ventilation processeur de la plus longue image. */
   maxDetail: string | null;
+  /** Ventilation processeur moyenne par image de la scène. */
+  meanDetail: string;
 }
 
 export interface BenchResult {
@@ -265,7 +297,9 @@ export interface BenchResult {
     /** Pendant les 3 premières secondes de jeu : shaders compilés, textures et géométries nouvellement envoyées. */
     firstPrograms: number | null; firstTextures: number | null; firstGeometries: number | null;
     /** Ventilation processeur de la plus longue des premières images. */
-    firstDetail: string | null };
+    firstDetail: string | null;
+    /** Durée de chaque étape du chargement (s), jusqu'au retrait de l'écran de chargement. */
+    steps: { step: string; s: number }[] };
   scenes: SceneResult[];
   /** Coût GPU par calque (vues aérienne et rue). */
   breakdown: LayerBreakdown[];
@@ -416,7 +450,7 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       calls: samples ? Math.round(calls / samples) : 0, triangles: samples ? Math.round(tris / samples) : 0,
       renderW: buf.x, renderH: buf.y,
       ratioMin: Number.isFinite(ratioMin) ? r2(ratioMin) : r2(h.pixelRatio()), ratioMax: ratioMax > 0 ? r2(ratioMax) : r2(h.pixelRatio()),
-      newPrograms, newTextures, newGeometries, maxAtS: r1(maxAt / 1000), maxDetail: longestFrame(t0, t1)?.detail ?? null,
+      newPrograms, newTextures, newGeometries, maxAtS: r1(maxAt / 1000), maxDetail: longestFrame(t0, t1)?.detail ?? null, meanDetail: phasesBetween(t0, t1, iv.length),
     });
   }
   await h.setSpeed(1).catch(() => undefined);
@@ -450,6 +484,7 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       maxFirstFramesMs: Math.round(Math.max(0, ...firstIv)), firstFramesOver100: firstIv.filter((v) => v > 100).length,
       firstPrograms: firstCounts?.programs ?? null, firstTextures: firstCounts?.textures ?? null, firstGeometries: firstCounts?.geometries ?? null,
       firstDetail: longestFrame(readyAt, firstEnd)?.detail ?? null,
+      steps: loadSteps.filter(([t]) => t <= readyAt).map(([t, step], i, a) => ({ step: step || 'Initialisation', s: r1(((a[i + 1]?.[0] ?? readyAt) - t) / 1000) })).filter((x) => x.s >= 0.05),
     },
     scenes, breakdown, warnings,
   };
@@ -547,12 +582,15 @@ export function resultsText(r: BenchResult): string {
     `Bascules A/B : ${e['bascules']}`,
     `Chargement : jouable en ${fmt(r.load.playableS)} s · plus longue image au chargement ${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms) · premières images ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms ; ${fmt(r.load.firstPrograms)} shaders / ${fmt(r.load.firstTextures)} textures / ${fmt(r.load.firstGeometries)} géométries)`,
     `Plus longue des premières images, processeur : ${r.load.firstDetail ?? '—'}`,
+    `Étapes du chargement : ${r.load.steps.map((x) => `${x.step} ${fmt(x.s)} s`).join(' · ')}`,
     '',
     'Scène | img/s méd. | img/s moy. | p95 ms | p99 ms | max ms (à s) | > 33 ms | CPU màj+rendu ms | appels | triangles | rendu px (ratio) | nouveaux shaders/textures/géom.',
   ];
   for (const s of r.scenes) {
     lines.push(`${s.label} | ${fmt(s.fpsMedian)} | ${fmt(s.fpsMean)} | ${fmt(s.p95)} | ${fmt(s.p99)} | ${fmt(s.maxMs)} (${fmt(s.maxAtS)}) | ${fmt(s.over33)} % | ${fmt(s.cpuUpdateMs)} + ${fmt(s.cpuRenderMs)} | ${fmtInt(s.calls)} | ${fmtTris(s.triangles)} | ${s.renderW}×${s.renderH} (${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}) | ${s.newPrograms}/${s.newTextures}/${s.newGeometries}`);
   }
+  lines.push('', 'Processeur, moyenne par image :');
+  for (const s of r.scenes) lines.push(`  ${s.label} : ${s.meanDetail}`);
   for (const b of r.breakdown) {
     lines.push('', `Coût GPU par calque — ${b.view} : image ${fmt(b.totalMs)} ms (${b.method})`);
     for (const l of b.layers) lines.push(`  ${l.layer} : ${fmt(l.ms)} ms (${l.share} %)`);
@@ -610,10 +648,12 @@ function showResults(r: BenchResult): void {
       ${kv('Plus longue image au chargement', `${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms)`)}
       ${kv('Premières images de jeu (3 s)', `max ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms) · ${fmt(r.load.firstPrograms)} shaders / ${fmt(r.load.firstTextures)} tex. / ${fmt(r.load.firstGeometries)} géom.`)}
       ${kv('Plus longue des premières images, processeur', r.load.firstDetail ?? '—')}
+      ${kv('Étapes du chargement', r.load.steps.map((x) => `${x.step} ${fmt(x.s)} s`).join(' · '))}
     </div>
     <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:960px">
       <thead><tr><th ${th.replace('right', 'left')}>Scène</th><th ${th}>img/s<br>médiane</th><th ${th}>img/s<br>moyenne</th><th ${th}>p95<br>ms</th><th ${th}>p99<br>ms</th><th ${th}>plus longue<br>ms</th><th ${th}>images<br>&gt; 33 ms</th><th ${th}>CPU ms<br>màj + rendu</th><th ${th}>appels de<br>dessin</th><th ${th}>triangles</th><th ${th}>rendu px<br>(densité)</th><th ${th}>nouveaux<br>shaders / tex. / géom.</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
+    <div style="margin-top:12px"><div style="font-weight:600">Processeur, moyenne par image</div>${r.scenes.map((s) => `<div style="font-size:13px"><span style="color:#93a4b8">${esc(s.label)} :</span> ${esc(s.meanDetail)}</div>`).join('')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:12px 28px;margin-top:12px">${r.breakdown.map((b) => `<div style="min-width:280px"><div style="font-weight:600">Coût GPU par calque — ${esc(b.view)} <span style="color:#93a4b8;font-weight:400">(image ${fmt(b.totalMs)} ms)</span></div>
       <table style="border-collapse:collapse;margin-top:4px">${b.layers.map((l) => `<tr><td style="padding:2px 10px 2px 0">${esc(l.layer)}</td><td ${td}>${fmt(l.ms)} ms</td><td ${td}><span style="display:inline-block;height:8px;width:${Math.min(120, l.share * 1.2)}px;background:#4fd18b;border-radius:2px"></span> ${l.share} %</td></tr>`).join('')}</table>
       <div style="color:#93a4b8;font-size:12px">${esc(b.method)} ; chaque calque compte aussi son ombre.</div></div>`).join('')}</div>

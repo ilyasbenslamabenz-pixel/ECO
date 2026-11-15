@@ -2,7 +2,7 @@
  * Bascules A/B de la page de mesure (?bench), lues dans l'adresse et jamais mémorisées : chacune rétablit
  * l'ancien comportement d'un changement de rendu pour le comparer sur la machine du joueur.
  *  - `ordre=0`  : ancien ordre de dessin (terrain et surfaces de routes au même rang que les autres objets) ;
- *  - `terrain=0`: ancien shader du terrain (toutes les couches de poids > 0,004 lues, roche triplanaire complète) ;
+ *  - `terrain=0`: ancien shader du terrain (toutes les couches de poids > 0,004 lues) ;
  *  - `aniso=8`  : ancienne anisotropie (8 aussi pour les normales et la rugosité) ;
  *  - `trace=0`  : sans la ventilation processeur de la page de mesure.
  */
@@ -13,7 +13,7 @@ function param(name: string): string | null {
 export const ab = {
   /** Terrain dessiné après les objets opaques, surfaces de routes juste avant lui. */
   drawOrder: param('ordre') !== '0',
-  /** Shader du terrain allégé (couches sans effet sautées, triplanaire réduit). */
+  /** Shader du terrain allégé (couches sans effet sautées). */
   terrainOpt: param('terrain') !== '0',
   /** Anisotropie maximale des textures non colorées (normales, rugosité, occlusion). */
   dataAniso: param('aniso') === '8' ? 16 : 4,

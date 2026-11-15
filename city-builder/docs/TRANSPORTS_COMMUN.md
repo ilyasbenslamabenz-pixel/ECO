@@ -103,7 +103,16 @@ charge sans ligne ; une section illisible est signalée et la partie se charge s
 
 ## 8. Mesures et limites
 
-Voir le rapport de la vague (partie type de 360 jours et coûts mesurés). Limites : bus non simulés dans le trafic (ils
+Partie type (Node, catalogue réel, graine 42, carte de 8 tronçons sans eau, impôt résidentiel 11 %, grille de rues 7 × 7,
+deux lignes de 10 et 12 arrêts à 6 bus chacune posées au jour 38 avec un dépôt) — moyennes des jours 120 à 360, sans / avec :
+population 2 712 / 2 780, chômage 2,5 / 2,0 %, satisfaction 58,1 / 61,3, véhicules à la pointe 2 286 / 2 198, réseau saturé
+96,4 / 95,8 % ; part du bus 13 %, facteur voiture 0,87, ≈ 590 voyages par jour, recettes ≈ 21–23 k CHF / entretien 19,2 k CHF par
+mois ; trésorerie au jour 360 : 2,57 M / 2,33 M (investissement initial dépôt + abribus ≈ 0,27 M). Ville de charge (500 bâtiments,
+21 000 habitants, trois lignes) : module par tick ≈ 0,001 ms ; passe quotidienne du module 3 à 5 ms (10 à 12 ms les premiers
+jours, avant compilation) ; tick moyen et clôture mensuelle sans écart au-delà du bruit de mesure. Rendu : 20 bus mis à jour en
+0,06 ms par image (Chromium logiciel), 5 appels de dessin + 1 par ligne.
+
+Limites : bus non simulés dans le trafic (ils
 ne bloquent ni ne subissent individuellement les carrefours ; leur vitesse suit la vitesse moyenne des voitures) ; un
 arrêt appartient à une seule ligne (pas de correspondances) ; au plus 32 lignes de 40 arrêts ; la portée d'embauche ne
 change rien tant que la ville tient dans un rayon de 4 km ; réglages non sauvegardés.

@@ -234,21 +234,16 @@ const FRAG_MAIN = /* glsl */ `
           // Roche triplanaire (pentes fortes), normales en mélange « UDN » (B. Golus).
           vec3 bw = pow(abs(Nw), vec3(4.0));
           bw /= (bw.x + bw.y + bw.z);
-          // Projections de poids < 2 % ignorées (renormalisées) : 2 projections au lieu de 3 sur la plupart des pentes.
-#if AUBE_TERRAIN_OPT
-          bw *= step(vec3(0.02), bw);
-          bw /= max(bw.x + bw.y + bw.z, 1e-4);
-#endif
           vec3 sg = sign(Nw + 1e-5);
-          vec3 aX = vec3(0.0), nX = vec3(0.0, 0.0, 1.0), rX = vec3(0.0), aY = vec3(0.0), nY = vec3(0.0, 0.0, 1.0), rY = vec3(0.0), aZ = vec3(0.0), nZ = vec3(0.0, 0.0, 1.0), rZ = vec3(0.0);
+          vec3 aX, nX, rX, aY, nY, rY, aZ, nZ, rZ;
           vec2 uX = vec2(vTWorld.z * sg.x, vTWorld.y) * s;
           vec2 uY = vec2(vTWorld.x * sg.y, vTWorld.z) * s;
           vec2 uZ = vec2(-vTWorld.x * sg.z, vTWorld.y) * s;
-          // Dérivées calculées hors des branches (valeurs non définies sinon).
-          vec2 dxX = dFdx(uX), dyX = dFdy(uX), dxY = dFdx(uY), dyY = dFdy(uY), dxZ = dFdx(uZ), dyZ = dFdy(uZ);
-          if (bw.x > 0.0) tSample(k, uX, dxX, dyX, far, aX, nX, rX);
-          if (bw.y > 0.0) tSample(k, uY, dxY, dyY, far, aY, nY, rY);
-          if (bw.z > 0.0) tSample(k, uZ, dxZ, dyZ, far, aZ, nZ, rZ);
+          // (Pas de lectures conditionnelles par projection : sous ANGLE/D3D11, des branches imbriquées dans la
+          // boucle des couches peuvent multiplier le temps de compilation du shader.)
+          tSample(k, uX, dFdx(uX), dFdy(uX), far, aX, nX, rX);
+          tSample(k, uY, dFdx(uY), dFdy(uY), far, aY, nY, rY);
+          tSample(k, uZ, dFdx(uZ), dFdy(uZ), far, aZ, nZ, rZ);
           albs[k] = aX * bw.x + aY * bw.y + aZ * bw.z;
           arms[k] = rX * bw.x + rY * bw.y + rZ * bw.z;
           nX.x *= sg.x; nY.x *= sg.y; nZ.x *= -sg.z;
@@ -322,7 +317,7 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
     uGrassLush: { value: new THREE.Color(0.66, 0.88, 0.5) },
   };
   const material = new THREE.MeshStandardMaterial({ name: 'terrain_pbr', roughness: 1, metalness: 0 });
-  material.customProgramCacheKey = (): string => `aube-terrain-v3-${ab.terrainOpt ? 1 : 0}`;
+  material.customProgramCacheKey = (): string => `aube-terrain-v4-${ab.terrainOpt ? 1 : 0}`;
   material.onBeforeCompile = (shader): void => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
