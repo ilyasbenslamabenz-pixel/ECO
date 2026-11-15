@@ -23,6 +23,19 @@ type AnyColumn = Int32Array | Uint32Array | Float32Array | Float64Array | Uint8A
 /** Sérialisation colonne par colonne : { colonne: number[] }. */
 export type ColumnsJSON = Record<string, number[]>;
 
+/**
+ * Garde l'objet des colonnes en « propriétés rapides » (moteur V8). Construit par clés dynamiques, il passait en mode
+ * dictionnaire au-delà d'une vingtaine de colonnes : avec la colonne `sick` (services, vague 2), chaque accès `col.x`
+ * des boucles par citoyen coûtait le double (tick de la démographie 0,7 -> 1,6 ms sur la ville de charge). Utiliser
+ * l'objet comme prototype le fait repasser en mode rapide ; sans effet sur les valeurs.
+ */
+function fastProperties<T extends object>(o: T): T {
+  function F(): void { /* prototype seulement */ }
+  F.prototype = o;
+  void new (F as unknown as new () => object)();
+  return o;
+}
+
 export class SoaTable<S extends Schema> {
   count = 0;
   capacity: number;
@@ -35,7 +48,7 @@ export class SoaTable<S extends Schema> {
     this.names = Object.keys(schema) as (keyof S & string)[];
     const col = {} as Record<string, AnyColumn>;
     for (const n of this.names) col[n] = new (schema[n] as ColumnCtor)(this.capacity);
-    this.col = col as Columns<S>;
+    this.col = fastProperties(col) as Columns<S>;
   }
 
   private grow(min: number): void {

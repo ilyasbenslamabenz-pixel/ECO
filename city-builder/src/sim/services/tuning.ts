@@ -96,9 +96,9 @@ export const DEFAULT_SERVICES_TUNING: ServicesTuning = {
   crimePolice: 0.75, crimeInertie: 0.12, crimeSatisfaction: 14, crimeFoncier: 0.25, crimeAttractivite: 0.15,
   delitsParOccupant: 0.003, crimeEleve: 45,
 
-  feuProbaHeure: 0.000005, feuPrevention: 0.6, feuAgeAns: 25, feuDureeH: 6,
+  feuProbaHeure: 0.0000015, feuPrevention: 0.6, feuAgeAns: 25, feuDureeH: 6,
   feuDelaiBaseH: 0.3, feuDelaiDistanceH: 1.6, feuExtinctionH: 1, feuSeuilDegats: 0.35, feuReparationJours: 10,
-  feuPropagation: 0.05, feuVoisinM: 24, reconstructionPart: 0.3, reconstructionPriveeJours: 20, feuSatisfaction: 8,
+  feuPropagation: 0.03, feuVoisinM: 24, reconstructionPart: 0.3, reconstructionPriveeJours: 20, feuSatisfaction: 8,
 
   santeBase: 84, santePollution: 6, santePollutionMax: 30, santeAge: 0.5, santeSoins: 12, santeSansSoins: 12,
   maladieProba: 0.0015, maladieDureeSoins: 4, maladieDureeSans: 9, maladieMortaliteSoins: 2.5, maladieMortaliteSans: 6,

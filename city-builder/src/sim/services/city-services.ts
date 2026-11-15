@@ -196,9 +196,9 @@ export class CityServices {
   isRuined(id: number): boolean { return this.ruinIds.has(id); }
   isDamaged(id: number): boolean { return this.damagedIds.has(id); }
   /** Bâtiment hors d'usage (feu ou ruine) : ni habitant nouveau, ni emploi offert. */
-  blocked(id: number): boolean { return this.burningIds.has(id) || this.ruinIds.has(id); }
+  blocked(id: number): boolean { return (this.burningIds.size > 0 || this.ruinIds.size > 0) && (this.burningIds.has(id) || this.ruinIds.has(id)); }
   /** Pas de nouveaux ménages (hors d'usage ou en réparation). */
-  blocksHousing(id: number): boolean { return this.blocked(id) || this.damagedIds.has(id); }
+  blocksHousing(id: number): boolean { return this.blocked(id) || (this.damagedIds.size > 0 && this.damagedIds.has(id)); }
   crimeOf(id: number): number { return this.recs.get(id)?.crime ?? 0; }
   healthOf(id: number): number { return this.recs.get(id)?.health ?? -1; }
   /** Baisse de l'indice de valeur foncière due à la criminalité (0..`crimeFoncier`). */
@@ -413,7 +413,7 @@ export class CityServices {
       if (r.damage >= 1) { this.destroy(id, r, now); continue; }
       if (onSite && now >= r.arrival + t.feuExtinctionH * 60) { this.extinguish(id, r, now); continue; }
       // Propagation légère : feu non maîtrisé avancé -> voisins proches.
-      if (!onSite && r.damage > 0.4) {
+      if (!onSite && r.damage > 0.5) {
         const R = t.feuVoisinM, x = b.x[bi]!, z = b.z[bi]!;
         this.host.ctx.buildingIndex.query(x - R, z - R, x + R, z + R, this.q);
         for (const nid of this.q) {

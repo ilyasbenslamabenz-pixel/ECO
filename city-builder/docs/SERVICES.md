@@ -64,13 +64,13 @@ bâtiment dépasse 45 ; icône « criminalité élevée » au-delà de 45.
 ```
 risque   = facteur (logement 1, commerce 1,2, bureaux 0,8, industrie 2,2 ; usine/énergie 3 ; public 0,5)
          · (1 + 0,25 · (niveau − 1)) · (1 + âge / 25 ans) · (1 − 0,6 · q_pompiers)       (affiché : 25 · risque, borné à 100)
-départ   : probabilité horaire 0,000005 · risque · pression (bâtiments occupés, ni en feu ni en ruine)
+départ   : probabilité horaire 0,0000015 · risque · pression (bâtiments occupés, ni en feu ni en ruine)
 pompiers : caserne couvrante la plus proche avec un engin libre ; arrivée après 0,3 + 1,6 · (1 − q) h ;
            sans engin libre : attente ; aucune caserne : aucun secours
 dégâts   : +1 / (6 h · (1 + 0,3 · (niveau − 1))) par heure, ×0,4 une fois les pompiers sur place ; extinction 1 h après l'arrivée
 issue    : dégâts < 35 % : légers ; sinon « endommagé » 10 jours (pas de nouveaux habitants, −8 de satisfaction) ;
            dégâts 100 % : RUINE (habitants relogés sinon partis, employés licenciés, ni logement ni emploi)
-propagation : feu non maîtrisé à plus de 40 % de dégâts -> voisins à moins de 24 m, 5 % par heure (index spatial)
+propagation : feu non maîtrisé à plus de 50 % de dégâts -> voisins à moins de 24 m, 3 % par heure (index spatial)
 ruine    : démolir (outil existant) ou Reconstruire (30 % du coût du modèle) ; lot privé : reconstruit par son promoteur après 20 jours
 ```
 
@@ -111,9 +111,9 @@ Attractivité : `−0,3 · part de malades`.
 | `crimeBase*`, `crimeChomage`, `crimePauvrete`, `crimeDensite` | 6/10/7/4, 45, 30, 7 | criminalité propre |
 | `crimeVoisinage`, `crimeIlotM`, `crimePolice`, `crimeInertie` | 0,35, 128, 0,75, 0,12 | voisinage, police, inertie |
 | `crimeSatisfaction`, `crimeFoncier`, `crimeAttractivite`, `delitsParOccupant`, `crimeEleve` | 14, 0,25, 0,15, 0,003, 45 | effets et délits |
-| `feuProbaHeure`, `feuPrevention`, `feuAgeAns`, `feuDureeH` | 0,000005, 0,6, 25, 6 | départs et durée |
+| `feuProbaHeure`, `feuPrevention`, `feuAgeAns`, `feuDureeH` | 0,0000015, 0,6, 25, 6 | départs et durée |
 | `feuDelaiBaseH`, `feuDelaiDistanceH`, `feuExtinctionH`, `feuSeuilDegats`, `feuReparationJours` | 0,3, 1,6, 1, 0,35, 10 | secours et dégâts |
-| `feuPropagation`, `feuVoisinM`, `reconstructionPart`, `reconstructionPriveeJours`, `feuSatisfaction` | 0,05, 24, 0,3, 20, 8 | propagation, ruines |
+| `feuPropagation`, `feuVoisinM`, `reconstructionPart`, `reconstructionPriveeJours`, `feuSatisfaction` | 0,03, 24, 0,3, 20, 8 | propagation, ruines |
 | `santeBase`, `santePollution`, `santePollutionMax`, `santeAge`, `santeSoins`, `santeSansSoins` | 84, 6, 30, 0,5, 12, 12 | santé du logement |
 | `maladieProba`, `maladieDureeSoins`, `maladieDureeSans`, `maladieMortaliteSoins`, `maladieMortaliteSans` | 0,0015, 4, 9, 2,5, 6 | maladies |
 | `maladieSatisfaction`, `santeSatisfaction`, `maladieAttractivite`, `rampeChargementJours` | 10, 0,25, 0,3, 30 | effets, ancienne sauvegarde |
