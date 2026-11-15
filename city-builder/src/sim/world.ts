@@ -9,6 +9,7 @@
  * Modules de phase 2 : crochets appelés via PluginHost (src/sim/plugins) ; registres vides = aucun effet.
  */
 import type { SecteursService } from './plugins/secteurs';
+import type { AmeliorationsService } from './plugins/ameliorations';
 import {
   CHUNK_SIZE,
   GAME_MINUTES_PER_TICK,
@@ -217,6 +218,7 @@ export class Simulation {
       return (d < -40 ? -40 : d > 20 ? 20 : d) + this.govMods.happiness + local;
     };
     this.demography.pollutionFactorOf = (id) => this.plugins.service<SecteursService>('secteurs')?.pollutionFactorOf(id) ?? 1;
+    this.demography.serviceLevel = (id) => this.plugins.service<AmeliorationsService>('ameliorations')?.levelOf(id) ?? 1;
   }
 
   getAsset(id: string): CatalogAsset | undefined {
@@ -892,7 +894,7 @@ export class Simulation {
     this.economy.buildingUpkeepFactor = m.buildingUpkeepFactor;
     if (this.demography) this.demography.pollutionFactor = m.pollutionFactor;
     // Politiques locales des secteurs : la pollution subie est recalculée quand elles changent.
-    const sv = this.plugins.service<SecteursService>('secteurs')?.version() ?? 0;
+    const sv = (this.plugins.service<SecteursService>('secteurs')?.version() ?? 0) * 100_003 + (this.plugins.service<AmeliorationsService>('ameliorations')?.version() ?? 0);
     if (sv !== this.secteursVersion) { this.secteursVersion = sv; this.demography?.markCoverageDirty(); }
   }
   private secteursVersion = 0;

@@ -23,6 +23,9 @@ export interface InfoPanelDeps {
   demolish(p: PickResult): Promise<boolean>;
   /** Outil Déplacer (facultatif) : le bâtiment suit ensuite le pointeur jusqu'au nouvel emplacement. */
   move?(rec: BuildingRecord): void;
+  /** Améliorations des équipements de service (facultatif) : niveau actuel, puis passage au niveau suivant. */
+  serviceInfo?(id: number): Promise<{ level: number; max: number; upgradeCost: number | null; radiusFactor: number; capacityFactor: number; extraUpkeep: number } | null>;
+  upgradeService?(id: number): Promise<boolean>;
   close(): void;
 }
 
@@ -35,6 +38,8 @@ export class InfoPanel {
   private rows = $('info-rows');
   private actions = $('info-actions');
   private thumb = $<HTMLImageElement>('info-thumb');
+  /** Bâtiment affiché (réponses asynchrones ignorées si la fiche a changé). */
+  private shownBuilding = -1;
   current: PickResult | null = null;
 
   constructor(private d: InfoPanelDeps) {
@@ -64,6 +69,7 @@ export class InfoPanel {
     this.actions.replaceChildren();
     this.thumb.classList.add('hidden');
     const cam = this.d.camera;
+    this.shownBuilding = p.kind === 'building' ? p.record.id : -1;
     if (p.kind === 'building') {
       const a = p.asset;
       const rec = p.record;
@@ -88,6 +94,19 @@ export class InfoPanel {
       const refund = Math.round((a?.cost ?? 0) * DEMOLISH_REFUND_RATE);
       this.action('Démolir', () => { void this.d.demolish(p); }, 'danger', `Démolir (remboursement +${money(refund)}) — Suppr`);
       if (this.d.move) this.action('Déplacer', () => { this.d.move!(rec); }, '', 'Déplacer ce bâtiment ailleurs (gratuit, habitants conservés)');
+      if (a?.tags.some((t) => t.startsWith('service:')) && this.d.serviceInfo) {
+        // Niveau de l'équipement (module améliorations), relu à l'ouverture de la fiche.
+        const row = el('span', { text: '…' });
+        this.row('Niveau', row);
+        const shownId = rec.id;
+        void this.d.serviceInfo(rec.id).then((inf) => {
+          if (!inf || this.shownBuilding !== shownId) return;
+          row.textContent = `${inf.level} / ${inf.max} · rayon ×${inf.radiusFactor.toFixed(2)} · capacité ×${inf.capacityFactor.toFixed(1)}${inf.extraUpkeep ? ` · entretien +${money(inf.extraUpkeep)}/mois` : ''}`;
+          if (inf.upgradeCost !== null && this.d.upgradeService) {
+            this.action(`Améliorer · ${money(inf.upgradeCost)}`, () => { void this.d.upgradeService!(rec.id).then((ok) => { if (ok) this.show(p); }); }, '', `Niveau ${inf.level + 1} : rayon +25 %, capacité +50 %, entretien +40 %`);
+          }
+        }).catch(() => { row.textContent = '—'; });
+      }
       this.action('Centrer', () => cam.flyTo({ targetX: rec.x, targetZ: rec.z, distance: Math.max(60, (a?.dimensions.height ?? 20) * 3) }), '', 'Centrer la caméra');
       this.action('Vue rue', () => this.streetViewAt(rec.x, rec.z, a ? Math.max(a.footprint.tilesX, a.footprint.tilesZ) * TILE_SIZE : 16), '', 'Se placer dans la rue devant le bâtiment');
     } else if (p.kind === 'road') {

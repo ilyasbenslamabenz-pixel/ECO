@@ -676,6 +676,12 @@ export class ConstructionTools {
     return false;
   }
 
+  /** Commande d'un module de simulation (données de la réponse) — fiche du bâtiment (améliorations…). */
+  async pluginCommand(plugin: string, name: string, payload?: unknown): Promise<unknown> {
+    const r = await this.sim.send('pluginCommand', { plugin, name, ...(payload !== undefined ? { payload } : {}) });
+    return r.data;
+  }
+
   /** Outil Déplacer : bâtiment en cours de déplacement (identifiant, position d'origine), null sinon. */
   moving: { id: number; x: number; z: number; rot: number; name: string } | null = null;
 

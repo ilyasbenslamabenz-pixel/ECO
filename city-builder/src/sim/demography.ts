@@ -364,14 +364,16 @@ export class DemographySystem {
       const sx = b.x[s]!, sz = b.z[s]!;
       const affects = m.service >= 0 || m.attract > 0 || m.pollution > 0 || m.leisureVenue;
       if (!affects) continue;
-      const R = Math.max(m.service >= 0 ? m.radius : 0, m.attract > 0 ? Math.max(m.radius, 800) : 0, m.pollution > 0 ? 400 : 0, m.leisureVenue ? 1500 : 0);
+      const lvl = m.service >= 0 ? this.serviceLevel(b.id[s]!) : 1;
+      const rad = m.radius * (1 + 0.25 * (lvl - 1));
+      const R = Math.max(m.service >= 0 ? rad : 0, m.attract > 0 ? Math.max(m.radius, 800) : 0, m.pollution > 0 ? 400 : 0, m.leisureVenue ? 1500 : 0);
       this.ctx.buildingIndex.query(sx - R, sz - R, sx + R, sz + R, this.tmp);
       for (const id of this.tmp) {
         const j = b.indexOf(id);
         if (j < 0) continue;
         const dx = b.x[j]! - sx, dz = b.z[j]! - sz;
         const d = Math.sqrt(dx * dx + dz * dz);
-        if (m.service >= 0 && d <= m.radius) this.coverage[m.service]![j] = 1;
+        if (m.service >= 0 && d <= rad) this.coverage[m.service]![j] = 1;
         if (m.attract > 0 && d <= Math.max(m.radius, 800)) this.attractAt[j]! += m.attract * (1 - d / Math.max(m.radius, 800));
         if (m.pollution > 0 && d <= 400) this.pollutionAt[j]! += m.pollution * (1 - d / 400) * this.pollutionFactor * this.pollutionFactorOf(id);
         if (m.leisureVenue && j !== s && d <= 1500 && d < bestLeisure[j]!) { bestLeisure[j] = d; this.leisureTarget[j] = b.id[s]!; }
@@ -396,6 +398,8 @@ export class DemographySystem {
   pollutionFactor = 1;
   /** Multiplicateur de pollution subie par bâtiment (politiques locales des secteurs) ; 1 par défaut. */
   pollutionFactorOf: (buildingId: number) => number = () => 1;
+  /** Niveau d'un équipement de service (améliorations, 1 à 3) : rayon +25 % et capacité +50 % par niveau. */
+  serviceLevel: (buildingId: number) => number = () => 1;
   /** Filtres de croissance des modules (eau, électricité) : faux = le bâtiment n'accueille pas de nouveaux ménages. */
   growthGates: ((buildingId: number) => boolean)[] = [];
 
@@ -618,11 +622,12 @@ export class DemographySystem {
       if (j < 0 || !b.roadAccess[j]) continue;
       const m = this.metaOfIndex(j);
       if (!m || m.service !== Service.Education) continue;
-      const cap = m.serviceCapacity > 0 ? m.serviceCapacity : 300;
+      const lvl = this.serviceLevel(id);
+      const cap = (m.serviceCapacity > 0 ? m.serviceCapacity : 300) * (1 + 0.5 * (lvl - 1));
       if ((this.pupilsBySchool.get(id) ?? 0) >= cap) continue;
       const dx = b.x[j]! - hx, dz = b.z[j]! - hz;
       const d = Math.sqrt(dx * dx + dz * dz);
-      if (d <= m.radius && d < bestD) { bestD = d; best = id; }
+      if (d <= m.radius * (1 + 0.25 * (lvl - 1)) && d < bestD) { bestD = d; best = id; }
     }
     return best;
   }

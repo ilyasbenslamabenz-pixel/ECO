@@ -401,6 +401,8 @@ async function boot(): Promise<void> {
     else if (!wantWater && autoWater) { waterView.set('off'); autoWater = false; }
   });
   debug.constructionApplied = () => cons.machine.applied;
+  // Diagnostic (e2e) : ouvre la fiche d'un bâtiment.
+  (debug as unknown as Record<string, unknown>).selectBuilding = (id: number) => { const r = cons.machine.mirror.buildings.get(id); if (r) cons.machine.onSelect({ kind: 'building', id, record: r, asset: cons.machine.mirror.asset(r.assetId), distance: 0 }); return !!r; };
   // Diagnostic (e2e) : outil Déplacer sur un bâtiment donné.
   (debug as unknown as Record<string, unknown>).startMove = (id: number) => { const r = cons.machine.mirror.buildings.get(id); return r ? cons.machine.startMove(r) : false; };
   debug.worldToScreen = (x, z) => {

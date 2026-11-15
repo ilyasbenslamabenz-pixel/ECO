@@ -103,13 +103,13 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
   // Zonage (tests/zonage) : enregistré partout, inerte sans zone, testé à part.
   const late = [...ELECTRICITE_MODULES, ...LATE_MODULES, ...ZONAGE_MODULES];
   // Politiques et recherche (phase 2C, tests/gouvernance) : simulation, sauvegarde et panneau ; pas de rendu.
-  const gov = ['politiques', 'recherche', 'paliers', 'secteurs'];
+  const gov = ['politiques', 'recherche', 'paliers', 'secteurs', 'ameliorations'];
   // Alertes (icônes de problèmes) : simulation et rendu, rien de sauvegardé, pas de panneau.
   const alerts = ['alertes'];
   assert.deepEqual([...PHASE2_MODULES].sort(), [...ids, ...LATE_MODULES].sort());
   assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts]);
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late, ...alerts, 'secteurs']);
-  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov]);
+  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov.filter((g) => g !== 'ameliorations')]);
   assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late, ...gov]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
   const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];

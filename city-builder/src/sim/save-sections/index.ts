@@ -17,6 +17,7 @@ import { politiquesSaveSection } from './politiques';
 import { rechercheSaveSection } from './recherche';
 import { paliersSaveSection } from './paliers';
 import { secteursSaveSection } from './secteurs';
+import { ameliorationsSaveSection } from './ameliorations';
 import type { SaveSectionSpec } from './types';
 
 export type { SaveSectionSpec } from './types';
@@ -37,4 +38,5 @@ export const SAVE_SECTIONS: readonly SaveSectionSpec<unknown>[] = [
   rechercheSaveSection,
   paliersSaveSection,
   secteursSaveSection,
+  ameliorationsSaveSection,
 ];

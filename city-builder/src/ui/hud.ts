@@ -508,7 +508,10 @@ export function initUI(h: UIHandlers): UIHandle {
     enableConstruction(a) {
       api = a;
       buildBar = new BuildBar({ catalog: a.mirror.catalog, tools: a.tools, machine: a.machine, thumbs: a.thumbs, notify: showToast });
-      info = new InfoPanel({ mirror: a.mirror, camera: a.camera, thumbs: a.thumbs, demolish: (p) => a.machine.demolishTarget(p).then((ok) => { if (ok) a.tools.select(null); return ok; }), move: (rec) => { a.tools.select(null); a.machine.startMove(rec); }, close: () => a.tools.select(null) });
+      info = new InfoPanel({ mirror: a.mirror, camera: a.camera, thumbs: a.thumbs, demolish: (p) => a.machine.demolishTarget(p).then((ok) => { if (ok) a.tools.select(null); return ok; }), move: (rec) => { a.tools.select(null); a.machine.startMove(rec); },
+        serviceInfo: async (id) => (await a.machine.pluginCommand('ameliorations', 'info', { buildingId: id })) as { level: number; max: number; upgradeCost: number | null; radiusFactor: number; capacityFactor: number; extraUpkeep: number },
+        upgradeService: async (id) => { try { await a.machine.pluginCommand('ameliorations', 'upgrade', { buildingId: id }); return true; } catch (e) { showToast(`Amélioration refusée : ${(e as { error?: { message?: string } })?.error?.message ?? String(e)}`, 'error'); return false; } },
+        close: () => a.tools.select(null) });
       $('tc-ok').addEventListener('click', () => a.tools.confirmTouch());
       $('tc-rotate').addEventListener('click', () => a.tools.rotate());
       const mag = $('tc-magnet');
