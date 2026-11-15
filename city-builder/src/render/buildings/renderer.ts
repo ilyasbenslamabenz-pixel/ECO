@@ -365,7 +365,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     _camPos.set(cx, cy, cz);
     const cam = this.camera;
     // Recalcul des instances visibles (et envoi à la carte graphique) seulement après un vrai déplacement :
-    // ≥ 3 m ou ≥ ~2,5° de rotation ; champ élargi (~25 %) pour ne rien voir apparaître en retard au bord de l'écran.
+    // ≥ 3 m ou ≥ ~2,5° de rotation ; champ élargi (~8 %) pour ne rien voir apparaître en retard au bord de l'écran.
     let moved = this.forceUpdate || _camPos.distanceToSquared(_lastPos) > 9;
     if (cam) {
       cam.updateMatrixWorld();
@@ -378,7 +378,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     if (cam) {
       _lastQ.copy(cam.quaternion);
       _wide.copy(cam.projectionMatrix);
-      _wide.elements[0]! *= 0.8; _wide.elements[5]! *= 0.8;
+      _wide.elements[0]! *= 0.92; _wide.elements[5]! *= 0.92;
       _pv.multiplyMatrices(_wide, cam.matrixWorldInverse);
       _frustum.setFromProjectionMatrix(_pv);
     }
