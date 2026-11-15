@@ -66,7 +66,7 @@ export function renderCityServices(r: SimReport | null, bar: Bar): HTMLElement {
   const m = S.month ?? {} as Counters, lm = S.lastMonth ?? {} as Counters;
   box.append(el('div', { cls: 'kpis' },
     el('div', { cls: 'kpi' }, el('span', { cls: 'lbl', text: 'Criminalité' }), el('b', { text: `${fmt(num(S.crime?.average))}` })),
-    el('div', { cls: 'kpi' }, el('span', { cls: 'lbl', text: 'Santé' }), el('b', { text: `${fmt(num(S.health?.average))}` }))));
+    el('div', { cls: 'kpi' }, el('span', { cls: 'lbl', text: 'Santé' }), el('b', { text: num(S.health?.residents) > 0 ? fmt(num(S.health?.average)) : '—' }))));
 
   // Où ça manque.
   const gaps: string[] = [];

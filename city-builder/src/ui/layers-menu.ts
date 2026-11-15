@@ -55,7 +55,11 @@ export function initLayersMenu(port: LayersPort): { set(id: LayerId): void; curr
     const sk = SERVICE_LAYERS[id];
     if (sk) {
       setServicesLayer(sk);
-      void port.pluginCommand('services', 'calque', { on: true }).then((l) => { if (current === id) setServicesLayer(sk, l as ServicesLayer | null); }).catch(() => undefined);
+      // Réponse du pont : `{ data: carte }` (repli : la carte elle-même).
+      void port.pluginCommand('services', 'calque', { on: true }).then((l) => {
+        const v = (l && typeof l === 'object' && 'data' in l ? (l as { data: unknown }).data : l) as ServicesLayer | null;
+        if (current === id) setServicesLayer(sk, v && typeof v === 'object' && 'cols' in v ? v : null);
+      }).catch(() => undefined);
     }
     if (id === 'power') powerView.setOverlay(true);
     const wm: Partial<Record<LayerId, WaterViewMode>> = { water: 'desserte', pressure: 'pression', waterPollution: 'pollution' };

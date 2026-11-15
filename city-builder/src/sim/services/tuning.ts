@@ -130,14 +130,17 @@ export function crimeTarget(t: ServicesTuning, own: number, neighborhood: number
   return clamp(mixed * (1 - t.crimePolice * clamp(policeQ, 0, 1)) * clamp(ramp, 0, 1), 0, 100);
 }
 
-/** Facteur de risque d'incendie d'un secteur : logement 1, commerce 1,2, industrie 2,2 (process lourd 3), bureaux 0,8, public 0,5. */
+/**
+ * Facteur de risque d'incendie d'un bâtiment (catégorie du catalogue) : logement 1, commerce 1,2, industrie 2,2 (process
+ * lourd 3), bureaux 0,8, public 0,5. Appelé seulement pour les catégories de bâtiment.
+ */
 export function fireBaseRisk(category: string, tags: readonly string[]): number {
   if (category === 'industrial') return tags.includes('usine') || tags.includes('energie') || tags.includes('chimie') || tags.includes('raffinerie') ? 3 : 2.2;
   if (category === 'commercial') return tags.includes('bureaux') || tags.includes('tertiaire') ? 0.8 : 1.2;
   if (category === 'skyscraper') return 0.8;
   if (category === 'public') return 0.5;
-  if (category === 'residential') return 1;
-  return 0;
+  // Logements : maisons, maisons mitoyennes, immeubles (toutes les autres catégories de bâtiment).
+  return 1;
 }
 
 /**

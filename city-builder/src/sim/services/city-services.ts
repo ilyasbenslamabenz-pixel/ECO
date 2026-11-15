@@ -293,8 +293,12 @@ export class CityServices {
     this.derivedStale = false;
   }
 
-  /** Valeurs dérivées à jour (après un chargement, avant le premier jour). */
-  ensureDerived(now: number): void { if (this.derivedStale) this.computeDerived(now, false); }
+  /**
+   * Valeurs dérivées à jour pour l'affichage : après un chargement, et avant le premier calcul quotidien d'une partie
+   * neuve (bâtiments posés le premier jour). Sans effet sur la simulation : pendant ce premier jour, la pression est
+   * nulle (aucun départ de feu ni maladie) et le calcul quotidien recalcule tout.
+   */
+  ensureDerived(now: number): void { if (this.derivedStale || this.lastDailyNow === 0) this.computeDerived(now, false); }
 
   /**
    * Calcul quotidien (appelé par la démographie après la recherche d'emploi, avant les loyers et le bonheur) :

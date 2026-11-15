@@ -36,6 +36,7 @@ export function createServicesPlugin(): SimPlugin & { readonly core: () => CityS
   const buildLayer = (ctx: PluginContext): ServicesLayer | null => {
     const bd = ctx.terrain.bounds();
     if (!core || !bd) return null;
+    core.ensureDerived(ctx.clock.totalMinutes);
     const cols = Math.max(1, Math.ceil((bd.maxX - bd.minX) / CELL)), rows = Math.max(1, Math.ceil((bd.maxZ - bd.minZ) / CELL));
     const n = cols * rows;
     const crime = new Uint8Array(n).fill(SERVICES_NO_DATA), fire = new Uint8Array(n).fill(SERVICES_NO_DATA), health = new Uint8Array(n).fill(SERVICES_NO_DATA);
