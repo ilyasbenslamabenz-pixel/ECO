@@ -49,7 +49,7 @@ export interface ServicesHost {
   householdInDistress(hk: number): boolean;
 }
 
-interface AssetInfo { crimeKind: number; level: number; fireBase: number; resCap: number; jobCap: number; name: string; cost: number }
+interface AssetInfo { crimeKind: number; level: number; fireBase: number; resCap: number; jobCap: number; name: string; cost: number; upkeep: number }
 
 /** État d'un bâtiment (conservé par identifiant : les index changent à chaque suppression). */
 class Rec {
@@ -83,7 +83,8 @@ export interface ServicesReport {
   fire: { burning: number; damaged: number; ruins: number; riskAverage: number; uncovered: number; occupied: number };
   health: { average: number; sick: number; sickShare: number; uncoveredResidents: number; residents: number };
   coverage: { police: number; fire: number; health: number };
-  stations: { service: 'police' | 'pompiers' | 'sante'; count: number; units: number; capacity: number }[];
+  /** Équipements par service : nombre, unités (patrouilles, engins, lits), habitants desservis au plus, entretien mensuel (catalogue). */
+  stations: { service: 'police' | 'pompiers' | 'sante'; count: number; units: number; capacity: number; upkeep: number }[];
   month: ServicesCounters;
   lastMonth: ServicesCounters;
   recent: { kind: ServicesEventKind; day: number; text: string }[];
@@ -101,10 +102,14 @@ export interface BuildingSafety {
 export interface ServicesJSON {
   v: 1;
   startedAt: number;
-  /** [id, criminalité ×10, construit à] par bâtiment. */
+  /** [id, criminalité ×1000, construit à, risque ×10 000, santé ×100 (−100 : pas un logement)] par bâtiment. */
   recs: number[];
-  /** [id, départ, dégâts ×1000, arrivée, caserne, endommagé jusqu'à, ruine depuis] par bâtiment touché par le feu. */
+  /** [id, départ, dégâts ×10⁶, arrivée, caserne, endommagé jusqu'à, ruine depuis, dernière mise à jour] par bâtiment touché par le feu. */
   fires: number[];
+  /** Malades et délits du jour, date du dernier calcul quotidien. */
+  sick?: number;
+  incidents?: number;
+  lastDaily?: number;
   month: ServicesCounters;
   lastMonth: ServicesCounters;
   recent: { kind: ServicesEventKind; minute: number; text: string }[];
@@ -134,10 +139,6 @@ export class CityServices {
   readonly events: ServicesEvent[] = [];
   /** Change à chaque événement ou calcul quotidien (deltas du module). */
   version = 0;
-  /** Candidats aux départs de feu (id, risque) recalculés chaque jour. */
-  private candIds = new Int32Array(0);
-  private candRisk = new Float32Array(0);
-  private candCount = 0;
   /** Valeurs dérivées (risque, santé) à recalculer (après chargement). */
   private derivedStale = true;
   private incidentsToday = 0;
@@ -164,14 +165,14 @@ export class CityServices {
       const office = a.category === 'skyscraper' || (a.category === 'commercial' && (a.tags.includes('bureaux') || a.tags.includes('tertiaire')));
       const crimeKind = !bld || a.category === 'public' ? CrimeKind.None : res > 0 ? CrimeKind.Housing
         : office ? CrimeKind.Office : a.category === 'industrial' ? CrimeKind.Industry : jobs > 0 ? CrimeKind.Commerce : CrimeKind.None;
-      return { crimeKind, level: bld ? buildingLevel(a.category, res, jobs) : 1, fireBase: bld ? fireBaseRisk(a.category, a.tags) : 0, resCap: res, jobCap: jobs, name: a.nameFr, cost: a.cost };
+      return { crimeKind, level: bld ? buildingLevel(a.category, res, jobs) : 1, fireBase: bld ? fireBaseRisk(a.category, a.tags) : 0, resCap: res, jobCap: jobs, name: a.nameFr, cost: a.cost, upkeep: a.upkeepPerMonth };
     });
   }
 
   reset(): void {
     this.recs.clear(); this.burningIds.clear(); this.ruinIds.clear(); this.damagedIds.clear(); this.engaged.clear();
     this.startedAt = -1; this.month = zero(); this.lastMonth = zero(); this.recent = []; this.events.length = 0;
-    this.candCount = 0; this.derivedStale = true; this.incidentsToday = 0; this.sickNow = 0; this.lastDailyNow = 0; this.reportCache = null; this.version++;
+    this.derivedStale = true; this.incidentsToday = 0; this.sickNow = 0; this.lastDailyNow = 0; this.reportCache = null; this.version++;
   }
 
   /* ------------------------------ Accès ------------------------------ */
@@ -281,12 +282,13 @@ export class CityServices {
           target = crimeTarget(t, own, sum.get(key)! / cnt.get(key)!, h.coverageQuality(SVC.Police, bi), ramp);
         }
         r.crime += (target - r.crime) * t.crimeInertie;
-        if (r.crime < 0.05) r.crime = 0;
+        // Quantifiée (millièmes) : la sauvegarde la restitue exactement.
+        r.crime = r.crime < 0.05 ? 0 : Math.round(r.crime * 1000) / 1000;
       }
       if (!a) { r.risk = 0; r.health = -1; continue; }
       const age = Math.max(0, (now - r.builtAt) / MINUTES_PER_YEAR);
-      r.risk = this.ruinIds.has(id) ? 0 : fireRisk(t, a.fireBase, a.level, age, h.coverageQuality(SVC.Fire, bi));
-      r.health = a.resCap > 0 ? healthTarget(t, h.pollutionOf(bi), this.aRes[bi]! > 0 ? this.aAge[bi]! / this.aRes[bi]! : 35, h.coverageQuality(SVC.Health, bi)) : -1;
+      r.risk = this.ruinIds.has(id) ? 0 : Math.round(fireRisk(t, a.fireBase, a.level, age, h.coverageQuality(SVC.Fire, bi)) * 10_000) / 10_000;
+      r.health = a.resCap > 0 ? Math.round(healthTarget(t, h.pollutionOf(bi), this.aRes[bi]! > 0 ? this.aAge[bi]! / this.aRes[bi]! : 35, h.coverageQuality(SVC.Health, bi)) * 100) / 100 : -1;
     }
     this.derivedStale = false;
   }
@@ -354,16 +356,6 @@ export class CityServices {
         this.push({ kind: 'rebuild', id, minute: now, level: 'info', text: `Reconstruit par son promoteur : ${this.assetName(id)} (${this.placeName(id)})` });
       }
     }
-    // Candidats aux départs de feu (bâtiments occupés, ni en feu ni en ruine).
-    if (this.candIds.length < b.count) { this.candIds = new Int32Array(b.capacity); this.candRisk = new Float32Array(b.capacity); }
-    let m = 0;
-    for (let bi = 0; bi < b.count; bi++) {
-      const id = b.id[bi]!;
-      const r = this.recs.get(id)!;
-      if (r.risk <= 0 || r.fireStart >= 0 || this.ruinIds.has(id) || b.residents[bi]! + b.workers[bi]! <= 0) continue;
-      this.candIds[m] = id; this.candRisk[m] = r.risk; m++;
-    }
-    this.candCount = m;
     this.version++;
   }
 
@@ -386,15 +378,19 @@ export class CityServices {
     const ramp = this.ramp(now);
     if (ramp <= 0 && !this.burningIds.size) return;
     const t = this.tuning, hour = Math.floor(now / 60);
+    const b = this.host.ctx.buildings;
     if (ramp > 0) {
+      // Départs de feu : bâtiments occupés, ni en feu ni en ruine (risque du dernier calcul quotidien).
       const k = t.feuProbaHeure * ramp;
-      for (let i = 0; i < this.candCount; i++) {
-        const id = this.candIds[i]!;
-        if (hash01(id, hour, SALT_FIRE) < this.candRisk[i]! * k && !this.burningIds.has(id) && this.host.ctx.buildings.indexOf(id) >= 0) this.ignite(id, now, false);
+      for (let bi = 0; bi < b.count; bi++) {
+        if (b.residents[bi]! + b.workers[bi]! <= 0) continue;
+        const id = b.id[bi]!;
+        const r = this.recs.get(id);
+        if (!r || r.risk <= 0 || r.fireStart >= 0 || this.ruinIds.has(id)) continue;
+        if (hash01(id, hour, SALT_FIRE) < r.risk * k) this.ignite(id, now, false);
       }
     }
     if (!this.burningIds.size) return;
-    const b = this.host.ctx.buildings;
     let stations: ServiceStation[] | null = null;
     for (const id of [...this.burningIds]) {
       const r = this.recs.get(id);
@@ -588,7 +584,8 @@ export class CityServices {
     const station = (svc: number, key: 'police' | 'pompiers' | 'sante'): ServicesReport['stations'][number] => {
       const list = h.serviceStations(svc);
       const units = list.reduce((s, x) => s + x.units, 0);
-      return { service: key, count: list.length, units: r1(units), capacity: Math.round(units * per[svc]!) };
+      const upkeep = list.reduce((s, x) => { const bi = b.indexOf(x.id); return s + (bi >= 0 ? this.info(bi)?.upkeep ?? 0 : 0); }, 0);
+      return { service: key, count: list.length, units: r1(units), capacity: Math.round(units * per[svc]!), upkeep };
     };
     const hotspots = [...hot.entries()].map(([name, e]) => ({ name, crime: Math.round(e.sum / e.n), buildings: e.n }))
       .sort((p, q) => q.crime - p.crime || q.buildings - p.buildings).slice(0, 5);
@@ -660,10 +657,13 @@ export class CityServices {
   toJSON(): ServicesJSON {
     const recs: number[] = [], fires: number[] = [];
     for (const [id, r] of this.recs) {
-      if (r.crime > 0 || r.builtAt !== 0) recs.push(id, Math.round(r.crime * 10), r.builtAt);
-      if (r.fireStart >= 0 || r.ruinedAt >= 0 || r.damagedUntil > 0) fires.push(id, r.fireStart, Math.round(r.damage * 1000), r.arrival, r.station, r.damagedUntil, r.ruinedAt);
+      recs.push(id, Math.round(r.crime * 1000), r.builtAt, Math.round(r.risk * 10_000), Math.round(r.health * 100));
+      if (r.fireStart >= 0 || r.ruinedAt >= 0 || r.damagedUntil > 0) fires.push(id, r.fireStart, Math.round(r.damage * 1e6), r.arrival, r.station, r.damagedUntil, r.ruinedAt, r.lastFireUpdate);
     }
-    return { v: 1, startedAt: this.startedAt, recs, fires, month: { ...this.month }, lastMonth: { ...this.lastMonth }, recent: this.recent.map((e) => ({ ...e })) };
+    return {
+      v: 1, startedAt: this.startedAt, recs, fires, month: { ...this.month }, lastMonth: { ...this.lastMonth }, recent: this.recent.map((e) => ({ ...e })),
+      sick: this.sickNow, incidents: this.incidentsToday, lastDaily: this.lastDailyNow,
+    };
   }
 
   /**
@@ -683,20 +683,29 @@ export class CityServices {
     };
     this.month = counters(o.month); this.lastMonth = counters(o.lastMonth);
     const b = this.host.ctx.buildings;
-    if (Array.isArray(o.recs)) for (let k = 0; k + 2 < o.recs.length; k += 3) {
-      const [id, crime, built] = [o.recs[k], o.recs[k + 1], o.recs[k + 2]];
-      if (!fin(id) || !fin(crime) || !fin(built) || b.indexOf(id) < 0) continue;
-      const r = this.rec(id); r.crime = Math.max(0, Math.min(100, crime / 10)); r.builtAt = built;
-    }
-    if (Array.isArray(o.fires)) for (let k = 0; k + 6 < o.fires.length; k += 7) {
-      const v = o.fires.slice(k, k + 7);
+    if (fin(o.lastDaily)) this.lastDailyNow = o.lastDaily;
+    if (fin(o.sick)) this.sickNow = o.sick;
+    if (fin(o.incidents)) this.incidentsToday = o.incidents;
+    let complete = Array.isArray(o.recs);
+    if (Array.isArray(o.recs)) for (let k = 0; k + 4 < o.recs.length; k += 5) {
+      const v = o.recs.slice(k, k + 5);
       if (!v.every(fin) || b.indexOf(v[0]!) < 0) continue;
-      const [id, start, dmg, arrival, station, damagedUntil, ruinedAt] = v as number[];
+      const [id, crime, built, risk, health] = v as number[];
       const r = this.rec(id!);
-      r.damage = Math.max(0, Math.min(1, dmg! / 1000)); r.damagedUntil = damagedUntil!; r.ruinedAt = ruinedAt!;
+      r.crime = Math.max(0, Math.min(100, crime! / 1000)); r.builtAt = built!; r.risk = Math.max(0, risk! / 10_000); r.health = health! < 0 ? -1 : Math.min(100, health! / 100);
+    }
+    // Valeurs dérivées sauvegardées pour chaque bâtiment : pas de recalcul avant le prochain jour (reprise à l'identique).
+    for (let bi = 0; bi < b.count && complete; bi++) if (!this.recs.has(b.id[bi]!)) complete = false;
+    this.derivedStale = !complete;
+    if (Array.isArray(o.fires)) for (let k = 0; k + 7 < o.fires.length; k += 8) {
+      const v = o.fires.slice(k, k + 8);
+      if (!v.every(fin) || b.indexOf(v[0]!) < 0) continue;
+      const [id, start, dmg, arrival, station, damagedUntil, ruinedAt, last] = v as number[];
+      const r = this.rec(id!);
+      r.damage = Math.max(0, Math.min(1, dmg! / 1e6)); r.damagedUntil = damagedUntil!; r.ruinedAt = ruinedAt!;
       if (ruinedAt! >= 0) this.ruinIds.add(id!);
       else if (start! >= 0) {
-        r.fireStart = start!; r.arrival = arrival!; r.station = station!; r.lastFireUpdate = Math.floor(now);
+        r.fireStart = start!; r.arrival = arrival!; r.station = station!; r.lastFireUpdate = last!;
         this.burningIds.add(id!);
         if (arrival! >= 0 && station! >= 0) this.engaged.set(station!, (this.engaged.get(station!) ?? 0) + 1);
       }

@@ -9,7 +9,7 @@ import type { AssetCatalog, CatalogAsset } from '../../src/shared/catalog';
 import { emptyCatalog } from '../../src/shared/catalog';
 import { InstancedBuildingRenderer, type ModelSource } from '../../src/render/buildings/renderer';
 import { mergePositions, mergeableForShadow, SHADOW_PROXY_LAYER, weldPositions } from '../../src/render/buildings/shadow-proxy';
-import { desktopAdaptive } from '../../src/ui/options';
+import { desktopDynamic, dynResEnabled } from '../../src/ui/options';
 
 function asset(id: string): CatalogAsset {
   return {
@@ -114,10 +114,13 @@ test('rendu instancié (téléphone) inchangé : masquage par l’API, ombres pa
   assert.ok(meshes.every((m) => m.count === 1));
 });
 
-test('résolution adaptative de l’ordinateur : Retina 1 → 2, 4K à 100 % jusqu’à 0,75, écran ordinaire fixe', () => {
-  assert.deepEqual(desktopAdaptive(2, 1440 * 900), { min: 1, max: 2 });
-  assert.deepEqual(desktopAdaptive(3, 1440 * 900), { min: 1, max: 2 });
-  assert.deepEqual(desktopAdaptive(1.25, 1536 * 864), { min: 1, max: 1.25 });
-  assert.equal(desktopAdaptive(1, 1920 * 1080), null);
-  assert.deepEqual(desktopAdaptive(1, 3840 * 2160), { min: 0.75, max: 1 });
+test('résolution dynamique de l’ordinateur : plancher 0,6 × la densité choisie, plafond 2 en Auto, activée par défaut en Auto seulement', () => {
+  assert.deepEqual(desktopDynamic('auto', 1.5, 2), { min: 0.9, max: 2 });
+  assert.deepEqual(desktopDynamic('auto', 1, 1), { min: 0.6, max: 1 });
+  assert.deepEqual(desktopDynamic('haute', 1.5, 1.5), { min: 0.9, max: 1.5 });
+  assert.deepEqual(desktopDynamic('basse', 1, 2), { min: 0.6, max: 1 });
+  assert.equal(dynResEnabled({ quality: 'auto', dynRes: 'auto' }), true);
+  assert.equal(dynResEnabled({ quality: 'haute', dynRes: 'auto' }), false);
+  assert.equal(dynResEnabled({ quality: 'haute', dynRes: 'on' }), true);
+  assert.equal(dynResEnabled({ quality: 'auto', dynRes: 'off' }), false);
 });

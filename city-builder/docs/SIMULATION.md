@@ -94,6 +94,9 @@ est dans `src/save/**` (thread principal).
 - **Économie vivante** (`src/sim/economie/`, détails dans `docs/ECONOMIE_VIVANTE.md`) : loyers dérivés de la valeur
   foncière, ménages en difficulté (relogement, départ), comptes des entreprises nets du loyer, fermetures avec raison et
   reprises, chômage par quartier, adéquation éducation / emploi ; pression progressive (30 j de grâce + 30 j de montée).
+- **Services qui comptent** (`src/sim/services/`, module `services`, détails dans `docs/SERVICES.md`) : criminalité par
+  bâtiment (chômage, pauvreté, densité, police), incendies (risque, pompiers, dégâts, ruines, reconstruction), santé des
+  logements et maladies (pollution, âge, soins) ; même pression progressive ; cartes d'information dans le menu Calques.
 
 ## Sauvegarde
 - **Format** (`save-format.ts`) : JSON v2 = v1 (paramètres, horloge, bâtiments, routes, identifiants) + économie

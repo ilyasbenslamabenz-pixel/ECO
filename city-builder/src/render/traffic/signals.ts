@@ -97,6 +97,9 @@ function plateGeometry(): THREE.BufferGeometry {
 
 interface HeadRef { arm: number }
 
+/** Au-delà (m, distance 3D à la caméra), le caisson détaillé (≈ 1 300 triangles) devient un pavé (12 triangles). */
+const HOUSING_NEAR = 90;
+
 export interface SignalDebugArm { node: number; x: number; y: number; z: number; heading: number; reach: number; lanes: number; mast: boolean; state: number }
 
 export class TrafficSignalRenderer {
@@ -106,6 +109,7 @@ export class TrafficSignalRenderer {
     pole: poleGeometry(POLE_HEAD_Y + 0.75, 0.07),
     arm: armGeometry(),
     housing: housingGeometry(),
+    housingFar: new THREE.BoxGeometry(0.34, 1.0, 0.25),
     plate: plateGeometry(),
     lens: new THREE.SphereGeometry(0.1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.32).rotateX(Math.PI / 2).translate(0, 0, -0.07),
     halo: new THREE.CircleGeometry(0.3, 20),
@@ -118,6 +122,11 @@ export class TrafficSignalRenderer {
     halo: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
   };
   private meshes: THREE.InstancedMesh[] = [];
+  /** Caissons : détaillés près de la caméra, pavés au loin (matrices de toutes les têtes dans `headMats`). */
+  private housingNear: THREE.InstancedMesh | null = null;
+  private housingFar: THREE.InstancedMesh | null = null;
+  private headMats = new Float32Array(0);
+  private readonly lastCam = new THREE.Vector3(NaN, NaN, NaN);
   private lenses: THREE.InstancedMesh | null = null;
   private halos: THREE.InstancedMesh | null = null;
   private heads: HeadRef[] = [];
@@ -145,6 +154,10 @@ export class TrafficSignalRenderer {
   clear(): void {
     for (const m of this.meshes) { m.dispose(); this.group.remove(m); }
     this.meshes = [];
+    if (this.housingFar) { this.housingFar.dispose(); this.group.remove(this.housingFar); }
+    this.housingNear = this.housingFar = null;
+    this.headMats = new Float32Array(0);
+    this.lastCam.set(NaN, NaN, NaN);
     this.lenses = this.halos = null;
     this.heads = [];
     this.arms = [];
@@ -188,6 +201,14 @@ export class TrafficSignalRenderer {
     const haloM = mk(this.geo.halo, this.mat.halo, headCount * 3, false, 'feux_halos');
     haloM.renderOrder = 4;
     this.lenses = lensM; this.halos = haloM;
+    const housingFar = new THREE.InstancedMesh(this.geo.housingFar, this.mat.housing, Math.max(1, headCount));
+    housingFar.count = 0;
+    housingFar.name = 'feux_caissons_loin';
+    housingFar.castShadow = housingFar.receiveShadow = true;
+    housingFar.visible = false;
+    this.group.add(housingFar);
+    this.housingNear = housingM; this.housingFar = housingFar;
+    this.headMats = new Float32Array(headCount * 16);
 
     const up = new THREE.Vector3(0, 1, 0);
     const q = new THREE.Quaternion();
@@ -201,6 +222,8 @@ export class TrafficSignalRenderer {
       off.set(lx, ly, lz).applyQuaternion(q).add(base);
       m.compose(off, q, one);
       housingM.setMatrixAt(iHead, m);
+      housingFar.setMatrixAt(iHead, m);
+      m.toArray(this.headMats, iHead * 16);
       plateM.setMatrixAt(iHead, m);
       for (let k = 0; k < 3; k++) {
         local.makeTranslation(0, LENS_DY * (1 - k), LENS_Z);
@@ -232,9 +255,30 @@ export class TrafficSignalRenderer {
       }
       this.arms.push({ node: l.nodeIds[i]!, x, y, z, heading: hd, reach, lanes: h[o + 5]!, mast, state: 2 });
     }
-    for (const im of this.meshes) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.computeBoundingBox(); }
+    for (const im of [...this.meshes, housingFar]) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere(); im.computeBoundingBox(); }
     this.states = new Uint8Array(n).fill(255);
     this.setStates(new Uint8Array(n).fill(2));
+  }
+
+  /** Caissons détaillés près de la caméra, pavés au loin (recalcul après ≥ 3 m de déplacement de la caméra). */
+  update(cx: number, cy: number, cz: number): void {
+    const near = this.housingNear, far = this.housingFar;
+    if (!near || !far) return;
+    if (Math.abs(cx - this.lastCam.x) < 3 && Math.abs(cy - this.lastCam.y) < 3 && Math.abs(cz - this.lastCam.z) < 3) return;
+    this.lastCam.set(cx, cy, cz);
+    const src = this.headMats, n = src.length / 16;
+    const na = near.instanceMatrix.array as Float32Array, fa = far.instanceMatrix.array as Float32Array;
+    let kn = 0, kf = 0;
+    for (let i = 0; i < n; i++) {
+      const o = i * 16;
+      const d = Math.hypot(src[o + 12]! - cx, src[o + 13]! - cy, src[o + 14]! - cz);
+      if (d < HOUSING_NEAR) na.set(src.subarray(o, o + 16), (kn++) * 16);
+      else fa.set(src.subarray(o, o + 16), (kf++) * 16);
+    }
+    near.count = kn; near.visible = kn > 0;
+    far.count = kf; far.visible = kf > 0;
+    if (kn) { near.instanceMatrix.clearUpdateRanges(); near.instanceMatrix.addUpdateRange(0, kn * 16); near.instanceMatrix.needsUpdate = true; }
+    if (kf) { far.instanceMatrix.clearUpdateRanges(); far.instanceMatrix.addUpdateRange(0, kf * 16); far.instanceMatrix.needsUpdate = true; }
   }
 
   private setStates(s: Uint8Array): void {
@@ -263,7 +307,7 @@ export class TrafficSignalRenderer {
 
   /** Diagnostic (tests e2e) : bras, positions, états et nombre d'instances. */
   debug(): { version: number; arms: SignalDebugArm[]; heads: number; meshes: { name: string; count: number }[]; updates: number } {
-    return { version: this.version, arms: this.arms.map((a) => ({ ...a })), heads: this.heads.length, meshes: this.meshes.map((m) => ({ name: m.name, count: m.count })), updates: this.updates };
+    return { version: this.version, arms: this.arms.map((a) => ({ ...a })), heads: this.heads.length, meshes: this.meshes.map((m) => ({ name: m.name, count: m === this.housingNear ? this.heads.length : m.count })), updates: this.updates };
   }
 
   dispose(): void {

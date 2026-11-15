@@ -183,7 +183,7 @@
       <button id="mm-zoom-out" data-tip="Zoom arrière" aria-label="Zoom arrière"><i data-icon="zoomOut"></i></button>
       <button id="mm-north" data-tip="Orientation : remettre le nord en haut (touche N)" aria-label="Orientation nord"><i data-icon="compass" id="mm-compass"></i></button>
       <button id="btn-cinematic" data-tip="Survol cinématique (touche C)" aria-pressed="false" aria-label="Survol cinématique"><i data-icon="plane"></i><span class="tl sr">Survol</span></button>
-      <button id="btn-layers" data-tip="Calques : électricité, eau, déchets, circulation, quartiers, icônes de problèmes" aria-label="Calques" aria-pressed="false" aria-expanded="false"><i data-icon="layers"></i></button>
+      <button id="btn-layers" data-tip="Calques : électricité, eau, déchets, circulation, quartiers, criminalité, incendies, santé, icônes de problèmes" aria-label="Calques" aria-pressed="false" aria-expanded="false"><i data-icon="layers"></i></button>
       <button id="mm-toggle" data-tip="Afficher / masquer la mini-carte" aria-label="Mini-carte" aria-pressed="true"><i data-icon="map"></i></button>
     </div>
   </div>
@@ -328,9 +328,10 @@
       <button id="pop-close" class="icon-btn" aria-label="Fermer" data-tip="Fermer (Échap)"><i data-icon="close"></i></button>
     </span>
   </div>
-  <div class="ptabs" role="tablist" aria-label="Population" style="--n: 5">
+  <div class="ptabs" role="tablist" aria-label="Population" style="--n: 6">
     <button data-ptab="overview" class="active" role="tab" aria-selected="true">Aperçu</button>
     <button data-ptab="economy" role="tab" aria-selected="false">Économie</button>
+    <button data-ptab="services" role="tab" aria-selected="false">Services</button>
     <button data-ptab="demand" role="tab" aria-selected="false">Demande</button>
     <button data-ptab="acts" role="tab" aria-selected="false">Activités</button>
     <button data-ptab="ages" role="tab" aria-selected="false">Âges</button>
@@ -347,6 +348,9 @@
     </section>
     <section data-ppage="economy" class="fpage hidden">
       <div id="pop-eco"></div>
+    </section>
+    <section data-ppage="services" class="fpage hidden">
+      <div id="pop-svc"></div>
     </section>
     <section data-ppage="demand" class="fpage hidden">
       <div class="sec-title">Demande de construction <span class="muted">(−100 % à +100 %)</span></div>

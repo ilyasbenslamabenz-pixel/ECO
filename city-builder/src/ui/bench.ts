@@ -83,6 +83,8 @@ export interface BenchHost {
   pixelRatio: () => number;
   /** Côté de la carte d'ombre du soleil (px, 0 : sans ombres). */
   shadowSize: () => number;
+  /** Résolution dynamique : plage du rapport de pixels de la 3D (null : résolution fixe). */
+  dynamicRange: () => { min: number; max: number } | null;
 }
 
 interface SceneDef {
@@ -261,6 +263,8 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       densitePixels: r2(devicePixelRatio || 1), qualite: h.quality, modeAllege: h.lite, modeSur: h.safeMode ?? false, lotsParMateriau: h.batched,
       carteOmbre: h.renderer.shadowMap.enabled && h.shadowSize() > 0 ? `${h.shadowSize()} px` : 'désactivée',
       coeursProcesseur: navigator.hardwareConcurrency ?? 0,
+      antialiasing: h.renderer.getContext().getContextAttributes()?.antialias ? `MSAA ×${(h.renderer.getContext().getParameter(h.renderer.getContext().SAMPLES) as number) || '?'}` : 'désactivé',
+      resolutionDynamique: (() => { const d = h.dynamicRange(); return d ? `activée (×${fmt(d.min)}–×${fmt(d.max)})` : 'désactivée'; })(),
     },
     load: {
       playableS: r1(readyAt / 1000),
@@ -297,7 +301,7 @@ export function resultsText(r: BenchResult): string {
     `Meknes City — mesure de performance (${r.mode}) — version ${r.version} — ${r.date}`,
     `Carte graphique : ${e['carteGraphique']} (${e['fabricant']}, ${e['webgl']}, multi_draw ${e['multiDraw'] ? 'oui' : 'non'})`,
     `Navigateur : ${e['navigateur']} sur ${e['systeme']} · ${e['coeursProcesseur']} cœurs`,
-    `Écran ${e['ecran']} · fenêtre ${e['fenetre']} · densité ${e['densitePixels']} · qualité ${e['qualite']}${e['modeAllege'] ? ' (allégé)' : ''}${e['modeSur'] ? ' (mode sûr)' : ''} · lots par matériau ${e['lotsParMateriau'] ? 'oui' : 'non'} · ombres ${e['carteOmbre']}`,
+    `Écran ${e['ecran']} · fenêtre ${e['fenetre']} · densité ${e['densitePixels']} · qualité ${e['qualite']}${e['modeAllege'] ? ' (allégé)' : ''}${e['modeSur'] ? ' (mode sûr)' : ''} · lots par matériau ${e['lotsParMateriau'] ? 'oui' : 'non'} · ombres ${e['carteOmbre']} · résolution dynamique ${e['resolutionDynamique']} · antialiasing ${e['antialiasing']}`,
     `Chargement : jouable en ${fmt(r.load.playableS)} s · plus longue image au chargement ${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms) · premières images ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms)`,
     '',
     'Scène | img/s méd. | img/s moy. | p95 ms | p99 ms | max ms (à s) | > 33 ms | CPU màj+rendu ms | appels | triangles | rendu px (ratio) | nouveaux shaders/textures/géom.',
@@ -353,6 +357,7 @@ function showResults(r: BenchResult): void {
       ${kv('Carte graphique', e['carteGraphique'])}${kv('Fabricant', `${e['fabricant']} · ${e['webgl']} · multi_draw ${e['multiDraw'] ? 'oui' : 'non'}`)}
       ${kv('Navigateur', `${e['navigateur']} · ${e['systeme']} · ${e['coeursProcesseur']} cœurs`)}${kv('Écran / fenêtre', `${e['ecran']} / ${e['fenetre']} · densité ${fmt(e['densitePixels'] as number)}`)}
       ${kv('Qualité', `${e['qualite']}${e['modeAllege'] ? ' (allégé)' : ''}${e['modeSur'] ? ' (mode sûr)' : ''} · lots par matériau ${e['lotsParMateriau'] ? 'oui' : 'non'} · ombres ${e['carteOmbre']}`)}
+      ${kv('Résolution dynamique', e['resolutionDynamique'])}${kv('Antialiasing', e['antialiasing'])}
       ${kv('Jouable après', `${fmt(r.load.playableS)} s`)}
       ${kv('Plus longue image au chargement', `${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms)`)}
       ${kv('Premières images de jeu (3 s)', `max ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms)`)}
@@ -365,7 +370,7 @@ function showResults(r: BenchResult): void {
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
       <button type="button" id="bench-copy" ${btn.replace('#2a3646', '#4fd18b').replace('#e8eef5', '#0d1a12')}>Copier les résultats</button>
       ${link('Relancer', {})}${link('Relancer en Haute', { qualite: 'haute' })}${link('Relancer en Moyenne', { qualite: 'moyenne' })}${link('Relancer en Auto', { qualite: 'auto' })}
-      ${link('Relancer sans lots (?lots=0)', { lots: '0' })}${link('Lots activés', { lots: null })}
+      ${link('Relancer sans lots (?lots=0)', { lots: '0' })}${link('Lots activés', { lots: null })}${link('Résolution dynamique activée', { dyn: '1' })}${link('Résolution fixe', { dyn: '0' })}${link('Sans MSAA', { msaa: '0' })}${link('Avec MSAA', { msaa: null })}${link('Ombres 1K', { ombres: 'low' })}${link('Sans ombres', { ombres: 'off' })}${link('Ombres du réglage', { ombres: null })}
       <button type="button" id="bench-close" ${btn}>Fermer</button>
     </div>
     <textarea id="bench-text" readonly style="display:none;width:100%;box-sizing:border-box;margin-top:10px;min-height:180px;background:#0b1016;color:#e8eef5;border:1px solid #2c3a4a;border-radius:8px;font:12px ui-monospace,monospace"></textarea>`;

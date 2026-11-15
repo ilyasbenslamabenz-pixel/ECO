@@ -267,6 +267,18 @@ export async function initRender(
       if (profile.lite) return;
       try {
         await Promise.race([ctx.renderer.compileAsync(ctx.scene, ctx.camera), new Promise<void>((r) => setTimeout(r, capMs))]);
+        // Textures de TOUTE la scène (objets cachés, LOD proches, autres vues) envoyées maintenant : sinon le
+        // premier passage en vue rue en envoyait ≈ 25 Mo d'un coup (image figée, mesure de la page ?bench).
+        const seen = new Set<THREE.Texture>();
+        ctx.scene.traverse((o) => {
+          const m = (o as THREE.Mesh).material;
+          if (!m) return;
+          for (const mat of Array.isArray(m) ? m : [m]) for (const v of Object.values(mat)) {
+            const t = v as THREE.Texture | null;
+            if (t?.isTexture && !seen.has(t) && t.image && !(t as THREE.Texture & { isRenderTargetTexture?: boolean }).isRenderTargetTexture) seen.add(t);
+          }
+        });
+        for (const t of seen) ctx.renderer.initTexture(t);
       } catch (e) { console.warn('Précompilation des shaders :', e); }
     },
     stats() {
@@ -291,6 +303,7 @@ export async function initRender(
     veg.update(cam);
     roads.update(camPos.x, camPos.y, camPos.z);
     buildings.update(camPos.x, camPos.y, camPos.z);
+    signals.update(camPos.x, camPos.y, camPos.z);
     vehicles.update(dt);
     plugins.frame(dt);
     frameMs = frameMs * 0.9 + (performance.now() - t0) * 0.1;

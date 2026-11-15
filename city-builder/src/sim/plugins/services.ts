@@ -81,11 +81,9 @@ export function createServicesPlugin(): SimPlugin & { readonly core: () => CityS
     onTick(ctx, _minutes) {
       if (!core || !ctx.inGame) return;
       const hour = Math.floor(ctx.clock.totalMinutes / 60);
-      if (hour !== lastHour) {
-        // Première heure après une nouvelle partie / un chargement : référence seulement.
-        if (lastHour >= 0) core.hourly(ctx.clock.totalMinutes);
-        lastHour = hour;
-      }
+      // Après une nouvelle partie / un chargement : référence = heure d'avant ce pas (reprise identique).
+      if (lastHour < 0) lastHour = Math.floor((ctx.clock.totalMinutes - _minutes) / 60);
+      if (hour !== lastHour) { core.hourly(ctx.clock.totalMinutes); lastHour = hour; }
       drain(ctx);
     },
     onDayStart(ctx) { drain(ctx); },

@@ -29,6 +29,8 @@ export interface InfoPanelDeps {
   upgradeService?(id: number): Promise<boolean>;
   /** Occupation réelle d'un bâtiment (simulation : habitants, employés, services, habitants suivis). */
   inspect?(id: number): Promise<BuildingOccupancy | null>;
+  /** Services : reconstruction d'une ruine (incendie) ; vrai si accepté. */
+  rebuild?(id: number): Promise<boolean>;
   close(): void;
 }
 
@@ -114,6 +116,24 @@ export class InfoPanel {
             if (eco && o.residentCapacity > 0) {
               this.row('Loyer d’un logement', `${money(eco.rent)} / mois · valeur foncière ${fmt(eco.landValue)}`);
               if (eco.householdsInDistress > 0) this.row('Ménages en difficulté', el('span', { cls: 'neg', text: fmt(eco.householdsInDistress) }));
+            }
+            // Services (champ facultatif) : état (feu, endommagé, ruine), criminalité, risque d'incendie, santé, couverture.
+            const sf = o.safety;
+            if (sf) {
+              const stateTxt = sf.state === 'feu' ? `en feu (dégâts ${Math.round(sf.damage * 100)} %)` : sf.state === 'ruine' ? 'détruit par le feu (ruine)'
+                : sf.state === 'endommage' ? 'endommagé par le feu (en réparation)' : '';
+              if (stateTxt) this.row('État', el('span', { cls: 'neg', text: stateTxt }));
+              const lvl = (v: number, hi: number, mid: number): string => (v >= hi ? 'neg' : v >= mid ? '' : 'pos');
+              const cov = (q: number): string => (q > 0 ? 'couvert' : 'non couvert');
+              if (o.residentCapacity > 0 || o.jobCapacity > 0) this.row('Criminalité', el('span', { cls: lvl(sf.crime, 45, 20), text: `${fmt(sf.crime)} / 100 · police : ${cov(sf.police)}` }));
+              if (sf.state !== 'ruine') this.row('Risque d’incendie', el('span', { cls: lvl(sf.fireRisk, 60, 30), text: `${fmt(sf.fireRisk)} / 100 · pompiers : ${cov(sf.fire)}` }));
+              if (sf.health !== null) this.row('Santé des habitants', el('span', { cls: sf.health < 60 ? 'neg' : sf.health >= 80 ? 'pos' : '', text: `${fmt(sf.health)} / 100 · soins : ${cov(sf.care)}${sf.sick ? ` · ${fmt(sf.sick)} malade(s)` : ''}` }));
+              if (sf.state === 'ruine') {
+                if (sf.rebuildCost !== null && this.d.rebuild) {
+                  const cost = sf.rebuildCost;
+                  this.action(`Reconstruire · ${money(cost)}`, () => { void this.d.rebuild!(shownId).then((ok) => { if (ok) this.show(p); }); }, '', 'Remettre le bâtiment en état (il accueillera de nouveau habitants et emplois)');
+                } else if (sf.rebuildInDays !== null) this.row('Reconstruction', `par son promoteur dans ${fmt(sf.rebuildInDays)} jour(s)`);
+              }
             }
             const co = o.company;
             if (co && co.status && co.sector !== 'Service public') {

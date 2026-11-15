@@ -1078,3 +1078,9 @@ body[data-tuto-cat="waste"] #family-pop [data-family-cat="waste"] { box-shadow: 
 #dash-body .eau-slider input { grid-column: 1 / 3; width: 100%; }
 #dash-body .eau-fac, #dash-body .eau-alerts { margin: 0; padding-left: 16px; }
 #dash-body .eau-fac li span { display: block; color: var(--muted); font-size: 12px; }
+
+/* Services (vague 2) : onglet Population › Services, légende des cartes du menu Calques. */
+@media (max-width: 760px) { #pop-panel .ptabs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.services-tab .svc-gaps, .services-tab .svc-events { margin: 4px 0 8px; padding-left: 18px; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.services-tab .svc-line { margin: -2px 0 6px; overflow-wrap: anywhere; }
+#layers-pop .layers-legend { margin-top: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(var(--ink), .05); overflow-wrap: anywhere; }

@@ -63,22 +63,30 @@ export function dynResEnabled(o: Pick<GraphicsOptions, 'quality' | 'dynRes'>): b
   return o.dynRes === 'on' || (o.dynRes === 'auto' && o.quality === 'auto');
 }
 
+/** Ombres imposées par l'adresse (`?ombres=off|low|high|ultra`, page de mesure), jamais mémorisées seules. */
+export function urlShadows(search = typeof location !== 'undefined' ? location.search : ''): GraphicsOptions['shadows'] | null {
+  const s = new URLSearchParams(search).get('ombres');
+  return s === 'off' || s === 'low' || s === 'high' || s === 'ultra' ? s : null;
+}
+
 export function loadOptions(): GraphicsOptions {
   let o: GraphicsOptions;
   try { o = sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null); } catch { o = { ...DEFAULT_OPTIONS }; }
-  const q = urlQuality(), d = urlDynRes();
+  const q = urlQuality(), d = urlDynRes(), sh = urlShadows();
   if (q) o = { ...o, quality: q };
   if (d) o = { ...o, dynRes: d };
+  if (sh) o = { ...o, shadows: sh };
   return o;
 }
 
 export function saveOptions(o: GraphicsOptions): void {
   try {
     // Qualité imposée par l'adresse : la qualité mémorisée du joueur reste celle d'avant.
-    const q = urlQuality(), d = urlDynRes();
+    const q = urlQuality(), d = urlDynRes(), sh = urlShadows();
     const stored = sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null);
     if (q && o.quality === q) o = { ...o, quality: stored.quality };
     if (d && o.dynRes === d) o = { ...o, dynRes: stored.dynRes };
+    if (sh && o.shadows === sh) o = { ...o, shadows: stored.shadows };
     localStorage.setItem(KEY, JSON.stringify(o));
   } catch { /* navigation privée : réglage non mémorisé */ }
 }
@@ -93,17 +101,6 @@ export interface GraphicsTargets {
   camera?: { viewDistance: number };
   /** Cadence du rendu (src/render/scene.ts) : plafond d'images, ombres, résolution adaptative. */
   perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number };
-}
-
-/**
- * Ordinateur, qualité « auto » : résolution adaptative autour de 60 images/s. Écran Retina / 4K (densité > 1) :
- * de 1 à 2 pixels par point (départ 1,5 ; monte si la machine suit, redescend sinon). Très grand écran à densité 1
- * (4K à 100 %, > 3,5 millions de points) : peut descendre à 0,75. Écran ordinaire : résolution fixe (null).
- */
-export function desktopAdaptive(dpr: number, cssPixels = typeof window !== 'undefined' ? window.innerWidth * window.innerHeight : 0): { min: number; max: number } | null {
-  const max = Math.min(dpr, 2);
-  const min = dpr > 1 ? 1 : cssPixels > 3_500_000 ? 0.75 : max;
-  return max - min > 1e-3 ? { min, max } : null;
 }
 
 /**

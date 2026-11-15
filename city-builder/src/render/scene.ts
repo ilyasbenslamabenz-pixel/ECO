@@ -36,7 +36,9 @@ export interface RenderPerf {
 }
 
 export function initScene(canvas: HTMLCanvasElement): RenderContext {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+  // ?msaa=0 (page de mesure) : sans antialiasing matériel, pour mesurer son coût sur la machine du joueur.
+  const msaa = (() => { try { return new URLSearchParams(globalThis.location?.search ?? '').get('msaa') !== '0'; } catch { return true; } })();
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: msaa, powerPreference: 'high-performance', preserveDrawingBuffer: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;

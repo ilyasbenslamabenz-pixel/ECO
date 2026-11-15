@@ -439,8 +439,6 @@ export class DemographySystem {
       if (c.home[i] === id) toRelocate.add(c.household[i]!);
     }
     this.pupilsBySchool.delete(id);
-    const bi = this.ctx.buildings.indexOf(id);
-    if (bi >= 0) { this.ctx.buildings.residents[bi] = 0; this.ctx.buildings.workers[bi] = 0; }
     for (const hid of toRelocate) {
       const hk = this.households.indexOf(hid);
       if (hk < 0) continue;
@@ -450,6 +448,9 @@ export class DemographySystem {
       else leavingHouseholds.add(hid);
     }
     if (leavingHouseholds.size) this.removeHouseholds(leavingHouseholds, true);
+    // Compteurs remis à zéro APRÈS les déménagements (qui décrémentent l'ancien logement) : le bâtiment reste vide.
+    const bi = this.ctx.buildings.indexOf(id);
+    if (bi >= 0) { this.ctx.buildings.residents[bi] = 0; this.ctx.buildings.workers[bi] = 0; }
     this.coverageDirty = true;
   }
 
@@ -482,6 +483,8 @@ export class DemographySystem {
     for (let s = 0; s < n; s++) {
       const m = this.metaOfIndex(s);
       if (!m || !b.roadAccess[s]) continue;
+      // Équipement en feu ou en ruine (incendie) : il ne couvre plus personne.
+      if (m.service >= 0 && this.services.blocked(b.id[s]!)) continue;
       const sx = b.x[s]!, sz = b.z[s]!;
       const affects = m.service >= 0 || m.attract > 0 || m.pollution > 0 || m.leisureVenue;
       if (!affects) continue;
@@ -609,7 +612,7 @@ export class DemographySystem {
     return this.coverage[service]![bi] ? this.coverageQ[service]![bi]! : 0;
   }
   pollutionOf(bi: number): number { return bi >= 0 && bi < this.pollutionAt.length ? this.pollutionAt[bi]! : 0; }
-  householdInDistress(hk: number): boolean { return this.living.ramp > 0 && this.households.col.distressDays[hk]! > 0; }
+  householdInDistress(hk: number): boolean { return this.households.col.distressDays[hk]! > 0 && this.noServiceRamp() > 0; }
   /** Équipements d'un service desservis par une route : position, rayon et unités (capacité, améliorations comprises). */
   serviceStations(service: number): ServiceStation[] {
     const b = this.ctx.buildings, out: ServiceStation[] = [];

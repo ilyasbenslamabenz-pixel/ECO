@@ -625,6 +625,7 @@ export function initUI(h: UIHandlers): UIHandle {
         serviceInfo: async (id) => (await a.machine.pluginCommand('ameliorations', 'info', { buildingId: id })) as { level: number; max: number; upgradeCost: number | null; radiusFactor: number; capacityFactor: number; extraUpkeep: number },
         inspect: async (id) => (extPort ? await extPort.sendExt('inspectBuilding', { buildingId: id }) : null),
         upgradeService: async (id) => { try { await a.machine.pluginCommand('ameliorations', 'upgrade', { buildingId: id }); return true; } catch (e) { showToast(`Amélioration refusée : ${(e as { error?: { message?: string } })?.error?.message ?? String(e)}`, 'error'); return false; } },
+        rebuild: async (id) => { try { await a.machine.pluginCommand('services', 'reconstruire', { buildingId: id }); showToast('Bâtiment reconstruit', 'ok'); return true; } catch (e) { showToast(`Reconstruction refusée : ${(e as { error?: { message?: string } })?.error?.message ?? String(e)}`, 'error'); return false; } },
         close: () => a.tools.select(null) });
       $('tc-ok').addEventListener('click', () => { if (!$<HTMLButtonElement>('tc-ok').disabled) a.tools.confirmTouch(); });
       a.machine.onPreview(() => syncTouchConfirm());

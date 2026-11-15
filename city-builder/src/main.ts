@@ -902,6 +902,7 @@ async function boot(): Promise<void> {
       cameraPose: () => input.camera.getPose(), lookAt: (x, z, d, p, y) => debug.lookAt?.(x, z, d, p, y),
       setSpeed: (speed) => b.send('setSpeed', { speed: speed as SimSpeed }), pixelRatio: () => render.ctx.renderer.getPixelRatio(),
       shadowSize: () => (render.ctx.sun.castShadow ? render.ctx.sun.shadow.mapSize.x : 0),
+      dynamicRange: () => render.ctx.perf.adaptive,
     }, bench, readyAt).catch((e: unknown) => debug.errors.push(`bench: ${errText(e)}`));
   }
   else if (params.has('demo')) await startDemo();
