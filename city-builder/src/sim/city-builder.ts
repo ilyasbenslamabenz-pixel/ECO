@@ -55,6 +55,8 @@ const DISTRICT_OVERRIDE: Record<string, District> = {
   commerce_boulangerie: 'pavillons', public_ecole: 'pavillons', public_eglise: 'pavillons',
   // Installations du module déchets : grandes emprises, zone d'activités (laisse la place aux pavillons).
   dechets_depot_camions: 'activites', dechets_centre_tri: 'activites', dechets_incinerateur: 'activites', dechets_decharge: 'activites',
+  // Dépôt de bus (module « bus ») : avec les dépôts techniques.
+  depot_bus: 'activites',
 };
 /** Poids de répétition par catégorie (nombre de copies dans la file du quartier, variantes en rotation). */
 const REPEAT: Record<string, number> = {

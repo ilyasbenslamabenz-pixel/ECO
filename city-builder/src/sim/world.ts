@@ -299,6 +299,8 @@ export class Simulation {
     // Services : une ruine de lot privé est reconstruite par son promoteur ; le module `services` pilote les incendies.
     this.demography.isPrivate = (id) => this.privateIds.has(id);
     this.plugins.service<{ attachCore?(core: unknown): void }>('services')?.attachCore?.(this.demography.services);
+    // Transports en commun (module « bus ») : démographie (navetteurs, embauche, satisfaction) et trafic (demande auto).
+    this.plugins.service<{ attachCore?(core: unknown): void }>('bus')?.attachCore?.({ demography: this.demography, traffic: this.traffic });
     this.demography.districtOf = (id) => this.plugins.service<SecteursService>('secteurs')?.sectorOf?.(id) ?? null;
     this.demography.companyTaxRate = (sector) => (sector === 1 ? this.economy.taxRates.commercial : sector === 2 ? this.economy.taxRates.industrial : sector === 3 ? this.economy.taxRates.office : 0);
   }
@@ -1046,7 +1048,11 @@ export class Simulation {
     this.tickCount++;
   }
 
-  private readonly sendTrip = (_citizen: number, from: number, to: number): void => {
+  private readonly sendTrip = (citizen: number, from: number, to: number): void => {
+    // Transports en commun : une part des trajets détaillés se fait en bus (tirage déterministe, sans PRNG ; aucun
+    // effet tant que le facteur voiture vaut 1).
+    const cf = this.traffic.carFactor;
+    if (cf < 1 && tripHash(citizen, this.clock.totalMinutes) >= cf) return;
     const a = this.traffic.accessIndexOf(from);
     const b = this.traffic.accessIndexOf(to);
     if (a >= 0 && b >= 0 && this.traffic.spawnTrip(a, b, 'prive') >= 0) this.tripsToTraffic++;
@@ -1557,4 +1563,12 @@ export class Simulation {
     this.clearPending();
     return null;
   }
+}
+
+/** Tirage déterministe 0..1 d'un trajet (citoyen, minute) : choix du mode sans consommer le PRNG de la partie. */
+function tripHash(citizen: number, minute: number): number {
+  let x = (Math.imul(citizen | 0, 0x9e3779b1) ^ Math.imul(minute | 0, 0x85ebca77)) >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 0x7feb352d);
+  x = Math.imul(x ^ (x >>> 15), 0x846ca68b);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
 }

@@ -124,6 +124,11 @@ export class TrafficSystem {
   private rng: number;
   private readonly maxVehicles: number;
   demandScale: number;
+  /**
+   * Part des déplacements faits en voiture par rapport à une ville sans transports en commun (module « bus ») :
+   * multiplie la demande automobile. 1 = aucun effet (valeur par défaut, aucune ligne).
+   */
+  carFactor = 1;
   demandEnabled: boolean;
   private readonly spawnPerStep: number;
   private readonly accessDistance: number;
@@ -1286,7 +1291,7 @@ export class TrafficSystem {
 
   private spawn(hour: number): void {
     if (!this.homes.length) return;
-    const target = Math.min(this.maxVehicles, Math.round(this.homeWeight * demandShare(hour) * this.demandScale));
+    const target = Math.min(this.maxVehicles, Math.round(this.homeWeight * demandShare(hour) * this.demandScale * this.carFactor));
     let budget = this.spawnPerStep;
     let tries = budget * 3;
     while (this.actCount < target && budget > 0 && tries-- > 0) {

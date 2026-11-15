@@ -15,6 +15,7 @@ import { zonageRenderPlugin } from './zonage';
 import { alertesRenderPlugin } from './alertes';
 import { secteursRenderPlugin } from './secteurs';
 import { servicesRenderPlugin } from './services';
+import { busRenderPlugin } from './bus';
 import type { RenderPlugin, RenderPluginContext } from './types';
 
 export type { RenderPlugin, RenderPluginContext } from './types';
@@ -33,6 +34,7 @@ export const RENDER_PLUGINS: readonly RenderPlugin[] = [
   alertesRenderPlugin,
   secteursRenderPlugin,
   servicesRenderPlugin,
+  busRenderPlugin,
 ];
 
 /** Distribution protégée des crochets de rendu (exceptions journalisées une fois par module et crochet). */

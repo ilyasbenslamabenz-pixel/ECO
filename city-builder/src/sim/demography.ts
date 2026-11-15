@@ -115,7 +115,7 @@ export interface VacancyReasons { sansAcces: number; sansEau: number; sansElectr
  * Indice de croissance bloquée (rapport `growthHint`). Économie vivante (après la période de grâce) : loyers trop
  * lourds, chômage élevé, emplois qualifiés tenus par des sous-qualifiés.
  */
-export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water' | 'high-rent' | 'need-jobs' | 'need-education' | null;
+export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water' | 'high-rent' | 'need-jobs' | 'need-education' | 'need-transit' | 'traffic-jam' | null;
 
 /** Étiquette `service:*` dont la démographie lit la couverture (rayon, capacité, niveau d'amélioration). */
 export const isCoverageServiceTag = (tag: string): boolean => SERVICE_TAG[tag] !== undefined;
@@ -561,6 +561,22 @@ export class DemographySystem {
   serviceSatisfactionParts: ((buildingId: number, out: Float64Array) => number) | null = null;
   /** Zonage résidentiel : cases zonées, cases libres constructibles, demande R (-1..1) ; null sans zonage actif. */
   residentialLots: () => { zoned: number; free: number; demand: number } | null = () => null;
+  /**
+   * Transports en commun (module « bus », docs/TRANSPORTS_COMMUN.md) — crochets neutres par défaut : préparation du
+   * jour (couverture des arrêts, avant l'embauche), satisfaction d'un logement desservi, portée supplémentaire de la
+   * recherche d'emploi (m) et desserte commune logement / emploi, aide de croissance proposée par le module.
+   */
+  transitPrepare: (now: number) => void = () => undefined;
+  transitSatisfaction: (homeId: number) => number = () => 0;
+  transitReach: (homeId: number) => number = () => 0;
+  transitServes: (homeId: number, jobId: number) => boolean = () => false;
+  extraGrowthHint: () => GrowthHint = () => null;
+  /** Embauches rendues possibles par le bus (cumul) ; recherches d'emploi sans emploi accessible (dernier jour). */
+  transitHires = 0;
+  jobNoReachDay = 0;
+  /** Chômeurs et actifs comptés à la dernière passe quotidienne. */
+  lastUnemployed = 0;
+  lastLaborForce = 0;
   /** Vrai si la ville a au moins une route (indice de croissance). */
   hasRoads: () => boolean = () => true;
   /** Économie vivante : décalage de valeur foncière de la grille municipale (indice, ±0,3) ; 0 sans grille. */
@@ -780,7 +796,12 @@ export class DemographySystem {
     const hx = b.x[hi]!, hz = b.z[hi]!;
     const idx = this.ctx.buildingIndex;
     const [c0, r0] = idx.cellOf(hx, hz);
-    const maxRing = Math.ceil(MAX_COMMUTE_M / idx.cellSize);
+    // Transports en commun (module « bus ») : un logement bien desservi atteint des emplois plus lointains desservis par
+    // la même ligne (portée supplémentaire nulle sans ligne : recherche inchangée).
+    const homeId = c.home[ci]!;
+    const extra = this.transitReach(homeId);
+    const reach = MAX_COMMUTE_M + (extra > 0 ? extra : 0);
+    const maxRing = Math.ceil(reach / idx.cellSize);
     const edu = c.education[ci]!;
     let best = -1, bestD = Infinity, fallback = -1, fallbackD = Infinity, foundRing = -1;
     for (let ring = 0; ring <= maxRing; ring++) {
@@ -796,7 +817,7 @@ export class DemographySystem {
             if (!m || m.jobCap - b.workers[j]! <= 0 || !this.jobOpen(j)) continue;
             const dx = b.x[j]! - hx, dz = b.z[j]! - hz;
             const d = Math.sqrt(dx * dx + dz * dz);
-            if (d > MAX_COMMUTE_M) continue;
+            if (d > MAX_COMMUTE_M && (d > reach || !this.transitServes(homeId, b.id[j]!))) continue;
             const qualified = edu >= m.reqEdu;
             if (qualified) { if (d < bestD) { bestD = d; best = b.id[j]!; } }
             else if (d < fallbackD) { fallbackD = d; fallback = b.id[j]!; }
@@ -805,7 +826,9 @@ export class DemographySystem {
       }
       if ((best >= 0 || fallback >= 0) && foundRing < 0) foundRing = ring;
     }
-    return best >= 0 ? best : fallback;
+    const found = best >= 0 ? best : fallback;
+    if (found >= 0 && (best >= 0 ? bestD : fallbackD) > MAX_COMMUTE_M) this.transitHires++;
+    return found;
   }
 
   private hire(ci: number, jobId: number): void {
@@ -875,12 +898,13 @@ export class DemographySystem {
     // Couverture recalculée chaque jour : la capacité des équipements suit les habitants logés.
     this.coverageDirty = true;
     this.ensureCoverage();
+    this.transitPrepare(now);
     const c = this.citizens.col;
     const b = this.ctx.buildings;
     const rng = this.ctx.rng;
     const yesterday = now - MINUTES_PER_DAY;
     const healthy = (bi: number): boolean => bi >= 0 && this.coverage[Service.Health]![bi] === 1;
-    let searches = 0;
+    let searches = 0, noReach = 0, unemployedNow = 0, laborNow = 0;
     // Emplois libres desservis : inutile de chercher quand il n'y en a aucun (coût CPU).
     let freeJobs = 0;
     for (let k = 0; k < b.count; k++) {
@@ -939,9 +963,12 @@ export class DemographySystem {
       if (freeJobs > 0 && age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.job[i]! < 0 && c.school[i]! < 0 && searches < JOB_SEARCHES_PER_DAY) {
         searches++;
         const j = this.findJob(i);
-        if (j >= 0) { this.hire(i, j); freeJobs--; }
+        if (j >= 0) { this.hire(i, j); freeJobs--; } else noReach++;
       }
+      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { laborNow++; if (c.job[i]! < 0) unemployedNow++; }
     }
+
+    this.jobNoReachDay = noReach; this.lastUnemployed = unemployedNow; this.lastLaborForce = laborNow;
 
     // 2 bis) Services : criminalité, risque d'incendie, santé des logements, délits du jour, maladies.
     this.services.daily(now);
@@ -1012,6 +1039,8 @@ export class DemographySystem {
         add(F.electricite, hp[0]!); add(F.eau, hp[1]!); add(F.dechets, hp[2]!); add(F.bruit, hp[3]!); add(F.politiques, hp[4]!);
       }
       add(F.trajet, -Math.min(15, c.commute[i]! / 400));
+      // Bonne desserte en bus du logement (0 sans ligne).
+      if (bi >= 0) { const tb = this.transitSatisfaction(b.id[bi]!); if (tb !== 0) add(F.trajet, tb); }
       add(F.impots, -taxPenalty);
       t = t < 0 ? 0 : t > 100 ? 100 : t;
       c.happiness[i] = c.happiness[i]! * 0.8 + t * 0.2;
@@ -1527,6 +1556,10 @@ export class DemographySystem {
       else if (laborForce > 0 && unemployed / laborForce > 0.15) growthHint = 'need-jobs';
       else if (skilledWorkers >= 20 && ed.underqualified / skilledWorkers > 0.35) growthHint = 'need-education';
     }
+    // Transports en commun : routes saturées, chômage dû au manque d'accès (module « bus »).
+    // Le chômage dû au manque d'accès passe avant « créez des emplois » (les emplois existent, hors de portée).
+    const transitHint = this.extraGrowthHint();
+    if (transitHint && (growthHint === null || (transitHint === 'need-transit' && growthHint === 'need-jobs'))) growthHint = transitHint;
     const fc = Math.max(1, this.factorCount);
     const satisfactionFactors = SATISFACTION_FACTORS.map(([key, label], k) => ({ key, label, delta: Math.round((this.factorSum[k]! / fc) * 10) / 10 }));
     return {

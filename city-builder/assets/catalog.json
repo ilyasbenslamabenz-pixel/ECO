@@ -19988,6 +19988,121 @@
       ]
     },
     {
+      "id": "depot_bus",
+      "nameFr": "Dépôt de bus",
+      "category": "public",
+      "lods": [
+        {
+          "file": "models/waste/dechets_depot_camions_lod0.glb",
+          "maxDistance": 200,
+          "triangles": 4616
+        },
+        {
+          "file": "models/waste/dechets_depot_camions_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 1470
+        },
+        {
+          "file": "models/waste/dechets_depot_camions_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 450
+        }
+      ],
+      "dimensions": {
+        "width": 31.2,
+        "depth": 23.2,
+        "height": 7.66
+      },
+      "footprint": {
+        "tilesX": 4,
+        "tilesZ": 3
+      },
+      "cost": 260000,
+      "upkeepPerMonth": 1200,
+      "capacity": {
+        "residents": 0,
+        "jobs": 30
+      },
+      "frontage": [
+        {
+          "x": 0,
+          "z": 11.6,
+          "nx": 0,
+          "nz": 1,
+          "kind": "pedestrian"
+        },
+        {
+          "x": -4,
+          "z": 12,
+          "nx": 0,
+          "nz": 1,
+          "kind": "delivery"
+        }
+      ],
+      "variants": [
+        {
+          "id": "bleu",
+          "nameFr": "Bardage gris, bandeau bleu (réseau de bus)",
+          "materialOverrides": {
+            "facade": {
+              "color": "#b9bec2"
+            },
+            "facade_b": {
+              "color": "#2f62b0"
+            }
+          }
+        },
+        {
+          "id": "origine",
+          "nameFr": "Bardage clair, bandeau vert propreté"
+        },
+        {
+          "id": "sable",
+          "nameFr": "Bardage sable, bandeau brique",
+          "materialOverrides": {
+            "facade": {
+              "color": "#e3d6bd"
+            },
+            "facade_b": {
+              "color": "#a5523a"
+            }
+          }
+        }
+      ],
+      "textureSets": [
+        "bardage_blanc",
+        "bardage_composite",
+        "beton_facade",
+        "enduit_blanc",
+        "enduit_peint",
+        "metal_conteneur",
+        "metal_larme",
+        "metal_rideau",
+        "pierre_taille",
+        "porte_garage",
+        "sol_beton_brut",
+        "terrain_gravier",
+        "toit_bac_acier",
+        "toit_tole_ondulee",
+        "trottoir_dalles"
+      ],
+      "license": {
+        "spdx": "CC0-1.0",
+        "source": "tools/waste/models.ts#depot (modèle du dépôt de camions-bennes réutilisé pour le dépôt de bus)",
+        "author": "Projet Aube Urbaine (kit bâtiments procédural)"
+      },
+      "tags": [
+        "public",
+        "transport",
+        "depot_bus",
+        "bus:20",
+        "reutilise:dechets_depot_camions",
+        "style:equipement_technique",
+        "densite:faible",
+        "genere"
+      ]
+    },
+    {
       "id": "dechets_centre_tri",
       "nameFr": "Centre de tri des déchets",
       "category": "public",
