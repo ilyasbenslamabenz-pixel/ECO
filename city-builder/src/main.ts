@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { previousTrace, traceStart, traceStep, tracePlaying } from './boot-trace';
 import { powerView } from './shared/power/view';
 import { waterView } from './render/water-network/view';
-import { bootDone, bootStarted, deviceProfile, isSafeMode, setSafeMode } from './render/device-profile';
+import { bootDone, bootStarted, deviceProfile, isSafeMode, safeModeReason, setSafeMode } from './render/device-profile';
 import { imageLimits } from './render/image-cap';
 import { DEFAULT_START_MONEY, GAME_NAME, PROTOCOL_VERSION, type SimSpeed } from './shared/constants';
 import { validateCatalog } from './shared/catalog';
@@ -28,7 +28,7 @@ import { initRender, type RenderStats } from './render';
 import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
-import { applyGraphicsOptions, applyTheme, loadOptions } from './ui/options';
+import { applyGraphicsOptions, applyTheme, loadOptions, urlQuality } from './ui/options';
 import { benchMode, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
 import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
 import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
@@ -154,8 +154,11 @@ async function boot(): Promise<void> {
     ? `Arrêt précédent (${prevTrace.playing ? 'après le chargement' : 'au chargement'}) après : ${prevTrace.steps.slice(-5).join(' › ')}` : null;
   traceStart();
   tracePlaying(false);
-  const enteredSafeMode = crashedBefore && !isSafeMode();
-  if (enteredSafeMode) setSafeMode(true);
+  // Qualité imposée par l'adresse (?qualite=, page de mesure) : prioritaire sur le mode sûr, qu'elle retire.
+  const forcedQuality = urlQuality();
+  if (forcedQuality) setSafeMode(false);
+  const enteredSafeMode = crashedBefore && !forcedQuality && !isSafeMode();
+  if (enteredSafeMode) setSafeMode(true, `chargement précédent interrompu (${new Date().toLocaleString('fr-FR')})${prevTrace?.steps.length ? `, dernière étape : ${prevTrace.steps[prevTrace.steps.length - 1]}` : ''}`);
   debug.safeMode = isSafeMode();
   // GLTFLoader : les textures externes partagées entre GLB ne sont téléchargées qu'une fois.
   THREE.Cache.enabled = true;
@@ -893,7 +896,7 @@ async function boot(): Promise<void> {
     const readyAt = performance.now();
     const cpuFrames = (debug as unknown as Record<string, unknown>).cpuFrames as (n: number, y: number) => { updateMs: number; renderMs: number; calls: number; triangles: number };
     if (debug.demoReady) void runBench({
-      renderer: render.ctx.renderer, canvas, quality: ui.currentOptions().quality, lite: render.profile.lite, safeMode: isSafeMode(),
+      renderer: render.ctx.renderer, canvas, quality: ui.currentOptions().quality, lite: render.profile.lite, safeMode: safeModeReason(),
       batched: !render.profile.lite && params.get('lots') !== '0' && render.ctx.renderer.extensions.has('WEBGL_multi_draw'),
       renderStats: () => render.stats(), cpuFrames, setCamera: (m) => setDemoCamera(m === 'demo-street' ? 'street' : 'aerial'),
       cameraPose: () => input.camera.getPose(), lookAt: (x, z, d, p, y) => debug.lookAt?.(x, z, d, p, y),

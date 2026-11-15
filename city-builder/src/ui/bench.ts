@@ -69,7 +69,8 @@ export interface BenchHost {
   canvas: HTMLCanvasElement;
   quality: string;
   lite: boolean;
-  safeMode: boolean;
+  /** Raison du mode sûr s'il est actif (null sinon). */
+  safeMode: string | null;
   /** Lots par matériau actifs (src/render/index.ts). */
   batched: boolean;
   renderStats: () => { calls: number; triangles: number; frameMs: number } | null;
@@ -117,6 +118,10 @@ interface SceneResult {
   fpsMedian: number; fpsMean: number; p95: number; p99: number; maxMs: number; over33: number;
   cpuUpdateMs: number | null; cpuRenderMs: number | null; updateEmaMs: number | null;
   calls: number; triangles: number; renderW: number; renderH: number; ratioMin: number; ratioMax: number;
+  /** Pendant la mesure : shaders compilés, textures et géométries nouvellement envoyées (cause probable d'à-coups). */
+  newPrograms: number; newTextures: number; newGeometries: number;
+  /** Instant de la plus longue image (s depuis le début de la mesure). */
+  maxAtS: number;
 }
 
 export interface BenchResult {
@@ -203,12 +208,17 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     };
     frameHooks.push(hook);
     await wait(preS * 1000);
+    const info = h.renderer.info;
+    const prog0 = info.programs?.length ?? 0, tex0 = info.memory.textures, geo0 = info.memory.geometries;
     const t0 = performance.now();
     measuring = true;
     await wait(measS * 1000);
     const t1 = performance.now();
     measuring = false;
     const iv = intervals(t0, t1);
+    const newPrograms = (info.programs?.length ?? 0) - prog0, newTextures = info.memory.textures - tex0, newGeometries = info.memory.geometries - geo0;
+    let maxAt = 0;
+    for (let k = 1; k < stamps.length; k++) { const t = stamps[k]!; if (t > t0 && t <= t1 && t - stamps[k - 1]! >= (iv.length ? Math.max(...iv) : Infinity)) { maxAt = t - t0; break; } }
     // Temps processeur : court échantillon séparé (attente de la carte graphique avant chaque image : gl.finish).
     let cpu: { updateMs: number; renderMs: number } | null = null;
     try { cpu = h.cpuFrames(cpuN, sc.cpuYaw); } catch { cpu = null; }
@@ -227,11 +237,14 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       calls: samples ? Math.round(calls / samples) : 0, triangles: samples ? Math.round(tris / samples) : 0,
       renderW: buf.x, renderH: buf.y,
       ratioMin: Number.isFinite(ratioMin) ? r2(ratioMin) : r2(h.pixelRatio()), ratioMax: ratioMax > 0 ? r2(ratioMax) : r2(h.pixelRatio()),
+      newPrograms, newTextures, newGeometries, maxAtS: r1(maxAt / 1000),
     });
   }
   await h.setSpeed(1).catch(() => undefined);
   h.setCamera('demo-aerial');
   badge(null);
+  if (h.safeMode) warnings.push(`Mode sûr actif (affichage allégé, qualité basse) : ${h.safeMode}. Les liens « Relancer en … » ci-dessous le retirent.`);
+  for (const s of scenes) if (s.maxMs > 100) warnings.push(`${s.label} : image de ${fmt(s.maxMs)} ms à ${fmt(s.maxAtS)} s ; pendant la scène, ${s.newPrograms} shader(s) compilé(s), ${s.newTextures} texture(s) et ${s.newGeometries} géométrie(s) envoyées.`);
   if (hiddenSeen && !startHidden) warnings.push('Onglet masqué pendant la mesure : résultats faussés (le navigateur ralentit les onglets cachés).');
   if (scenes.some((s) => s.ratioMin !== s.ratioMax)) warnings.push('Résolution adaptative (qualité « auto ») : la résolution de rendu a changé pendant au moins une scène.');
   const g = gpuInfo(h.renderer);
@@ -245,7 +258,7 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       carteGraphique: g.gpu, fabricant: g.vendor, webgl: g.webgl, multiDraw: h.renderer.extensions.has('WEBGL_multi_draw'),
       navigateur: browserName(), systeme: osName(),
       ecran: `${screen.width}×${screen.height}`, fenetre: `${Math.round(vv?.width ?? innerWidth)}×${Math.round(vv?.height ?? innerHeight)}`,
-      densitePixels: r2(devicePixelRatio || 1), qualite: h.quality, modeAllege: h.lite, modeSur: h.safeMode, lotsParMateriau: h.batched,
+      densitePixels: r2(devicePixelRatio || 1), qualite: h.quality, modeAllege: h.lite, modeSur: h.safeMode ?? false, lotsParMateriau: h.batched,
       carteOmbre: h.renderer.shadowMap.enabled && h.shadowSize() > 0 ? `${h.shadowSize()} px` : 'désactivée',
       coeursProcesseur: navigator.hardwareConcurrency ?? 0,
     },
@@ -287,10 +300,10 @@ export function resultsText(r: BenchResult): string {
     `Écran ${e['ecran']} · fenêtre ${e['fenetre']} · densité ${e['densitePixels']} · qualité ${e['qualite']}${e['modeAllege'] ? ' (allégé)' : ''}${e['modeSur'] ? ' (mode sûr)' : ''} · lots par matériau ${e['lotsParMateriau'] ? 'oui' : 'non'} · ombres ${e['carteOmbre']}`,
     `Chargement : jouable en ${fmt(r.load.playableS)} s · plus longue image au chargement ${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms) · premières images ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms)`,
     '',
-    'Scène | img/s méd. | img/s moy. | p95 ms | p99 ms | max ms | > 33 ms | CPU màj+rendu ms | appels | triangles | rendu px (ratio)',
+    'Scène | img/s méd. | img/s moy. | p95 ms | p99 ms | max ms (à s) | > 33 ms | CPU màj+rendu ms | appels | triangles | rendu px (ratio) | nouveaux shaders/textures/géom.',
   ];
   for (const s of r.scenes) {
-    lines.push(`${s.label} | ${fmt(s.fpsMedian)} | ${fmt(s.fpsMean)} | ${fmt(s.p95)} | ${fmt(s.p99)} | ${fmt(s.maxMs)} | ${fmt(s.over33)} % | ${fmt(s.cpuUpdateMs)} + ${fmt(s.cpuRenderMs)} | ${fmtInt(s.calls)} | ${fmtTris(s.triangles)} | ${s.renderW}×${s.renderH} (${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`})`);
+    lines.push(`${s.label} | ${fmt(s.fpsMedian)} | ${fmt(s.fpsMean)} | ${fmt(s.p95)} | ${fmt(s.p99)} | ${fmt(s.maxMs)} (${fmt(s.maxAtS)}) | ${fmt(s.over33)} % | ${fmt(s.cpuUpdateMs)} + ${fmt(s.cpuRenderMs)} | ${fmtInt(s.calls)} | ${fmtTris(s.triangles)} | ${s.renderW}×${s.renderH} (${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}) | ${s.newPrograms}/${s.newTextures}/${s.newGeometries}`);
   }
   for (const w of r.warnings) lines.push(`Attention : ${w}`);
   return lines.join('\n');
@@ -325,9 +338,9 @@ function showResults(r: BenchResult): void {
   const fpsColor = (f: number): string => (f >= 55 ? '#4fd18b' : f >= 30 ? '#f2c94c' : '#ff6b6b');
   const rows = r.scenes.map((s) => `<tr><td ${td.replace('right', 'left')}>${esc(s.label)}</td>`
     + `<td ${td}><b style="color:${fpsColor(s.fpsMedian)}">${fmt(s.fpsMedian)}</b></td><td ${td}>${fmt(s.fpsMean)}</td>`
-    + `<td ${td}>${fmt(s.p95)}</td><td ${td}>${fmt(s.p99)}</td><td ${td}>${fmt(s.maxMs)}</td><td ${td}>${fmt(s.over33)} %</td>`
+    + `<td ${td}>${fmt(s.p95)}</td><td ${td}>${fmt(s.p99)}</td><td ${td}>${fmt(s.maxMs)}<br><small style="color:#93a4b8">à ${fmt(s.maxAtS)} s</small></td><td ${td}>${fmt(s.over33)} %</td>`
     + `<td ${td}>${fmt(s.cpuUpdateMs)} + ${fmt(s.cpuRenderMs)}</td><td ${td}>${fmtInt(s.calls)}</td><td ${td}>${fmtTris(s.triangles)}</td>`
-    + `<td ${td}>${s.renderW}×${s.renderH}<br><small style="color:#93a4b8">×${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}</small></td></tr>`).join('');
+    + `<td ${td}>${s.renderW}×${s.renderH}<br><small style="color:#93a4b8">×${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}</small></td><td ${td}>${s.newPrograms} / ${s.newTextures} / ${s.newGeometries}</td></tr>`).join('');
   const btn = 'style="min-height:40px;padding:0 14px;border:0;border-radius:8px;font:600 14px system-ui,sans-serif;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;background:#2a3646;color:#e8eef5"';
   const short = r.mode === 'court' ? 'court' : '';
   const link = (label: string, change: Record<string, string | null>): string => `<a ${btn} href="${esc(relaunchUrl({ bench: short, ...change }))}">${esc(label)}</a>`;
@@ -344,8 +357,8 @@ function showResults(r: BenchResult): void {
       ${kv('Plus longue image au chargement', `${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms)`)}
       ${kv('Premières images de jeu (3 s)', `max ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms)`)}
     </div>
-    <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:860px">
-      <thead><tr><th ${th.replace('right', 'left')}>Scène</th><th ${th}>img/s<br>médiane</th><th ${th}>img/s<br>moyenne</th><th ${th}>p95<br>ms</th><th ${th}>p99<br>ms</th><th ${th}>plus longue<br>ms</th><th ${th}>images<br>&gt; 33 ms</th><th ${th}>CPU ms<br>màj + rendu</th><th ${th}>appels de<br>dessin</th><th ${th}>triangles</th><th ${th}>rendu px<br>(densité)</th></tr></thead>
+    <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:960px">
+      <thead><tr><th ${th.replace('right', 'left')}>Scène</th><th ${th}>img/s<br>médiane</th><th ${th}>img/s<br>moyenne</th><th ${th}>p95<br>ms</th><th ${th}>p99<br>ms</th><th ${th}>plus longue<br>ms</th><th ${th}>images<br>&gt; 33 ms</th><th ${th}>CPU ms<br>màj + rendu</th><th ${th}>appels de<br>dessin</th><th ${th}>triangles</th><th ${th}>rendu px<br>(densité)</th><th ${th}>nouveaux<br>shaders / tex. / géom.</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     ${r.warnings.map((w) => `<p style="margin:10px 0 0;color:#f2c94c">⚠ ${esc(w)}</p>`).join('')}
     <p style="margin:10px 0 0;color:#93a4b8;font-size:12px">img/s plafonnées par la fréquence de l'écran (60, 120 Hz…). CPU : échantillon séparé de ${r.mode === 'court' ? 3 : 20} images, carte graphique attendue avant chaque image. Appels et triangles : moyenne par image, ombres comprises. Aucune donnée n'est envoyée sur le réseau.</p>
