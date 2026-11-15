@@ -4,7 +4,7 @@
  * Aucune règle de jeu ici : la simulation tourne dans le worker (src/sim) ; ce fichier ne fait que relayer.
  *
  * Modes d'URL : ?demo (scène de démonstration), ?autostart (partie immédiate), ?validate (porte visuelle),
- * ?seed=N (graine de la partie), ?h=H (heure de départ).
+ * ?seed=N (graine de la partie), ?h=H (heure de départ), ?bench (page de mesure de performance : src/ui/bench.ts).
  */
 import { initToolFamilies } from './ui/tool-families';
 import { initLayersMenu } from './ui/layers-menu';
@@ -29,6 +29,7 @@ import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
 import { applyGraphicsOptions, applyTheme, loadOptions } from './ui/options';
+import { benchMode, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
 import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
 import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
 import { autoPrefixFor } from './save/autosave';
@@ -136,6 +137,9 @@ async function boot(): Promise<void> {
   document.addEventListener('touchmove', (e) => { if ((e as TouchEvent & { scale?: number }).scale !== undefined && (e as TouchEvent & { scale?: number }).scale !== 1) e.preventDefault(); }, { passive: false });
   window.addEventListener('resize', () => { if (window.visualViewport && window.visualViewport.scale > 1.01) window.scrollTo(0, 0); });
   const params = new URLSearchParams(location.search);
+  // Page de mesure : images enregistrées dès le démarrage (à-coups du chargement compris).
+  const bench = benchMode();
+  if (bench) startBenchRecorder();
   const debug: DebugInfo = {
     ready: false, workerReady: false, snapshotReceived: false, deltas: 0, frames: () => 0, catalogAssets: 0, errors: [],
     lastStats: null, demoReady: false, demo: null, renderStats: () => null,
@@ -812,6 +816,9 @@ async function boot(): Promise<void> {
       setDemoCamera('aerial');
       input.camera.setHome();
       render.terrain.refineAround(ax, az, 560);
+      // Première image rendue sous l'écran de chargement (envois de textures et de géométrie, derniers shaders) :
+      // pas d'image figée juste après son retrait.
+      if (!render.profile.lite) render.ctx.renderNow(1 / 60);
       debug.demo = { ...city, decor: city.decor.length };
       ui.hideLoading();
       ui.toast(asGame ? `Nouvelle partie : ville de départ de ${city.buildings} bâtiments, sauvegarde automatique activée.` : `Démonstration : ${city.buildings} bâtiments (${city.distinctBuildings} modèles différents), ${city.vehicles} véhicules. Touche V : vue rue.`, 'info');
@@ -878,7 +885,21 @@ async function boot(): Promise<void> {
   ui.setLoading(1, 'Prêt');
   ui.hideLoading();
   ui.setMenuFoot(`${GAME_NAME} · ${catalog.assets.length} modèles 3D au catalogue · sauvegardes : ${store.backend.kind}`);
+  installBenchLink();
   if (params.has('stress')) await startStress();
+  else if (bench) {
+    await startDemo();
+    const readyAt = performance.now();
+    const cpuFrames = (debug as unknown as Record<string, unknown>).cpuFrames as (n: number, y: number) => { updateMs: number; renderMs: number; calls: number; triangles: number };
+    if (debug.demoReady) void runBench({
+      renderer: render.ctx.renderer, canvas, quality: ui.currentOptions().quality, lite: render.profile.lite, safeMode: isSafeMode(),
+      batched: !render.profile.lite && params.get('lots') !== '0' && render.ctx.renderer.extensions.has('WEBGL_multi_draw'),
+      renderStats: () => render.stats(), cpuFrames, setCamera: (m) => setDemoCamera(m === 'demo-street' ? 'street' : 'aerial'),
+      cameraPose: () => input.camera.getPose(), lookAt: (x, z, d, p, y) => debug.lookAt?.(x, z, d, p, y),
+      setSpeed: (speed) => b.send('setSpeed', { speed: speed as SimSpeed }), pixelRatio: () => render.ctx.renderer.getPixelRatio(),
+      shadowSize: () => (render.ctx.sun.castShadow ? render.ctx.sun.shadow.mapSize.x : 0),
+    }, bench, readyAt).catch((e: unknown) => debug.errors.push(`bench: ${errText(e)}`));
+  }
   else if (params.has('demo')) await startDemo();
   else if (params.has('autostart')) await startNewGame();
   else await refreshMenu();

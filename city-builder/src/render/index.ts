@@ -80,6 +80,12 @@ export interface RenderHandle {
   applyDelta(d: DeltaMessage): void;
   /** Charge tous les modèles (démo, porte de validation) et attend la fin des chargements en cours. */
   whenReady(preloadAll?: boolean): Promise<void>;
+  /**
+   * Ordinateur : compile d'avance les shaders de toute la scène (KHR_parallel_shader_compile : sans bloquer le fil
+   * principal quand le navigateur le permet), sous l'écran de chargement, au lieu de la première image affichée.
+   * Attente plafonnée à `capMs`. Téléphone : sans effet (comportement inchangé).
+   */
+  precompile(capMs?: number): Promise<void>;
   stats(): RenderStats;
 }
 
@@ -255,6 +261,13 @@ export async function initRender(
       // Mode allégé : pas de préchargement de TOUS les modèles (mémoire) ; chargement à la demande.
       if (preloadAll && profile.preloadAll) { buildings.preloadAll(); vehicles.preloadAll(); }
       await Promise.all([terrain.ready, roads.whenReady(), buildings.whenReady(), vehicles.whenReady()]);
+      await handle.precompile();
+    },
+    async precompile(capMs = 5000) {
+      if (profile.lite) return;
+      try {
+        await Promise.race([ctx.renderer.compileAsync(ctx.scene, ctx.camera), new Promise<void>((r) => setTimeout(r, capMs))]);
+      } catch (e) { console.warn('Précompilation des shaders :', e); }
     },
     stats() {
       const info = ctx.renderer.info;

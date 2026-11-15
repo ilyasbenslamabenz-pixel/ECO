@@ -285,6 +285,17 @@ export class Simulation {
     };
     this.demography.pollutionFactorOf = (id) => this.plugins.service<SecteursService>('secteurs')?.pollutionFactorOf(id) ?? 1;
     this.demography.serviceLevel = (id) => this.plugins.service<AmeliorationsService>('ameliorations')?.levelOf(id) ?? 1;
+    // Économie vivante : valeur foncière de la grille municipale (base 100 ¢/m² : nuisances des déchets, bruit des
+    // pôles), secteurs du joueur comme quartiers, taux d'imposition des entreprises.
+    this.demography.landValueOffset = (id) => {
+      const g = this.plugins.service<Muni>('municipal')?.grids.get('valeur_fonciere');
+      const i = g ? this.buildings.indexOf(id) : -1;
+      if (!g || i < 0) return 0;
+      const d = (g.at(this.buildings.x[i]!, this.buildings.z[i]!) - 100) / 200;
+      return d < -0.3 ? -0.3 : d > 0.3 ? 0.3 : d;
+    };
+    this.demography.districtOf = (id) => this.plugins.service<SecteursService>('secteurs')?.sectorOf?.(id) ?? null;
+    this.demography.companyTaxRate = (sector) => (sector === 1 ? this.economy.taxRates.commercial : sector === 2 ? this.economy.taxRates.industrial : sector === 3 ? this.economy.taxRates.office : 0);
   }
 
   /** Minute de jeu du début de la partie (heure et mois de départ ; période de grâce « sans service »). */

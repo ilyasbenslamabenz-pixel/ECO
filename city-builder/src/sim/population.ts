@@ -164,6 +164,10 @@ export const HOUSEHOLD_SCHEMA = {
   movedIn: Int32Array,
   /** Mois consécutifs de mécontentement (déménagement hors de la ville à 3). */
   unhappyMonths: Uint8Array,
+  /** Économie vivante (colonnes facultatives : 0 dans les anciennes sauvegardes) : loyer mensuel du logement (crédits). */
+  rent: Float32Array,
+  /** Jours de difficulté de paiement du loyer (loyer au-delà de la part soutenable des ressources). */
+  distressDays: Uint16Array,
 } as const;
 
 /** Une entreprise par bâtiment d'emploi (id = id du bâtiment). */
@@ -176,7 +180,26 @@ export const COMPANY_SCHEMA = {
   revenue: Float32Array,
   profit: Float32Array,
   founded: Int32Array,
+  /** Économie vivante (colonnes facultatives : 0 dans les anciennes sauvegardes). Loyer et impôt du dernier mois clos. */
+  rent: Float32Array,
+  tax: Float32Array,
+  /** Clientèle locale (commerces, 0 = pas encore évaluée : facteur de la ville entière). */
+  customers: Float32Array,
+  /** Mois déficitaires (lissés) ; fermeture au-delà du seuil. */
+  lossMonths: Uint8Array,
+  /** 0 en activité, 1 en difficulté, 2 fermée (local vacant). */
+  status: Uint8Array,
+  /** Raison principale des difficultés ou de la fermeture (`CLOSURE_REASONS`, 0 = aucune). */
+  reason: Uint8Array,
+  /** Minute de la fermeture (local vacant), 0 sinon. */
+  closedAt: Int32Array,
 } as const;
+
+/**
+ * Colonnes ajoutées après la première version du format : absentes des anciennes sauvegardes, elles valent 0
+ * au chargement (`SoaTable.fromJSON`) et la validation ne les exige pas.
+ */
+export const OPTIONAL_COLUMNS: ReadonlySet<string> = new Set(['rent', 'distressDays', 'tax', 'customers', 'lossMonths', 'status', 'reason', 'closedAt']);
 
 export type CitizenTable = SoaTable<typeof CITIZEN_SCHEMA>;
 export type HouseholdTable = SoaTable<typeof HOUSEHOLD_SCHEMA>;

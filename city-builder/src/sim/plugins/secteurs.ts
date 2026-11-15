@@ -28,7 +28,11 @@ export function migrateSecteurs(data: unknown, from: number): SecteursSave {
 }
 
 /** Service lu par la démographie (bonheur, pollution subie) ; `version` change à chaque modification. */
-export interface SecteursService { happinessOf(buildingId: number): number; pollutionFactorOf(buildingId: number): number; version(): number }
+export interface SecteursService {
+  happinessOf(buildingId: number): number; pollutionFactorOf(buildingId: number): number; version(): number;
+  /** Secteur contenant le bâtiment (statistiques par quartier de l'économie vivante) ; null hors secteur. */
+  sectorOf?(buildingId: number): { key: number; name: string } | null;
+}
 
 export function createSecteursPlugin(): SimPlugin & { readonly state: () => SecteursSave } {
   let s = emptySecteursSave();
@@ -77,7 +81,15 @@ export function createSecteursPlugin(): SimPlugin & { readonly state: () => Sect
     const secteurs: SecteurView[] = s.secteurs.map((d, k) => ({ ...d, policies: [...d.policies], buildings: n[k]!, monthlyCost: costOf(d, n[k]!) }));
     return { secteurs, totalCost: secteurs.reduce((a, d) => a + d.monthlyCost, 0), max: SECTEUR_LIMITS.max };
   };
-  const service: SecteursService = { happinessOf: (id) => effect(id, 'happiness'), pollutionFactorOf: (id) => effect(id, 'pollution'), version: () => version };
+  const service: SecteursService = {
+    happinessOf: (id) => effect(id, 'happiness'), pollutionFactorOf: (id) => effect(id, 'pollution'), version: () => version,
+    sectorOf: (id) => {
+      if (!ctxRef || !s.secteurs.length) return null;
+      const k = sectorIndex(ctxRef, id);
+      const d = k >= 0 ? s.secteurs[k] : undefined;
+      return d ? { key: d.id, name: d.name } : null;
+    },
+  };
   const bad = (message: string): PluginCommandResult => ({ ok: false, code: 'INVALID_ARGS', message });
 
   return {

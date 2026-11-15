@@ -6,6 +6,7 @@
  *   node scripts/build.mjs [--watch] [--dev]
  */
 import * as esbuild from 'esbuild';
+import { execSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +23,16 @@ const FILE_BUDGET = 15 * 1024 * 1024;
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 
+/** Version affichée par la page de mesure (?bench) : commit publié (GitHub Actions) ou commit local (+ « modifié »). */
+function buildCommit() {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 10);
+  try {
+    const sha = execSync('git rev-parse --short=10 HEAD', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    const dirty = execSync('git status --porcelain --untracked-files=no -- .', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() !== '';
+    return dirty ? `${sha}+modifié` : sha;
+  } catch { return ''; }
+}
+
 const common = {
   bundle: true,
   sourcemap: dev ? 'inline' : false,
@@ -29,7 +40,7 @@ const common = {
   target: ['es2022', 'safari16'],
   logLevel: 'info',
   legalComments: 'none',
-  define: { 'process.env.NODE_ENV': dev ? '"development"' : '"production"' },
+  define: { 'process.env.NODE_ENV': dev ? '"development"' : '"production"', __BUILD_COMMIT__: JSON.stringify(buildCommit()) },
 };
 
 const mainOpts = { ...common, entryPoints: [join(root, 'src/main.ts')], outfile: join(dist, 'game.js'), format: 'esm', splitting: false };

@@ -91,6 +91,9 @@ est dans `src/save/**` (thread principal).
   emprunts sont suspendus. La ville sort de faillite dès que la trésorerie redevient positive.
 - **Prévision** : bilan du mois et projection de la trésorerie sur 12 mois, avec amortissement réel des emprunts.
 - **Historique** : bilan mensuel détaillé (240 mois au plus).
+- **Économie vivante** (`src/sim/economie/`, détails dans `docs/ECONOMIE_VIVANTE.md`) : loyers dérivés de la valeur
+  foncière, ménages en difficulté (relogement, départ), comptes des entreprises nets du loyer, fermetures avec raison et
+  reprises, chômage par quartier, adéquation éducation / emploi ; pression progressive (30 j de grâce + 30 j de montée).
 
 ## Sauvegarde
 - **Format** (`save-format.ts`) : JSON v2 = v1 (paramètres, horloge, bâtiments, routes, identifiants) + économie

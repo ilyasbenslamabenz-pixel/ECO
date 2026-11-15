@@ -13,7 +13,7 @@ import type { SaveFile } from '../shared/contracts';
 import { ROAD_TYPES } from '../shared/contracts';
 import { DEFAULT_TAX_RATE, MAX_TAX_RATE, TAX_SECTORS, type EconomyJSON } from './economy';
 import type { DemographyJSON } from './demography';
-import { CITIZEN_SCHEMA, COMPANY_SCHEMA, HOUSEHOLD_SCHEMA } from './population';
+import { CITIZEN_SCHEMA, COMPANY_SCHEMA, HOUSEHOLD_SCHEMA, OPTIONAL_COLUMNS } from './population';
 import type { ScheduledEvent } from './scheduler';
 
 export const SAVE_FORMAT_ID = 'aube-urbaine-save';
@@ -94,6 +94,8 @@ function checkColumns(j: unknown, schema: Record<string, unknown>, what: string,
   need(n <= max, `${what} : trop d'entrées (${n})`);
   for (const k of Object.keys(schema)) {
     const col = j[k];
+    // Colonnes ajoutées après coup (économie vivante) : facultatives, 0 si absentes.
+    if (col === undefined && OPTIONAL_COLUMNS.has(k)) continue;
     need(Array.isArray(col), `${what} : colonne ${k} absente`);
     need(col.length === n, `${what} : colonne ${k} de longueur incohérente`);
     for (let i = 0; i < n; i++) need(fin(col[i]), `${what} : valeur invalide (${k}[${i}])`);

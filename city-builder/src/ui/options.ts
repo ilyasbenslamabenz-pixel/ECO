@@ -40,12 +40,26 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
   };
 }
 
+/** Qualité imposée par l'adresse (`?qualite=haute|moyenne|basse|auto`, page de mesure) : prioritaire, jamais mémorisée seule. */
+export function urlQuality(search = typeof location !== 'undefined' ? location.search : ''): GraphicsOptions['quality'] | null {
+  const q = new URLSearchParams(search).get('qualite');
+  return q === 'auto' || q === 'basse' || q === 'moyenne' || q === 'haute' ? q : null;
+}
+
 export function loadOptions(): GraphicsOptions {
-  try { return sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null); } catch { return { ...DEFAULT_OPTIONS }; }
+  let o: GraphicsOptions;
+  try { o = sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null); } catch { o = { ...DEFAULT_OPTIONS }; }
+  const q = urlQuality();
+  return q ? { ...o, quality: q } : o;
 }
 
 export function saveOptions(o: GraphicsOptions): void {
-  try { localStorage.setItem(KEY, JSON.stringify(o)); } catch { /* navigation privée : réglage non mémorisé */ }
+  try {
+    // Qualité imposée par l'adresse : la qualité mémorisée du joueur reste celle d'avant.
+    const q = urlQuality();
+    if (q && o.quality === q) o = { ...o, quality: sanitizeOptions(JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<GraphicsOptions> | null).quality };
+    localStorage.setItem(KEY, JSON.stringify(o));
+  } catch { /* navigation privée : réglage non mémorisé */ }
 }
 
 export const SHADOW_SIZE: Record<GraphicsOptions['shadows'], number> = { off: 0, low: 1024, high: 2048, ultra: 4096 };

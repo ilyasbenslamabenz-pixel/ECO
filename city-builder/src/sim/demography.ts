@@ -23,6 +23,8 @@ import {
   type CitizenTable, type ColumnsJSON, type CompanyTable, type HouseholdTable,
 } from './population';
 import type { Rng } from './rng';
+import { LivingEconomy, type LivingMeta, type LivingReport } from './economie/living';
+import { buildingLevel, CompanyStatus, CLOSURE_REASONS, eduTier, rentSatisfaction, SECTOR_FR } from './economie/tuning';
 
 /* ------------------------------------------------------------------ */
 /* Paramètres                                                           */
@@ -98,7 +100,7 @@ export function residentialTaxAttraction(rate: number): number {
 
 /** Facteurs de satisfaction détaillés (rapport `satisfactionFactors`), dans l'ordre d'affichage. */
 export const SATISFACTION_FACTORS = [
-  ['emploi', 'Emploi'], ['logement', 'Accès routier'], ['electricite', 'Électricité'], ['eau', 'Eau'], ['dechets', 'Déchets'],
+  ['emploi', 'Emploi'], ['loyer', 'Coût du logement'], ['logement', 'Accès routier'], ['electricite', 'Électricité'], ['eau', 'Eau'], ['dechets', 'Déchets'],
   ['sante', 'Santé'], ['police', 'Police'], ['pompiers', 'Pompiers'], ['education', 'Éducation'], ['loisirs', 'Loisirs'],
   ['equipements', 'Équipements remarquables'], ['pollution', 'Pollution'], ['bruit', 'Bruit et nuisances'], ['trajet', 'Temps de trajet'],
   ['impots', 'Impôts'], ['politiques', 'Politiques et quartier'],
@@ -107,9 +109,12 @@ const F = Object.fromEntries(SATISFACTION_FACTORS.map(([k], i) => [k, i])) as Re
 const FACTOR_COUNT = SATISFACTION_FACTORS.length;
 
 /** Raisons des logements vides (rapport `vacancyReasons`). */
-export interface VacancyReasons { sansAcces: number; sansEau: number; sansElectricite: number; demandeFaible: number }
-/** Indice de croissance bloquée (rapport `growthHint`). */
-export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water' | null;
+export interface VacancyReasons { sansAcces: number; sansEau: number; sansElectricite: number; loyerEleve: number; demandeFaible: number }
+/**
+ * Indice de croissance bloquée (rapport `growthHint`). Économie vivante (après la période de grâce) : loyers trop
+ * lourds, chômage élevé, emplois qualifiés tenus par des sous-qualifiés.
+ */
+export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water' | 'high-rent' | 'need-jobs' | 'need-education' | null;
 
 /** Étiquette `service:*` dont la démographie lit la couverture (rayon, capacité, niveau d'amélioration). */
 export const isCoverageServiceTag = (tag: string): boolean => SERVICE_TAG[tag] !== undefined;
@@ -167,6 +172,11 @@ export interface DemographyReport {
   vacancyReasons: VacancyReasons;
   /** Croissance bloquée : ce qui manque à la ville (null si rien de particulier). */
   growthHint: GrowthHint;
+  /**
+   * Économie vivante (docs/ECONOMIE_VIVANTE.md) : loyers, ménages en difficulté, entreprises, chômage par quartier,
+   * adéquation éducation / emploi. Calculé chaque jour ; null avant le premier calcul quotidien.
+   */
+  living: LivingReport | null;
 }
 
 export interface CitizenInfo {
@@ -192,7 +202,13 @@ export interface BuildingOccupancy {
   workers: number;
   jobCapacity: number;
   roadAccess: boolean;
-  company: { name: string; sector: string; revenue: number; profit: number } | null;
+  company: {
+    name: string; sector: string; revenue: number; profit: number;
+    /** Économie vivante : loyer et impôt du dernier mois, état ('active' | 'difficulty' | 'closed'), raison. */
+    rent?: number; tax?: number; status?: 'active' | 'difficulty' | 'closed'; reason?: string | null; lossMonths?: number;
+  } | null;
+  /** Économie vivante : valeur foncière (indice, 100 = référence), loyer d'un logement, ménages en difficulté. */
+  economy?: { landValue: number; rent: number; householdsInDistress: number };
   services: string[];
   occupants: CitizenInfo[];
   employees: CitizenInfo[];
@@ -208,6 +224,8 @@ export interface DemographyJSON {
   lastMonth: MonthCounters;
   attractiveness: number;
   tripsEmitted: number;
+  /** Économie vivante (facultatif : absent des anciennes sauvegardes). */
+  living?: unknown;
 }
 
 /* ------------------------------------------------------------------ */
@@ -235,6 +253,10 @@ interface AssetMeta {
   attract: number;
   pollution: number;
   leisureVenue: boolean;
+  /** Économie vivante : niveau du bâtiment (1..3), éducation minimale des emplois (niveau à 5 crans) et niveau simplifié. */
+  level: number;
+  reqEdu: number;
+  reqTier: number;
 }
 
 export interface DemographyContext {
@@ -289,7 +311,12 @@ export class DemographySystem {
   private hhMembers = new Uint8Array(0);
   private tickCounter = 0;
 
-  constructor(private ctx: DemographyContext) {}
+  /** Économie vivante : loyers, difficultés des ménages, comptes et fermetures d'entreprises. */
+  readonly living: LivingEconomy = new LivingEconomy(this);
+  /** Change à chaque ajout / suppression de bâtiment (index des tableaux par bâtiment). */
+  private buildingsVersion = 0;
+
+  constructor(public ctx: DemographyContext) {}
 
   setContext(ctx: DemographyContext): void { this.ctx = ctx; this.buildMeta(); }
 
@@ -312,7 +339,14 @@ export class DemographySystem {
       let service = -1;
       for (const t of tags) if (SERVICE_TAG[t] !== undefined) { service = SERVICE_TAG[t]!; break; }
       const leisureVenue = service === Service.Leisure || (a.category === 'commercial' && (tags.includes('restaurant') || tags.includes('cafe') || tags.includes('galerie_marchande') || tags.includes('commerce_de_proximite')));
+      // Éducation exigée : bureaux le bac (tours de bureaux : le supérieur), services publics et industrie avancée
+      // (usines, manufactures, énergie) le brevet / CAP ; commerce et petite industrie : aucune.
+      const advancedIndustry = sector === Sector.Industrial && (tags.includes('usine') || tags.includes('manufacture') || tags.includes('energie'));
+      const reqEdu = sector === Sector.Office ? (a.category === 'skyscraper' ? Education.Higher : Education.Baccalaureate)
+        : sector === Sector.Public || advancedIndustry ? Education.Secondary : Education.None;
       return {
+        level: isBuildingCategory(a.category) ? buildingLevel(a.category, a.capacity.residents, a.capacity.jobs) : 1,
+        reqEdu, reqTier: eduTier(reqEdu),
         resCap: isBuildingCategory(a.category) ? Math.max(0, a.capacity.residents) : 0,
         jobCap: isBuildingCategory(a.category) ? Math.max(0, a.capacity.jobs) : 0,
         sector, service, radius: num('rayon:', 800), serviceCapacity: num('capacite_service:', 0),
@@ -336,6 +370,8 @@ export class DemographySystem {
     this.pupilsBySchool.clear();
     this.coverageDirty = true;
     this.tickCounter = 0;
+    this.living.reset();
+    this.buildingsVersion++;
   }
 
   get population(): number { return this.citizens.count; }
@@ -349,6 +385,7 @@ export class DemographySystem {
   /** À appeler après l'insertion d'un bâtiment dans le store. */
   onBuildingAdded(id: number, now: number): void {
     this.coverageDirty = true;
+    this.buildingsVersion++;
     const bi = this.ctx.buildings.indexOf(id);
     const m = bi >= 0 ? this.metaOfIndex(bi) : undefined;
     if (m && m.jobCap > 0 && !this.companies.has(id)) {
@@ -365,6 +402,8 @@ export class DemographySystem {
    */
   onBuildingRemoved(id: number, now: number): void {
     this.coverageDirty = true;
+    this.buildingsVersion++;
+    this.living.onBuildingRemoved(id);
     const c = this.citizens.col;
     const leavingHouseholds = new Set<number>();
     const toRelocate = new Set<number>();
@@ -488,6 +527,12 @@ export class DemographySystem {
   residentialLots: () => { zoned: number; free: number; demand: number } | null = () => null;
   /** Vrai si la ville a au moins une route (indice de croissance). */
   hasRoads: () => boolean = () => true;
+  /** Économie vivante : décalage de valeur foncière de la grille municipale (indice, ±0,3) ; 0 sans grille. */
+  landValueOffset: (buildingId: number) => number = () => 0;
+  /** Quartier (secteur du joueur) d'un bâtiment ; null : îlot de la grille de 500 m. */
+  districtOf: (buildingId: number) => { key: number; name: string } | null = () => null;
+  /** Taux d'imposition d'un secteur d'entreprise (1 commerce, 2 industrie, 3 bureaux) ; 9 % par défaut. */
+  companyTaxRate: (sector: number) => number = () => 0.09;
   /** Somme des points de satisfaction par facteur (dernier calcul quotidien) et habitants comptés. */
   private factorSum = new Float64Array(FACTOR_COUNT);
   private factorCount = 0;
@@ -504,8 +549,25 @@ export class DemographySystem {
   }
 
   private active(bi: number): boolean { return this.activity(this.ctx.buildings.id[bi]!) >= 1; }
+  /** Emplois offerts : bâtiment actif (courant) et entreprise ouverte (pas un local vacant après fermeture). */
+  private jobOpen(bi: number): boolean { return this.active(bi) && this.living.isOpen(this.ctx.buildings.id[bi]!); }
 
-  private freeHousingAt(bi: number): number {
+  /* --------------------------- Économie vivante (hôte) --------------------------- */
+
+  livingMeta(bi: number): LivingMeta | undefined { return this.metaOfIndex(bi); }
+  private readonly amen = { services: 0, attract: 0, pollution: 0 };
+  amenitiesAt(bi: number): { services: number; attract: number; pollution: number } {
+    const a = this.amen;
+    a.services = 0; a.attract = 0; a.pollution = 0;
+    if (bi < 0 || this.coverage.length !== SERVICE_COUNT || bi >= this.coverage[0]!.length) return a;
+    for (let k = 0; k < SERVICE_COUNT; k++) a.services += this.coverage[k]![bi]!;
+    a.attract = this.attractAt[bi]!;
+    a.pollution = this.pollutionAt[bi]!;
+    return a;
+  }
+  randomOwner(): number { return randomSurname(this.ctx.rng); }
+
+  freeHousingAt(bi: number): number {
     const m = this.metaOfIndex(bi);
     if (!m || m.resCap <= 0 || !this.ctx.buildings.roadAccess[bi]) return 0;
     if (this.growthGates.length) { const id = this.ctx.buildings.id[bi]!; for (const g of this.growthGates) if (!g(id)) return 0; }
@@ -522,7 +584,7 @@ export class DemographySystem {
     return cands[Math.floor(this.ctx.rng.next() * cands.length)]!;
   }
 
-  private moveHousehold(hid: number, targetId: number, now: number): void {
+  moveHousehold(hid: number, targetId: number, now: number): void {
     const b = this.ctx.buildings;
     const hk = this.households.indexOf(hid);
     if (hk < 0) return;
@@ -542,7 +604,7 @@ export class DemographySystem {
   }
 
   /** Retire des ménages entiers (émigration ou décès du dernier membre). */
-  private removeHouseholds(ids: Set<number>, emigrate: boolean): void {
+  removeHouseholds(ids: Set<number>, emigrate: boolean): void {
     for (let i = this.citizens.count - 1; i >= 0; i--) {
       if (ids.has(this.citizens.col.household[i]!)) {
         if (emigrate) this.month.emigrants++;
@@ -670,11 +732,11 @@ export class DemographySystem {
             const j = b.indexOf(cell[k]!);
             if (j < 0 || !b.roadAccess[j]) continue;
             const m = this.metaOfIndex(j);
-            if (!m || m.jobCap - b.workers[j]! <= 0 || !this.active(j)) continue;
+            if (!m || m.jobCap - b.workers[j]! <= 0 || !this.jobOpen(j)) continue;
             const dx = b.x[j]! - hx, dz = b.z[j]! - hz;
             const d = Math.sqrt(dx * dx + dz * dz);
             if (d > MAX_COMMUTE_M) continue;
-            const qualified = m.sector === Sector.Office ? edu >= Education.Baccalaureate : m.sector === Sector.Public ? edu >= Education.Secondary : true;
+            const qualified = edu >= m.reqEdu;
             if (qualified) { if (d < bestD) { bestD = d; best = b.id[j]!; } }
             else if (d < fallbackD) { fallbackD = d; fallback = b.id[j]!; }
           }
@@ -699,7 +761,7 @@ export class DemographySystem {
     this.month.hires++;
   }
 
-  private quitJob(ci: number): void {
+  quitJob(ci: number): void {
     const c = this.citizens.col;
     const b = this.ctx.buildings;
     const j = b.indexOf(c.job[ci]!);
@@ -762,7 +824,7 @@ export class DemographySystem {
     let freeJobs = 0;
     for (let k = 0; k < b.count; k++) {
       const m = this.metaOfIndex(k);
-      if (m && b.roadAccess[k] && this.active(k)) freeJobs += Math.max(0, m.jobCap - b.workers[k]!);
+      if (m && b.roadAccess[k] && this.jobOpen(k)) freeJobs += Math.max(0, m.jobCap - b.workers[k]!);
     }
 
     // 1) Décès (parcours à rebours : suppression par permutation sûre).
@@ -799,6 +861,18 @@ export class DemographySystem {
         c.commute[i] = 0;
         this.assignSchedule(i);
       }
+      // Économie vivante : études supérieures (bachelier de 21 ans dont le quartier est couvert par l'éducation) et
+      // formation continue des adultes sans emploi (moins de 45 ans, quartier couvert).
+      if (crossed(21) && c.education[i] === Education.Baccalaureate) {
+        const hb = b.indexOf(c.home[i]!);
+        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.chance(this.living.tuning.probaSuperieur)) { c.education[i] = Education.Higher; this.living.month.graduates++; }
+      } else if (c.job[i]! < 0 && c.school[i]! < 0 && age >= WORKING_AGE_MIN && age < 45 && c.education[i]! < Education.Baccalaureate) {
+        const hb = b.indexOf(c.home[i]!);
+        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.next() < this.living.tuning.probaFormationAn / DAYS_PER_YEAR) {
+          c.education[i] = Math.max(Education.Secondary, c.education[i]! + 1);
+          this.living.month.graduates++;
+        }
+      }
       // Recherche d'emploi.
       if (freeJobs > 0 && age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.job[i]! < 0 && c.school[i]! < 0 && searches < JOB_SEARCHES_PER_DAY) {
         searches++;
@@ -806,6 +880,9 @@ export class DemographySystem {
         if (j >= 0) { this.hire(i, j); freeJobs--; }
       }
     }
+
+    // 2 bis) Économie vivante : loyers, ressources et effort des ménages, statistiques du jour.
+    this.living.assess(now, this.buildingsVersion);
 
     // 3) Bonheur + agrégats par ménage.
     this.ensureHouseholdBuffers();
@@ -843,6 +920,11 @@ export class DemographySystem {
       const add = (f: number, v: number): void => { t += v; fs[f]! += v; };
       if (bi < 0 || !b.roadAccess[bi]) add(F.logement, -30);
       if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) add(F.emploi, c.job[i]! >= 0 ? 12 : -18);
+      // Emploi très en dessous de son niveau (supérieur dans un poste sans diplôme) : légère insatisfaction.
+      if (c.job[i]! >= 0 && c.education[i] === Education.Higher) { const jm = this.metaOfIndex(b.indexOf(c.job[i]!)); if (jm && jm.reqTier === 0) add(F.emploi, -3); }
+      // Coût du logement (effort du ménage), après la période de grâce.
+      const hkr = this.households.indexOf(c.household[i]!);
+      if (ramp > 0 && hkr >= 0) add(F.loyer, rentSatisfaction(this.living.tuning, this.living.burdenOf(hkr), ramp));
       if (bi >= 0) {
         const cov = this.coverage;
         if (age < 18) add(F.education, cov[Service.Education]![bi] ? 8 : -10);
@@ -859,7 +941,7 @@ export class DemographySystem {
       add(F.impots, -taxPenalty);
       t = t < 0 ? 0 : t > 100 ? 100 : t;
       c.happiness[i] = c.happiness[i]! * 0.8 + t * 0.2;
-      const hk = this.households.indexOf(c.household[i]!);
+      const hk = hkr;
       if (hk >= 0) {
         this.hhMembers[hk]!++;
         this.hhHappy[hk]! += c.happiness[i]!;
@@ -909,6 +991,9 @@ export class DemographySystem {
       this.updateCommute(i);
       this.month.householdsFormed++;
     }
+
+    // 6) Économie vivante : ménages en difficulté durable -> logement moins cher, sinon départ (plafonnés).
+    this.living.resolve(now);
   }
 
   /* ------------------------------ Migrations ------------------------------ */
@@ -921,8 +1006,19 @@ export class DemographySystem {
     let services = 0;
     for (let k = 0; k < SERVICE_COUNT; k++) services += s.covered[k]! / Math.max(1, s.population);
     services /= SERVICE_COUNT;
-    const a = 0.3 + 0.25 * jobAvail + 0.2 * ((happy - 50) / 50) + 0.15 * services + Math.min(0.1, s.attractSum * 0.01) - residentialTaxAttraction(residentialTaxRate);
+    // Économie vivante : une ville où beaucoup de ménages peinent à payer leur loyer attire moins.
+    const distress = this.livingDistressShare();
+    const a = 0.3 + 0.25 * jobAvail + 0.2 * ((happy - 50) / 50) + 0.15 * services + Math.min(0.1, s.attractSum * 0.01) - residentialTaxAttraction(residentialTaxRate) - 0.1 * distress;
     return clamp01(a);
+  }
+
+  private livingDistressShare(): number {
+    const nh = this.households.count;
+    if (!nh || this.living.ramp <= 0) return 0;
+    let d = 0;
+    const col = this.households.col;
+    for (let k = 0; k < nh; k++) if (col.distressDays[k]! > 0) d++;
+    return d / nh;
   }
 
   /** Vague de migration (toutes les 6 h de jeu) : arrivées selon l'attractivité et les logements libres. */
@@ -997,49 +1093,104 @@ export class DemographySystem {
       if (this.households.col.unhappyMonths[hk]! >= 3) leaving.add(this.households.col.id[hk]!);
     }
     if (leaving.size) this.removeHouseholds(leaving, true);
-    const tb = this.computeTaxBase(true);
+    const tb = this.computeTaxBase(true, now);
     this.lastMonth = this.month;
     this.month = zeroCounters();
-    void now;
+    this.living.closeMonth();
     return tb;
   }
 
-  /** Assiettes fiscales mensuelles (et comptes des entreprises si `commit`). */
-  computeTaxBase(commit = false): { taxBase: Record<TaxSector, number>; serviceWorkers: number } {
+  private wageBuf = new Float64Array(0);
+  private underBuf = new Uint32Array(0);
+  private readonly qtmp: number[] = [];
+
+  /**
+   * Assiettes fiscales mensuelles (et comptes des entreprises si `commit`). Économie vivante : le chiffre d'affaires
+   * tient compte des employés sous-qualifiés (productivité réduite) et, pour un commerce, de sa clientèle locale
+   * (évaluée à chaque clôture) ; le bénéfice déduit le loyer du local. À la clôture (`commit`), les entreprises
+   * déficitaires depuis longtemps ferment et les locaux vacants peuvent être repris (`LivingEconomy.monthlyCompanies`).
+   */
+  computeTaxBase(commit = false, now = this.lastNow): { taxBase: Record<TaxSector, number>; serviceWorkers: number } {
     const b = this.ctx.buildings;
     const c = this.citizens.col;
+    const L = this.living, t = L.tuning;
     const taxBase: Record<TaxSector, number> = { residential: 0, commercial: 0, industrial: 0, office: 0 };
     let householdIncome = 0;
     for (let i = 0; i < this.citizens.count; i++) householdIncome += c.income[i]!;
     taxBase.residential = householdIncome * RES_TAXABLE_SHARE;
-    let commercialWorkers = 0, serviceWorkers = 0;
+    let commercialWorkers = 0, serviceWorkers = 0, employedTotal = 0;
     for (let i = 0; i < b.count; i++) {
+      employedTotal += b.workers[i]!;
       const m = this.metaOfIndex(i);
       if (!m) continue;
       if (m.sector === Sector.Commercial) commercialWorkers += b.workers[i]!;
       if (m.sector === Sector.Public) serviceWorkers += b.workers[i]!;
     }
-    let employedTotal = 0;
-    for (let i = 0; i < b.count; i++) employedTotal += b.workers[i]!;
     const customers = this.citizens.count + WORKER_CUSTOMER_SHARE * employedTotal;
     const demandFactor = commercialWorkers > 0 ? Math.min(1.25, Math.max(0.25, customers / RESIDENTS_PER_COMMERCIAL_JOB / commercialWorkers)) : 1;
-    // Salaires effectifs par bâtiment (somme des revenus des employés).
-    const wagesByBuilding = new Map<number, number>();
+    L.globalCustomers = demandFactor;
+    // Salaires effectifs et employés sous-qualifiés par index de bâtiment (sans allocation).
+    const n = b.count;
+    if (this.wageBuf.length < b.capacity) { this.wageBuf = new Float64Array(b.capacity); this.underBuf = new Uint32Array(b.capacity); }
+    const wages = this.wageBuf, under = this.underBuf;
+    wages.fill(0, 0, n); under.fill(0, 0, n);
     for (let i = 0; i < this.citizens.count; i++) {
-      if (c.job[i]! >= 0) wagesByBuilding.set(c.job[i]!, (wagesByBuilding.get(c.job[i]!) ?? 0) + c.income[i]!);
+      if (c.job[i]! < 0) continue;
+      const j = b.indexOf(c.job[i]!);
+      if (j < 0) continue;
+      wages[j]! += c.income[i]!;
+      const m = this.metaOfIndex(j);
+      if (m && c.education[i]! < m.reqEdu) under[j]!++;
     }
+    L.refreshBuildings(this.buildingsVersion);
+    const cc = this.companies.col;
+    const isCommercial = (j: number): boolean => this.metaOfIndex(j)?.sector === Sector.Commercial;
+    const accounts: ({ workers: number; jobCap: number; under: number; customers: number; revenue: number; rent: number; profit: number } | null)[] = commit ? new Array(this.companies.count).fill(null) : [];
     for (let k = 0; k < this.companies.count; k++) {
-      const id = this.companies.col.id[k]!;
+      const id = cc.id[k]!;
       const bi = b.indexOf(id);
       if (bi < 0) continue;
-      const sector = this.companies.col.sector[k]!;
+      const m = this.metaOfIndex(bi);
+      if (!m) continue;
+      const sector = cc.sector[k]!;
+      if (cc.status[k] === CompanyStatus.Closed) { if (commit) { cc.revenue[k] = 0; cc.profit[k] = 0; cc.rent[k] = 0; cc.tax[k] = 0; } continue; }
       const workers = b.workers[bi]!;
-      const revenue = workers * (REVENUE_PER_WORKER[sector] ?? 0) * (sector === Sector.Commercial ? demandFactor : 1);
-      const wages = wagesByBuilding.get(id) ?? 0;
-      const profit = revenue - wages - revenue * 0.1;
+      if (commit && sector === Sector.Commercial) cc.customers[k] = L.localCustomers(bi, m, RESIDENTS_PER_COMMERCIAL_JOB, WORKER_CUSTOMER_SHARE, isCommercial, this.qtmp);
+      const cust = sector === Sector.Commercial ? (cc.customers[k]! > 0 ? 0.5 * demandFactor + 0.5 * cc.customers[k]! : demandFactor) : 1;
+      const effective = workers - (1 - t.productiviteSousQualifie) * Math.min(workers, under[bi]!);
+      const revenue = effective * (REVENUE_PER_WORKER[sector] ?? 0) * cust;
+      const rent = L.businessRentAt(bi, m);
+      const profit = revenue - wages[bi]! - revenue * t.fraisGeneraux - rent;
       const tax = SECTOR_TAX[sector];
-      if (tax) taxBase[tax] += Math.max(0, profit) * COMPANY_TAXABLE_SHARE;
-      if (commit) { this.companies.col.revenue[k] = revenue; this.companies.col.profit[k] = profit; }
+      const taxable = Math.max(0, profit) * COMPANY_TAXABLE_SHARE;
+      if (tax) taxBase[tax] += taxable;
+      if (commit) {
+        cc.revenue[k] = revenue; cc.profit[k] = profit; cc.rent[k] = rent; cc.tax[k] = tax ? taxable * this.companyTaxRate(sector) : 0;
+        accounts[k] = { workers, jobCap: m.jobCap, under: Math.min(workers, under[bi]!), customers: cust, revenue, rent, profit };
+      }
+    }
+    if (commit) {
+      const s = this.summary();
+      let unemployedQualified = -1;
+      const qualifiedUnemployed = (): number => {
+        if (unemployedQualified >= 0) return unemployedQualified;
+        unemployedQualified = 0;
+        for (let i = 0; i < this.citizens.count; i++) {
+          if (c.job[i]! >= 0 || c.school[i]! >= 0 || c.education[i]! < Education.Baccalaureate) continue;
+          const age = this.ageOf(i, now);
+          if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE) unemployedQualified++;
+        }
+        return unemployedQualified;
+      };
+      L.monthlyCompanies(now, (k) => accounts[k] ?? null, (k) => {
+        // Reprise d'un local vacant : clientèle suffisante (commerce) ou main-d'œuvre disponible (industrie, bureaux).
+        const bi = b.indexOf(cc.id[k]!);
+        const m = bi >= 0 ? this.metaOfIndex(bi) : undefined;
+        if (!m || !b.roadAccess[bi]) return false;
+        if (cc.sector[k] === Sector.Commercial) return demandFactor >= 0.9;
+        const need = Math.max(5, 0.2 * m.jobCap);
+        return cc.sector[k] === Sector.Office ? qualifiedUnemployed() >= need : s.unemployed >= need;
+      });
     }
     return { taxBase, serviceWorkers };
   }
@@ -1165,7 +1316,7 @@ export class DemographySystem {
     for (let i = 0; i < b.count; i++) {
       const m = this.metaOfIndex(i);
       if (!m) continue;
-      if (b.roadAccess[i] && this.active(i)) jobsTotal += m.jobCap;
+      if (b.roadAccess[i] && this.jobOpen(i)) jobsTotal += m.jobCap;
       jobsFilled += b.workers[i]!;
       if (b.roadAccess[i]) attractSum += m.attract;
     }
@@ -1237,12 +1388,13 @@ export class DemographySystem {
       const m = this.metaOfIndex(i);
       if (!m) continue;
       if (b.roadAccess[i]) {
-        if (this.active(i)) jobsTotal += m.jobCap;
+        if (this.jobOpen(i)) jobsTotal += m.jobCap;
         housingCapacity += m.resCap;
         housingFree += Math.max(0, m.resCap - b.residents[i]!);
         if (m.sector === Sector.Commercial) commercialJobs += m.jobCap;
-        if (m.sector === Sector.Industrial) freeIndustrial += Math.max(0, m.jobCap - b.workers[i]!);
-        if (m.sector === Sector.Office) freeOffice += Math.max(0, m.jobCap - b.workers[i]!);
+        const open = this.living.isOpen(b.id[i]!);
+        if (m.sector === Sector.Industrial && open) freeIndustrial += Math.max(0, m.jobCap - b.workers[i]!);
+        if (m.sector === Sector.Office && open) freeOffice += Math.max(0, m.jobCap - b.workers[i]!);
       }
       jobsFilled += b.workers[i]!;
     }
@@ -1255,7 +1407,10 @@ export class DemographySystem {
     const freeJobs = jobsTotal - jobsFilled;
     // Logements vides par raison, indice de croissance bloquée.
     const ramp = this.noServiceRamp();
-    const vacancyReasons: VacancyReasons = { sansAcces: 0, sansEau: 0, sansElectricite: 0, demandeFaible: 0 };
+    const vacancyReasons: VacancyReasons = { sansAcces: 0, sansEau: 0, sansElectricite: 0, loyerEleve: 0, demandeFaible: 0 };
+    // Logement trop cher : loyer d'un ménage moyen au-delà de la part soutenable des ressources moyennes (après la grâce).
+    const living = this.living.report((r) => this.closureName(r.id, r.name), (m) => Math.floor(m / MINUTES_PER_DAY));
+    const rentCap = living && ramp > 0 && living.householdIncomeAverage > 0 ? (this.living.tuning.partSoutenable * living.householdIncomeAverage) / 1.05 : Infinity;
     let resBuildings = 0;
     for (let i = 0; i < b.count; i++) {
       const m = this.metaOfIndex(i);
@@ -1267,6 +1422,7 @@ export class DemographySystem {
       if (!b.roadAccess[i]) vacancyReasons.sansAcces++;
       else if (ws === 1 || (ws === 2 && ramp > 0)) vacancyReasons.sansEau++;
       else if (ps === 1 || (ps === 2 && ramp > 0)) vacancyReasons.sansElectricite++;
+      else if (i < this.living.rentUnit.length && this.living.rentUnit[i]! > rentCap) vacancyReasons.loyerEleve++;
       else vacancyReasons.demandeFaible++;
     }
     const demandR = clampS((freeJobs - housingFree * 0.5) / Math.max(50, jobsTotal * 0.2) + (this.attractiveness - 0.5));
@@ -1278,6 +1434,14 @@ export class DemographySystem {
     else if (vacancyReasons.sansElectricite >= blocked) growthHint = 'need-power';
     else if (!lots || lots.zoned === 0) growthHint = pop === 0 || (lots?.demand ?? demandR) > 0.2 ? 'need-zones' : null;
     else if (lots.free === 0 && (lots.demand > 0.3 || demandR > 0.3) && housingFree <= Math.max(4, housingCapacity * 0.03)) growthHint = 'need-roads';
+    // Économie vivante (pleine pression à moitié installée, ville d'au moins 150 habitants).
+    if (growthHint === null && living && ramp >= 0.5 && pop >= 150) {
+      const ed = living.education;
+      const skilledWorkers = ed.workers[1]! + ed.workers[2]!;
+      if (living.distressShare > 0.12) growthHint = 'high-rent';
+      else if (laborForce > 0 && unemployed / laborForce > 0.15) growthHint = 'need-jobs';
+      else if (skilledWorkers >= 20 && ed.underqualified / skilledWorkers > 0.35) growthHint = 'need-education';
+    }
     const fc = Math.max(1, this.factorCount);
     const satisfactionFactors = SATISFACTION_FACTORS.map(([key, label], k) => ({ key, label, delta: Math.round((this.factorSum[k]! / fc) * 10) / 10 }));
     return {
@@ -1295,8 +1459,15 @@ export class DemographySystem {
       },
       month: { ...this.month }, lastMonth: { ...this.lastMonth }, activities, lod,
       tripsEmitted: this.tripsEmitted, companies: this.companies.count,
-      satisfactionFactors, vacancyReasons, growthHint,
+      satisfactionFactors, vacancyReasons, growthHint, living,
     };
+  }
+
+  /** Nom d'une entreprise (modèle du bâtiment + nom du propriétaire). */
+  private closureName(buildingId: number, surname: number): string {
+    const bi = this.ctx.buildings.indexOf(buildingId);
+    const asset = bi >= 0 ? this.ctx.catalog.assets[this.ctx.buildings.assetIndex[bi]!] : undefined;
+    return `${asset?.nameFr ?? 'Entreprise'} ${fullName(1, 0, surname).split(' ').slice(1).join(' ')}`.trim();
   }
 
   /* ------------------------------ Inspection ------------------------------ */
@@ -1332,8 +1503,15 @@ export class DemographySystem {
       if (c.job[i] === id && employees.length < limit) employees.push(this.citizenInfo(i, now));
     }
     const k = this.companies.indexOf(id);
-    const sectorNames: Record<number, string> = { 1: 'Commerce', 2: 'Industrie', 3: 'Bureaux', 4: 'Service public' };
+    const sectorNames = SECTOR_FR;
     const asset = this.ctx.catalog.assets[b.assetIndex[bi]!];
+    const cc = this.companies.col;
+    const statusOf = (st: number): 'active' | 'difficulty' | 'closed' => (st === CompanyStatus.Closed ? 'closed' : st === CompanyStatus.Difficulty ? 'difficulty' : 'active');
+    let distressHh = 0;
+    for (let hk = 0; hk < this.households.count; hk++) if (this.households.col.home[hk] === id && this.households.col.distressDays[hk]! > 0) distressHh++;
+    const L = this.living;
+    const economy = bi < L.land.length && L.land[bi]! > 0
+      ? { landValue: Math.round(L.land[bi]! * 100), rent: Math.round(L.rentUnit[bi]!), householdsInDistress: distressHh } : undefined;
     return {
       buildingId: id, residents: b.residents[bi]!, residentCapacity: m.resCap, workers: b.workers[bi]!, jobCapacity: m.jobCap,
       roadAccess: b.roadAccess[bi] === 1,
@@ -1341,7 +1519,10 @@ export class DemographySystem {
         name: `${asset?.nameFr ?? 'Entreprise'} ${fullName(1, 0, this.companies.col.ownerSurname[k]!).split(' ').slice(1).join(' ')}`,
         sector: sectorNames[this.companies.col.sector[k]!] ?? '?',
         revenue: Math.round(this.companies.col.revenue[k]!), profit: Math.round(this.companies.col.profit[k]!),
+        rent: Math.round(cc.rent[k]!), tax: Math.round(cc.tax[k]!), status: statusOf(cc.status[k]!),
+        reason: cc.reason[k]! > 0 ? CLOSURE_REASONS[cc.reason[k]!]?.[1] ?? null : null, lossMonths: cc.lossMonths[k]!,
       } : null,
+      ...(economy ? { economy } : {}),
       services: SERVICE_NAMES_FR.filter((_, s) => this.coverage[s]![bi] === 1),
       occupants, employees,
     };
@@ -1354,6 +1535,7 @@ export class DemographySystem {
       nextCitizenId: this.nextCitizenId, nextHouseholdId: this.nextHouseholdId,
       citizens: this.citizens.toJSON(), households: this.households.toJSON(), companies: this.companies.toJSON(),
       month: { ...this.month }, lastMonth: { ...this.lastMonth }, attractiveness: this.attractiveness, tripsEmitted: this.tripsEmitted,
+      living: this.living.toJSON(),
     };
   }
 
@@ -1372,6 +1554,8 @@ export class DemographySystem {
     this.lastMonth = { ...zeroCounters(), ...j.lastMonth };
     this.attractiveness = j.attractiveness;
     this.tripsEmitted = j.tripsEmitted;
+    // Économie vivante : champ absent des anciennes sauvegardes -> valeurs neuves (colonnes nouvelles à 0).
+    this.living.fromJSON(j.living);
     this.recount();
     this.lastNow = now;
     this.updateLod();

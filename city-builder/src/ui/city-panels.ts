@@ -3,7 +3,7 @@
  *  - Finances municipales : Aperçu (recettes / dépenses ventilées, solde, graphique des 12 derniers mois
  *    clos), Impôts (setTaxRate), Budget (postes de dépense, projection 12 mois, trésorerie journalière),
  *    Dette (loanOffer / takeLoan / repayLoan) ;
- *  - Population : Aperçu, Demande (+ éducation), Activités, Âges.
+ *  - Population : Aperçu, Économie (loyers, emploi par quartier, éducation, entreprises), Demande (+ éducation), Activités, Âges.
  * Toutes les valeurs affichées viennent de la simulation (aucun chiffre inventé côté interface).
  * Propriétaire : agent construction/caméra/UI.
  */
@@ -17,6 +17,7 @@ import { iconEl } from './icons';
 import { cityDemand, DEMAND_ORDER, demandPct } from './demand';
 import { SECTOR_LABELS_FR } from '../shared/protocol-ext/zonage';
 import { renderSatisfaction } from './satisfaction';
+import { livingOverviewRows, renderLivingEconomy } from './economie';
 
 export interface ExtPort {
   sendExt<K extends ExtCommandName>(name: K, args: ExtCommandArgs<K>): Promise<ExtCommandResult<K>>;
@@ -312,8 +313,12 @@ export class CityPanels {
         ['Ce mois : arrivées · départs', `${fmt(d.month.immigrants)} · ${fmt(d.month.emigrants)}`],
         ['Ce mois : naissances · décès', `${fmt(d.month.births)} · ${fmt(d.month.deaths)}`],
         ['Entreprises', fmt(d.companies)],
+        // Économie vivante (détail dans l'onglet Économie).
+        ...livingOverviewRows(r),
       ];
       $('pop-rows').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
+    } else if (this.popTab === 'economy') {
+      $('pop-eco').replaceChildren(renderLivingEconomy(r, barRow));
     } else if (this.popTab === 'demand') {
       // Même source, même échelle et même ordre (R C I B) que la jauge de la barre du haut.
       const dem = cityDemand(r);

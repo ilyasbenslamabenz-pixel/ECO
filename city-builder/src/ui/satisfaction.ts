@@ -8,8 +8,8 @@ import type { SimReport } from '../sim/sim-protocol';
 import { el, fmt } from './dom';
 
 export interface SatisfactionFactor { key: string; label: string; delta: number }
-export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water';
-export const GROWTH_HINTS: readonly GrowthHint[] = ['need-roads', 'need-zones', 'need-power', 'need-water'];
+export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water' | 'high-rent' | 'need-jobs' | 'need-education';
+export const GROWTH_HINTS: readonly GrowthHint[] = ['need-roads', 'need-zones', 'need-power', 'need-water', 'high-rent', 'need-jobs', 'need-education'];
 
 /** Champs ajoutés au rapport de démographie par la simulation (facultatifs tant qu'ils n'existent pas partout). */
 interface DemographyExtras {
@@ -37,7 +37,7 @@ export function satisfactionFactors(r: SimReport | null): SatisfactionFactor[] |
 }
 
 const VACANCY_FR: Record<string, string> = {
-  sansAcces: 'sans accès routier', sansEau: 'sans eau', sansElectricite: 'sans électricité', demandeFaible: 'demande faible',
+  sansAcces: 'sans accès routier', sansEau: 'sans eau', sansElectricite: 'sans électricité', demandeFaible: 'demande faible', loyerEleve: 'loyer trop élevé',
   water: 'sans eau', eau: 'sans eau', 'no-water': 'sans eau', noWater: 'sans eau',
   power: 'sans électricité', electricite: 'sans électricité', 'no-power': 'sans électricité', noPower: 'sans électricité',
   road: 'sans accès routier', roads: 'sans accès routier', 'no-road': 'sans accès routier', noRoad: 'sans accès routier',
@@ -81,6 +81,9 @@ export const GROWTH_HINT_FR: Record<GrowthHint, string> = {
   'need-zones': 'Aucune zone résidentielle libre : zonez du résidentiel le long des routes (Zones)',
   'need-power': 'Les nouveaux bâtiments attendent l’électricité : raccordez-vous au réseau voisin (Énergie › Réglages) ou construisez une centrale',
   'need-water': 'Les nouveaux bâtiments attendent l’eau : raccordez-vous au réseau voisin (Eau › Réglages) ou posez une station de pompage',
+  'high-rent': 'Beaucoup de ménages peinent à payer leur loyer : créez des emplois mieux payés et zonez du résidentiel moins cher (Population › Économie)',
+  'need-jobs': 'Le chômage est élevé : zonez des commerces, des bureaux ou de l’industrie (Population › Économie)',
+  'need-education': 'Les emplois qualifiés manquent de diplômés : construisez des écoles près des logements (Services › Éducation)',
 };
 
 /** Conseil d'action pour un facteur négatif (reconnu par sa clé ou son libellé) ; null si aucun conseil fixe. */
@@ -88,6 +91,7 @@ export function factorAdvice(f: SatisfactionFactor): string | null {
   const s = `${f.key} ${f.label}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const rules: [RegExp, string][] = [
     [/acces|routier/, 'Reliez chaque bâtiment à une route (Routes).'],
+    [/loyer|cout du logement/, 'Loyers lourds : créez des emplois mieux payés (bureaux, industrie) et zonez du résidentiel dans des quartiers moins chers.'],
     [/remarquable|monument/, 'Construisez un équipement remarquable : musée, gare, hôtel de ville (Services).'],
     [/politique/, 'Ajustez les politiques publiques (tableau de bord Politiques).'],
     [/eau|water|egout|sewage/, 'Raccordez-vous au réseau d’eau voisin ou posez une station de pompage (Réseaux › Eau).'],

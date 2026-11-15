@@ -212,7 +212,7 @@ test('rapport : détail de la satisfaction, logements vides par raison, indice d
   const s = newTownSim();
   let r = report(s);
   assert.equal(r.growthHint, 'need-roads', 'aucune route');
-  assert.deepEqual(r.satisfactionFactors.map((f) => f.key), ['emploi', 'logement', 'electricite', 'eau', 'dechets', 'sante', 'police', 'pompiers', 'education', 'loisirs', 'equipements', 'pollution', 'bruit', 'trajet', 'impots', 'politiques']);
+  assert.deepEqual(r.satisfactionFactors.map((f) => f.key), ['emploi', 'loyer', 'logement', 'electricite', 'eau', 'dechets', 'sante', 'police', 'pompiers', 'education', 'loisirs', 'equipements', 'pollution', 'bruit', 'trajet', 'impots', 'politiques']);
   assert.ok(r.satisfactionFactors.every((f) => typeof f.label === 'string' && f.label.length > 0 && Number.isFinite(f.delta)));
   assert.ok(s.buildRoad({ type: 'street', points: [-200, 0, 200, 0] }).ok);
   assert.equal(report(s).growthHint, 'need-zones', 'routes sans zone');

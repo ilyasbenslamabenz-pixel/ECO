@@ -109,6 +109,19 @@ export class InfoPanel {
             if (jobs) jobs.textContent = isService ? (o.jobCapacity > 0 ? `${Math.round((100 * o.workers) / o.jobCapacity)} % (${fmt(o.workers)} / ${fmt(o.jobCapacity)} agents)` : '—') : `${fmt(o.workers)} / ${fmt(o.jobCapacity)}${share(o.workers, o.jobCapacity)}`;
             const svc = node('svc'); if (svc) svc.textContent = o.services.length ? o.services.join(', ') : 'aucun';
             if (!o.roadAccess) this.row('Accès routier', el('span', { cls: 'neg', text: 'aucun : reliez-le à une route' }));
+            // Économie vivante (champs facultatifs) : loyer d'un logement, état de l'entreprise et raison.
+            const eco = o.economy;
+            if (eco && o.residentCapacity > 0) {
+              this.row('Loyer d’un logement', `${money(eco.rent)} / mois · valeur foncière ${fmt(eco.landValue)}`);
+              if (eco.householdsInDistress > 0) this.row('Ménages en difficulté', el('span', { cls: 'neg', text: fmt(eco.householdsInDistress) }));
+            }
+            const co = o.company;
+            if (co && co.status && co.sector !== 'Service public') {
+              const txt = co.status === 'closed' ? `fermée (local vacant)${co.reason ? ` : ${co.reason}` : ''}`
+                : co.status === 'difficulty' ? `en difficulté${co.reason ? ` : ${co.reason}` : ''}` : 'en activité';
+              this.row('Entreprise', el('span', { cls: co.status === 'active' ? 'pos' : 'neg', text: txt }));
+              if (co.status !== 'closed') this.row('Bénéfice · loyer (mois)', `${money(co.profit)} · ${money(co.rent ?? 0)}`);
+            }
           }).catch(() => { for (const r of occRows) if (r.node.textContent?.startsWith('…')) r.node.textContent = '—'; });
         }
         if (v) this.row('Variante', v.nameFr);

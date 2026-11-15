@@ -169,7 +169,11 @@ test('effet 3 (Simulation complète) : l\'usine du bourg pollue et fait baisser 
   const [ci, cj] = corners.reduce((a, c) => (Math.hypot(g.centerX(c[0]) - on.ux, g.centerZ(c[1]) - on.uz) > Math.hypot(g.centerX(a[0]) - on.ux, g.centerZ(a[1]) - on.uz) ? c : a));
   assert.ok(Math.hypot(g.centerX(ci) - on.ux, g.centerZ(cj) - on.uz) > 400);
   assert.ok(g.get(ci, cj) > 99.99, `loin : ${g.get(ci, cj)}`);
-  // La simulation de base n'est pas affectée par le contrat (trésorerie, population identiques).
-  assert.equal(on.s.economy.money, off.s.economy.money);
+  // La simulation de base n'est affectée que par l'économie vivante (docs/ECONOMIE_VIVANTE.md) : la valeur foncière
+  // de la grille entre dans le loyer des locaux d'activité, donc dans le bénéfice imposable des entreprises (effet
+  // minime, dans le bon sens : terrain déprécié -> loyer plus bas -> un peu plus d'impôt). Population identique
+  // (période de grâce : les loyers ne font partir personne).
+  assert.ok(on.s.economy.money >= off.s.economy.money && (on.s.economy.money - off.s.economy.money) / off.s.economy.money < 1e-4,
+    `trésorerie ${on.s.economy.money} / témoin ${off.s.economy.money}`);
   assert.equal(on.s.demography!.population, off.s.demography!.population);
 });
