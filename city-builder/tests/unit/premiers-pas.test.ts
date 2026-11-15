@@ -43,3 +43,11 @@ test('Satisfaction : champs absents → sections masquées ; présents → trié
   const list = { demography: { vacancyReasons: [{ key: 'power', count: 4 }, { reason: 'other', label: 'Trop cher', value: 9 }] } } as unknown as SimReport;
   assert.deepEqual(vacancyReasons(list), [{ label: 'Trop cher', count: 9 }, { label: 'sans électricité', count: 4 }]);
 });
+
+test('Satisfaction : forme du rapport de démographie (raisons en camelCase, besoin de zones)', () => {
+  const r = { demography: { housingFree: 316, vacancyReasons: { sansAcces: 0, sansEau: 12, sansElectricite: 3, demandeFaible: 1 }, growthHint: 'need-zones',
+    satisfactionFactors: [{ key: 'logement', label: 'Accès routier', delta: -4 }, { key: 'pollution', label: 'Pollution', delta: 0 }] } } as unknown as SimReport;
+  assert.deepEqual(vacancyReasons(r)?.map((v) => v.label), ['sans eau', 'sans électricité', 'demande faible']);
+  assert.equal(growthHint(r), 'need-zones');
+  assert.match(factorAdvice(satisfactionFactors(r)![0]!) ?? '', /route/);
+});

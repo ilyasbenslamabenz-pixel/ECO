@@ -8,7 +8,8 @@ import type { SimReport } from '../sim/sim-protocol';
 import { el, fmt } from './dom';
 
 export interface SatisfactionFactor { key: string; label: string; delta: number }
-export type GrowthHint = 'need-roads' | 'need-power' | 'need-water';
+export type GrowthHint = 'need-roads' | 'need-zones' | 'need-power' | 'need-water';
+export const GROWTH_HINTS: readonly GrowthHint[] = ['need-roads', 'need-zones', 'need-power', 'need-water'];
 
 /** Champs ajoutés au rapport de démographie par la simulation (facultatifs tant qu'ils n'existent pas partout). */
 interface DemographyExtras {
@@ -36,6 +37,7 @@ export function satisfactionFactors(r: SimReport | null): SatisfactionFactor[] |
 }
 
 const VACANCY_FR: Record<string, string> = {
+  sansAcces: 'sans accès routier', sansEau: 'sans eau', sansElectricite: 'sans électricité', demandeFaible: 'demande faible',
   water: 'sans eau', eau: 'sans eau', 'no-water': 'sans eau', noWater: 'sans eau',
   power: 'sans électricité', electricite: 'sans électricité', 'no-power': 'sans électricité', noPower: 'sans électricité',
   road: 'sans accès routier', roads: 'sans accès routier', 'no-road': 'sans accès routier', noRoad: 'sans accès routier',
@@ -70,12 +72,13 @@ export function vacancyReasons(r: SimReport | null): { label: string; count: num
 
 export function growthHint(r: SimReport | null): GrowthHint | null {
   const h = extras(r)?.growthHint;
-  return h === 'need-roads' || h === 'need-power' || h === 'need-water' ? h : null;
+  return (GROWTH_HINTS as readonly unknown[]).includes(h) ? h as GrowthHint : null;
 }
 
 /** Texte joueur de l'aide de croissance (pastille de la jauge de demande et notification). */
 export const GROWTH_HINT_FR: Record<GrowthHint, string> = {
   'need-roads': 'Plus de place constructible : tracez des routes et zonez le long',
+  'need-zones': 'Aucune zone résidentielle libre : zonez du résidentiel le long des routes (Zones)',
   'need-power': 'Les nouveaux bâtiments attendent l’électricité : construisez une centrale (Réseaux › Énergie)',
   'need-water': 'Les nouveaux bâtiments attendent l’eau : posez une station de pompage (Réseaux › Eau)',
 };
@@ -84,6 +87,9 @@ export const GROWTH_HINT_FR: Record<GrowthHint, string> = {
 export function factorAdvice(f: SatisfactionFactor): string | null {
   const s = `${f.key} ${f.label}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const rules: [RegExp, string][] = [
+    [/acces|routier/, 'Reliez chaque bâtiment à une route (Routes).'],
+    [/remarquable|monument/, 'Construisez un équipement remarquable : musée, gare, hôtel de ville (Services).'],
+    [/politique/, 'Ajustez les politiques publiques (tableau de bord Politiques).'],
     [/eau|water|egout|sewage/, 'Posez une station de pompage reliée par les routes (Réseaux › Eau).'],
     [/electr|power|courant|energie/, 'Construisez une centrale et un poste (Réseaux › Énergie).'],
     [/dechet|waste|garbage|ordure/, 'Dépôt de camions + décharge ou incinérateur (Réseaux › Déchets).'],
@@ -125,20 +131,26 @@ export function renderSatisfaction(r: SimReport | null): HTMLElement | null {
     const list = el('ul', { cls: 'satisf-list' });
     // Conseils : les deux pires facteurs négatifs.
     const worst = new Set(factors.filter((f) => f.delta < 0).slice(0, 2));
-    for (const f of factors) {
+    const shown = factors.filter((f) => Math.abs(f.delta) >= 0.05);
+    for (const f of shown) {
       const li = el('li', { cls: f.delta < 0 ? 'neg' : f.delta > 0 ? 'pos' : '' },
         el('span', { cls: 'sf-label', text: f.label }), el('b', { cls: 'sf-delta', text: pts(f.delta) }));
       const tip = worst.has(f) ? factorAdvice(f) : null;
       if (tip) li.append(el('span', { cls: 'sf-tip', text: tip }));
       list.append(li);
     }
-    if (factors.length) box.append(list);
+    if (shown.length) box.append(list);
+    const neutral = factors.length - shown.length;
+    if (factors.length && neutral > 0) box.append(el('p', { cls: 'muted small', text: shown.length ? `${neutral} autre${neutral > 1 ? 's' : ''} facteur${neutral > 1 ? 's' : ''} sans effet pour l’instant.` : 'Aucun facteur ne pèse pour l’instant.' }));
   }
   if (vac) {
+    // Raisons : bâtiments résidentiels entièrement vides ; « libres » : logements libres (unités) du rapport.
     const total = vac.reduce((s, v) => s + v.count, 0);
+    const free = Number(r?.demography.housingFree ?? 0);
     if (total > 0) {
       box.append(el('div', { cls: 'sec-title', text: 'Logements vides' }));
-      box.append(el('p', { cls: 'satisf-vac', text: `${fmt(total)} libre${total > 1 ? 's' : ''} : ${vac.map((v) => `${v.label} (${fmt(v.count)})`).join(' · ')}` }));
+      const head = free > 0 ? `${fmt(free)} logement${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''}` : 'Logements libres';
+      box.append(el('p', { cls: 'satisf-vac', text: `${head} — ${fmt(total)} bâtiment${total > 1 ? 's' : ''} vide${total > 1 ? 's' : ''} : ${vac.map((v) => `${v.label} (${fmt(v.count)})`).join(' · ')}` }));
     }
   }
   return box;

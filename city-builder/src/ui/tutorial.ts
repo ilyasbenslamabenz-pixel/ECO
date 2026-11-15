@@ -109,6 +109,9 @@ export class Tutorial {
 
   get enabled(): boolean { return !this.prefs.skipped && !this.prefs.done; }
 
+  /** Étape en cours (null : tutoriel masqué, terminé ou pas encore évalué). */
+  get currentStepId(): string | null { return this.enabled && this.current >= 0 ? TUTO_STEPS[this.current]?.id ?? null : null; }
+
   /** Réglages : réactive (ou coupe) le tutoriel. */
   setEnabled(on: boolean): void {
     this.prefs.skipped = !on;

@@ -37,7 +37,7 @@ import { InfoPanel } from './panels';
 import { listSlotsAsync, removeSlotAsync, slotIdKeepCase, slotLabel } from './save-slots';
 import type { ThumbnailSource } from './thumbnails';
 import { initTooltips } from './tooltips';
-import { GROWTH_HINT_FR, growthHint } from './satisfaction';
+import { GROWTH_HINT_FR, GROWTH_HINTS, growthHint } from './satisfaction';
 import { Tutorial } from './tutorial';
 
 export interface NewGameChoice {
@@ -461,9 +461,12 @@ export function initUI(h: UIHandlers): UIHandle {
     if (hint) {
       btn.dataset['tip'] = `${GROWTH_HINT_FR[hint]}. ${demandTip}`;
       btn.setAttribute('aria-label', `Demande — ${GROWTH_HINT_FR[hint]}`);
-      alertOnce(`growth:${hint}`, GROWTH_HINT_FR[hint], 10 * 60_000);
+      // Début de partie : les Premiers pas disent déjà de tracer des routes et de zoner (pas de notification en double).
+      const step = tutorial.currentStepId;
+      const covered = (hint === 'need-roads' && step === 'roads') || ((hint === 'need-zones' || hint === 'need-roads') && step === 'zones');
+      if (!covered) alertOnce(`growth:${hint}`, GROWTH_HINT_FR[hint], 10 * 60_000);
     } else { btn.setAttribute('aria-label', 'Demande'); btn.dataset['tip'] = demandTip; }
-    for (const k of ['need-roads', 'need-power', 'need-water']) if (k !== hint) rearm(`growth:${k}`);
+    for (const k of GROWTH_HINTS) if (k !== hint) rearm(`growth:${k}`);
   };
   /** Circulation très lente (vitesse moyenne des véhicules du rapport) : conseil du calque Circulation, sans répétition. */
   const renderTrafficAlert = (r: SimReport): void => {
