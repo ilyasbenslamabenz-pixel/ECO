@@ -112,6 +112,8 @@ export class ToolController implements IToolController, PointerToolSink {
     if (!this.deps) return;
     if (tool !== 'select' && this.override) this.setPointerOverride(null);
     this.resetGesture();
+    this.radiusFactors.clear();
+    this.coverageKey = '';
     // Bulle d'aide de l'outil précédent effacée (le nouvel outil affiche la sienne au prochain aperçu).
     this.hooks?.cursorTag(null, 'info', 0, 0);
     if (this.deps.machine.setTool(tool, options) && tool !== 'select') this.select(null);
@@ -200,6 +202,8 @@ export class ToolController implements IToolController, PointerToolSink {
   private coverage: CoverageRings | null = null;
   private coverageKey = '';
   private coverageOthers: { x: number; z: number; r: number }[] = [];
+  /** Facteur de rayon (améliorations) par bâtiment, mis en cache ; vidé à chaque nouvel outil de pose. */
+  private radiusFactors = new Map<number, number>();
   /** Démolition par zone : contour du rectangle. */
   private areaMarker: SelectionMarker | null = null;
 
@@ -496,7 +500,22 @@ export class ToolController implements IToolController, PointerToolSink {
           if (okey !== this.coverageKey) {
             this.coverageKey = okey;
             this.coverageOthers = [];
-            for (const b of m.buildings.values()) { const a = m.asset(b.assetId); if (a && serviceOf(a) === svc) this.coverageOthers.push({ x: b.x, z: b.z, r: serviceRadius(a) }); }
+            const others: { x: number; z: number; r: number }[] = [];
+            const ids: number[] = [];
+            for (const b of m.buildings.values()) {
+              const a = m.asset(b.assetId);
+              if (a && serviceOf(a) === svc) { others.push({ x: b.x, z: b.z, r: serviceRadius(a) * (this.radiusFactors.get(b.id) ?? 1) }); ids.push(b.id); }
+            }
+            this.coverageOthers = others;
+            // Rayon réel des équipements améliorés (+25 %/niveau) : demandé une fois à la simulation, puis cercles recalculés.
+            const missing = ids.filter((id) => !this.radiusFactors.has(id));
+            if (missing.length) {
+              void Promise.all(missing.map(async (id) => {
+                let f = 1;
+                try { f = ((await d.machine.pluginCommand('ameliorations', 'info', { buildingId: id })) as { radiusFactor?: number } | undefined)?.radiusFactor ?? 1; } catch { /* rayon de base */ }
+                this.radiusFactors.set(id, f);
+              })).then(() => { if (this.coverageKey === okey && missing.some((id) => this.radiusFactors.get(id) !== 1)) this.coverageKey = ''; });
+            }
           }
           this.coverage.show(p.proposal.x, p.proposal.z, serviceRadius(p.asset), this.coverageOthers, okey);
         } else this.coverage?.hide();

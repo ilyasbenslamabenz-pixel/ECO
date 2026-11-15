@@ -331,6 +331,19 @@ export function initUI(h: UIHandlers): UIHandle {
   optTuto.checked = tutorial.enabled;
   optTuto.addEventListener('change', (e) => { e.stopPropagation(); tutorial.setEnabled(optTuto.checked); tutorial.update(api?.mirror ?? null); });
 
+  /** Raccordements aux réseaux voisins : réglage `raccordement` des modules électricité et eau (charge utile). */
+  const readRaccord = (ext: Record<string, unknown> | undefined): void => {
+    const on = (id: string): boolean | undefined => {
+      const set = (ext?.[id] as { settings?: { raccordement?: unknown } } | undefined)?.settings;
+      return set ? set.raccordement === true : undefined;
+    };
+    const p = on('electricite'), w = on('eau');
+    if (p === undefined && w === undefined) return;
+    if (p !== undefined) tutorial.raccord.power = p;
+    if (w !== undefined) tutorial.raccord.water = w;
+    tutorial.update(api?.mirror ?? null);
+  };
+
   /* ---------- Alertes non répétitives (aide de croissance, circulation) ---------- */
   const alertAt = new Map<string, number>();
   /** Une alerte par clé, au plus une fois par `cooldownMs` (temps réel), réarmée par `rearm(key)`. */
@@ -632,8 +645,8 @@ export function initUI(h: UIHandlers): UIHandle {
     setExtPort(p) { extPort = p; cityPanels.setPort(p); },
     attachWorld(o) { heightAt = o.heightAt; ensureMinimap(); },
     setModuleBridge(b) { modules.bridge = b; },
-    moduleSnapshot(ext) { modules.setSnapshot(ext); },
-    moduleDelta(ext) { modules.pushDelta(ext); },
+    moduleSnapshot(ext) { modules.setSnapshot(ext); tutorial.raccord = { power: false, water: false }; readRaccord(ext); },
+    moduleDelta(ext) { modules.pushDelta(ext); readRaccord(ext); },
     get buildBar() { return buildBar; },
     get info() { return info; },
   };

@@ -51,3 +51,10 @@ test('Satisfaction : forme du rapport de démographie (raisons en camelCase, bes
   assert.equal(growthHint(r), 'need-zones');
   assert.match(factorAdvice(satisfactionFactors(r)![0]!) ?? '', /route/);
 });
+
+test('Premiers pas : le raccordement au réseau voisin valide les étapes électricité et eau', () => {
+  const base = { roads: 2, zones: { R: 1, C: 1, I: 1 }, tags: new Set<string>() };
+  assert.equal(firstOpen(facts(base)), 'power');
+  assert.equal(firstOpen(facts({ ...base, raccord: { power: true, water: false } })), 'water');
+  assert.equal(firstOpen(facts({ ...base, raccord: { power: true, water: true } })), 'waste');
+});

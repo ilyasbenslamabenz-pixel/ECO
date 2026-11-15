@@ -27,6 +27,8 @@ export interface CityFacts {
   roads: number;
   zones: { R: number; C: number; I: number };
   tags: Set<string>;
+  /** Raccordements aux réseaux voisins (modules électricité et eau). */
+  raccord?: { power: boolean; water: boolean };
 }
 
 interface Part { label: string; ok: (f: CityFacts) => boolean }
@@ -48,10 +50,10 @@ export const TUTO_STEPS: readonly Step[] = [
   { id: 'zones', title: 'Zoner R, C et I', text: 'Dans Zones, peignez du résidentiel, des commerces et de l’industrie le long des routes : les bâtiments poussent seuls.',
     targets: ['#toolbar [data-cat=zones]'], parts: [
       { label: 'Résidentiel', ok: (f) => f.zones.R > 0 }, { label: 'Commerces', ok: (f) => f.zones.C > 0 }, { label: 'Industrie', ok: (f) => f.zones.I > 0 }] },
-  { id: 'power', title: 'Produire l’électricité', text: 'Construisez une centrale (Réseaux › Énergie) près des routes : sans courant, les bâtiments restent vides.',
-    targets: ['#toolbar [data-cat=energy]', '#toolbar [data-family=reseaux]'], parts: [{ label: 'Centrale', ok: hasPrefix('elec:centrale') }] },
-  { id: 'water', title: 'Amener l’eau', text: 'Posez une station de pompage ou un château d’eau (Réseaux › Eau) ; l’eau suit les routes.',
-    targets: ['#toolbar [data-cat=water]', '#toolbar [data-family=reseaux]'], parts: [{ label: 'Eau potable', ok: has('service:eau') }] },
+  { id: 'power', title: 'Amener l’électricité', text: 'Raccordez-vous au réseau voisin (tableau de bord Énergie › Réglages) ou construisez une centrale (Réseaux › Énergie) : sans courant, les bâtiments restent vides.',
+    targets: ['#toolbar [data-cat=energy]', '#toolbar [data-family=reseaux]'], parts: [{ label: 'Centrale ou raccordement', ok: (f) => hasPrefix('elec:centrale')(f) || !!f.raccord?.power }] },
+  { id: 'water', title: 'Amener l’eau', text: 'Raccordez-vous au réseau d’eau voisin (tableau de bord Eau › Réglages) ou posez une station de pompage (Réseaux › Eau) ; l’eau suit les routes.',
+    targets: ['#toolbar [data-cat=water]', '#toolbar [data-family=reseaux]'], parts: [{ label: 'Pompage ou raccordement', ok: (f) => has('service:eau')(f) || !!f.raccord?.water }] },
   { id: 'waste', title: 'Collecter les déchets', text: 'Un dépôt de camions ramasse les ordures, une décharge ou un incinérateur les traite (Réseaux › Déchets).',
     targets: ['#toolbar [data-cat=waste]', '#toolbar [data-family=reseaux]'], parts: [
       { label: 'Dépôt', ok: has('dechets:depot') }, { label: 'Décharge ou incinérateur', ok: (f) => f.tags.has('dechets:decharge') || f.tags.has('dechets:incinerateur') }] },
@@ -65,7 +67,7 @@ export const TUTO_STEPS: readonly Step[] = [
 export function stepDone(s: Step, f: CityFacts): boolean { return s.parts.every((p) => p.ok(f)); }
 
 /** Faits de la ville : tronçons de route, cases zonées par secteur, étiquettes des bâtiments posés. */
-export function cityFacts(mirror: WorldMirror): CityFacts {
+export function cityFacts(mirror: WorldMirror, raccord?: { power: boolean; water: boolean }): CityFacts {
   const tags = new Set<string>();
   const seen = new Set<string>();
   for (const b of mirror.buildings.values()) {
@@ -80,11 +82,11 @@ export function cityFacts(mirror: WorldMirror): CityFacts {
     ? { R: (c.res_faible ?? 0) + (c.res_moyen ?? 0) + (c.res_dense ?? 0), C: (c.commerce ?? 0) + (c.bureaux ?? 0), I: c.industrie ?? 0 }
     : { R: 0, C: 0, I: 0 };
   // Sans module Zonage : des bâtiments de chaque secteur posés à la main valident aussi l'étape.
-  if (c) return { roads: mirror.edges.size, zones, tags };
+  if (c) return { roads: mirror.edges.size, zones, tags, raccord };
   if (!zones.R &&['house', 'townhouse', 'apartment_low', 'apartment_mid', 'apartment_high'].some((k) => tags.has(`cat:${k}`))) zones.R = 1;
   if (!zones.C && tags.has('cat:commercial')) zones.C = 1;
   if (!zones.I && tags.has('cat:industrial') && tags.has('service:emplois_industriels')) zones.I = 1;
-  return { roads: mirror.edges.size, zones, tags };
+  return { roads: mirror.edges.size, zones, tags, raccord };
 }
 
 export class Tutorial {
@@ -122,13 +124,16 @@ export class Tutorial {
   }
 
   /** Nouvel état de la ville (≈ 1 fois/s et à chaque changement du miroir). */
+  /** Raccordements aux réseaux voisins (lus dans les charges utiles des modules). */
+  raccord = { power: false, water: false };
+
   update(mirror: WorldMirror | null): void {
     if (!mirror || !this.enabled) { if (!this.enabled) this.render(false); return; }
     // Le miroir change à chaque construction : relecture limitée à 4 fois par seconde.
     const now = performance.now();
     if (now - this.lastRead < 250) { if (!this.pending) { this.pending = true; setTimeout(() => { this.pending = false; this.update(mirror); }, 260); } return; }
     this.lastRead = now;
-    this.facts = cityFacts(mirror);
+    this.facts = cityFacts(mirror, this.raccord);
     this.render(false);
   }
 

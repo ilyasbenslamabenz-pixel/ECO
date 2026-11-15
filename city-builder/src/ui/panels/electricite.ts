@@ -13,6 +13,7 @@ import {
   SOURCE_LABELS_FR, type FacilityView,
 } from '../../shared/power/types';
 import { powerView } from '../../shared/power/view';
+import { IMPORT_SPEC } from '../../shared/power/model';
 import type { UiPanel, UiPanelApi } from './types';
 
 /* --------------------------------- Formats --------------------------------- */
@@ -104,13 +105,22 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
   </table>` : ''}`;
 }
 
+/** Interrupteur du raccordement au réseau électrique voisin (frais uniques, plafond, prix du kWh). */
+function renderRaccordement(st: ElectriciteDelta): string {
+  const on = st.settings?.raccordement === true;
+  const kw = st.summary?.importedKw;
+  return `<div class="row raccord"><label><input id="elec-racc" type="checkbox" ${on ? 'checked' : ''}> <b>Raccordement au réseau voisin</b></label></div>
+  <p class="muted" style="margin:2px 0 6px">${on ? `Raccordé${typeof kw === 'number' ? ` : achat actuel ${fmtPower(kw)}` : ''}. ` : ''}Frais uniques ${nf0.format(IMPORT_SPEC.connectionChf)} CHF, jusqu'à ${fmtPower(IMPORT_SPEC.capacityKw)}, achat ${IMPORT_SPEC.priceCentsPerKwh.toLocaleString('fr-FR')} ct/kWh. Appoint appelé après vos centrales : idéal pour démarrer.</p>`;
+}
+
 function renderSettings(st: ElectriciteDelta): string {
   const set = st.settings;
-  if (!set) return '';
+  if (!set) return `<h4>Réglages</h4>${renderRaccordement(st)}`;
   const pr = set.priorities.map((c, i) => `<li>${esc(CLASS_LABELS_FR[c])}
       <button data-act="prio-up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Monter">▲</button>
       <button data-act="prio-down" data-i="${i}" ${i === set.priorities.length - 1 ? 'disabled' : ''} aria-label="Descendre">▼</button></li>`).join('');
   return `<h4>Réglages</h4>
+  ${renderRaccordement(st)}
   <div class="row"><label for="elec-fund">Financement de l'entretien</label><b data-k="financement">${Math.round(set.funding * 100)} %</b></div>
   <div class="row"><input id="elec-fund" type="range" min="${FUNDING_MIN * 100}" max="${FUNDING_MAX * 100}" step="5" value="${Math.round(set.funding * 100)}"></div>
   <p class="muted" style="margin:2px 0 6px">Sous-financer augmente les pannes (×4 à 50 %) et allonge les réparations.</p>
@@ -197,6 +207,13 @@ function mountPanel(root: HTMLElement, api: UiPanelApi): () => void {
     const t = ev.target as HTMLInputElement;
     if (t.id === 'elec-fund') void run('setFunding', { funding: Number(t.value) / 100 }).then(refresh);
     if (t.id === 'elec-roof') void run('setRooftops', { enabled: t.checked }).then(refresh);
+    if (t.id === 'elec-racc') {
+      const on = t.checked;
+      void run('raccordement', { on }).then((r) => {
+        if (r) api.toast(on ? `Raccordé au réseau électrique voisin (${nf0.format(IMPORT_SPEC.connectionChf)} CHF)` : 'Raccordement électrique coupé', 'ok');
+        return refresh();
+      });
+    }
   };
   root.addEventListener('click', onClick);
   root.addEventListener('change', onChange);

@@ -79,8 +79,8 @@ export function growthHint(r: SimReport | null): GrowthHint | null {
 export const GROWTH_HINT_FR: Record<GrowthHint, string> = {
   'need-roads': 'Plus de place constructible : tracez des routes et zonez le long',
   'need-zones': 'Aucune zone résidentielle libre : zonez du résidentiel le long des routes (Zones)',
-  'need-power': 'Les nouveaux bâtiments attendent l’électricité : construisez une centrale (Réseaux › Énergie)',
-  'need-water': 'Les nouveaux bâtiments attendent l’eau : posez une station de pompage (Réseaux › Eau)',
+  'need-power': 'Les nouveaux bâtiments attendent l’électricité : raccordez-vous au réseau voisin (Énergie › Réglages) ou construisez une centrale',
+  'need-water': 'Les nouveaux bâtiments attendent l’eau : raccordez-vous au réseau voisin (Eau › Réglages) ou posez une station de pompage',
 };
 
 /** Conseil d'action pour un facteur négatif (reconnu par sa clé ou son libellé) ; null si aucun conseil fixe. */
@@ -90,8 +90,8 @@ export function factorAdvice(f: SatisfactionFactor): string | null {
     [/acces|routier/, 'Reliez chaque bâtiment à une route (Routes).'],
     [/remarquable|monument/, 'Construisez un équipement remarquable : musée, gare, hôtel de ville (Services).'],
     [/politique/, 'Ajustez les politiques publiques (tableau de bord Politiques).'],
-    [/eau|water|egout|sewage/, 'Posez une station de pompage reliée par les routes (Réseaux › Eau).'],
-    [/electr|power|courant|energie/, 'Construisez une centrale et un poste (Réseaux › Énergie).'],
+    [/eau|water|egout|sewage/, 'Raccordez-vous au réseau d’eau voisin ou posez une station de pompage (Réseaux › Eau).'],
+    [/electr|power|courant|energie/, 'Raccordez-vous au réseau électrique voisin ou construisez une centrale (Réseaux › Énergie).'],
     [/dechet|waste|garbage|ordure/, 'Dépôt de camions + décharge ou incinérateur (Réseaux › Déchets).'],
     [/educ|ecole|school/, 'Construisez une école près des logements (Services › Éducation).'],
     [/sante|health|hopital|medical/, 'Ajoutez un centre de santé ou un hôpital (Services › Santé).'],

@@ -5,7 +5,7 @@
  * N'affiche QUE des valeurs reçues de la simulation (`delta.ext.eau` / `snapshot.ext.eau` / commande `state`).
  */
 import type { EauDelta, EauSnapshot } from '../../shared/protocol-ext/eau';
-import { WATER_FACILITIES, type WaterSettings } from '../../shared/water-network/types';
+import { WATER_FACILITIES, WATER_IMPORT, type WaterSettings } from '../../shared/water-network/types';
 import { waterView, WATER_LEGEND, WATER_VIEW_MODES } from '../../render/water-network/view';
 import { el, fmt, money } from '../dom';
 import type { UiPanel, UiPanelApi } from './types';
@@ -55,6 +55,24 @@ function mount(root: HTMLElement, api: UiPanelApi): () => void {
     return l;
   };
 
+  /** Interrupteur du raccordement au réseau d'eau voisin (frais uniques, plafond, prix du m³). */
+  const raccordement = (): HTMLElement => {
+    const on = state?.settings?.raccordement === true;
+    const chk = el('input', { attrs: { type: 'checkbox', 'data-eau': 'raccordement' } });
+    chk.checked = on;
+    chk.addEventListener('change', () => {
+      const want = chk.checked;
+      sending = true;
+      api.command('raccordement', { on: want }).then((r) => {
+        if (state) state = { ...state, settings: r as WaterSettings };
+        api.toast(want ? `Raccordé au réseau d'eau voisin (${fmt(WATER_IMPORT.connectionChf)} CHF)` : 'Raccordement à l’eau coupé', 'ok');
+      }).catch((e: unknown) => { chk.checked = !want; api.toast(e instanceof Error ? e.message : String(e), 'error'); }).finally(() => { sending = false; render(); });
+    });
+    return el('div', { cls: 'eau-raccord' },
+      el('label', { cls: 'eau-check' }, chk, el('b', { text: 'Raccordement au réseau d’eau voisin' })),
+      el('p', { cls: 'muted small', text: `${on ? 'Raccordé. ' : ''}Frais uniques ${fmt(WATER_IMPORT.connectionChf)} CHF, jusqu’à ${fmt(WATER_IMPORT.capacity)} m³/h, eau ${dec(WATER_IMPORT.pricePerM3, 1)} CHF/m³ et eaux usées ${dec(WATER_IMPORT.sewagePricePerM3, 1)} CHF/m³. Appoint appelé après vos installations : idéal pour démarrer.` }));
+  };
+
   const render = (): void => {
     const s = state;
     const parts: HTMLElement[] = [];
@@ -76,6 +94,7 @@ function mount(root: HTMLElement, api: UiPanelApi): () => void {
       parts.push(leg);
     }
     if (!s) {
+      parts.push(raccordement());
       parts.push(el('p', { cls: 'muted', text: 'Service non créé. Posez une station de pompage (catalogue « public ») près d\'une rivière ou d\'un lac — à défaut, elle fore la nappe — puis une usine de potabilisation, un château d\'eau, une station d\'épuration et un émissaire. Canalisations et égouts suivent les routes.' }));
       body.replaceChildren(...parts);
       return;
@@ -111,6 +130,7 @@ function mount(root: HTMLElement, api: UiPanelApi): () => void {
     parts.push(el('p', { cls: 'muted small', text: 'Recettes et dépenses du service de l’eau, comptées dans la ligne « Services » des finances municipales.' }));
     // Réglages.
     parts.push(el('h4', { text: 'Réglages' }));
+    parts.push(raccordement());
     parts.push(slider('Financement eau potable', 'fundingWater', 0, 1.5, 0.05, pct, 'Capacité de pompage / traitement et rendement de potabilisation'));
     parts.push(slider('Financement assainissement', 'fundingSewer', 0, 1.5, 0.05, pct, 'Capacité et rendement des stations d\'épuration (sous-financées : épuration partielle)'));
     parts.push(slider('Tarif de l\'eau', 'tariff', 0, 6, 0.1, (v) => `${dec(v, 1)} ¢/m³`, 'Un tarif élevé réduit la consommation et la satisfaction'));
