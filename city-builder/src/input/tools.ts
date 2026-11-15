@@ -165,7 +165,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.lastType = type;
     // Au doigt, l'aperçu est décalé au-dessus du point de contact pour rester visible.
     // (Outil Améliorer : on désigne la route sous le doigt, sans décalage.)
-    const lift = type === 'touch' && this.activeTool !== 'select' && !(this.activeTool === 'road' && d.machine.roadSub === 'upgrade') ? TOUCH_LIFT_PX : 0;
+    const lift = type === 'touch' && this.activeTool !== 'select' && !(this.activeTool === 'road' && (d.machine.roadSub === 'upgrade' || d.machine.roadSub === 'parallel')) ? TOUCH_LIFT_PX : 0;
     this.lastScreen.x = sx; this.lastScreen.y = sy - lift;
     const ray = d.camera.screenRay(sx, sy - lift);
     const g = d.camera.groundAt(sx, sy - lift);
@@ -242,7 +242,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.pendingHover = null;
     this.feed(sx, sy, type);
     this.roadStartedThisGesture = false;
-    if (type !== 'touch' && d.machine.tool === 'road' && d.machine.roadSub !== 'upgrade' && !d.machine.drawing) {
+    if (type !== 'touch' && d.machine.tool === 'road' && d.machine.roadSub !== 'upgrade' && d.machine.roadSub !== 'parallel' && !d.machine.drawing) {
       this.roadStartedThisGesture = true;
       void d.machine.primary();
     }
@@ -278,7 +278,8 @@ export class ToolController implements IToolController, PointerToolSink {
     }
     if (type === 'touch' && m.tool !== 'select') {
       // Route : les étapes intermédiaires se posent au relâcher ; l'action finale se confirme.
-      if (m.tool === 'road' && m.roadSub !== 'upgrade' && (!m.drawing || (m.roadSub === 'draw' && m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
+      if (m.tool === 'road' && m.roadSub === 'parallel' && !(m.preview.kind === 'road' && m.preview.points)) return;
+      if (m.tool === 'road' && m.roadSub !== 'upgrade' && m.roadSub !== 'parallel' && (!m.drawing || (m.roadSub === 'draw' && m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
       if (m.tool === 'road' && m.roadSub === 'upgrade' && !(m.preview.kind === 'upgrade' && m.preview.target)) return;
       if (m.tool === 'road' && m.roadSub === 'draw' && !m.draft.points()) return; // doigt relâché sur le départ
       if (m.tool === 'bulldoze' && m.bulldozeArea) {
@@ -292,7 +293,7 @@ export class ToolController implements IToolController, PointerToolSink {
       return;
     }
     if (m.tool === 'road' || ((m.tool === 'terraform' || (m.tool === 'bulldoze' && m.bulldozeArea)) && this.roadStartedThisGesture)) {
-      if (m.tool === 'road' && m.roadSub === 'upgrade' && !tap) return; // Améliorer : un clic franc, pas un glisser
+      if (m.tool === 'road' && (m.roadSub === 'upgrade' || m.roadSub === 'parallel') && !tap) return; // Améliorer, parallèle : un clic franc, pas un glisser
       if (tap && this.roadStartedThisGesture) return; // simple clic de départ
       void m.primary();
       return;

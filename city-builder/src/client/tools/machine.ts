@@ -75,7 +75,9 @@ export const DEMOLISH_REFUND_RATE = 0.25;
 export type Validity = 'pending' | 'ok' | 'error';
 
 /** Sous-outil de l'outil Routes. */
-export type RoadSubTool = 'draw' | 'grid' | 'upgrade';
+export type RoadSubTool = 'draw' | 'grid' | 'upgrade' | 'parallel';
+/** Distances proposées (m, d'axe à axe) pour la route parallèle. */
+export const PARALLEL_DISTANCES = [32, 48, 64, 96] as const;
 /** Action de l'outil « Améliorer » : type suivant (rue → avenue → boulevard), type précis, ou inversion du sens. */
 export type UpgradeTarget = 'next' | 'prev' | 'reverse' | RoadKindId;
 
@@ -139,6 +141,10 @@ export class ConstructionTools {
   /** Lignes guides parallèles aux routes existantes, à distance d'îlot (avec l'aimantation). */
   guides = true;
   upgradeTarget: UpgradeTarget = 'next';
+  /** Route parallèle : distance d'axe à axe (m). */
+  parallelDist: number = PARALLEL_DISTANCES[2];
+  private parallelKey = '';
+  setParallelDist(d: number): void { this.parallelDist = d; this.parallelKey = ''; this.refresh(); }
   private gridStart: { x: number; z: number } | null = null;
   private gridKey = '';
   private upgradeKey = '';
@@ -317,6 +323,7 @@ export class ConstructionTools {
       case 'road': {
         if (this.roadSub === 'grid') { if (this.refreshGrid(g)) return; break; }
         if (this.roadSub === 'upgrade') { if (this.refreshUpgrade(g)) return; break; }
+        if (this.roadSub === 'parallel') { if (this.refreshParallel(g)) return; break; }
         const d = this.draft;
         d.hover = g ? snapRoadPoint(this.mirror, g.x, g.z, { radius: this.snapRadius, angleSnap: this.angleSnap, magnet: this.magnet, grid: this.gridSnap && this.magnet, guideSpacing: this.guides ? this.gridBlock : 0 }, d.phase !== 'idle' ? (d.control ?? d.start ?? undefined) : undefined) : null;
         const points = d.points();
@@ -503,6 +510,76 @@ export class ConstructionTools {
     return out;
   }
 
+  /** Copie décalée d'un tronçon (du côté du pointeur) : 2 points (+ point de contrôle pour une courbe) et tracé d'aperçu. */
+  parallelPlan(near: { edge: RoadEdgeView; px: number; pz: number; tx: number; tz: number }, g: { x: number; z: number }, dist: number): { points: number[]; control?: [number, number]; display: number[] } {
+    const e = near.edge;
+    const perp = (x: number, z: number): [number, number] => { const l = Math.hypot(x, z) || 1; return [-z / l, x / l]; };
+    // Côté : signe par rapport à la normale (même convention que perp) au point le plus proche.
+    const [snx, snz] = perp(near.tx, near.tz);
+    const side = (g.x - near.px) * snx + (g.z - near.pz) * snz >= 0 ? 1 : -1;
+    // Orientation de la tangente du tronçon (a -> b) par rapport à celle du point le plus proche.
+    const dirAB = (e.bx - e.ax) * near.tx + (e.bz - e.az) * near.tz >= 0 ? 1 : -1;
+    const d = dist * side * dirAB;
+    if (!(e.c1 && e.c2)) {
+      const [nx, nz] = perp(e.bx - e.ax, e.bz - e.az);
+      const pts = [e.ax + nx * d, e.az + nz * d, e.bx + nx * d, e.bz + nz * d];
+      return { points: pts, display: pts };
+    }
+    // Courbe : contrôle quadratique retrouvé depuis la Bézier cubique (c1 = a + 2/3 (q - a)), décalé sur la bissectrice.
+    const qx = (3 * e.c1[0] - e.ax) / 2, qz = (3 * e.c1[1] - e.az) / 2;
+    const [nax, naz] = perp(qx - e.ax, qz - e.az), [nbx, nbz] = perp(e.bx - qx, e.bz - qz);
+    let mx = nax + nbx, mz = naz + nbz; const ml = Math.hypot(mx, mz) || 1; mx /= ml; mz /= ml;
+    const k = d / Math.max(0.3, nax * mx + naz * mz);
+    const a2 = [e.ax + nax * d, e.az + naz * d], b2 = [e.bx + nbx * d, e.bz + nbz * d], q2: [number, number] = [qx + mx * k, qz + mz * k];
+    const display: number[] = [];
+    for (let i = 0; i <= 16; i++) { const t = i / 16, u = 1 - t; display.push(u * u * a2[0]! + 2 * u * t * q2[0] + t * t * b2[0]!, u * u * a2[1]! + 2 * u * t * q2[1] + t * t * b2[1]!); }
+    return { points: [a2[0]!, a2[1]!, b2[0]!, b2[1]!], control: q2, display };
+  }
+
+  private parallelCmd: { points: number[]; control?: [number, number] } | null = null;
+
+  private refreshParallel(g: { x: number; z: number } | null): boolean {
+    const near = g ? this.mirror.nearestEdge(g.x, g.z, Math.max(this.parallelDist + 20, this.snapRadius)) : null;
+    const base = { kind: 'road' as const, type: this.roadType, mode: 'straight' as RoadMode, start: null, control: null, hover: null, angle: '', chained: 0 };
+    if (!near || !g || near.dist < 3) {
+      this.parallelKey = ''; this.parallelCmd = null;
+      this.preview = { ...base, points: null, validity: 'ok', cost: 0, length: 0, message: 'Touchez à côté d’une route : sa parallèle sera tracée de ce côté' };
+      return false;
+    }
+    const plan = this.parallelPlan(near, g, this.parallelDist);
+    let length = 0;
+    for (let i = 2; i < plan.display.length; i += 2) length += Math.hypot(plan.display[i]! - plan.display[i - 2]!, plan.display[i + 1]! - plan.display[i - 1]!);
+    const key = `${near.edge.id}|${plan.points.map((v) => v.toFixed(1)).join(',')}|${this.roadType}|${this.mirror.version}`;
+    if (key === this.parallelKey && this.preview.kind === 'road') { this.emit(); return true; }
+    this.parallelKey = key;
+    this.parallelCmd = { points: plan.points, ...(plan.control ? { control: plan.control } : {}) };
+    const def = roadDef(this.roadType);
+    this.preview = { ...base, points: plan.display, validity: 'pending', cost: def ? Math.round(length * def.costPerMeter) : 0, length, message: '' };
+    const seq = ++this.previewSeq;
+    const cmd = this.parallelCmd;
+    this.dry.run(async () => {
+      if (seq !== this.previewSeq) return;
+      let validity: Validity = 'ok', message = '', cost = this.preview.kind === 'road' ? this.preview.cost : 0;
+      try { const r = await this.sim.send('buildRoad', { type: legacyRoadType(this.roadType), kind: this.roadType, ...cmd, dryRun: true }); cost = r.cost; }
+      catch (e) { validity = 'error'; message = errorOf(e).message; }
+      if (this.parallelKey === key && this.preview.kind === 'road') { this.preview = { ...this.preview, validity, message, cost }; this.emit(); }
+    });
+    return false;
+  }
+
+  private async parallelClick(): Promise<void> {
+    const cmd = this.parallelCmd;
+    if (!cmd || this.preview.kind !== 'road' || this.preview.validity === 'error') return;
+    try {
+      const r = await this.sim.send('buildRoad', { type: legacyRoadType(this.roadType), kind: this.roadType, ...cmd });
+      this.applied++;
+      this.undo.push({ label: `Route parallèle : ${roadDef(this.roadType)?.nameFr ?? this.roadType}`, steps: r.edgeIds.map((edgeId) => ({ kind: 'removeRoad', edgeId }) as UndoStep) });
+      this.notify(`Route parallèle construite à ${this.parallelDist} m (−${fmt(r.cost)} ¢)`, 'ok');
+    } catch (e) { this.notify(`Route refusée : ${errorOf(e).message}`, 'error'); }
+    this.parallelKey = '';
+    this.refresh();
+  }
+
   private refreshUpgrade(g: { x: number; z: number } | null): boolean {
     let target: RoadEdgeView | null = null;
     const hit = this.lastRay ? this.mirror.pick(this.lastRay, g) : null;
@@ -642,6 +719,7 @@ export class ConstructionTools {
         case 'road':
           if (this.roadSub === 'grid') await this.gridClick();
           else if (this.roadSub === 'upgrade') await this.upgradeClick();
+          else if (this.roadSub === 'parallel') await this.parallelClick();
           else await this.roadClick();
           break;
         case 'bulldoze': await this.bulldozeCurrent(); break;

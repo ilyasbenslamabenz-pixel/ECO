@@ -10,6 +10,7 @@ import type { RoadKindId, ToolId } from '../shared/contracts';
 import { roadDef } from '../client/tools/mirror';
 import { ROAD_KINDS, ROAD_KIND_ORDER } from '../sim/roads/types';
 import type { ConstructionTools, RoadSubTool, UpgradeTarget } from '../client/tools/machine';
+import { PARALLEL_DISTANCES } from '../client/tools/machine';
 import { GRID_BLOCK_SIZES } from '../client/tools/grid';
 import type { ToolController } from '../input/tools';
 import { $, el, fmt, money, phaseBadge } from './dom';
@@ -412,7 +413,7 @@ export class BuildBar {
       mode.append(b);
     }
     const more = el('div', { cls: 'seg', attrs: { role: 'group', 'aria-label': 'Outils de voirie' } });
-    for (const [id, label, tip] of [['grid', 'Quadrillage', 'Quadrillage : tracez un rectangle, un îlot de rues est créé sur la grille de 8 m'], ['upgrade', 'Améliorer', 'Améliorer : touchez une route pour changer son type ou son sens sans la démolir']] as const) {
+    for (const [id, label, tip] of [['grid', 'Quadrillage', 'Quadrillage : tracez un rectangle, un îlot de rues est créé sur la grille de 8 m'], ['upgrade', 'Améliorer', 'Améliorer : touchez une route pour changer son type ou son sens sans la démolir'], ['parallel', 'Parallèle', 'Route parallèle : touchez à côté d’une route, sa copie décalée (32 à 96 m) est proposée de ce côté']] as const) {
       const b = el('button', { cls: m.roadSub === id ? 'active' : '', text: label, attrs: { 'data-road-sub': id } });
       b.dataset['tip'] = tip;
       b.addEventListener('click', () => { this.d.tools.setTool('road'); m.setRoadSub(id); this.closeDrawer(); });
@@ -443,6 +444,7 @@ export class BuildBar {
     if (m.tool === 'road' && m.draft.mode === 'roundabout') return `${m.draft.roundaboutSize === 'large' ? 'Grand giratoire' : 'Giratoire'} — cliquez sur un carrefour ou sur une route`;
     if (m.tool === 'road') {
       if (m.roadSub === 'grid') return `Quadrillage · ${ROAD_KINDS[m.roadType].nameFr} · îlots de ${m.gridBlock} m — premier coin, puis coin opposé (coût affiché avant validation)`;
+      if (m.roadSub === 'parallel') return `Route parallèle à ${m.parallelDist} m — touchez à côté d’une route, du côté voulu (type : ${ROAD_KINDS[m.roadType as RoadKindId]?.nameFr ?? m.roadType})`;
       if (m.roadSub === 'upgrade') return `Améliorer · ${UPGRADE_LABELS[m.upgradeTarget as keyof typeof UPGRADE_LABELS] ?? ROAD_KINDS[m.upgradeTarget as RoadKindId]?.nameFr ?? ''} — désignez une route (coût de la différence)`;
       const chain = m.draft.chained > 0 ? ` · ${m.draft.chained} tronçon${m.draft.chained > 1 ? 's' : ''} — le tracé continue, « Terminer » pour arrêter` : ' — le tracé continue depuis l’extrémité';
       return `${ROAD_KINDS[m.roadType].nameFr}${m.draft.elevation ? ` · ${m.draft.elevation > 0 ? '+' : ''}${m.draft.elevation} m` : ''} · ${m.draft.mode === 'curve' ? 'courbe : départ, courbure, arrivée' : 'départ puis arrivée'}${chain}`;
@@ -497,9 +499,13 @@ export class BuildBar {
       act('Courbe', 'Tracé courbe : départ, point de courbure, arrivée', () => m.setRoadMode('curve'), sub === 'draw' && m.draft.mode === 'curve');
       act('Quadrillage', 'Quadrillage : un rectangle devient un îlot de rues sur la grille de 8 m', () => m.setRoadSub(sub === 'grid' ? 'draw' : 'grid'), sub === 'grid');
       act('Améliorer', 'Améliorer : changer le type ou le sens d’une route sans la démolir', () => m.setRoadSub(sub === 'upgrade' ? 'draw' : 'upgrade'), sub === 'upgrade');
+      act('Parallèle', 'Route parallèle : touchez à côté d’une route existante, sa copie décalée est proposée de ce côté', () => m.setRoadSub(sub === 'parallel' ? 'draw' : 'parallel'), sub === 'parallel');
       this.actions.append(el('span', { cls: 'ta-break', attrs: { 'aria-hidden': 'true' } }));
       if (sub === 'grid' || sub === 'draw') {
         for (const b of GRID_BLOCK_SIZES) act(`${b} m`, `Taille d’îlot ${b} m (quadrillage et lignes guides parallèles)`, () => m.setGridBlock(b), m.gridBlock === b);
+      }
+      if (sub === 'parallel') {
+        for (const d of PARALLEL_DISTANCES) act(`${d} m`, `Distance entre les deux routes (d’axe à axe) : ${d} m`, () => m.setParallelDist(d), m.parallelDist === d);
       }
       if (sub === 'draw') act('Guides', `Lignes guides parallèles aux routes, à ${m.gridBlock} m (avec l’aimantation)`, () => m.setGuides(!m.guides), m.guides && m.magnet);
       if (sub === 'upgrade') {
