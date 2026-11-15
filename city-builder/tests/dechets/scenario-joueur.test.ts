@@ -3,7 +3,7 @@
  * « Prochaine collecte : vendredi », deux lignes « Centre de tri » à 0 kg, bacs qui débordent).
  *
  * Reproduction (même résultat, au kg près, sur 0e8e0be et après le correctif du trafic : les camions-bennes sont
- * simulés par le module, hors du trafic) : 66 producteurs, 2 dépôts (8 camions), 2 centres de tri, une décharge,
+ * simulés par le module, hors du trafic) : 65 producteurs, 2 dépôts (8 camions), 2 centres de tri, une décharge,
  * collecte 3 fois par semaine (lundi, mercredi, vendredi, départ 6 h).
  *  - « 7 en tournée » + « hier 0 · 0 » : capture faite le vendredi entre 6 h et 7 h, pendant la tournée ; jeudi
  *    n'est pas un jour de collecte. Les tournées durent < 1 h de jeu et se terminent toutes (aucun camion retenu).

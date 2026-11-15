@@ -15,7 +15,7 @@ budget, registre d'effets ; rendu (camions, tumulus, panache, conteneurs, calque
 | `src/render/waste/layers.ts`, `src/render/plugins/dechets.ts` | rendu : camions (LOD), tumulus, panache, conteneurs, calque |
 | `src/ui/panels/dechets.ts` | panneau « Déchets » |
 | `tools/waste/models.ts`, `tools/waste/build.ts` | modèles GLB originaux (kit de bâtiments), `npm run waste:build` |
-| `tests/dechets/*.test.ts`, `tests/dechets/e2e.mjs` | 10 tests (dont les 3 tests d'effet), parcours e2e avec captures |
+| `tests/dechets/*.test.ts`, `tests/dechets/e2e.mjs` | 13 tests (dont les 3 tests d'effet et le scénario joueur `scenario-joueur.test.ts`), parcours e2e avec captures |
 
 ## 1. Installations (bâtiments du catalogue, onglet « Services publics »)
 
@@ -45,6 +45,9 @@ Décor : `dechets_tumulus` (relief de la décharge, mis à l'échelle par le ren
   vide au centre de tri (part triée) puis à l'incinérateur (s'il a de la capacité) ou à la décharge (part
   résiduelle), au plus 2 vidages par service de 7 h, puis rentre au dépôt. Les ramassages ont lieu quand le camion
   arrive (horloge de jeu) : les bacs se vident au fil de la tournée.
+  Un bac de moins de 20 kg est quand même vidé s'il déborderait avant la collecte suivante (production × intervalle
+  jusqu'au prochain jour de collecte + 7 h ≥ capacité). Centre de tri : le plus proche qui a encore de la capacité
+  dans la journée.
 - **Clôture journalière** : tri (30 t/j, 70 % recyclés), incinération (60 t/j ; file > 2 jours → décharge),
   enfouissement ; pollution : air (incinérateur), sol + eau (décharge, débordement), sol + nuisances (bacs qui
   débordent) ; **nuisances → satisfaction (−0,25/point) et valeur foncière (−0,3 ¢/m² par point)**, décalage
@@ -60,11 +63,31 @@ Limites connues : camions simulés par le module (pas dans le trafic de base : p
 dans docs/requests/dechets.md §2) ; graphe en double sens sauf sens uniques, abscisse de Bézier ≈ abscisse
 curviligne ; part triée collectée par les mêmes bennes (bi-compartiment).
 
+### Lecture du panneau, diagnostics (2026-11-15)
+
+Cas réel d'un joueur : « Camions 8 · 8 · 7 », « Hier : 0 tournée · 0 arrêt », « Prochaine collecte : vendredi »,
+deux « Centre de tri » à 0 kg, 3 bacs qui débordent. Reproduit à l'identique sur 0e8e0be et sur la version suivante
+(les camions-bennes ne roulent pas dans le trafic de base : le correctif du trafic de la vague 4 ne les concerne pas)
+par `tests/dechets/scenario-joueur.test.ts` : la capture date du vendredi entre 6 h et 7 h, pendant la tournée
+(jeudi n'est pas un jour de collecte avec 3 passages : lundi, mercredi, vendredi). Les tournées durent moins d'une
+heure de jeu et se terminent toutes. Les deux centres de tri sont deux vrais bâtiments ; seul le plus proche reçoit.
+
+- Panneau : « Calendrier » (jours de collecte, départ 6 h, les bacs se remplissent entre deux collectes),
+  « Prochaine tournée » (aujourd'hui seulement avant 6 h), collecte en cours (tournées et arrêts du jour),
+  installations numérotées (« Centre de tri n° 1 / n° 2 »), dernier traitement non nul d'un centre.
+- Diagnostics (`summary.diagnostics`, calculés par la simulation) avec le réglage ou l'action à toucher : installation
+  non reliée, bâtiments hors d'atteinte des camions (`unservedProducers`), arrêts non desservis faute de temps
+  (`missedStops`), fréquence sous le minimum (`recommendedCollectsPerWeek` = 2 : plus long intervalle ≤ 4 jours de
+  réserve), débordements résiduels, tournée anormalement longue (> 10 h), centre de tri inutilisé.
+- Mesure (30 jours, 65 producteurs, 1,5 t/j, 8 camions) — non collectés avant → après : 3 passages 321 kg → 0 ;
+  2 passages 1 346 kg → 0 ; 1 passage 15,9 t → 15,9 t (diagnostic « 2 / semaine au moins »). Réglage par défaut
+  conservé : 3 passages.
+
 ## 3. Protocole
 
 `delta.ext.dechets` : `trucks` (Float32Array `[x, z, cap, charge]`, à chaque delta pendant une tournée, transféré),
 `summary` + `layer` (grille des nuisances et du sol, bacs `[x, z, remplissage]`) + `containers`, au plus une fois
-par heure de jeu. `snapshot.ext.dechets` : tout. Commandes `pluginCommand { plugin: 'dechets' }` : `etat`,
+par heure de jeu, et aussitôt la dernière tournée terminée. `snapshot.ext.dechets` : tout. Commandes `pluginCommand { plugin: 'dechets' }` : `etat`,
 `reglages { collectsPerWeek?, sortShare?, funding? }` (bornés), `collecter` (lance les tournées maintenant),
 `bacs { buildingId }`. Sans le service `municipal`, le module est inactif (aucun `ext`, aucune section,
 commandes → `NOT_IMPLEMENTED`).
