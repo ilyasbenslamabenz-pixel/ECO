@@ -42,16 +42,32 @@ export const DECOR_ASSETS: Record<DecorKind, string[]> = {
   bin: ['poubelle_metal', 'poubelles_tri'],
 };
 
-/** Distance (m) caméra-chunk au-delà de laquelle le décor passe au LOD le plus léger. */
-/** Distances (m, du bord approximatif du chunk) : LOD0 -> LOD1 -> LOD2 -> masqué. Réglées par l'intégration :
- *  les arbres d'alignement Poly Haven font 16-20 k triangles au LOD0 (mesure de la scène de démo). */
+/** Distances (m) : version proche du décor jusqu'à la distance du LOD du catalogue (au moins DECOR_LOD0), par
+ *  instance ; masqué au-delà de DECOR_HIDE (du bord approximatif du chunk). Les arbres d'alignement Poly Haven
+ *  font 16-20 k triangles au LOD0 (mesure de la scène de démo) : version proche = leur LOD1. */
 const DECOR_LOD0 = 40;
-const DECOR_NEAR = 300;
 const DECOR_HIDE = 1400;
-/** Lampadaire en pavés au-delà de cette distance 3D (m) au décor du chunk (≈ 20 px de haut en 1080p). */
+/** Lampadaire en pavés au-delà de cette distance 3D (m) à la caméra (≈ 20 px de haut en 1080p). */
 const LAMP_PROXY = 200;
 
-interface DecorBatch { meshes: THREE.InstancedMesh[][]; } // [lod][sous-maillage]
+/**
+ * Lot de décor d'un chunk (un asset) : un maillage instancié par niveau et sous-maillage, chaque niveau avec ses
+ * propres matrices. Près de la caméra, chaque instance choisit son niveau selon SA distance (`limits`) ; loin,
+ * tout le lot est au dernier niveau. Avant, le niveau valait pour tout le chunk (256 m) : en vue rue, chaque
+ * lampadaire du chunk de la caméra était dessiné au LOD0 (8 000 triangles), image et carte d'ombre.
+ */
+interface DecorBatch {
+  meshes: THREE.InstancedMesh[][]; // [niveau][sous-maillage]
+  /** Matrices de toutes les instances (16 par instance) et positions (3 par instance). */
+  mats: Float32Array;
+  pos: Float32Array;
+  /** Matrices compactées de chaque niveau. */
+  attrs: THREE.InstancedBufferAttribute[];
+  /** Distance 3D maximale (m) de chaque niveau sauf le dernier. */
+  limits: number[];
+  /** Mode courant : niveau unique (0, 1, 2…), -1 = par instance, -2 = masqué. */
+  mode: number;
+}
 
 interface Chunk {
   key: number;
@@ -65,9 +81,11 @@ interface Chunk {
   batches: DecorBatch[];
   pools: THREE.InstancedMesh | null;
   lod: number;
-  /** Hauteurs extrêmes du décor du chunk (distance 3D du palier « pavés » des lampadaires). */
+  /** Hauteurs extrêmes du décor du chunk (distance 3D à la boîte du chunk). */
   decorMinY: number;
   decorMaxY: number;
+  /** Position de caméra du dernier tri par instance (recalcul après ≥ 2 m de déplacement). */
+  lastX: number; lastY: number; lastZ: number;
 }
 
 /** Couleurs de repli (sans bibliothèque de matériaux : tests isolés). */
@@ -109,7 +127,7 @@ function proxyBox(x0: number, x1: number, y0: number, y1: number, z0: number, z1
 }
 
 /**
- * Lampadaire vu de très loin (au-delà de DECOR_NEAR, quelques pixels de haut) : 3 pavés (mât, lanterne vitrée,
+ * Lampadaire vu de très loin (au-delà de LAMP_PROXY, quelques pixels de haut) : 3 pavés (mât, lanterne vitrée,
  * chapeau) au lieu des 797 triangles du dernier LOD, mêmes matériaux (vitrage allumé la nuit). Dérivé des
  * boîtes englobantes du dernier LOD ; null si sa structure n'est pas celle attendue (mât + vitrage).
  */
@@ -143,6 +161,8 @@ export class RoadNetworkRenderer implements IRoadRenderer {
   private matLib: MaterialLibrary | null = null;
   private readonly lib: AssetLibrary | null;
   /** Prototypes de décor : par asset, par LOD, liste (géométrie, matériau). */
+  /** Distance 3D (m) jusqu'à laquelle chaque décor garde sa version proche (LOD du catalogue). */
+  private readonly decorNear = new Map<string, number>();
   private readonly decorProto = new Map<string, { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[] }[][]>();
   private decorReady: Promise<void> = Promise.resolve();
   private readonly treeImpostor: ((assetId: string) => THREE.Material | null) | null;
@@ -252,11 +272,12 @@ export class RoadNetworkRenderer implements IRoadRenderer {
         });
         lods.push(parts);
       }
-      // Lampadaires (≈ 750 dans la démo, dessinés jusqu'à 1,4 km et dans la carte d'ombre) : version pavés au-delà de DECOR_NEAR.
+      // Lampadaires (≈ 750 dans la démo, dessinés jusqu'à 1,4 km et dans la carte d'ombre) : version pavés au-delà de LAMP_PROXY.
       if (id === 'lampadaire_fonte' && lods.length === 2) {
         const proxy = lampFarProxy(lods[1]!, (m) => this.lampGlass.includes(m as THREE.MeshStandardMaterial));
         if (proxy) lods.push(proxy);
       }
+      this.decorNear.set(id, Math.max(DECOR_LOD0, a.lods[near]?.maxDistance ?? DECOR_LOD0));
       this.decorProto.set(id, lods);
     }));
     this.setNight(this.night);
@@ -370,7 +391,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       const group = new THREE.Group();
       group.name = `roads_chunk_${key}`;
       this.group.add(group);
-      c = { key, cx, cz, group, segs: new Set(), nodes: new Set(), layerMeshes: [], decor: [], batches: [], pools: null, lod: 0, decorMinY: 0, decorMaxY: 0 };
+      c = { key, cx, cz, group, segs: new Set(), nodes: new Set(), layerMeshes: [], decor: [], batches: [], pools: null, lod: 0, decorMinY: 0, decorMaxY: 0, lastX: NaN, lastY: NaN, lastZ: NaN };
       this.chunks.set(key, c);
     }
     return c;
@@ -536,8 +557,18 @@ export class RoadNetworkRenderer implements IRoadRenderer {
         this.tmpM.compose(this.tmpV, this.tmpQ, this.tmpS);
         this.tmpM.toArray(matrix.array as Float32Array, i * 16);
       });
-      const batch: DecorBatch = { meshes: [] };
+      const pos = new Float32Array(items.length * 3);
+      items.forEach((d, i) => { pos[i * 3] = d.x; pos[i * 3 + 1] = d.y; pos[i * 3 + 2] = d.z; });
+      const near = this.decorNear.get(id) ?? DECOR_LOD0;
+      const batch: DecorBatch = {
+        meshes: [], mats: matrix.array as Float32Array, pos, attrs: [], mode: -3,
+        limits: proto.length > 2 ? [near, Math.max(near, LAMP_PROXY)] : [near],
+      };
       proto.forEach((parts, lod) => {
+        // Matrices propres au niveau (compactées par applyLod) ; le niveau 0 garde d'abord toutes les instances.
+        const levelMatrix = lod === 0 ? matrix : new THREE.InstancedBufferAttribute((matrix.array as Float32Array).slice(), 16);
+        levelMatrix.setUsage(THREE.DynamicDrawUsage);
+        batch.attrs.push(levelMatrix);
         const list: THREE.InstancedMesh[] = [];
         for (const p of parts) {
           const impostor = p.geometry === IMPOSTOR_QUAD;
@@ -549,13 +580,14 @@ export class RoadNetworkRenderer implements IRoadRenderer {
             geometry.userData['ownedByBatch'] = true;
           }
           const im = new THREE.InstancedMesh(geometry, p.material, items.length);
-          im.instanceMatrix = matrix; // matrices partagées entre LOD et sous-maillages
+          im.instanceMatrix = levelMatrix; // matrices partagées entre sous-maillages d'un même niveau
           im.name = `roads_decor_${id}_${impostor ? 'imposteur' : `lod${lod}`}`;
           im.castShadow = !impostor;
           im.receiveShadow = !impostor;
           im.frustumCulled = true;
           // Imposteur : le quad est déplacé par le shader ; on reprend la sphère englobante du LOD détaillé.
           const ref = impostor ? batch.meshes[0]?.[0] : undefined;
+          // Sphère calculée sur TOUTES les instances (matrices complètes à ce stade) : reste valable après compactage.
           if (ref?.boundingSphere) im.boundingSphere = ref.boundingSphere.clone();
           else im.computeBoundingSphere();
           im.visible = lod === 0;
@@ -564,6 +596,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
         }
         batch.meshes.push(list);
       });
+      batch.mats = (matrix.array as Float32Array).slice();
       c.batches.push(batch);
       if (id === 'lampadaire_fonte') {
         // Halos au sol (nuit) : décalés vers la chaussée.
@@ -585,23 +618,63 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       }
     }
     c.lod = -1;
+    c.lastX = NaN;
     this.applyLod(c);
   }
 
   private applyLod(c: Chunk): void {
-    const d = Math.max(0, Math.hypot(this.cam.x - c.cx, this.cam.z - c.cz) - CHUNK_SIZE * 0.5);
-    const lod = d > DECOR_HIDE ? 3 : d > DECOR_NEAR ? 2 : d > DECOR_LOD0 ? 1 : 0;
-    // Palier « pavés » (3 niveaux : lampadaires) : distance 3D exacte à la boîte du chunk (jamais sous-estimée près de la caméra).
+    const cam = this.cam;
+    // Masquage lointain : inchangé (distance horizontale au chunk).
+    const hidden = Math.max(0, Math.hypot(cam.x - c.cx, cam.z - c.cz) - CHUNK_SIZE * 0.5) > DECOR_HIDE;
+    // Distance 3D exacte à la boîte du décor du chunk : aucune instance n'est plus proche.
     const h = CHUNK_SIZE / 2;
-    const ax = Math.max(0, Math.abs(this.cam.x - c.cx) - h), az = Math.max(0, Math.abs(this.cam.z - c.cz) - h);
-    const ay = this.cam.y > c.decorMaxY ? this.cam.y - c.decorMaxY : this.cam.y < c.decorMinY ? c.decorMinY - this.cam.y : 0;
-    const far = lod < 3 && lod >= 1 && Math.hypot(ax, ay, az) > LAMP_PROXY;
-    const key = lod * 2 + (far ? 1 : 0);
-    if (key === c.lod) return;
-    c.lod = key;
-    for (const b of c.batches) b.meshes.forEach((list, i) => {
-      const want = b.meshes.length > 2 ? (lod === 0 ? 0 : far ? 2 : 1) : Math.min(lod, b.meshes.length - 1);
-      for (const m of list) m.visible = lod < 3 && i === want;
+    const ax = Math.max(0, Math.abs(cam.x - c.cx) - h), az = Math.max(0, Math.abs(cam.z - c.cz) - h);
+    const ay = cam.y > c.decorMaxY ? cam.y - c.decorMaxY : cam.y < c.decorMinY ? c.decorMinY - cam.y : 0;
+    const dc = Math.hypot(ax, ay, az);
+    const moved = !(Math.abs(cam.x - c.lastX) < 2 && Math.abs(cam.y - c.lastY) < 2 && Math.abs(cam.z - c.lastZ) < 2);
+    let sorted = false;
+    for (const b of c.batches) {
+      const last = b.meshes.length - 1;
+      const mode = hidden ? -2 : dc >= b.limits[b.limits.length - 1]! ? last : -1;
+      if (mode === b.mode && (mode !== -1 || !moved)) continue;
+      if (mode === -1) { this.sortInstances(b); sorted = true; }
+      else if (mode >= 0) this.singleLevel(b, mode);
+      else for (const list of b.meshes) for (const m of list) m.visible = false;
+      b.mode = mode;
+    }
+    if (sorted || moved) { c.lastX = cam.x; c.lastY = cam.y; c.lastZ = cam.z; }
+  }
+
+  /** Toutes les instances du lot au niveau `lvl` (matrices complètes recopiées si besoin). */
+  private singleLevel(b: DecorBatch, lvl: number): void {
+    const n = b.pos.length / 3;
+    b.meshes.forEach((list, i) => {
+      if (i === lvl) {
+        const at = b.attrs[i]!;
+        (at.array as Float32Array).set(b.mats);
+        at.clearUpdateRanges(); at.needsUpdate = true;
+        for (const m of list) { m.count = n; m.visible = n > 0; }
+      } else for (const m of list) m.visible = false;
+    });
+  }
+
+  /** Niveau de chaque instance selon sa distance 3D à la caméra ; matrices compactées par niveau. */
+  private sortInstances(b: DecorBatch): void {
+    const cam = this.cam, n = b.pos.length / 3, nl = b.meshes.length;
+    const counts = [0, 0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      const d = Math.hypot(b.pos[i * 3]! - cam.x, b.pos[i * 3 + 1]! - cam.y, b.pos[i * 3 + 2]! - cam.z);
+      let lvl = 0;
+      while (lvl < b.limits.length && d > b.limits[lvl]!) lvl++;
+      if (lvl >= nl) lvl = nl - 1;
+      const k = counts[lvl]!++;
+      (b.attrs[lvl]!.array as Float32Array).set(b.mats.subarray(i * 16, i * 16 + 16), k * 16);
+    }
+    b.meshes.forEach((list, i) => {
+      const k = counts[i]!;
+      const at = b.attrs[i]!;
+      if (k > 0) { at.clearUpdateRanges(); at.addUpdateRange(0, k * 16); at.needsUpdate = true; }
+      for (const m of list) { m.count = k; m.visible = k > 0; }
     });
   }
 

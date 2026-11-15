@@ -17,9 +17,17 @@ function storageSet(k: string, v: string | null): void {
   try { if (v === null) globalThis.localStorage?.removeItem(k); else globalThis.localStorage?.setItem(k, v); } catch { /* navigation privée */ }
 }
 
+/** Raison mémorisée du mode sûr (affichée par la page de mesure). */
+export const SAFE_MODE_REASON_KEY = 'meknes:mode-sur-raison';
+
 /** Mode sûr actif (après un chargement planté ; désactivé en choisissant une autre qualité dans les réglages). */
 export function isSafeMode(): boolean { return storageGet(SAFE_MODE_KEY) === '1'; }
-export function setSafeMode(on: boolean): void { storageSet(SAFE_MODE_KEY, on ? '1' : null); }
+export function setSafeMode(on: boolean, reason?: string): void {
+  storageSet(SAFE_MODE_KEY, on ? '1' : null);
+  storageSet(SAFE_MODE_REASON_KEY, on ? (reason ?? 'activé') : null);
+}
+/** Pourquoi le mode sûr est actif (null s'il ne l'est pas). */
+export function safeModeReason(): string | null { return isSafeMode() ? storageGet(SAFE_MODE_REASON_KEY) ?? 'raison non enregistrée' : null; }
 
 /**
  * Début du chargement. Renvoie vrai si le chargement PRÉCÉDENT ne s'est pas terminé (Safari a tué l'onglet) :
@@ -28,9 +36,16 @@ export function setSafeMode(on: boolean): void { storageSet(SAFE_MODE_KEY, on ? 
 export function bootStarted(): boolean {
   const crashed = storageGet(BOOT_PENDING_KEY) === '1';
   storageSet(BOOT_PENDING_KEY, '1');
+  // Sortie VOLONTAIRE pendant le chargement (rechargement, lien, fermeture de l'onglet) : ce n'est pas un plantage.
+  // Un onglet tué par Safari (mémoire) ne reçoit pas `pagehide` : le drapeau reste et le mode sûr s'active.
+  try { globalThis.addEventListener?.('pagehide', onPageHide); } catch { /* hors navigateur */ }
   return crashed;
 }
-export function bootDone(): void { storageSet(BOOT_PENDING_KEY, null); }
+function onPageHide(): void { storageSet(BOOT_PENDING_KEY, null); }
+export function bootDone(): void {
+  storageSet(BOOT_PENDING_KEY, null);
+  try { globalThis.removeEventListener?.('pagehide', onPageHide); } catch { /* hors navigateur */ }
+}
 
 export interface DeviceProfile {
   /** Mode allégé (téléphone / faible mémoire). */
