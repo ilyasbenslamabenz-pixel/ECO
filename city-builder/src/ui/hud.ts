@@ -38,13 +38,19 @@ import { listSlotsAsync, removeSlotAsync, slotIdKeepCase, slotLabel } from './sa
 import type { ThumbnailSource } from './thumbnails';
 import { initTooltips } from './tooltips';
 import { GROWTH_HINT_FR, GROWTH_HINTS, growthHint } from './satisfaction';
-import { Tutorial } from './tutorial';
+import { Tutorial, type GoalInfo } from './tutorial';
+import { openView, progressionView } from '../client/progression-view';
+import { nextMilestoneLine, nextMilestonePct } from './panels/paliers';
+import { objProgressText, objStreakText } from './panels/objectifs';
+import type { DashId } from './dashboards';
 
 export interface NewGameChoice {
   cityName: string; seed: number; mapChunks: number; startMoney: number;
   /** Carte : rivières (aucune / une / plusieurs) et côte (mer / sans mer). */
   riverMode?: 'aucune' | 'une' | 'plusieurs';
   hydrology?: 'mer' | 'aucune';
+  /** Déblocages progressifs (paliers) : case de l'écran Nouvelle partie (cochée par défaut). */
+  paliers?: boolean;
 }
 
 export interface UIHandlers {
@@ -165,7 +171,7 @@ export function initUI(h: UIHandlers): UIHandle {
     const rm = String(f.get('riverMode') ?? 'une');
     const riverMode = rm === 'aucune' || rm === 'plusieurs' ? rm : 'une';
     const hydrology = String(f.get('hydrology') ?? 'mer') === 'aucune' ? 'aucune' : 'mer';
-    h.onNewGameWith?.({ cityName, seed: Number.isFinite(seed) ? seed | 0 : randomSeed(), mapChunks: Number(f.get('mapChunks')) || 8, startMoney: Number(f.get('startMoney')) || 500000, riverMode, hydrology });
+    h.onNewGameWith?.({ cityName, seed: Number.isFinite(seed) ? seed | 0 : randomSeed(), mapChunks: Number(f.get('mapChunks')) || 8, startMoney: Number(f.get('startMoney')) || 500000, riverMode, hydrology, paliers: f.get('paliers') !== null });
   });
 
   /* ---------- Chargement ---------- */
@@ -210,15 +216,18 @@ export function initUI(h: UIHandlers): UIHandle {
     (optForm.elements.namedItem('viewDistance') as HTMLInputElement).value = String(o.viewDistance);
     (optForm.elements.namedItem('fps') as HTMLSelectElement).value = o.fps;
     (optForm.elements.namedItem('theme') as HTMLSelectElement).value = o.theme;
+    const ev = optForm.elements.namedItem('events') as HTMLSelectElement | null;
+    if (ev) ev.value = o.events;
     distOut.textContent = `${fmt(o.viewDistance)} m`;
     $<HTMLInputElement>('opt-tutorial').checked = tutorial.enabled;
   };
   optForm.addEventListener('input', (e) => {
     if ((e.target as HTMLElement | null)?.id === 'opt-tutorial') return; // case « Premiers pas » : gérée à part
     const f = new FormData(optForm);
-    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'], dynRes: String(f.get('dynRes') ?? 'auto') as GraphicsOptions['dynRes'], aa: String(f.get('aa') ?? 'auto') as GraphicsOptions['aa'] });
+    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'], dynRes: String(f.get('dynRes') ?? 'auto') as GraphicsOptions['dynRes'], aa: String(f.get('aa') ?? 'auto') as GraphicsOptions['aa'], events: String(f.get('events') ?? 'normal') as GraphicsOptions['events'] });
     distOut.textContent = `${fmt(o.viewDistance)} m`;
     saveOptions(o);
+    sendEventsSetting(o.events);
     h.onOptions?.(o);
   });
   optForm.addEventListener('submit', (e) => e.preventDefault());
@@ -334,6 +343,43 @@ export function initUI(h: UIHandlers): UIHandle {
   const optTuto = $<HTMLInputElement>('opt-tutorial');
   optTuto.checked = tutorial.enabled;
   optTuto.addEventListener('change', (e) => { e.stopPropagation(); tutorial.setEnabled(optTuto.checked); tutorial.update(api?.mirror ?? null); });
+
+  /* ---------- Progression : tableaux de bord, rappel de l'objectif, réglage des événements ---------- */
+  window.addEventListener('ui:open-view', (e) => {
+    const d = (e as CustomEvent<{ dash: string; tab?: string }>).detail;
+    if (!d) return;
+    setSidebar(false);
+    if (d.dash === 'population') cityPanels.openPop();
+    else if (d.dash === 'finance') cityPanels.openFinance();
+    else dashboards.open(d.dash as DashId, d.tab);
+    dashboards.syncSidebar();
+  });
+  /** Fréquence des événements (Options) transmise à la simulation (partie neuve, chargement, changement). */
+  const sendEventsSetting = (f: GraphicsOptions['events']): void => {
+    if (!modules.bridge || !inGameFlagSim) return;
+    if (progressionView.evenements?.setting === f) return;
+    modules.bridge.pluginCommand('evenements', 'reglage', { frequence: f }).catch(() => undefined);
+  };
+  let inGameFlagSim = false;
+  const goalOf = (): GoalInfo | null => {
+    const o = progressionView.objectifs, p = progressionView.paliers;
+    const prog = { label: 'Progression', run: () => openView('progression', 'mod:objectifs') };
+    const act = o?.active ?? [];
+    if (act.length) {
+      const best = [...act].sort((a, b) => b.progress - a.progress || a.since - b.since)[0]!;
+      const streak = objStreakText(best);
+      return {
+        title: best.title, count: `${Math.round(best.progress * 100)} %`, pct: best.progress * 100,
+        lines: [`${objProgressText(best)}${streak ? ` · ${streak}` : ''}`, `Récompense : ${money(best.rewardMoney)} · ${fmt(best.rewardXp)} points`, ...(p ? [nextMilestoneLine(p)] : [])],
+        actions: [{ label: 'Voir', run: () => openView(best.dash), primary: true }, prog],
+      };
+    }
+    if (p?.next) {
+      return { title: `Palier suivant : ${p.next.nameFr}`, count: `${Math.round(nextMilestonePct(p))} %`, pct: nextMilestonePct(p), lines: [nextMilestoneLine(p)], actions: [{ label: 'Progression', run: () => openView('progression', 'mod:paliers'), primary: true }] };
+    }
+    return null;
+  };
+  progressionView.onChange(() => tutorial.setGoal(goalOf()));
 
   /** Raccordements aux réseaux voisins : réglage `raccordement` des modules électricité et eau (charge utile). */
   const readRaccord = (ext: Record<string, unknown> | undefined): void => {
@@ -581,7 +627,12 @@ export function initUI(h: UIHandlers): UIHandle {
       if (ico) ico.replaceWith(iconEl(m === 'aerial' ? 'walk' : 'eye'));
       if (dashboards.current === 'city') dashboards.render(true);
     },
-    toast(text, kind = 'info') { showToast(text, kind); },
+    toast(text, kind = 'info') {
+      // Messages de la progression : bouton « Voir » vers le bon onglet du tableau de bord Progression.
+      const tab = /^Événement/.test(text) ? 'mod:evenements' : /^(Nouvel objectif|Objectif accompli|Réalisation)/.test(text) ? 'mod:objectifs' : /^Palier atteint/.test(text) ? 'mod:paliers' : null;
+      if (tab) showToast(text, kind, /^Événement/.test(text) ? 9000 : 6000, { label: 'Voir', run: () => openView('progression', tab) });
+      else showToast(text, kind);
+    },
     // Pied du menu : sans détail technique (support de stockage des sauvegardes).
     setMenuFoot(text) { $('menu-foot').textContent = text.replace(/\s*·\s*sauvegardes\s*:\s*\S+/i, ' · sauvegardes dans ce navigateur'); },
     toolHooks() {
@@ -650,8 +701,13 @@ export function initUI(h: UIHandlers): UIHandle {
     setExtPort(p) { extPort = p; cityPanels.setPort(p); },
     attachWorld(o) { heightAt = o.heightAt; ensureMinimap(); },
     setModuleBridge(b) { modules.bridge = b; },
-    moduleSnapshot(ext) { modules.setSnapshot(ext); tutorial.raccord = { power: false, water: false }; readRaccord(ext); },
-    moduleDelta(ext) { modules.pushDelta(ext); readRaccord(ext); },
+    moduleSnapshot(ext) {
+      modules.setSnapshot(ext); tutorial.raccord = { power: false, water: false }; readRaccord(ext);
+      progressionView.setSnapshot(ext);
+      inGameFlagSim = true;
+      sendEventsSetting(loadOptions().events);
+    },
+    moduleDelta(ext) { modules.pushDelta(ext); readRaccord(ext); progressionView.pushDelta(ext); },
     get buildBar() { return buildBar; },
     get info() { return info; },
   };

@@ -55,6 +55,8 @@ export interface TrafficReport {
   arrived: number;
   connectedBuildings: number;
   tripsFromCitizens: number;
+  /** Trajets détaillés non admis (plafond horaire du trafic atteint, vague 4). */
+  tripsCapped?: number;
 }
 
 export interface SimReport {

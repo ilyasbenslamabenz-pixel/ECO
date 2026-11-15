@@ -8,6 +8,7 @@
  * Toutes les valeurs viennent de la simulation (`zoningView`, commande `state`) ; les commandes passent par
  * `window.__aube.send('pluginCommand', …)`.
  */
+import { progressionView } from '../../client/progression-view';
 import { DEMAND_ORDER } from '../demand';
 import {
   SECTOR_COLORS, SECTOR_LABELS_FR, ZONE_COLORS, ZONE_DEPTH_MAX, ZONE_DEPTH_MIN, ZONE_LABELS_FR, ZONE_SHORT_FR, ZONE_TYPES,
@@ -171,6 +172,16 @@ class ZonageDrawer implements DrawerProvider {
       const b = el('button', { cls: `tile zn-tile${v.brush === z ? ' active' : ''}`, attrs: { 'data-zone': z, style: `--ic:${ZONE_COLORS[z]}`, 'aria-pressed': String(v.brush === z) } },
         el('span', { cls: 'tile-ico' }, iconEl(ZONE_ICONS[z])), el('span', { cls: 'nm', text: ZONE_SHORT_FR[z] }));
       b.dataset['tip'] = `${ZONE_LABELS_FR[z]} : glisser le long d’une route`;
+      // Déblocages progressifs : zone encore verrouillée (cadenas et palier requis ; la simulation refuse aussi).
+      const lockAt = progressionView.zoneLock(z);
+      if (lockAt) {
+        b.classList.add('locked');
+        b.append(el('span', { cls: 'lock-badge', text: `🔒 ${lockAt}` }));
+        b.dataset['tip'] = `${ZONE_LABELS_FR[z]} : débloquée au palier « ${lockAt} » (Progression)`;
+        b.addEventListener('click', () => o.deps.notify(`${ZONE_LABELS_FR[z]} : débloquée au palier « ${lockAt} » — voir Progression › Paliers`, 'info'));
+        o.body.append(b);
+        continue;
+      }
       b.addEventListener('click', () => { v.brush = z; o.rerender(); });
       o.body.append(b);
     }

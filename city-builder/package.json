@@ -38,7 +38,7 @@
     "stress": "node tests/e2e/stress.mjs",
     "e2e:game": "node tests/e2e/gameplay.mjs",
     "e2e:play": "node tests/e2e/play.mjs",
-    "e2e:mobile": "node tests/e2e/mobile-batiment.mjs && node tests/e2e/bus-iphone.mjs",
+    "e2e:mobile": "node tests/e2e/mobile-batiment.mjs && node tests/e2e/bus-iphone.mjs && node tests/e2e/progression-iphone.mjs",
     "e2e:bus": "node tests/e2e/bus-iphone.mjs",
     "e2e:bench": "node tests/e2e/bench.mjs",
     "e2e:signals": "node tests/e2e/signals.mjs",

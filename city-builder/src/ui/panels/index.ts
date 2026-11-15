@@ -16,6 +16,8 @@ import { zonagePanel } from './zonage';
 import { politiquesPanel, recherchePanel } from './gouvernance';
 import { paliersPanel } from './paliers';
 import { secteursPanel } from './secteurs';
+import { objectifsPanel } from './objectifs';
+import { evenementsPanel } from './evenements';
 import type { UiPanel } from './types';
 
 export type { UiPanel, UiPanelApi } from './types';
@@ -35,4 +37,6 @@ export const UI_PANELS: readonly UiPanel[] = [
   paliersPanel,
   secteursPanel,
   busPanel,
+  objectifsPanel,
+  evenementsPanel,
 ];

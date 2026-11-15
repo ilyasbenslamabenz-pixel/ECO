@@ -8,6 +8,9 @@
 
 /** Identifiant du module (clé de `ext`, `save.plugins`, `pluginCommand.plugin`). */
 export const WEATHER_PLUGIN_ID = 'weather';
+/** Service en lecture seule publié par le module météo (`payload()` : temps courant), lu par les événements. */
+export const METEO_SERVICE = 'meteo';
+export interface MeteoService { payload(): WeatherPayload | undefined }
 
 /** Modules d'atmosphère ajoutés aux registres en plus de PHASE2_MODULES (src/shared/protocol-ext). */
 export const ATMOSPHERE_MODULES = [WEATHER_PLUGIN_ID] as const;

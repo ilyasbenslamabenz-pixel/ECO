@@ -24,6 +24,8 @@ import { createSecteursPlugin, secteursPlugin } from './secteurs';
 import { ameliorationsPlugin, createAmeliorationsPlugin } from './ameliorations';
 import { createServicesPlugin, servicesPlugin } from './services';
 import { busPlugin, createBusPlugin } from './bus';
+import { createObjectifsPlugin, objectifsPlugin } from './objectifs';
+import { createEvenementsPlugin, evenementsPlugin } from './evenements';
 import type { SimPlugin } from './types';
 
 export type { PluginCommandResult, PluginContext, PluginSaveField, PluginSaveSection, SimPlugin } from './types';
@@ -49,6 +51,8 @@ export const SIM_PLUGINS: readonly SimPlugin[] = [
   servicesPlugin,
   alertesPlugin,
   busPlugin,
+  objectifsPlugin,
+  evenementsPlugin,
 ];
 
 /**
@@ -62,5 +66,6 @@ export function createSimPlugins(): SimPlugin[] {
     batimentsPlugin, circulationPlugin, createPietonsPlugin(), chantiersPlugin, createWeatherPlugin(),
     createMunicipalPlugin(), createElectricitePlugin(), createDechetsPlugin(), createHubsPlugin(), createEauPlugin(),
     createZonagePlugin(), createPolitiquesPlugin(), createRecherchePlugin(), createPaliersPlugin(), createSecteursPlugin(), createAmeliorationsPlugin(), createServicesPlugin(), createAlertesPlugin(), createBusPlugin(),
+    createObjectifsPlugin(), createEvenementsPlugin(),
   ];
 }

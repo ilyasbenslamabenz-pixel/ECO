@@ -5,6 +5,7 @@
  */
 import type { PolitiquesState } from '../../sim/plugins/politiques';
 import type { RechercheState } from '../../sim/plugins/recherche';
+import { progressionView } from '../../client/progression-view';
 import { el, fmt, money } from '../dom';
 import type { UiPanel, UiPanelApi } from './types';
 
@@ -21,7 +22,11 @@ function mountPolitiques(root: HTMLElement, api: UiPanelApi): () => void {
     const list = el('div', { cls: 'gov-list' });
     for (const p of st.policies) {
       const btn = el('button', { cls: `gov-btn${p.active ? ' on' : ''}`, text: p.active ? 'Abandonner' : 'Adopter', attrs: { type: 'button', 'data-policy': p.id } });
+      // Déblocages progressifs : politique encore verrouillée (cadenas et palier requis).
+      const lockAt = !p.active ? progressionView.policyLock(p.id) : null;
+      if (lockAt) { btn.textContent = `🔒 ${lockAt}`; btn.classList.add('locked'); btn.dataset['tip'] = `Débloquée au palier « ${lockAt} » (Progression)`; }
       btn.addEventListener('click', () => {
+        if (lockAt) { api.toast(`${p.nameFr} : débloquée au palier « ${lockAt} » — voir Progression › Paliers`, 'info'); return; }
         btn.disabled = true;
         api.command('toggle', { id: p.id, on: !p.active }).then((r) => { st = r as PolitiquesState; render(); }).catch((e: unknown) => { api.toast(errText(e), 'error'); btn.disabled = false; });
       });

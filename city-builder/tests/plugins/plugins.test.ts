@@ -40,7 +40,7 @@ const LATE_MODULES: readonly string[] = ['dechets', 'hubs', 'eau'];
  */
 const LATE_ACTIVE: readonly string[] = ['dechets'];
 /** Paliers de ville : prime versée dès le premier seuil de population franchi (agit sans action du joueur). */
-const SELF_ACTIVE: readonly string[] = ['paliers'];
+const SELF_ACTIVE: readonly string[] = ['paliers', 'objectifs'];
 /** Modules de phase 2A (PHASE2_MODULES sans les modules intégrés plus tard). */
 const BASE_MODULES: readonly string[] = PHASE2_MODULES.filter((id) => !LATE_MODULES.includes(id));
 /** Modules d'atmosphère (phase 2C) exclus aussi : leur absence d'effet sur la base est testée dans tests/weather. */
@@ -111,11 +111,15 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
   // Lignes de bus (vague 3, tests/jeu/bus.test.ts) : simulation, rendu, panneau « Bus » et section de sauvegarde ; sans
   // ligne, aucun effet (contrôle « modules vides » ci-dessous).
   const transit = ['bus'];
+  // Progression (vague 4, tests/jeu/progression.test.ts) : objectifs et événements ; simulation, section de sauvegarde et
+  // panneaux (tableau de bord Progression), pas de rendu. Les objectifs agissent seuls (récompenses : SELF_ACTIVE) ; les
+  // événements restent inertes 45 jours (contrôle « modules vides » ci-dessous).
+  const progression = ['objectifs', 'evenements'];
   assert.deepEqual([...PHASE2_MODULES].sort(), [...ids, ...LATE_MODULES].sort());
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit]);
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit, ...progression]);
   assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late, 'alertes', 'secteurs', 'services', ...transit]);
-  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov.filter((g) => g !== 'ameliorations'), ...transit]);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late, ...gov, ...transit]);
+  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov.filter((g) => g !== 'ameliorations'), ...transit, ...progression]);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late, ...gov, ...transit, ...progression]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
   const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];
   for (const p of SIM_PLUGINS) {
@@ -130,7 +134,7 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit]);
+  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit, ...progression]);
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 

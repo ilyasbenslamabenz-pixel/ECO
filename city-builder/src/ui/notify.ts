@@ -50,7 +50,10 @@ export function playerText(raw: string): string {
 
 const CHANTIER = /^Chantier terminé : (.+?)\.?$/;
 
-export function toast(raw: string, kind: NotifyKind = 'info', ms = 4200): void {
+/** Bouton d'action d'une notification (ex. « Voir » d'un événement) : au moins 44 px au doigt. */
+export interface ToastAction { label: string; run: () => void }
+
+export function toast(raw: string, kind: NotifyKind = 'info', ms = 4200, action?: ToastAction): void {
   const text = playerText(raw);
   // Téléphone : une seule notification à la fois, plus brève (le détail reste dans la cloche).
   const phone = typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches;
@@ -87,7 +90,15 @@ export function toast(raw: string, kind: NotifyKind = 'info', ms = 4200): void {
       return;
     }
   }
-  const t = el('div', { cls: `toast ${ch ? 'ok' : kind}`, attrs: { role: kind === 'error' ? 'alert' : 'status' } }, el('span', { cls: 'tico' }, iconEl(ICONS[ch ? 'ok' : kind])), el('span', { text: shown }));
+  const t = el('div', { cls: `toast ${ch ? 'ok' : kind}${action ? ' has-act' : ''}`, attrs: { role: kind === 'error' ? 'alert' : 'status' } }, el('span', { cls: 'tico' }, iconEl(ICONS[ch ? 'ok' : kind])));
+  if (action) {
+    // Le texte reste le dernier enfant (mise à jour des doublons, coupe à deux lignes sur téléphone) ; le bouton est
+    // placé après lui par la feuille de style (`order`).
+    const b = el('button', { cls: 'toast-act', text: action.label, attrs: { type: 'button' } });
+    b.addEventListener('click', (e) => { e.stopPropagation(); action.run(); t.classList.add('out'); setTimeout(() => t.remove(), 260); });
+    t.append(b);
+  }
+  t.append(el('span', { text: shown }));
   t.dataset['text'] = key;
   t.dataset['until'] = String(Date.now() + ms);
   if (phone) t.addEventListener('click', () => document.getElementById('btn-notif')?.click());

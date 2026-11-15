@@ -22,7 +22,7 @@ import { $, el, fmt, money, moneyShort, pct, signedMoney } from './dom';
 import { iconEl } from './icons';
 import { clearLog, markAllRead, notifyLog, onNotify, unreadCount, type NotifyEntry } from './notify';
 
-export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications' | 'policy' | 'research' | 'energy' | 'water' | 'waste';
+export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications' | 'policy' | 'research' | 'energy' | 'water' | 'waste' | 'progression';
 
 const META: Record<DashId, { title: string; icon: string; cls: string; kicker: string }> = {
   city: { title: 'Vue ville', icon: 'home', cls: 't-city', kicker: 'Tableau de bord' },
@@ -36,10 +36,11 @@ const META: Record<DashId, { title: string; icon: string; cls: string; kicker: s
   energy: { title: 'Énergie', icon: 'energy', cls: 't-energy', kicker: 'Services urbains' },
   water: { title: 'Eau & égouts', icon: 'water', cls: 't-water', kicker: 'Services urbains' },
   waste: { title: 'Déchets', icon: 'waste', cls: 't-waste', kicker: 'Services urbains' },
+  progression: { title: 'Progression', icon: 'flag', cls: 't-city', kicker: 'Paliers, objectifs, événements' },
 };
 
 /** Tableau de bord hôte de chaque module de phase 2. */
-const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', bus: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research', paliers: 'city', secteurs: 'policy', electricite: 'energy', eau: 'water', dechets: 'waste' };
+const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', bus: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research', paliers: 'progression', objectifs: 'progression', evenements: 'progression', secteurs: 'policy', electricite: 'energy', eau: 'water', dechets: 'waste' };
 
 /** Ferme les anciens panneaux flottants des modules (Énergie, Eau, Déchets) : un seul panneau à la fois. */
 export function closeFloatingModulePanels(): void {
@@ -245,7 +246,7 @@ export class Dashboards {
       environment: [{ id: 'env', label: 'Qualité' }],
       stats: [{ id: 'pop', label: 'Habitants' }, { id: 'money', label: 'Trésorerie' }, { id: 'happy', label: 'Satisfaction' }, { id: 'jobs', label: 'Emploi' }],
       notifications: [{ id: 'log', label: 'Journal' }],
-      policy: [], research: [], energy: [], water: [], waste: [],
+      policy: [], research: [], energy: [], water: [], waste: [], progression: [],
     };
     const mods = UI_PANELS.filter((p) => typeof p.mount === 'function' && (MODULE_DASH[p.id] ?? 'city') === id).map((p) => ({ id: `mod:${p.id}`, label: p.title, module: p }));
     return [...base[id], ...mods];
@@ -272,7 +273,7 @@ export class Dashboards {
       case 'environment': return this.buildEnvironment(r, m);
       case 'stats': return this.buildStats(r, tab);
       case 'notifications': return this.buildNotifications();
-      case 'policy': case 'research': case 'energy': case 'water': case 'waste': return []; // contenu : panneau du module
+      case 'policy': case 'research': case 'energy': case 'water': case 'waste': case 'progression': return []; // contenu : panneau du module
     }
   }
 

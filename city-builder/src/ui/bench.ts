@@ -592,7 +592,7 @@ export function resultsText(r: BenchResult): string {
   lines.push('', 'Processeur, moyenne par image :');
   for (const s of r.scenes) lines.push(`  ${s.label} : ${s.meanDetail}`);
   for (const b of r.breakdown) {
-    lines.push('', `Coût GPU par calque — ${b.view} : image ${fmt(b.totalMs)} ms (${b.method})`);
+    lines.push('', `Coût GPU par calque — ${b.view} : image ${fmt(b.totalMs)} ms (${b.method} ; mesures indicatives, ±1 ms, somme > 100 % possible)`);
     for (const l of b.layers) lines.push(`  ${l.layer} : ${fmt(l.ms)} ms (${l.share} %)`);
   }
   for (const w of r.warnings) lines.push(`Attention : ${w}`);
@@ -656,7 +656,7 @@ function showResults(r: BenchResult): void {
     <div style="margin-top:12px"><div style="font-weight:600">Processeur, moyenne par image</div>${r.scenes.map((s) => `<div style="font-size:13px"><span style="color:#93a4b8">${esc(s.label)} :</span> ${esc(s.meanDetail)}</div>`).join('')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:12px 28px;margin-top:12px">${r.breakdown.map((b) => `<div style="min-width:280px"><div style="font-weight:600">Coût GPU par calque — ${esc(b.view)} <span style="color:#93a4b8;font-weight:400">(image ${fmt(b.totalMs)} ms)</span></div>
       <table style="border-collapse:collapse;margin-top:4px">${b.layers.map((l) => `<tr><td style="padding:2px 10px 2px 0">${esc(l.layer)}</td><td ${td}>${fmt(l.ms)} ms</td><td ${td}><span style="display:inline-block;height:8px;width:${Math.min(120, l.share * 1.2)}px;background:#4fd18b;border-radius:2px"></span> ${l.share} %</td></tr>`).join('')}</table>
-      <div style="color:#93a4b8;font-size:12px">${esc(b.method)} ; chaque calque compte aussi son ombre.</div></div>`).join('')}</div>
+      <div style="color:#93a4b8;font-size:12px">Mesures indicatives (±1 ms ; la somme peut dépasser 100 %). ${esc(b.method)} ; chaque calque compte aussi son ombre.</div></div>`).join('')}</div>
     ${r.warnings.map((w) => `<p style="margin:10px 0 0;color:#f2c94c">⚠ ${esc(w)}</p>`).join('')}
     <p style="margin:10px 0 0;color:#93a4b8;font-size:12px">img/s plafonnées par la fréquence de l'écran (60, 120 Hz…). CPU : échantillon séparé de ${r.mode === 'court' ? 3 : 20} images, carte graphique attendue avant chaque image. Appels et triangles : moyenne par image, ombres comprises. Aucune donnée n'est envoyée sur le réseau.</p>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">

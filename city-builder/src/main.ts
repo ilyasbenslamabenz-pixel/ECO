@@ -182,7 +182,7 @@ async function boot(): Promise<void> {
 
   const ui = initUI({
     onNewGame: () => { void startNewGame(); },
-    onNewGameWith: (p) => { void startNewGame({ cityName: p.cityName, seed: p.seed, mapChunks: p.mapChunks, startMoney: p.startMoney, terrain: { riverMode: p.riverMode ?? 'une', hydrology: p.hydrology ?? 'mer' } }); },
+    onNewGameWith: (p) => { void startNewGame({ cityName: p.cityName, seed: p.seed, mapChunks: p.mapChunks, startMoney: p.startMoney, terrain: { riverMode: p.riverMode ?? 'une', hydrology: p.hydrology ?? 'mer' } }, p.paliers !== false); },
     onContinue: () => {
       if (state.inGame) { ui.hideMenu(); void needBridge().send('setSpeed', { speed: speedBeforeMenu }); return; }
       void loadSlot(continueSlot ?? QUICK_SLOT);
@@ -769,7 +769,11 @@ async function boot(): Promise<void> {
   debug.saveSlot = saveSlot;
   debug.loadSlot = loadSlot;
 
-  async function startNewGame(p: Partial<NewGameParams> = {}): Promise<void> {
+  /**
+   * Nouvelle partie. `paliers` : déblocages progressifs (docs/PROGRESSION.md), activés AVANT le premier tick sur la
+   * ville vide (écran Nouvelle partie : case cochée par défaut ; ?autostart : seulement avec ?paliers, tests).
+   */
+  async function startNewGame(p: Partial<NewGameParams> = {}, paliers = params.has('paliers')): Promise<void> {
     try {
       demoRunning = false;
       const snap = waitSnapshot();
@@ -787,6 +791,7 @@ async function boot(): Promise<void> {
         },
       });
       await snap;
+      if (paliers) await b.send('pluginCommand', { plugin: 'paliers', name: 'mode', payload: { verrous: true } }).catch(() => undefined);
       focusCamera(0, 0, 420, 0.6);
       ui.hideMenu();
       autosaver?.start();
@@ -839,6 +844,9 @@ async function boot(): Promise<void> {
         setDemoCamera('street'); render.ctx.renderNow(1 / 60);
         input.camera.setPose({ distance: 900 }); setDemoCamera('aerial'); input.camera.setPose({ distance: 900 }); render.ctx.renderNow(1 / 60);
         setDemoCamera('aerial'); render.ctx.renderNow(1 / 60);
+        // 3 images RÉELLEMENT présentées par la boucle (taille, cible et passes finales), écran de chargement HTML
+        // par-dessus : sous ANGLE/D3D11, la première présentation coûtait encore ≈ 1 s après son retrait.
+        if (!params.has('norender')) await new Promise<void>((r) => { let n = 0; const f = (): void => { if (++n >= 3) r(); else requestAnimationFrame(f); }; requestAnimationFrame(f); });
       }
       debug.demo = { ...city, decor: city.decor.length };
       ui.hideLoading();

@@ -4,6 +4,9 @@
  * détaillée et une surbrillance (avec flèche) sur le bouton de la barre d'outils à utiliser.
  * Bouton « Passer » ; réactivable dans Réglages (case « Premiers pas ») ; état mémorisé dans ce navigateur.
  * Aucune récompense en argent. Propriétaire : agent interface.
+ *
+ * Une fois les premiers pas terminés (ou passés), le même encadré rappelle l'objectif en cours (module `objectifs`,
+ * docs/PROGRESSION.md) : intitulé, avancement, récompense, boutons « Voir » et « Progression » (`setGoal`).
  */
 import { zoningView } from '../client/zoning-view';
 import type { WorldMirror } from '../client/tools/mirror';
@@ -12,6 +15,17 @@ import { $, el } from './dom';
 const KEY = 'aube.tutorial.v1';
 
 interface TutoPrefs { skipped: boolean; open: boolean; done: boolean }
+
+/** Rappel de l'objectif en cours (après les premiers pas). */
+export interface GoalInfo {
+  title: string;
+  /** Petit compteur à droite de l'intitulé (« 42 % »). */
+  count: string;
+  /** Avancement 0..100. */
+  pct: number;
+  lines: string[];
+  actions: { label: string; run: () => void; primary?: boolean }[];
+}
 
 export function loadTutoPrefs(): TutoPrefs {
   try {
@@ -102,6 +116,8 @@ export class Tutorial {
   private facts: CityFacts | null = null;
   private lastRead = -1e9;
   private pending = false;
+  private goal: GoalInfo | null = null;
+  private goalKey = '';
 
   constructor(private readonly notify: (t: string, k?: 'info' | 'error' | 'ok') => void) {
     this.toggle.addEventListener('click', () => { this.prefs.open = !this.prefs.open; saveTutoPrefs(this.prefs); this.render(true); });
@@ -137,9 +153,47 @@ export class Tutorial {
     this.render(false);
   }
 
+  /** Rappel de l'objectif en cours : affiché quand les premiers pas sont terminés ou masqués. */
+  setGoal(g: GoalInfo | null): void {
+    this.goal = g;
+    if (!this.enabled) this.render(false);
+  }
+
+  private renderGoal(force: boolean): void {
+    const g = this.goal;
+    this.setTarget(null);
+    delete document.body.dataset['tutoCat'];
+    this.box.classList.toggle('tuto-off', !g);
+    this.box.classList.toggle('goal-mode', !!g);
+    this.box.setAttribute('aria-label', g ? 'Objectif en cours' : 'Premiers pas');
+    if (!g) { this.goalKey = ''; return; }
+    const key = `${g.title}|${g.count}|${g.pct.toFixed(1)}|${g.lines.join('|')}|${this.prefs.open}`;
+    if (!force && key === this.goalKey) return;
+    this.goalKey = key;
+    this.lastKey = '';
+    this.box.classList.toggle('open', this.prefs.open);
+    this.toggle.setAttribute('aria-expanded', String(this.prefs.open));
+    this.toggle.dataset['tip'] = 'Objectif en cours (détail dans Progression)';
+    this.body.classList.toggle('hidden', !this.prefs.open);
+    this.title.textContent = g.title;
+    this.count.textContent = g.count;
+    const bar = el('div', { cls: 'gov-bar' }, el('i', { attrs: { style: `width:${Math.max(0, Math.min(100, g.pct)).toFixed(1)}%` } }));
+    const acts = el('div', { cls: 'obj-actions' }, ...g.actions.map((a) => {
+      const b = el('button', { cls: a.primary ? 'primary' : '', text: a.label, attrs: { type: 'button' } });
+      b.addEventListener('click', () => a.run());
+      return b;
+    }));
+    this.body.replaceChildren(bar, ...g.lines.map((t) => el('p', { cls: 'obj-text', text: t })), acts);
+  }
+
   private render(force: boolean): void {
     const f = this.facts;
     const on = this.enabled;
+    if (!on) { this.renderGoal(force); return; }
+    this.box.classList.remove('goal-mode');
+    this.box.setAttribute('aria-label', 'Premiers pas');
+    this.toggle.dataset['tip'] = 'Premiers pas : objectifs guidés (facultatifs)';
+    this.goalKey = '';
     this.box.classList.toggle('tuto-off', !on);
     if (!on || !f) { this.setTarget(null); delete document.body.dataset['tutoCat']; return; }
     const idx = TUTO_STEPS.findIndex((s) => !stepDone(s, f));
@@ -163,7 +217,7 @@ export class Tutorial {
       this.count.textContent = `${n}/${n}`;
       const close = el('button', { cls: 'primary', text: 'Fermer' });
       close.addEventListener('click', () => { this.prefs.done = true; saveTutoPrefs(this.prefs); this.render(true); });
-      this.body.replaceChildren(el('p', { cls: 'obj-text', text: 'Votre ville a ses réseaux et ses services de base. Suivez la satisfaction (Population) et la demande R C I B pour la faire grandir.' }),
+      this.body.replaceChildren(el('p', { cls: 'obj-text', text: 'Votre ville a ses réseaux et ses services de base. Place aux objectifs : ils suivent ses problèmes du moment et rapportent argent et points d’expansion pour franchir les paliers (Progression).' }),
         el('div', { cls: 'obj-actions' }, close));
       this.setTarget(null);
       delete document.body.dataset['tutoCat'];

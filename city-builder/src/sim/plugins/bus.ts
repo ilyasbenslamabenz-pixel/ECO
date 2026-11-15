@@ -8,9 +8,9 @@
  *    `addStop`, `moveStop`, `removeStop`, `renameStop`, `stop` (fiche), `calque` (carte de couverture).
  * Sans ligne : aucun delta, aucune section de sauvegarde, aucun effet sur la simulation (seule l'aide de croissance
  * peut suggérer d'en tracer quand les routes saturent).
- * TypeScript pur : AUCUN import { PALIERS_SERVICE, type PaliersService } from '../../shared/milestones';
-import de three ni du DOM.
+ * TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { PALIERS_SERVICE, type PaliersService } from '../../shared/milestones';
 import { PLUGIN_TRANSFER_KEY } from '../../shared/protocol';
 import { BUS_SAVE_VERSION, migrateBus } from '../save-sections/bus';
 import { BusSystem, type BusResult, type TransitCore } from '../transit/system';

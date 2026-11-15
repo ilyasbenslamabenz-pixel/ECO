@@ -60,6 +60,7 @@
             </select>
           </label>
         </div>
+        <label class="check" data-tip="Bâtiments, zones, politiques et lignes de bus se débloquent au fil des paliers (points d’expansion). Décochée : tout est accessible dès le début."><input type="checkbox" id="new-paliers" name="paliers" checked> Déblocages progressifs (paliers)</label>
         <label>Graine du relief
           <span class="inline"><input id="new-seed" name="seed" inputmode="numeric" pattern="-?[0-9]{1,10}" required autocomplete="off"><button type="button" id="new-seed-dice" class="icon-btn" title="Graine aléatoire" aria-label="Graine aléatoire"><i data-icon="dice"></i></button></span>
         </label>
@@ -99,6 +100,9 @@
         </label>
         <label>Distance d'affichage <output id="opt-dist-out"></output>
           <input type="range" name="viewDistance" min="1500" max="8000" step="250">
+        </label>
+        <label>Événements (canicule, épidémie, grève…)
+          <select name="events"><option value="normal">Normal</option><option value="rares">Rares</option><option value="off">Désactivés</option></select>
         </label>
         <label class="check"><input type="checkbox" id="opt-tutorial"> Premiers pas (objectifs guidés)</label>
         <p class="hint">Les réglages s'appliquent immédiatement et sont mémorisés dans ce navigateur.</p>
@@ -162,6 +166,7 @@
   <button data-dash="environment" data-tip="Environnement : pollution, attractivité, espaces verts"><i data-icon="leaf"></i><span class="tl">Environnement</span></button>
   <button data-dash="policy" data-tip="Politiques publiques : aides, filtres industriels, sobriété, tri, restrictions d’eau…"><i data-icon="policy"></i><span class="tl">Politiques</span></button>
   <button data-dash="research" data-tip="Recherche municipale : projets qui améliorent la ville (points des écoles et du budget)"><i data-icon="research"></i><span class="tl">Recherche</span></button>
+  <button data-dash="progression" data-tip="Progression : paliers et déblocages, objectifs en cours, réalisations, événements"><i data-icon="flag"></i><span class="tl">Progression</span></button>
   <div class="sb-extra">
     <button data-proxy="btn-notif" data-tip="Notifications"><i data-icon="bell"></i><span class="tl">Notifications</span><span id="sb-notif-badge" class="badge hidden">0</span></button>
     <button data-proxy="btn-stats" data-tip="Statistiques mensuelles"><i data-icon="stats"></i><span class="tl">Statistiques</span></button>

@@ -4,6 +4,7 @@
  * leur phase (Zones, Terrain, placement de décors).
  * Propriétaire : agent construction/caméra/UI.
  */
+import { progressionView } from '../client/progression-view';
 import type { AssetCatalog, AssetCategory, CatalogAsset } from '../shared/catalog';
 import { TILE_SIZE } from '../shared/constants';
 import type { RoadKindId, ToolId } from '../shared/contracts';
@@ -411,7 +412,14 @@ export class BuildBar {
         info.lines.length ? el('span', { cls: 'kf', text: info.lines.join(' · ') }) : null,
         el('span', { cls: 'sz', text: [fp, info.lines.length ? '' : cap].filter(Boolean).join(' · ') }),
         info.depends ? el('span', { cls: 'dep', text: info.depends }) : null));
-    if (!placeable) {
+    const lockAt = placeable ? progressionView.assetLock(a.id) : null;
+    if (lockAt) {
+      // Déblocages progressifs : modèle encore verrouillé (la simulation refuse aussi la pose).
+      b.classList.add('locked');
+      thumb.append(el('span', { cls: 'lock-badge', text: `🔒 ${lockAt}` }));
+      b.dataset['tip'] = `${a.nameFr} — débloqué au palier « ${lockAt} » (Progression › Paliers)`;
+      b.addEventListener('click', () => this.d.notify(`${a.nameFr} : débloqué au palier « ${lockAt} » — voir Progression › Paliers`, 'info'));
+    } else if (!placeable) {
       b.disabled = true;
       b.dataset['tip'] = 'Placement libre des décors : bientôt disponible (ils décorent déjà les routes et la démo).';
       thumb.append(el('span', { cls: 'badge' }, phaseBadge(DECOR_PLACEMENT_PHASE)));

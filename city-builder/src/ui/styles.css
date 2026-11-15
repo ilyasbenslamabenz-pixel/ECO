@@ -1084,3 +1084,51 @@ body[data-tuto-cat="waste"] #family-pop [data-family-cat="waste"] { box-shadow: 
 .services-tab .svc-gaps, .services-tab .svc-events { margin: 4px 0 8px; padding-left: 18px; display: grid; gap: 4px; overflow-wrap: anywhere; }
 .services-tab .svc-line { margin: -2px 0 6px; overflow-wrap: anywhere; }
 #layers-pop .layers-legend { margin-top: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(var(--ink), .05); overflow-wrap: anywhere; }
+
+/* ===== Progression (paliers, objectifs, événements : docs/PROGRESSION.md) ===== */
+.prog-next { margin: 8px 0; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--accent-rgb), .45); background: rgba(var(--accent-rgb), .08); }
+.prog-next-t { font-weight: 700; font-size: 14px; color: var(--text-strong, var(--text)); overflow-wrap: anywhere; }
+.prog-next .gov-bar { height: 10px; margin: 6px 0; }
+.prog-next p { margin: 4px 0 0; }
+.prog-unlocks { overflow-wrap: anywhere; }
+.prog-src { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.prog-chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); background: rgba(var(--ink), .05); white-space: nowrap; }
+.prog-btn { min-height: 44px; padding: 6px 14px; border-radius: 10px; font-weight: 600; }
+.prog-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.prog-obj-t { display: block; font-size: 14px; margin-bottom: 4px; overflow-wrap: anywhere; }
+.prog-obj-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; margin-top: 4px; }
+.prog-reward { margin-top: 2px; }
+.prog-recent { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
+.prog-recent .ok-mark, .prog-ach-i.on b { color: var(--ok); }
+.prog-ach { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 4px; }
+.prog-ach-i { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: rgba(var(--ink), .03); min-width: 0; }
+.prog-ach-i:not(.on) { opacity: .7; }
+.prog-ach-i b { font-size: 12.5px; overflow-wrap: anywhere; }
+.prog-badge { font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.prog-badge.annonce { background: rgba(255, 197, 49, .18); color: var(--warn); }
+.prog-badge.actif { background: rgba(255, 90, 90, .16); color: #ff8a8a; }
+.prog-event.annonce { border-color: rgba(255, 197, 49, .5); }
+.prog-event.actif { border-color: rgba(255, 90, 90, .5); }
+.prog-effects { margin: 4px 0; padding-left: 18px; }
+.prog-advice { margin: 6px 0 0; }
+#dash-body .module-root[data-module="paliers"], #dash-body .module-root[data-module="objectifs"], #dash-body .module-root[data-module="evenements"] { overflow-wrap: anywhere; }
+/* Verrous : cadenas et palier requis (bâtiments, zones, politiques). */
+.lock-badge { position: absolute; left: 4px; top: 4px; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 8px; background: rgba(10, 16, 26, .82); color: #ffd36b; white-space: nowrap; max-width: calc(100% - 8px); overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.card.locked .thumb img { filter: grayscale(.85) brightness(.7); }
+.card.locked .thumb { position: relative; }
+.zn-tile.locked { position: relative; opacity: .65; }
+.zn-tile.locked .lock-badge { position: static; display: block; margin-top: 2px; font-size: 10px; padding: 1px 4px; }
+.gov-btn.locked { opacity: .75; color: var(--warn); }
+/* Notification avec bouton « Voir » (événements, objectifs, paliers). */
+.toast .toast-act { order: 1; flex: 0 0 auto; min-height: 44px; min-width: 64px; padding: 4px 12px; margin: -4px -4px -4px 4px; border-radius: 10px; font-weight: 700; align-self: center; }
+.toast.has-act { align-items: center; }
+/* Rappel de l'objectif en cours (même encadré que les Premiers pas). */
+#objectives.goal-mode .gov-bar { margin: 2px 0 8px; height: 8px; }
+#objectives.goal-mode .obj-text { margin: 0 0 6px; font-size: 12.5px; overflow-wrap: anywhere; }
+#objectives.goal-mode .obj-actions button { min-height: 44px; }
+@media (max-width: 760px) {
+  .prog-btn { flex: 1 1 auto; }
+  .prog-ach { grid-template-columns: 1fr 1fr; }
+  #toasts .toast.has-act { padding-right: 6px; }
+  #objectives.goal-mode #obj-toggle { min-height: 44px; }
+}

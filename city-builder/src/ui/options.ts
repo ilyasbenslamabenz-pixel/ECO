@@ -28,9 +28,11 @@ export interface GraphicsOptions {
    * graphique intégré), activé sinon ; téléphone : inchangé (activé).
    */
   aa: 'auto' | 'on' | 'off';
+  /** Événements de la ville (canicule, épidémie…, docs/PROGRESSION.md) : fréquence, envoyée à la simulation. */
+  events: 'normal' | 'rares' | 'off';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto' };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal' };
 
 /** Applique le thème de l'interface (attribut lu par les feuilles de style). */
 export function applyTheme(t: GraphicsOptions['theme']): void {
@@ -50,6 +52,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     theme: o?.theme === 'sombre' || o?.theme === 'clair' || o?.theme === 'nuit' ? o.theme : DEFAULT_OPTIONS.theme,
     dynRes: o?.dynRes === 'on' || o?.dynRes === 'off' || o?.dynRes === 'auto' ? o.dynRes : DEFAULT_OPTIONS.dynRes,
     aa: o?.aa === 'on' || o?.aa === 'off' || o?.aa === 'auto' ? o.aa : DEFAULT_OPTIONS.aa,
+    events: o?.events === 'normal' || o?.events === 'rares' || o?.events === 'off' ? o.events : DEFAULT_OPTIONS.events,
   };
 }
 

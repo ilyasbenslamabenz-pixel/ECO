@@ -8,7 +8,7 @@
  * N'utilise que le PRNG propre au module : la simulation de base est inchangée (tests/weather).
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
-import { WEATHER_KINDS, WEATHER_PLUGIN_ID, type WeatherKind } from '../../shared/weather/types';
+import { METEO_SERVICE, WEATHER_KINDS, WEATHER_PLUGIN_ID, type WeatherKind } from '../../shared/weather/types';
 import { migrateWeather, WEATHER_SAVE_VERSION } from './save';
 import type { PluginContext, SimPlugin } from '../plugins/types';
 import { WeatherModel } from './model';
@@ -28,6 +28,9 @@ export function createWeatherPlugin(): SimPlugin & { modelOf(ctx: PluginContext)
     id: WEATHER_PLUGIN_ID,
     saveVersion: WEATHER_SAVE_VERSION,
     modelOf,
+    // Lecture seule pour les autres modules (événements : canicule). Nom distinct de `weather` : la production
+    // éolienne et solaire (module électricité) garde son profil propre, la simulation existante est inchangée.
+    init(ctx) { ctx.provide(METEO_SERVICE, { payload: () => (ctx.inGame ? modelOf(ctx).payload(ctx.clock.totalMinutes) : undefined) }); },
     onNewGame(ctx) { modelOf(ctx).reset(ctx.rng, ctx.clock.totalMinutes); },
     onTick(ctx) { if (ctx.inGame) modelOf(ctx).advance(ctx.rng, ctx.clock.totalMinutes); },
     takeDelta(ctx) {

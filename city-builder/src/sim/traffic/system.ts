@@ -1287,6 +1287,15 @@ export class TrafficSystem {
   /** Temps courant de la simulation de trafic (s). */
   get now(): number { return this.time; }
 
+  /**
+   * Voitures en circulation simultanée visées pour toute la ville à l'heure `hour` (habitants × profil horaire ×
+   * facteur voiture du bus). La demande statistique en couvre la part non détaillée ; les trajets détaillés des
+   * habitants (world.ts) ne sont plus admis au-delà de ce plafond (équilibrage, docs/CIRCULATION.md §1).
+   */
+  demandCeiling(hour: number): number {
+    return Math.min(this.maxVehicles, Math.round(this.homeWeight * demandShare(hour) * this.carFactor));
+  }
+
   /* ----------------------------- demande ----------------------------- */
 
   private spawn(hour: number): void {

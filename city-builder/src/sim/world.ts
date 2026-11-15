@@ -201,6 +201,8 @@ export class Simulation {
   private pendingQuays = false;
   private pendingCleared: number[] = [];
   private tripsToTraffic = 0;
+  /** Trajets détaillés non admis faute de place dans le plafond horaire du trafic (diagnostic). */
+  private tripsCapped = 0;
   private jobsCache = 0;
   private jobsDirty = true;
   readonly notices: SimNotice[] = [];
@@ -357,6 +359,7 @@ export class Simulation {
     this.demography?.reset();
     this.notices.length = 0;
     this.tripsToTraffic = 0;
+    this.tripsCapped = 0;
     this.jobsDirty = true;
     this.scheduleRecurring();
     this.traffic.clear();
@@ -1066,6 +1069,12 @@ export class Simulation {
     // effet tant que le facteur voiture vaut 1).
     const cf = this.traffic.carFactor;
     if (cf < 1 && tripHash(citizen, this.clock.totalMinutes) >= cf) return;
+    // Équilibrage (vague 4) : une minute de jeu ne dure que 0,1 s de conduite ; sans plafond, chaque actif détaillé
+    // ajoutait SA voiture pour des heures de jeu et la ville proche de la caméra se bloquait (≈ 2 200 véhicules à la
+    // pointe pour 2 800 habitants). Les trajets détaillés remplissent désormais le même nombre de voitures simultanées
+    // que la demande statistique (profil horaire, `TrafficSystem.demandCeiling`) ; au-delà, le trajet se fait hors
+    // de la chaussée simulée (marche, covoiturage, horaires décalés : non représentés).
+    if (this.traffic.actCount >= this.traffic.demandCeiling(this.clock.hourOfDay)) { this.tripsCapped++; return; }
     const a = this.traffic.accessIndexOf(from);
     const b = this.traffic.accessIndexOf(to);
     if (a >= 0 && b >= 0 && this.traffic.spawnTrip(a, b, 'prive') >= 0) this.tripsToTraffic++;
@@ -1224,7 +1233,7 @@ export class Simulation {
         history: (fullHistory ? e.history : e.history.slice(-24)).map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } })),
       },
       demography,
-      traffic: { vehicles: this.traffic.actCount, meanSpeedKmh: ts.meanSpeedKmh, arrived: ts.arrived, connectedBuildings: ts.connectedBuildings, tripsFromCitizens: this.tripsToTraffic },
+      traffic: { vehicles: this.traffic.actCount, meanSpeedKmh: ts.meanSpeedKmh, arrived: ts.arrived, connectedBuildings: ts.connectedBuildings, tripsFromCitizens: this.tripsToTraffic, tripsCapped: this.tripsCapped },
       notices: this.notices.slice(),
     };
   }
