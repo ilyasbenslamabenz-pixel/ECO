@@ -24,6 +24,8 @@ export interface EauService {
   /** Croissance autorisée pour un bâtiment (vrai tant que le service n'existe pas, puis seulement s'il est desservi). */
   growthAllowed(buildingId: number): boolean;
   buildingState: WaterSystem['buildingState'];
+  /** État du service : 'ok' desservi, 'coupe' mal desservi, 'aucun' sans ressource (voir WaterSystem.serviceState). */
+  serviceState(buildingId: number): 'ok' | 'coupe' | 'aucun';
   readonly system: WaterSystem;
 }
 
@@ -60,6 +62,7 @@ export function createEauPlugin(): SimPlugin & { readonly system: WaterSystem; m
       const api: EauService = {
         growthAllowed: (id) => system.growthAllowed(id),
         buildingState: (id) => system.buildingState(id),
+        serviceState: (id) => system.serviceState(id),
         system,
       };
       ctx.provide(EAU_SERVICE, api);
@@ -108,6 +111,12 @@ export function createEauPlugin(): SimPlugin & { readonly system: WaterSystem; m
         case 'building': {
           if (typeof p.id !== 'number') return { ok: false, code: 'INVALID_ARGS', message: 'id (nombre) attendu' };
           return { ok: true, data: system.buildingState(p.id) };
+        }
+        case 'raccordement': {
+          if (typeof p.on !== 'boolean') return { ok: false, code: 'INVALID_ARGS', message: 'on (booléen) attendu' };
+          if (!ctx.inGame) return { ok: false, code: 'NO_GAME', message: 'Aucune partie en cours' };
+          const r = system.setRaccordement(ctx, p.on);
+          return r.ok ? { ok: true, data: { ...system.settings } } : r;
         }
         case 'history':
           return { ok: true, data: system.history.map((h) => ({ ...h })) };

@@ -1011,3 +1011,53 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 /* Panneau Énergie dans le tableau de bord : le titre est déjà dans l'en-tête, on garde seulement ses boutons. */
 #dash-body .elec > h3 { font-size: 0; justify-content: flex-end; margin-bottom: 4px; }
 #dash-body .elec > h3 > span { font-size: 13px; }
+
+/* ===== Premiers pas (tutoriel guidé, facultatif) ===== */
+#objectives.tuto-off { display: none !important; }
+#obj-toggle .obj-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.obj-count { font-size: 11.5px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.obj-text { margin: 0 0 8px; color: var(--text); font-size: 13px; line-height: 1.4; }
+.obj-parts { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); }
+.obj-parts li.ok { color: var(--ok); }
+.obj-actions { display: flex; gap: 8px; align-items: center; }
+.obj-actions button { min-height: 40px; padding: 4px 14px; font-size: 13px; }
+.obj-actions button.link { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 4px 6px; }
+/* Bouton de la barre d'outils à utiliser : anneau pulsé et flèche au-dessus. */
+#toolbar button.tuto-target { box-shadow: 0 0 0 2px var(--warn), 0 0 14px rgba(255, 197, 49, .45); animation: tuto-pulse 1.6s ease-in-out infinite; }
+#toolbar button.tuto-target::after { content: '▼'; position: absolute; left: 50%; top: -15px; transform: translateX(-50%); font-size: 12px; line-height: 1; color: var(--warn);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .6); pointer-events: none; animation: tuto-bob 1.2s ease-in-out infinite; }
+#toolbar button.tuto-flash { animation: tuto-flash .45s ease-in-out 4; }
+@keyframes tuto-pulse { 50% { box-shadow: 0 0 0 3px var(--warn), 0 0 22px rgba(255, 197, 49, .7); } }
+@keyframes tuto-bob { 50% { transform: translate(-50%, -4px); } }
+@keyframes tuto-flash { 50% { background: rgba(255, 197, 49, .35); } }
+@media (max-width: 760px) {
+  /* Téléphone : bandeau compact repliable sous la barre du haut, à gauche (la date reste visible à droite). */
+  #objectives:not(.hidden):not(.tuto-off) { display: block !important; top: calc(var(--hud-h) + 6px); bottom: auto; left: max(6px, var(--safe-l)); right: auto;
+    width: auto; max-width: min(268px, calc(100vw - 140px)); border-radius: 14px; z-index: 13; }
+  #obj-toggle { min-height: 40px; padding: 6px 10px; gap: 6px; font-size: 13px; }
+  .obj-body { padding: 0 10px 10px; }
+  .obj-text { font-size: 12.5px; }
+  /* Pendant la pose (outil, tiroir, confirmation) : seul l'intitulé reste, la carte est libre. */
+  body.tool-opts #obj-body, body.drawer-open #obj-body, body.confirming #obj-body, body.sheet-open #obj-body { display: none; }
+  body.tool-opts #objectives, body.confirming #objectives { opacity: .85; }
+}
+
+/* ===== Satisfaction (Population > Aperçu) et aide de croissance ===== */
+.satisf { margin: 4px 0 10px; }
+.satisf-hint { margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255, 197, 49, .45); background: rgba(255, 197, 49, .1); color: var(--text-strong); font-size: 12.5px; line-height: 1.35; }
+.satisf-list { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.satisf-list li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: baseline; padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.satisf-list .sf-delta { font-variant-numeric: tabular-nums; }
+.satisf-list li.neg .sf-delta { color: var(--danger); }
+.satisf-list li.pos .sf-delta { color: var(--ok); }
+.satisf-list .sf-tip { grid-column: 1 / -1; font-size: 12px; color: var(--muted); line-height: 1.35; }
+.satisf-list .sf-tip::before { content: '→ '; color: var(--warn); }
+.satisf-vac { margin: 0 0 6px; font-size: 12.5px; color: var(--text); line-height: 1.4; }
+#hud-demand-btn { position: relative; }
+.growth-dot { position: absolute; top: 1px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--warn); color: #1a1300;
+  font-size: 11px; font-weight: 800; line-height: 16px; text-align: center; pointer-events: none; box-shadow: 0 0 0 2px rgba(0, 0, 0, .35); }
+.form label.check { flex-direction: row; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
+.form label.check input { width: 22px; height: 22px; min-height: 0; flex: 0 0 auto; accent-color: var(--accent); }
+/* Aide de l'outil de pose : astuce sur sa propre ligne (élargissement futur des routes). */
+.tool-hint .hint-tip { display: block; font-size: 11.5px; color: var(--warn); white-space: normal; }
+@media (max-width: 760px) { #tool-hint:has(.hint-tip):not(.open) { -webkit-line-clamp: 2; } }

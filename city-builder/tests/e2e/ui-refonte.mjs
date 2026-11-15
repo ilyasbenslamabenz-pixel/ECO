@@ -265,11 +265,12 @@ try {
   check(!(await visible(page, '#mm-map')), 'mini-carte masquée');
   await page.click('#mm-toggle');
   check(await visible(page, '#mm-map'), 'mini-carte réaffichée');
-  // --- Objectifs (phase 2C).
+  // --- Premiers pas (objectifs guidés, déplié par défaut ; un toucher replie, un autre déplie).
+  const tutoOpen = await visible(page, '#obj-body');
   await page.click('#obj-toggle');
-  check(await visible(page, '#obj-body') && /2C/.test(await text(page, '#objectives')), 'Objectifs : panneau « phase 2C » déplié');
-  await page.click('#obj-toggle');
-  check(!(await visible(page, '#obj-body')), 'Objectifs : replié');
+  check((await visible(page, '#obj-body')) !== tutoOpen, 'Premiers pas : repli / dépli');
+  if (!(await visible(page, '#obj-body'))) await page.click('#obj-toggle');
+  check(await visible(page, '#obj-body') && !/phase/i.test(await text(page, '#objectives')), 'Premiers pas : étape affichée, sans « phase »');
 
   // Capture de référence : finances + sous-barre Zones, vue de la ville.
   await page.evaluate(() => window.__aube.lookAt(0, 0, 330, 0.62, 0.7));

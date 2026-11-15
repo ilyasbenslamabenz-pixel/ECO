@@ -271,7 +271,7 @@ export class BuildBar {
     d.machine.onToolChange(() => this.sync());
     d.machine.onPreview(() => {
       this.syncUndo();
-      if (this.d.machine.tool !== 'select') this.hint.textContent = this.hintText();
+      if (this.d.machine.tool !== 'select') this.showHint();
       this.syncFinish();
     });
     this.finishBtn.addEventListener('click', () => { d.tools.cancel(); d.machine.finishRoad(); this.sync(); });
@@ -463,12 +463,19 @@ export class BuildBar {
     this.undoBtn.dataset['tip'] = top ? `Annuler : ${top.label} (Ctrl+Z)` : 'Rien à annuler (Ctrl+Z)';
   }
 
+  /** Aide de l'outil : première ligne (outil, coût) et, après un saut de ligne, une astuce sur sa propre ligne. */
+  private showHint(): void {
+    const [main = '', tip] = this.hintText().split('\n');
+    this.hint.textContent = main;
+    if (tip) this.hint.append(el('span', { cls: 'hint-tip', text: tip }));
+  }
+
   private hintText(): string {
     const m = this.d.machine;
     if (m.tool === 'building' && m.moving) return `Déplacer : ${m.moving.name} — touchez le nouvel emplacement (gratuit, habitants conservés ; Échap : annuler)`;
     if (m.tool === 'building' && m.asset) {
       const v = m.variant >= 0 ? m.asset.variants[m.variant] : undefined;
-      return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m`;
+      return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m\nAstuce : un bâtiment collé à la route empêchera plus tard de l’élargir (laissez une marge)`;
     }
     if (m.tool === 'powerline') return 'Ligne haute tension — touchez une centrale ou un poste, puis l’installation d’arrivée (coût affiché) ; le courant suit ensuite les routes';
     if (m.tool === 'road' && m.draft.mode === 'roundabout') return `${m.draft.roundaboutSize === 'large' ? 'Grand giratoire' : 'Giratoire'} — cliquez sur un carrefour ou sur une route`;
@@ -577,7 +584,7 @@ export class BuildBar {
       act('Zone', 'Démolir tout ce qui est dans un rectangle (une seule annulation)', () => m.setBulldozeArea(true), m.bulldozeArea);
       if (m.bulldozeArea) act('Routes aussi', 'Inclure les tronçons de route entièrement dans la zone', () => m.setBulldozeRoads(!m.bulldozeRoads), m.bulldozeRoads);
     }
-    this.hint.textContent = this.hintText();
+    this.showHint();
     act('Terminer', t === 'road' ? 'Terminer le tracé en cours ; sinon revenir à la sélection (Échap)' : 'Revenir à la sélection (Échap)', () => {
       if ((t === 'road' || t === 'terraform') && m.finishRoad()) { this.d.tools.cancel(); return; }
       this.d.tools.setTool('select'); this.closeDrawer();
@@ -589,7 +596,7 @@ export class BuildBar {
   private syncFinish(): void {
     const on = this.d.machine.drawing;
     this.finishBtn.classList.toggle('hidden', !on);
-    if (this.d.machine.tool === 'terraform' || this.d.machine.tool === 'bulldoze') this.hint.textContent = this.hintText();
+    if (this.d.machine.tool === 'terraform' || this.d.machine.tool === 'bulldoze') this.showHint();
     // Outil Carrefour : les boutons de réglage suivent le carrefour choisi.
     const jid = this.d.machine.tool === 'road' && this.d.machine.roadSub === 'junction' ? (this.d.machine.junction?.id ?? -1) : -2;
     if (jid !== this.lastJunction) { this.lastJunction = jid; if (jid !== -2) { this.sync(); return; } }

@@ -60,6 +60,15 @@ export const ROOFTOP_SPEC = { peakKwPerBuilding: 4, costPerBuilding: 9_000, inst
 export const TARIFF_CENTS_PER_KWH = 2;
 
 /**
+ * Raccordement au réseau extérieur (achat d'électricité à la commune voisine) : démarrer une ville sans centrale.
+ * Puissance plafonnée (une ville qui grandit doit produire elle-même), appelé en DERNIER (coût de mérite le plus
+ * élevé : les centrales locales servent d'abord), acheté plus cher que le tarif de revente (chaque kWh importé
+ * coûte `priceCentsPerKwh − TARIFF_CENTS_PER_KWH` à la ville) et que la production locale (éolienne : entretien
+ * ≈ 0,3 ¢/kWh). Frais de raccordement uniques en CHF.
+ */
+export const IMPORT_SPEC = { capacityKw: 3_000, priceCentsPerKwh: 4.5, connectionChf: 60_000, meritCost: 90, lossShare: 0.02 } as const;
+
+/**
  * Conversion centimes (unité des montants du module électricité : tarifs, coûts, entretien) -> CHF (unité de la
  * trésorerie et du grand livre municipal). Arrondi au centime. Toute écriture budgétaire du module passe par ici :
  * le panneau Énergie affiche `centimes / 100`, la trésorerie doit recevoir le même montant.

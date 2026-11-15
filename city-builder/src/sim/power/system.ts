@@ -11,15 +11,18 @@
  *  4. graphe municipal reconstruit : producteur -> jeu de barres (J) -> transformateur -> nœud de distribution (D)
  *     -> un consommateur par classe (priorité = rang de la classe) ; lignes = arêtes J–J (capacité, pertes/km) ;
  *  5. répartition (`Networks.allocate`, ordre de mérite, délestage des priorités basses) ; dans une classe
- *     partiellement servie, les bâtiments sont alimentés dans un ordre tournant (hachage id × heure) ;
+ *     partiellement servie, les bâtiments déjà installés (identifiant le plus petit) sont alimentés d'abord :
+ *     délestage progressif, les derniers arrivés sont coupés en premier au lieu de toute la ville à tour de rôle ;
+ *     raccordement au réseau extérieur (réglage `raccordement`, `IMPORT_SPEC`) : appoint appelé en dernier, relié à
+ *     toutes les installations raccordées à la voirie et aux bâtiments qu'aucune installation ne dessert ;
  *  6. effets : bâtiments coupés, emplois / habitants sans courant, pollution de l'air (thermique), bruit,
  *     satisfaction (pénalité réversible et bornée), registre d'effets (causes : panne, pénurie, réglage).
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
 import { governanceModifiers } from '../../shared/governance';
 import {
-  baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hash32, hourlyFactor, hydroShare,
-  hydroSiteCheck, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
+  baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hourlyFactor, hydroShare,
+  hydroSiteCheck, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
   TARIFF_CENTS_PER_KWH, windPowerShare, windProfile,
 } from '../../shared/power/model';
 import {
@@ -60,13 +63,15 @@ export interface PowerState {
   penalty: string;
   penaltyCells: number;
   events: ElectriciteEvent[];
-  month: { producedKwh: number; deliveredKwh: number; shedKwh: number; failures: number };
-  lastMonth: { income: number; expense: number; failures: number };
+  month: { producedKwh: number; deliveredKwh: number; shedKwh: number; failures: number; importedKwh?: number };
+  lastMonth: { income: number; expense: number; failures: number; importCost?: number };
   investments: number;
   /** Dernière heure traitée (minutes de jeu). */
   lastHourAt: number;
   /** Bâtiments sans courant au dernier calcul (rechargement identique : la démographie les consulte). */
   unpowered?: number[];
+  /** Parmi eux, ceux qu'aucun réseau ne dessert (ni installation ni raccordement extérieur). */
+  unlinked?: number[];
 }
 
 export function emptyPowerState(): PowerState {
@@ -92,6 +97,8 @@ const LOCAL_LINK_LOSS_PER_KM = 0.015;
 const PENALTY_STEP_CUT = 3;
 const PENALTY_RECOVER = 1.5;
 const PENALTY_MAX = 20;
+/** Pseudo-installation « réseau extérieur » (identifiant de bâtiment jamais attribué : les ids commencent à 1). */
+const IMPORT_HUB = 0;
 
 interface Facility {
   id: number;
@@ -123,6 +130,8 @@ export class PowerSystem {
   private facilities = new Map<number, Facility>();
   /** Part servie par bâtiment consommateur (absent = non consommateur, compté comme alimenté). */
   private served = new Map<number, number>();
+  /** Consommateurs hors de tout réseau (aucune installation ni raccordement extérieur ne les dessert). */
+  private noService = new Set<number>();
   /** Multiplicateur de production éolienne / solaire (recherche) ; 1 = neutre. */
   private govRenew = 1;
   private cutList: number[] = [];
@@ -148,6 +157,7 @@ export class PowerSystem {
     this.state = emptyPowerState();
     this.facilities.clear();
     this.served.clear();
+    this.noService.clear();
     this.cutList = [];
     this.summaryCache = undefined;
     this.facilityViews = [];
@@ -168,6 +178,7 @@ export class PowerSystem {
     this.penaltyGrid = s.penalty && s.penaltyCells > 0 ? decodeFloat32(s.penalty, s.penaltyCells) : null;
     this.eventsSent = s.events.length;
     for (const id of s.unpowered ?? []) this.served.set(id, 0);
+    for (const id of s.unlinked ?? []) this.noService.add(id);
   }
 
   toJSON(): PowerState {
@@ -176,6 +187,7 @@ export class PowerSystem {
     const off: number[] = [];
     for (const [id, f] of this.served) if (f < 1) off.push(id);
     if (off.length) s.unpowered = off.sort((a, b) => a - b); else delete s.unpowered;
+    if (this.noService.size) s.unlinked = [...this.noService].sort((a, b) => a - b); else delete s.unlinked;
     if (this.penaltyGrid) { s.penalty = encodeFloat32(this.penaltyGrid); s.penaltyCells = this.penaltyGrid.length; } else { s.penalty = ''; s.penaltyCells = 0; }
     return s;
   }
@@ -184,13 +196,20 @@ export class PowerSystem {
   isIdle(ctx: PluginContext): boolean {
     if (this.state.lines.length || this.state.events.length || this.rooftopSet.size) return false;
     const s = this.state.settings;
-    if (s.funding !== 1 || s.rooftops || s.priorities.join() !== DEFAULT_PRIORITY_ORDER.join()) return false;
+    if (s.funding !== 1 || s.rooftops || s.raccordement || s.priorities.join() !== DEFAULT_PRIORITY_ORDER.join()) return false;
     return this.scanFacilities(ctx).size === 0;
   }
 
   /* --------------------------------- Lecture --------------------------------- */
 
   powerFactor(id: number): number { return this.served.get(id) ?? 1; }
+  /** État du service d'un bâtiment : alimenté, coupé (raccordé mais délesté) ou hors de tout réseau. */
+  serviceState(id: number): 'ok' | 'coupe' | 'aucun' {
+    if (this.noService.has(id)) return 'aucun';
+    return (this.served.get(id) ?? 1) >= 1 ? 'ok' : 'coupe';
+  }
+  /** Raccordement au réseau extérieur actif. */
+  get importOn(): boolean { return this.state.settings.raccordement === true; }
   /** Installations connues (état sauvegardé : identique avant et après un rechargement). */
   facilityCount(): number { return Math.max(this.facilities.size, Object.keys(this.state.facilities).length); }
   summary(): ElectriciteSummary | undefined { return this.summaryCache; }
@@ -415,6 +434,27 @@ export class PowerSystem {
     return true;
   }
 
+  /**
+   * Raccordement au réseau extérieur : à l'activation, frais de raccordement (investissement ponctuel, CHF) ;
+   * refusé si la trésorerie ne les couvre pas. La désactivation est gratuite (un nouveau raccordement repaie).
+   */
+  setRaccordement(ctx: PluginContext, on: boolean): { ok: true } | { ok: false; code: string; message: string } {
+    if (on === this.importOn) return { ok: true };
+    if (on) {
+      const fee = IMPORT_SPEC.connectionChf;
+      if (ctx.economy.bankrupt || ctx.economy.money < fee) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: `Fonds insuffisants pour le raccordement (${fee.toLocaleString('fr-FR')} CHF)` };
+      const m = this.getMunicipal();
+      if (m) m.budget.post('expense', 'investissement:raccordement_electrique', fee, 'electricite');
+      else ctx.economy.applyService(-fee, true);
+      this.state.investments += fee * 100;
+    }
+    this.state.settings = { ...this.state.settings, raccordement: on };
+    this.event(ctx, 'reglage', on ? 'Raccordement au réseau extérieur mis en service' : 'Raccordement au réseau extérieur résilié');
+    this.version++;
+    this.allocate(ctx, false);
+    return { ok: true };
+  }
+
   setRooftops(ctx: PluginContext, enabled: boolean): void {
     if (this.state.settings.rooftops === enabled) return;
     this.state.settings.rooftops = enabled;
@@ -575,6 +615,7 @@ export class PowerSystem {
     const gm = governanceModifiers((n) => ctx.use(n));
     this.govRenew = gm.renewableFactor;
     const govDemand = gm.powerDemandFactor;
+    const imp = this.importOn;
     // 1. Production disponible par installation.
     const avail = new Map<number, number>();
     for (const f of this.facilities.values()) avail.set(f.id, this.availableKw(ctx, f, wind.ms, sun));
@@ -614,6 +655,8 @@ export class PowerSystem {
       }
       // Priorité à l'installation alimentée la plus proche ; repli : la plus proche (réseau isolé, coupé).
       if (fedHub >= 0) hub = fedHub;
+      // Aucune installation : réseau extérieur (raccordement) le long de la voirie.
+      if (hub < 0 && imp && comp >= 0) hub = IMPORT_HUB;
       let cell = -1;
       if (geom) {
         const ci = Math.min(geom.cols - 1, Math.max(0, Math.floor((x - geom.originX) / geom.cellSize)));
@@ -650,15 +693,16 @@ export class PowerSystem {
     //    ce qui libère le reliquat pour les classes moins prioritaires (2 à 3 itérations en pratique).
     const groups = new Map<string, Consumer[]>();
     for (const c of consumers) if (c.hub >= 0) (groups.get(`${c.hub}|${c.cls}`) ?? groups.set(`${c.hub}|${c.cls}`, []).get(`${c.hub}|${c.cls}`)!).push(c);
-    const hourIndex = Math.floor(now / 60);
-    for (const list of groups.values()) list.sort((p, q) => hash32(p.id, hourIndex) - hash32(q.id, hourIndex) || p.id - q.id);
+    // Délestage progressif : les bâtiments les plus anciens (identifiant croissant) gardent le courant, les derniers
+    // raccordés sont coupés d'abord (et non toute la ville à tour de rôle).
+    for (const list of groups.values()) list.sort((p, q) => p.id - q.id);
     const pick = (list: Consumer[], budget: number): { on: Set<number>; used: number } => {
       const on = new Set<number>();
       let used = 0;
       for (const c of list) if (c.demandKw <= budget - used + 1e-6) { on.add(c.id); used += c.demandKw; }
       return { on, used };
     };
-    let report = this.runNetwork(m, facs, avail, rooftopByHub, demandBy, prio);
+    let report = this.runNetwork(m, facs, avail, rooftopByHub, demandBy, prio, imp);
     let picks = new Map<string, { on: Set<number>; used: number }>();
     for (let iter = 0; iter < 6; iter++) {
       picks = new Map();
@@ -670,10 +714,11 @@ export class PowerSystem {
         if (got - pk.used > 1e-3 && pk.used < (demandBy.get(key) ?? 0) - 1e-6) { demandBy.set(key, pk.used); wasted = true; }
       }
       if (!wasted) break;
-      report = this.runNetwork(m, facs, avail, rooftopByHub, demandBy, prio);
+      report = this.runNetwork(m, facs, avail, rooftopByHub, demandBy, prio, imp);
     }
     this.served.clear();
-    for (const c of consumers) if (c.hub < 0) this.served.set(c.id, 0);
+    this.noService.clear();
+    for (const c of consumers) if (c.hub < 0) { this.served.set(c.id, 0); this.noService.add(c.id); }
     for (const [key, list] of groups) {
       const pk = picks.get(key)!;
       for (const c of list) this.served.set(c.id, pk.on.has(c.id) ? 1 : 0);
@@ -709,7 +754,8 @@ export class PowerSystem {
     const roof = bySource[srcIdx.get('toitures')!]!;
     roof.count = rooftopCount; roof.nominalKw = rooftopNominal; roof.availableKw = rooftopKw; roof.outputKw = report.rooftopOut;
     availableKw += rooftopKw;
-    const producedKw = report.produced;
+    const importedKw = report.imported;
+    const producedKw = report.produced - importedKw;
     const deliveredKw = byClass.reduce((t, b) => t + b.deliveredKw, 0);
     const summary: ElectriciteSummary = {
       at: now, hour: Math.round(hourOfDay * 100) / 100,
@@ -720,6 +766,7 @@ export class PowerSystem {
       bySource, byClass, buildings: consumers.length, powered: consumers.length - cut - unlinked, cut, unlinked,
       jobsWithoutPower: jobsOff, residentsWithoutPower: resOff,
     };
+    if (imp) summary.importedKw = Math.round(importedKw * 10) / 10;
     this.summaryCache = summary;
 
     // 7. Vues (rendu / interface).
@@ -740,6 +787,7 @@ export class PowerSystem {
       this.state.month.producedKwh += producedKw;
       this.state.month.deliveredKwh += deliveredKw;
       this.state.month.shedKwh += summary.shortfallKw;
+      if (importedKw > 0) this.state.month.importedKwh = (this.state.month.importedKwh ?? 0) + importedKw;
       if (m) this.hourlyEffects(ctx, m, summary, consumers);
     }
     this.version++;
@@ -747,25 +795,43 @@ export class PowerSystem {
   }
 
   /** Construit le réseau municipal et répartit ; renvoie les quantités utiles (indépendantes des ids de nœuds). */
-  private runNetwork(m: Municipal | undefined, facs: Facility[], avail: Map<number, number>, rooftopByHub: Map<number, number>, demandBy: Map<string, number>, prio: Record<ConsumerClass, number>): {
-    deliveredBy: Map<string, number>; outputOf: Map<number, number>; lineLoad: Map<number, number>; rooftopOut: number; produced: number; delivered: number; losses: number;
+  private runNetwork(m: Municipal | undefined, facs: Facility[], avail: Map<number, number>, rooftopByHub: Map<number, number>, demandBy: Map<string, number>, prio: Record<ConsumerClass, number>, imp = false): {
+    deliveredBy: Map<string, number>; outputOf: Map<number, number>; lineLoad: Map<number, number>; rooftopOut: number; produced: number; delivered: number; losses: number; imported: number;
   } {
     const deliveredBy = new Map<string, number>();
     const outputOf = new Map<number, number>();
     const lineLoad = new Map<number, number>();
-    const res = { deliveredBy, outputOf, lineLoad, rooftopOut: 0, produced: 0, delivered: 0, losses: 0 };
+    const res = { deliveredBy, outputOf, lineLoad, rooftopOut: 0, produced: 0, delivered: 0, losses: 0, imported: 0 };
     if (!m) return res;
     m.networks.remove(ELECTRICITE_NETWORK);
-    if (facs.length === 0) return res;
+    if (facs.length === 0 && !imp) return res;
     const net = m.networks.ensure(ELECTRICITE_NETWORK);
     const busOf = new Map<number, number>();
     const prodOf = new Map<number, number>(); // nœud producteur -> installation
     const roofNodes = new Set<number>();
     const consumerKey = new Map<number, string>();
+    // Réseau extérieur : producteur plafonné, appelé en dernier, avec sa propre distribution (bâtiments sans
+    // installation) et un lien vers chaque installation raccordée à la voirie (appoint du réseau local).
+    let impBus = -1, impProd = -1;
+    if (imp) {
+      impBus = net.addNode({ role: 'junction', ref: IMPORT_HUB });
+      const D = net.addNode({ role: 'junction', ref: IMPORT_HUB });
+      net.addEdge(impBus, D, IMPORT_SPEC.capacityKw, 0.01);
+      impProd = net.addNode({ role: 'producer', capacity: IMPORT_SPEC.capacityKw, cost: IMPORT_SPEC.meritCost, ref: IMPORT_HUB });
+      net.addEdge(impProd, impBus, IMPORT_SPEC.capacityKw, IMPORT_SPEC.lossShare);
+      for (const cls of CONSUMER_CLASSES) {
+        const d = demandBy.get(`${IMPORT_HUB}|${cls}`) ?? 0;
+        if (d <= 0) continue;
+        const C = net.addNode({ role: 'consumer', demand: d, priority: prio[cls], ref: IMPORT_HUB });
+        consumerKey.set(C, `${IMPORT_HUB}|${cls}`);
+        net.addEdge(D, C, d * 2 + 1, 0);
+      }
+    }
     for (const f of facs) {
       const failed = this.facilityState(f.id).failedUntil > 0;
       const J = net.addNode({ role: 'junction', x: f.x, z: f.z, ref: f.id, enabled: !(f.kind === 'poste' && failed) });
       busOf.set(f.id, J);
+      if (imp && (this.facComp.get(f.id) ?? -1) >= 0) net.addEdge(impBus, J, IMPORT_SPEC.capacityKw, 0);
       const D = net.addNode({ role: 'junction', x: f.x, z: f.z, ref: f.id, enabled: !(f.kind === 'poste' && failed) });
       const trCap = f.kind === 'poste' ? f.nominalKw : Math.max(PLANT_DISTRIBUTION_MIN_KW, f.nominalKw);
       net.addEdge(J, D, trCap, 0.01);
@@ -802,6 +868,7 @@ export class PowerSystem {
     for (const c of r.consumers) { const k = consumerKey.get(c.node); if (k) deliveredBy.set(k, c.delivered); }
     for (const p of r.producers) {
       if (roofNodes.has(p.node)) { res.rooftopOut += p.output; continue; }
+      if (p.node === impProd) { res.imported += p.output; continue; }
       const f = prodOf.get(p.node);
       if (f !== undefined) outputOf.set(f, (outputOf.get(f) ?? 0) + p.output);
     }
@@ -849,7 +916,9 @@ export class PowerSystem {
     if (this.penaltyGrid && this.penaltyGrid.length !== n) this.penaltyGrid = null;
     const cutCells = new Uint8Array(n);
     let anyCut = false;
-    for (const c of consumers) if (c.cell >= 0 && c.residents > 0 && this.served.get(c.id) !== 1) { cutCells[c.cell] = 1; anyCut = true; }
+    // Seuls les logements RACCORDÉS et coupés sont pénalisés ici ; ceux qu'aucun réseau ne dessert relèvent de la
+    // pénalité « sans service » de la démographie (progressive, comme avant la première installation).
+    for (const c of consumers) if (c.cell >= 0 && c.residents > 0 && c.hub >= 0 && this.served.get(c.id) !== 1) { cutCells[c.cell] = 1; anyCut = true; }
     if (anyCut || this.penaltyGrid) {
       const pen = (this.penaltyGrid ??= new Float32Array(n));
       const sat = m.grids.ensure('satisfaction');
@@ -931,12 +1000,15 @@ export class PowerSystem {
     const m = this.getMunicipal();
     const expense = Math.round(this.upkeepNominal() * this.state.settings.funding);
     const income = Math.round(this.state.month.deliveredKwh * TARIFF_CENTS_PER_KWH);
+    const importCost = Math.round((this.state.month.importedKwh ?? 0) * IMPORT_SPEC.priceCentsPerKwh);
     if (m) {
       // Montants du module en centimes ; trésorerie et grand livre en CHF (comme l'affichage du panneau).
       if (expense > 0) m.budget.post('expense', 'entretien:reseau_electrique', centsToChf(expense), 'electricite');
+      if (importCost > 0) m.budget.post('expense', 'achat:electricite_exterieure', centsToChf(importCost), 'electricite');
       if (income > 0) m.budget.post('income', 'vente:electricite', centsToChf(income), 'electricite');
     }
     this.state.lastMonth = { income, expense, failures: this.state.month.failures };
+    if (importCost > 0 || this.importOn) this.state.lastMonth.importCost = importCost;
     this.state.month = { producedKwh: 0, deliveredKwh: 0, shedKwh: 0, failures: 0 };
     void ctx;
     this.version++;
@@ -952,6 +1024,7 @@ export class PowerSystem {
       lastIncome: this.state.lastMonth.income, lastExpense: this.state.lastMonth.expense, investments: this.state.investments,
       monthProducedKwh: Math.round(this.state.month.producedKwh), monthDeliveredKwh: Math.round(this.state.month.deliveredKwh),
       monthShedKwh: Math.round(this.state.month.shedKwh), monthFailures: this.state.month.failures, lastMonthFailures: this.state.lastMonth.failures,
+      ...(this.importOn || this.state.lastMonth.importCost !== undefined ? { monthImportedKwh: Math.round(this.state.month.importedKwh ?? 0), lastImportCost: this.state.lastMonth.importCost ?? 0 } : {}),
     };
   }
 

@@ -55,7 +55,19 @@ export interface WaterSettings {
   tariff: number;
   /** Restrictions d'usage (arrosage, lavage) : demande −20 %, léger mécontentement. */
   restrictions: boolean;
+  /**
+   * Raccordement au réseau d'eau extérieur (achat d'eau potable à la commune voisine, `WATER_IMPORT`) : appoint
+   * appelé en dernier, facturé au m³. Absent des anciennes sauvegardes = non raccordé.
+   */
+  raccordement?: boolean;
 }
+
+/**
+ * Raccordement au réseau d'eau extérieur : débit plafonné (m³/h), eau potable (qualité 1), prix d'achat (CHF/m³,
+ * plus cher que la production locale : pompage + potabilisation ≈ 0,26 CHF/m³, moins cher que le tarif de vente par
+ * défaut de 2 CHF/m³), frais de raccordement uniques (CHF).
+ */
+export const WATER_IMPORT = { capacity: 40, pricePerM3: 1.2, connectionChf: 40_000 } as const;
 
 export const DEFAULT_WATER_SETTINGS: Readonly<WaterSettings> = { fundingWater: 1, fundingSewer: 1, tariff: 2, restrictions: false };
 export const SETTINGS_BOUNDS = { funding: [0, 1.5], tariff: [0, 6] } as const;

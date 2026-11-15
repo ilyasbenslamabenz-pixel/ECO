@@ -61,7 +61,7 @@ export function checkPowerState(raw: unknown): PowerState {
     throw new Error('electricite : lignes illisibles');
   }
   if (!isObj(s.facilities) || !Array.isArray(s.rooftopIds) || !Array.isArray(s.events)) throw new Error('electricite : état illisible');
-  s.settings = { funding: s.settings.funding, priorities: [...pr], rooftops: !!s.settings.rooftops };
+  s.settings = { funding: s.settings.funding, priorities: [...pr], rooftops: !!s.settings.rooftops, ...(s.settings.raccordement === true ? { raccordement: true } : {}) };
   s.month = { ...base.month, ...(isObj(s.month) ? s.month : {}) };
   s.lastMonth = { ...base.lastMonth, ...(isObj(s.lastMonth) ? s.lastMonth : {}) };
   return s;

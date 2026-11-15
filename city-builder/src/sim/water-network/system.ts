@@ -20,13 +20,17 @@
  * Pas journalier : effets sur la satisfaction (`satisfaction`), grilles `eau:desserte`, `eau:qualite`,
  * `eau:risque_sanitaire`, mesures d'effets dans le registre. Pas mensuel : lignes budgétaires du service `eau`.
  *
- * Dormant (aucune grille, aucun réseau, aucune sauvegarde) tant qu'aucune installation n'a été posée.
+ * Raccordement au réseau extérieur (réglage `raccordement`, `WATER_IMPORT`) : un producteur d'eau potable par
+ * composante de voirie, appelé en dernier, débit total plafonné et réparti selon la demande, facturé au m³.
+ * Bâtiments d'une composante sans aucune ressource (ni installation ni raccordement) : « sans service » (aucune
+ * pénalité du module, croissance non bloquée : la démographie applique sa pénalité progressive).
+ * Dormant (aucune grille, aucun réseau, aucune sauvegarde) tant qu'aucune installation n'a été posée ni raccordement.
  * Déterministe (aucun tirage aléatoire). TypeScript pur : AUCUN import de three ni du DOM.
  */
 import { governanceModifiers } from '../../shared/governance';
 import type { IndicatorId } from '../../shared/municipal/types';
 import {
-  DEFAULT_WATER_SETTINGS, facilityKindOf, SETTINGS_BOUNDS, WATER_FACILITIES,
+  DEFAULT_WATER_SETTINGS, facilityKindOf, SETTINGS_BOUNDS, WATER_FACILITIES, WATER_IMPORT,
   type IntakeMode, type PipeGeometry, type RiverLayer, type WaterBalance, type WaterBudget, type WaterFacilityKind,
   type WaterFacilityState, type WaterLayerState, type WaterSettings,
 } from '../../shared/water-network/types';
@@ -105,6 +109,8 @@ export interface WaterSaveV1 {
   version: number;
   causes: { shortage: number; discharge: number };
   pending: { cause: number; at: number; grids: { id: string; before: string }[] }[];
+  /** Bâtiments sans aucune ressource dans leur composante au dernier pas (absent = aucun). */
+  noSource?: number[];
 }
 
 const emptyBudget = (): WaterBudget => ({ income: 0, expenses: 0, lines: {} });
@@ -117,6 +123,7 @@ export function normalizeSettings(cur: WaterSettings, p: Partial<WaterSettings>)
     fundingSewer: n(p.fundingSewer, cur.fundingSewer, SETTINGS_BOUNDS.funding),
     tariff: n(p.tariff, cur.tariff, SETTINGS_BOUNDS.tariff),
     restrictions: typeof p.restrictions === 'boolean' ? p.restrictions : cur.restrictions,
+    ...((typeof p.raccordement === 'boolean' ? p.raccordement : cur.raccordement) ? { raccordement: true } : {}),
   };
 }
 
@@ -191,6 +198,12 @@ export class WaterSystem {
   private shortageCause = -1;
   private dischargeCause = -1;
   private pending: { cause: number; at: number; grids: { id: string; before: Float32Array }[] }[] = [];
+  /** Producteurs « réseau extérieur » par composante (nœud du réseau `eau`, -1 sans raccordement). */
+  private importNode: number[] = [];
+  /** Bâtiments sans ressource dans leur composante (ni installation ni raccordement). */
+  private noSource = new Set<number>();
+  /** Eau achetée au réseau extérieur au dernier pas (m³/h). */
+  importedM3h = 0;
 
   /* ------------------------------------------------------------------ */
   /* Cycle de vie                                                         */
@@ -223,6 +236,9 @@ export class WaterSystem {
     this.shortageCause = -1;
     this.dischargeCause = -1;
     this.pending = [];
+    this.importNode = [];
+    this.noSource.clear();
+    this.importedM3h = 0;
   }
 
   /** Façade municipale courante (lève si `reset` n'a pas été appelé). */
@@ -281,7 +297,7 @@ export class WaterSystem {
       h ^= Math.round(st.x[i]! * 10); h = Math.imul(h, 16777619);
       h ^= Math.round(st.z[i]! * 10); h = Math.imul(h, 16777619);
     }
-    return `${ctx.roads.version}|${ctx.buildings.count}|${h >>> 0}`;
+    return `${ctx.roads.version}|${ctx.buildings.count}|${h >>> 0}|${this.settings.raccordement ? 1 : 0}`;
   }
 
   /** Reconstruit réseaux, branchements et géométrie si la voirie ou les bâtiments ont changé. */
@@ -355,6 +371,16 @@ export class WaterSystem {
       }
     }
 
+    // Raccordement extérieur : un producteur par composante (au premier nœud de la composante).
+    this.importNode = new Array<number>(this.compCount).fill(-1);
+    if (this.settings.raccordement) {
+      for (let i = 0; i < n; i++) {
+        const c = this.roadComp[i]!;
+        if (this.importNode[c]! >= 0) continue;
+        this.importNode[c] = water.addNode({ role: 'producer', x: this.roadX[i]!, z: this.roadZ[i]!, ref: -2, capacity: 0, cost: 8 });
+        water.addEdge(this.importNode[c]!, this.waterJunction[i]!, BIG, 0);
+      }
+    }
     // Bâtiments : installations et consommateurs.
     const st = ctx.buildings.store;
     const prevFac = new Map(this.facilities.map((f) => [f.id, f]));
@@ -465,7 +491,7 @@ export class WaterSystem {
   hourly(ctx: PluginContext, at: number): void {
     if (!ctx.inGame || !this.muni) return;
     if (!this.active) {
-      if (!this.hasFacility(ctx)) return;
+      if (!this.hasFacility(ctx) && !this.settings.raccordement) return;
       this.activate(ctx);
     }
     this.ensureGrids();
@@ -498,6 +524,18 @@ export class WaterSystem {
 
     // 2. Production par composante : pompage -> potabilisation ; châteaux.
     const C = this.compCount;
+    // Raccordement extérieur : débit plafonné réparti entre composantes selon leur demande.
+    const compDemand = new Float64Array(C);
+    for (let r = 0; r < nRoad; r++) compDemand[this.roadComp[r]!]! += nodeDemand[r]!;
+    let linkedDemand = 0;
+    for (let c = 0; c < C; c++) if ((this.importNode[c] ?? -1) >= 0) linkedDemand += compDemand[c]!;
+    const importCap = new Float64Array(C);
+    for (let c = 0; c < C; c++) {
+      const node = this.importNode[c] ?? -1;
+      if (node < 0) continue;
+      importCap[c] = linkedDemand > 0 ? (WATER_IMPORT.capacity * compDemand[c]!) / linkedDemand : 0;
+      water.setCapacity(node, importCap[c]!);
+    }
     const raw = new Float64Array(C), rawPoll = new Float64Array(C), plantCap = new Float64Array(C);
     const fac = this.facilities;
     for (const f of fac) {
@@ -571,6 +609,17 @@ export class WaterSystem {
       if (f.kind === 'pompage' && cap > 0) { spare[c]! += cap - out; spareQ[c]! += (cap - out) * f.quality; }
       if (f.kind === 'chateau') { const t = this.tanks.get(f.id)!; t.stock = Math.max(0, t.stock - out); }
     }
+    // Réseau extérieur : eau potable (qualité 1), comptée dans la production de la composante.
+    let imported = 0;
+    for (let c = 0; c < C; c++) {
+      const node = this.importNode[c] ?? -1;
+      if (node < 0) continue;
+      const out = outByNode.get(node) ?? 0;
+      imported += out;
+      compOut[c]! += out; compQ[c]! += out; compSupply[c]! += importCap[c]!;
+      production += importCap[c]!;
+    }
+    this.importedM3h = imported;
     // Remplissage des châteaux avec l'excédent de capacité de la composante (usines, ou pompages sans usine).
     const towersByComp = new Map<number, Facility[]>();
     for (const f of fac) {
@@ -617,9 +666,14 @@ export class WaterSystem {
       const ri = this.roadIndex.get(water.node(cons.node)!.ref);
       if (ri !== undefined) compDelivered[this.roadComp[ri]!]! += cons.delivered;
     }
-    this.computePressure(fac, compSupply, compDelivered);
+    this.computePressure(fac, compSupply, compDelivered, importCap);
 
-    // 5. Desserte par bâtiment.
+    // 5. Desserte par bâtiment ; composantes sans aucune ressource (ni installation d'eau ni raccordement).
+    const compHasSource = new Uint8Array(C);
+    for (const f of fac) if (f.road >= 0 && f.net >= 0 && (f.kind === 'pompage' || f.kind === 'potabilisation' || f.kind === 'chateau')) compHasSource[this.roadComp[this.roadIndex.get(f.road)!]!] = 1;
+    for (let c = 0; c < C; c++) if ((this.importNode[c] ?? -1) >= 0) compHasSource[c] = 1;
+    this.noSource.clear();
+    for (const c of this.consumers) if (c.road < 0 || !compHasSource[this.roadComp[this.roadIndex.get(c.road)!]!]) this.noSource.add(c.id);
     const delivered = new Float64Array(this.consumers.length);
     let served = 0, unserved = 0, totalDelivered = 0, qSum = 0, pSum = 0, pN = 0;
     const L = this.layer;
@@ -759,7 +813,7 @@ export class WaterSystem {
   }
 
   /** Charge (m) disponible à chaque nœud routier ; nœuds alimentés. */
-  private computePressure(fac: Facility[], compSupply: Float64Array, compDelivered: Float64Array): void {
+  private computePressure(fac: Facility[], compSupply: Float64Array, compDelivered: Float64Array, importCap?: Float64Array): void {
     const n = this.roadIds.length;
     const head = this.nodeHead, fed = this.nodeFed;
     head.fill(-BIG); fed.fill(0);
@@ -782,6 +836,18 @@ export class WaterSystem {
       srcs.push({ r, h });
       const c = this.roadComp[r]!;
       if (h > hMax[c]!) hMax[c] = h;
+    }
+    // Raccordement extérieur : arrivée sous pression (comme une usine) au premier nœud de chaque composante.
+    if (importCap) {
+      const first = new Int32Array(C).fill(-1);
+      for (let r = 0; r < n; r++) { const c = this.roadComp[r]!; if (first[c]! < 0) first[c] = r; }
+      for (let c = 0; c < C; c++) {
+        const r = first[c]!;
+        if (r < 0 || (importCap[c] ?? 0) <= 0) continue;
+        const h = this.roadY[r]! + PUMP_HEAD;
+        srcs.push({ r, h });
+        if (h > hMax[c]!) hMax[c] = h;
+      }
     }
     if (!srcs.length) return;
     const lossRate = new Float64Array(C);
@@ -856,6 +922,7 @@ export class WaterSystem {
     let towers = 0;
     for (const f of fac) if (f.kind === 'chateau') towers += f.output;
     add('exploitation:chateaux', towers * WATER_FACILITIES.chateau.costPerM3 * s.fundingWater, 'expense');
+    add('achat:eau_exterieure', this.importedM3h * WATER_IMPORT.pricePerM3, 'expense');
     // Entretien des canalisations, réparti par heure (mois de 30 jours).
     add('entretien:canalisations', (this.pipeKm * PIPE_UPKEEP_PER_KM * (s.fundingWater + s.fundingSewer) / 2) / (30 * 24), 'expense');
   }
@@ -863,10 +930,12 @@ export class WaterSystem {
   private updateAlerts(b: WaterBalance, fac: Facility[]): void {
     const a: string[] = [];
     const has = (k: WaterFacilityKind): boolean => fac.some((f) => f.kind === k);
-    if (!has('pompage')) a.push('Aucune station de pompage : pas de ressource en eau.');
+    if (!has('pompage') && !this.settings.raccordement) a.push('Aucune station de pompage : pas de ressource en eau.');
+    if (this.settings.raccordement && this.importedM3h >= WATER_IMPORT.capacity * 0.95) a.push('Raccordement extérieur saturé : construisez une station de pompage.');
     if (b.unserved > 0) a.push(`Pénurie : ${b.unserved} bâtiment(s) non desservi(s) sur ${b.buildings}.`);
     if (b.production > 0 && b.demand > b.production) a.push('Demande supérieure à la capacité de production.');
     if (has('pompage') && !has('potabilisation')) a.push('Eau distribuée sans potabilisation.');
+    if (this.noSource.size > 0) a.push(`${this.noSource.size} bâtiment(s) hors de tout réseau d'eau (voirie non reliée à une ressource).`);
     if (b.quality > 0 && b.quality < 0.7) a.push(`Qualité de l'eau médiocre (${Math.round(b.quality * 100)} %).`);
     if (b.sewageRaw + b.sewageOverflow > 0.01) a.push(`Rejets d'eaux usées non traitées : ${(b.sewageRaw + b.sewageOverflow).toFixed(1)} m³/h.`);
     if (this.settings.fundingSewer < 1 && has('epuration')) a.push('Station d\'épuration sous-financée : épuration partielle.');
@@ -915,7 +984,8 @@ export class WaterSystem {
       if (k < 0) continue;
       const sv = this.servedEma.get(c.id) ?? 0, q = this.qualityEma.get(c.id) ?? 0;
       sumS[k]! += sv; sumQ[k]! += q;
-      sumC[k]! += satisfactionContribution(sv, q, this.layer.buildingSewer[i] === 1, this.settings);
+      // Sans aucune ressource : pénalité « sans service » de la démographie (progressive), pas celle du module.
+      if (!this.noSource.has(c.id)) sumC[k]! += satisfactionContribution(sv, q, this.layer.buildingSewer[i] === 1, this.settings);
       maxH[k] = Math.max(maxH[k]!, healthRisk(sv, q));
       cnt[k]!++;
     }
@@ -967,7 +1037,8 @@ export class WaterSystem {
   /** Applique des réglages ; une décision du joueur est une cause du registre, son effet est mesuré à J+1. */
   applySettings(p: Partial<WaterSettings>, at: number): WaterSettings {
     const prev = this.settings;
-    const next = normalizeSettings(prev, p);
+    // Le raccordement extérieur passe par `setRaccordement` (frais de raccordement), pas par les réglages.
+    const next = normalizeSettings(prev, { ...p, raccordement: prev.raccordement === true });
     const changed = (Object.keys(next) as (keyof WaterSettings)[]).filter((k) => next[k] !== prev[k]);
     this.settings = next;
     if (changed.length && this.active && this.muni) {
@@ -997,12 +1068,42 @@ export class WaterSystem {
   /** Croissance autorisée (service non encore créé : toujours vrai ; sinon bâtiment desservi). */
   growthAllowed(id: number): boolean {
     if (!this.active) return true;
+    // Hors de tout réseau : la croissance est freinée par la démographie, pas bloquée (comme avant le service).
+    if (this.noSource.has(id)) return true;
     const st = this.buildingState(id);
     if (st) return st.growthAllowed;
     // Juste après un chargement, les branchements ne sont reconstruits qu'à la prochaine heure : la desserte
     // sauvegardée (moyenne glissante) fait foi en attendant.
     const ema = this.servedEma.get(id);
     return ema === undefined ? true : ema >= SERVED_THRESHOLD;
+  }
+
+  /**
+   * État du service pour un bâtiment : 'ok' desservi, 'coupe' raccordé mais mal desservi (pénurie, pression),
+   * 'aucun' sans ressource (service inexistant, voirie non reliée à une installation ni au raccordement).
+   */
+  serviceState(id: number): 'ok' | 'coupe' | 'aucun' {
+    if (!this.active || this.noSource.has(id)) return 'aucun';
+    const ema = this.servedEma.get(id);
+    if (ema === undefined) return this.consumerIndex.has(id) ? 'coupe' : 'ok';
+    return ema >= SERVED_THRESHOLD ? 'ok' : 'coupe';
+  }
+
+  /** Raccordement extérieur : frais uniques à l'activation (refusé sans trésorerie suffisante). */
+  setRaccordement(ctx: PluginContext, on: boolean): { ok: true } | { ok: false; code: string; message: string } {
+    if (on === (this.settings.raccordement === true)) return { ok: true };
+    if (on) {
+      const fee = WATER_IMPORT.connectionChf;
+      if (ctx.economy.bankrupt || ctx.economy.money < fee) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: `Fonds insuffisants pour le raccordement (${fee.toLocaleString('fr-FR')} CHF)` };
+      if (this.muni) this.muni.budget.post('expense', 'investissement:raccordement_eau', fee, 'eau');
+      else ctx.economy.applyService(-fee, true);
+    }
+    this.settings = { ...this.settings, raccordement: on };
+    if (!on) delete this.settings.raccordement;
+    this.topoKey = '';
+    this.version++;
+    if (on && !this.active && this.muni && ctx.inGame) this.activate(ctx);
+    return { ok: true };
   }
 
   facilityStates(): WaterFacilityState[] {
@@ -1087,6 +1188,7 @@ export class WaterSystem {
       version: this.version,
       causes: { shortage: this.shortageCause, discharge: this.dischargeCause },
       pending: this.pending.map((p) => ({ cause: p.cause, at: p.at, grids: p.grids.map((g) => ({ id: g.id, before: encodeFloat32(g.before) })) })),
+      ...(this.noSource.size ? { noSource: [...this.noSource].sort((a, b) => a - b) } : {}),
     };
   }
 
@@ -1113,6 +1215,7 @@ export class WaterSystem {
     this.dischargeCause = d.causes.discharge;
     this.pending = d.pending.map((p) => ({ cause: p.cause, at: p.at, grids: p.grids.map((g) => ({ id: g.id, before: decodeFloat32(g.before, n) })) }));
     this.topoKey = '';
+    this.noSource = new Set(Array.isArray(d.noSource) ? d.noSource.filter((v) => typeof v === 'number') : []);
     if (this.active) this.ensureGrids();
   }
 }

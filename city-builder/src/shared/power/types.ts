@@ -142,6 +142,8 @@ export interface ElectriciteSummary {
   /** Emplois et habitants dans des bâtiments sans courant. */
   jobsWithoutPower: number;
   residentsWithoutPower: number;
+  /** Puissance achetée au réseau extérieur cette heure (kW, raccordement) ; absent = non raccordé. */
+  importedKw?: number;
 }
 
 /** Réglages du joueur. */
@@ -152,6 +154,11 @@ export interface ElectriciteSettings {
   priorities: ConsumerClass[];
   /** Programme de toitures solaires (installation progressive sur les logements). */
   rooftops: boolean;
+  /**
+   * Raccordement au réseau extérieur (achat d'électricité à la commune voisine, `IMPORT_SPEC`) : appoint appelé en
+   * dernier (après toutes les centrales), facturé au kWh. Absent des anciennes sauvegardes = non raccordé.
+   */
+  raccordement?: boolean;
 }
 
 /** Bilan budgétaire mensuel du service (¢). */
@@ -173,6 +180,9 @@ export interface ElectriciteBudget {
   /** Pannes du mois en cours et du mois passé. */
   monthFailures: number;
   lastMonthFailures: number;
+  /** Énergie achetée au réseau extérieur ce mois-ci (kWh) et facture du mois passé (¢) ; absents = jamais raccordé. */
+  monthImportedKwh?: number;
+  lastImportCost?: number;
 }
 
 /** Panne ou événement récent (journal du panneau). */
@@ -238,6 +248,8 @@ export interface ElectriciteCommands {
   refresh: { payload: undefined; result: ElectriciteSummary };
   /** Effets électriques récents du registre municipal. */
   effects: { payload: { limit?: number }; result: unknown[] };
+  /** Raccordement au réseau extérieur (frais de raccordement facturés à l'activation) ; renvoie les réglages. */
+  raccordement: { payload: { on: boolean }; result: ElectriciteSettings };
 }
 
 /** API publiée aux autres modules de simulation (service `electricite`). */
@@ -248,6 +260,11 @@ export interface ElectriciteService {
   powerFactor(buildingId: number): number;
   /** Vrai si le bâtiment est alimenté (ou non consommateur). */
   isPowered(buildingId: number): boolean;
+  /**
+   * État du service pour un bâtiment : 'ok' alimenté, 'coupe' raccordé mais délesté (pénurie, panne), 'aucun' hors
+   * de tout réseau (aucune installation ni raccordement extérieur ne le dessert). 'ok' si inconnu (non consommateur).
+   */
+  serviceState?(buildingId: number): 'ok' | 'coupe' | 'aucun';
   /** Surplus exportable (kW) à la dernière répartition — pour le module des exportations (2B). */
   exportableKw(): number;
   /** Dernier bilan horaire (undefined avant la première répartition). */

@@ -46,7 +46,8 @@ export function createElectricitePlugin(): ElectricitePlugin {
   const service: ElectriciteService = {
     powerFactor: (id) => system.powerFactor(id),
     isPowered: (id) => system.powerFactor(id) >= 1,
-    hasNetwork: () => system.facilityCount() > 0,
+    hasNetwork: () => system.facilityCount() > 0 || system.importOn,
+    serviceState: (id) => system.serviceState(id),
     exportableKw: () => system.exportableKw(),
     summary: () => system.summary(),
   };
@@ -140,6 +141,13 @@ export function createElectricitePlugin(): ElectricitePlugin {
           }
           activate();
           if (!system.setPriorities(ctx, order)) return bad(`order : permutation de ${CONSUMER_CLASSES.join(', ')} attendue`);
+          return { ok: true, data: system.state.settings };
+        }
+        case 'raccordement': {
+          if (typeof p.on !== 'boolean') return bad('on (booléen) attendu');
+          const r = system.setRaccordement(ctx, p.on);
+          if (!r.ok) return r;
+          activate();
           return { ok: true, data: system.state.settings };
         }
         case 'setRooftops':

@@ -16,6 +16,7 @@ import { FinanceChart, type FinanceHistory } from './finance';
 import { iconEl } from './icons';
 import { cityDemand, DEMAND_ORDER, demandPct } from './demand';
 import { SECTOR_LABELS_FR } from '../shared/protocol-ext/zonage';
+import { renderSatisfaction } from './satisfaction';
 
 export interface ExtPort {
   sendExt<K extends ExtCommandName>(name: K, args: ExtCommandArgs<K>): Promise<ExtCommandResult<K>>;
@@ -287,6 +288,11 @@ export class CityPanels {
     $('pop-happy').textContent = d.population > 0 ? `${fmt(Math.round(d.happiness))} %` : '—';
     $('pop-sub').textContent = `${fmt(d.households)} ménages · ${fmt(d.children)} enfants · ${fmt(d.adults)} adultes · ${fmt(d.seniors)} seniors`;
     if (this.popTab === 'overview') {
+      // Satisfaction expliquée (facteurs, logements vides, aide de croissance) : masquée si la simulation ne l'envoie pas.
+      const sat = renderSatisfaction(r);
+      const satBox = $('pop-satisf');
+      satBox.classList.toggle('hidden', !sat);
+      satBox.replaceChildren(...(sat ? [sat] : []));
       const commuting = (d.activities['Trajet aller'] ?? 0) + (d.activities['Trajet retour'] ?? 0);
       const rows: [string, string][] = [
         ['Actifs', fmt(d.laborForce)],

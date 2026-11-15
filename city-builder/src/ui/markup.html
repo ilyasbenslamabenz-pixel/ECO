@@ -94,6 +94,7 @@
         <label>Distance d'affichage <output id="opt-dist-out"></output>
           <input type="range" name="viewDistance" min="1500" max="8000" step="250">
         </label>
+        <label class="check"><input type="checkbox" id="opt-tutorial"> Premiers pas (objectifs guidés)</label>
         <p class="hint">Les réglages s'appliquent immédiatement et sont mémorisés dans ce navigateur.</p>
         <div class="form-actions"><button type="button" data-back>Retour</button></div>
       </form>
@@ -129,6 +130,7 @@
   </button>
   <button id="hud-demand-btn" class="hud-stat" data-tip="Demande par secteur (R résidentiel, C commerces, I industrie, B bureaux) — ouvrir le détail" aria-label="Demande">
     <span id="hud-demand" class="hud-demand" aria-hidden="true"></span>
+    <span id="hud-growth-dot" class="growth-dot hidden" aria-hidden="true">!</span>
   </button>
   <button id="hud-money-btn" class="hud-stat" data-tip="Trésorerie et solde mensuel prévu (même calcul que le panneau Finances) — ouvrir les finances" aria-label="Trésorerie">
     <i data-icon="cash" class="ic-cash"></i><span class="stack"><small class="lbl">Trésorerie</small><span class="mrow"><b id="hud-money">—</b><small id="hud-balance" class="delta"></small></span></span>
@@ -219,9 +221,9 @@
   </div>
 </div>
 
-<aside id="objectives" class="hidden" aria-label="Objectifs">
-  <button id="obj-toggle" aria-expanded="false" data-tip="Objectifs et missions"><i data-icon="flag"></i><span class="obj-t">Objectifs</span><i data-icon="chevron" class="chev"></i></button>
-  <div id="obj-body" class="obj-body hidden">Les missions et leurs récompenses arrivent bientôt. En attendant, faites grandir votre ville : logements, emplois, services et un budget à l'équilibre.</div>
+<aside id="objectives" class="hidden" aria-label="Premiers pas">
+  <button id="obj-toggle" aria-expanded="false" data-tip="Premiers pas : objectifs guidés (facultatifs)"><i data-icon="flag"></i><span class="obj-t">Premiers pas</span><span id="obj-count" class="obj-count"></span><i data-icon="chevron" class="chev"></i></button>
+  <div id="obj-body" class="obj-body hidden"></div>
 </aside>
 
 <!-- ======================= Panneaux (à droite ; feuille glissante sur téléphone) ======================= -->
@@ -336,6 +338,7 @@
         <div class="kpi"><span class="lbl">Satisfaction</span><b id="pop-happy">—</b></div>
       </div>
       <p id="pop-sub" class="muted small"></p>
+      <div id="pop-satisf" class="hidden"></div>
       <dl class="rows" id="pop-rows"></dl>
     </section>
     <section data-ppage="demand" class="fpage hidden">

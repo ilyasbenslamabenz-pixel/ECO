@@ -37,6 +37,8 @@ import { InfoPanel } from './panels';
 import { listSlotsAsync, removeSlotAsync, slotIdKeepCase, slotLabel } from './save-slots';
 import type { ThumbnailSource } from './thumbnails';
 import { initTooltips } from './tooltips';
+import { GROWTH_HINT_FR, growthHint } from './satisfaction';
+import { Tutorial } from './tutorial';
 
 export interface NewGameChoice {
   cityName: string; seed: number; mapChunks: number; startMoney: number;
@@ -206,7 +208,8 @@ export function initUI(h: UIHandlers): UIHandle {
     (optForm.elements.namedItem('theme') as HTMLSelectElement).value = o.theme;
     distOut.textContent = `${fmt(o.viewDistance)} m`;
   };
-  optForm.addEventListener('input', () => {
+  optForm.addEventListener('input', (e) => {
+    if ((e.target as HTMLElement | null)?.id === 'opt-tutorial') return; // case « Premiers pas » : gérée à part
     const f = new FormData(optForm);
     const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'] });
     distOut.textContent = `${fmt(o.viewDistance)} m`;
@@ -321,13 +324,23 @@ export function initUI(h: UIHandlers): UIHandle {
     b.addEventListener('click', () => { setSidebar(false); $(b.dataset['proxy']!).click(); dashboards.syncSidebar(); });
   }
 
-  /* ---------- Objectifs (phase 2C : aucun objectif simulé, panneau discret repliable) ---------- */
-  const objToggle = $('obj-toggle');
-  objToggle.addEventListener('click', () => {
-    const open = $('obj-body').classList.toggle('hidden') === false;
-    objToggle.setAttribute('aria-expanded', String(open));
-    $('objectives').classList.toggle('open', open);
-  });
+  /* ---------- Premiers pas : objectifs guidés vérifiés d'après la ville (ui/tutorial.ts) ---------- */
+  const tutorial = new Tutorial(showToast);
+  const optTuto = $<HTMLInputElement>('opt-tutorial');
+  optTuto.checked = tutorial.enabled;
+  optTuto.addEventListener('change', (e) => { e.stopPropagation(); tutorial.setEnabled(optTuto.checked); tutorial.update(api?.mirror ?? null); });
+
+  /* ---------- Alertes non répétitives (aide de croissance, circulation) ---------- */
+  const alertAt = new Map<string, number>();
+  /** Une alerte par clé, au plus une fois par `cooldownMs` (temps réel), réarmée par `rearm(key)`. */
+  const alertOnce = (key: string, text: string, cooldownMs: number): void => {
+    const now = Date.now();
+    const last = alertAt.get(key);
+    if (last !== undefined && (last < 0 || now - last < cooldownMs)) return;
+    alertAt.set(key, -now); // armée de nouveau seulement quand la condition disparaît
+    showToast(text, 'info', 7000);
+  };
+  const rearm = (key: string): void => { const v = alertAt.get(key); if (v !== undefined && v < 0) alertAt.set(key, -v); };
 
   /* ---------- Mesures de mise en page (feuilles sur téléphone : entre la barre du haut et les outils) ---------- */
   const rootStyle = document.documentElement.style;
@@ -408,7 +421,7 @@ export function initUI(h: UIHandlers): UIHandle {
     ok.textContent = bad ? 'Emplacement invalide' : tcLabel || 'Construire';
     // Avertissement de la simulation sur un emplacement valide (ex. aucune route ne dessert le bâtiment).
     const warn = !bad && !touchBar.classList.contains('hidden') && m?.tool === 'building' && p?.kind === 'building' && p.validity === 'ok' && !!p.message;
-    reason.textContent = p?.kind === 'building' && (bad || warn) ? chfText(p.message || 'Emplacement refusé par la simulation') : '';
+    reason.textContent = p?.kind === 'building' && (bad || warn) ? `${warn ? '⚠ ' : ''}${chfText(p.message || 'Emplacement refusé par la simulation')}` : '';
     reason.classList.toggle('hidden', !bad && !warn);
     reason.classList.toggle('warn', warn);
   };
@@ -417,6 +430,7 @@ export function initUI(h: UIHandlers): UIHandle {
     minimap = new Minimap({ camera: api.camera, mirror: api.mirror, heightAt });
     (window as unknown as { __aubeMinimap?: Minimap }).__aubeMinimap = minimap;
   };
+  let demandTip = $('hud-demand-btn').dataset['tip'] ?? '';
   /** Jauge de demande : même source et même échelle que Population > Demande (voir ui/demand.ts). */
   const renderDemand = (r: SimReport): void => {
     const v = cityDemand(r);
@@ -433,7 +447,30 @@ export function initUI(h: UIHandlers): UIHandle {
       (col as HTMLElement).dataset['value'] = x.toFixed(2);
       parts.push(`${SECTOR_LABELS_FR[s]} ${demandPct(x)}`);
     }
-    $('hud-demand-btn').dataset['tip'] = `Demande de construction — ${parts.join(' · ')}. ${DEMAND_NOTE} Ouvrir le détail.`;
+    demandTip = `Demande de construction — ${parts.join(' · ')}. ${DEMAND_NOTE} Ouvrir le détail.`;
+    $('hud-demand-btn').dataset['tip'] = demandTip;
+  };
+
+  /** Aide de croissance (champ facultatif `growthHint` de la démographie) : pastille sur la jauge + notification unique. */
+  const renderGrowthHint = (r: SimReport): void => {
+    const hint = growthHint(r);
+    const dot = $('hud-growth-dot');
+    dot.classList.toggle('hidden', !hint);
+    const btn = $('hud-demand-btn');
+    if (hint) {
+      btn.dataset['tip'] = `${GROWTH_HINT_FR[hint]}. ${demandTip}`;
+      btn.setAttribute('aria-label', `Demande — ${GROWTH_HINT_FR[hint]}`);
+      alertOnce(`growth:${hint}`, GROWTH_HINT_FR[hint], 10 * 60_000);
+    } else { btn.setAttribute('aria-label', 'Demande'); btn.dataset['tip'] = demandTip; }
+    for (const k of ['need-roads', 'need-power', 'need-water']) if (k !== hint) rearm(`growth:${k}`);
+  };
+  /** Circulation très lente (vitesse moyenne des véhicules du rapport) : conseil du calque Circulation, sans répétition. */
+  const renderTrafficAlert = (r: SimReport): void => {
+    const t = r.traffic;
+    if (!t || !Number.isFinite(t.meanSpeedKmh)) return;
+    if (t.vehicles >= 30 && t.meanSpeedKmh > 0 && t.meanSpeedKmh < 10) {
+      alertOnce('traffic', `Circulation très lente (${fmt(Math.round(t.meanSpeedKmh))} km/h en moyenne) : ouvrez Calques › Circulation pour repérer les bouchons, puis élargissez ou doublez les axes saturés.`, 15 * 60_000);
+    } else if (t.meanSpeedKmh >= 18) rearm('traffic');
   };
 
   /** Satisfaction et variation de population : rapport de la simulation (jamais inventées). */
@@ -441,6 +478,8 @@ export function initUI(h: UIHandlers): UIHandle {
     const r = cityPanels.report;
     if (!r) return;
     renderDemand(r);
+    renderGrowthHint(r);
+    renderTrafficAlert(r);
     const d = r.demography;
     const net = d.month.immigrants + d.month.births - d.month.emigrants - d.month.deaths;
     elPopDelta.textContent = `${net >= 0 ? '+' : '−'}${fmt(Math.abs(net))}`;
@@ -575,7 +614,7 @@ export function initUI(h: UIHandlers): UIHandle {
       mag.addEventListener('click', () => { a.machine.setMagnet(!a.machine.magnet); mag.setAttribute('aria-pressed', String(a.machine.magnet)); mag.classList.toggle('active', a.machine.magnet); });
       mag.classList.toggle('active', a.machine.magnet);
       $('tc-cancel').addEventListener('click', () => a.tools.cancelTouch());
-      a.mirror.onChange(() => { if (cityPanels.financeOpen) cityPanels.renderFinance(); });
+      a.mirror.onChange(() => { if (cityPanels.financeOpen) cityPanels.renderFinance(); tutorial.update(a.mirror); });
       ensureMinimap();
     },
     currentOptions: () => loadOptions(),
@@ -584,6 +623,7 @@ export function initUI(h: UIHandlers): UIHandle {
       cityPanels.update(r);
       renderReportStats();
       dashboards.render();
+      tutorial.update(api?.mirror ?? null);
     },
     setExtPort(p) { extPort = p; cityPanels.setPort(p); },
     attachWorld(o) { heightAt = o.heightAt; ensureMinimap(); },
