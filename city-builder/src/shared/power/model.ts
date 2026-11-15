@@ -59,6 +59,13 @@ export const ROOFTOP_SPEC = { peakKwPerBuilding: 4, costPerBuilding: 9_000, inst
 /** Tarif de vente de l'électricité (¢ par kWh livré) — ligne de recette du service. */
 export const TARIFF_CENTS_PER_KWH = 2;
 
+/**
+ * Conversion centimes (unité des montants du module électricité : tarifs, coûts, entretien) -> CHF (unité de la
+ * trésorerie et du grand livre municipal). Arrondi au centime. Toute écriture budgétaire du module passe par ici :
+ * le panneau Énergie affiche `centimes / 100`, la trésorerie doit recevoir le même montant.
+ */
+export const centsToChf = (cents: number): number => Math.round(cents) / 100;
+
 /** Lit l'installation électrique d'un modèle du catalogue (undefined si ce n'en est pas une). */
 export function facilityKindOf(asset: Pick<CatalogAsset, 'tags'> | undefined): FacilityKind | undefined {
   if (!asset) return undefined;

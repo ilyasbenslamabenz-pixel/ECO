@@ -16,7 +16,7 @@
 import { CityPanels, type ExtPort } from './city-panels';
 import { zoningView } from '../client/zoning-view';
 import { SECTOR_COLORS, SECTOR_LABELS_FR, type DemandSector } from '../shared/protocol-ext/zonage';
-import { Dashboards, ModuleHost, type ModuleBridge } from './dashboards';
+import { closeFloatingModulePanels, Dashboards, ModuleHost, type ModuleBridge } from './dashboards';
 import { hydrateIcons, iconEl } from './icons';
 import { Minimap } from './minimap';
 import type { SimReport } from '../sim/sim-protocol';
@@ -250,10 +250,6 @@ export function initUI(h: UIHandlers): UIHandle {
     const order: SimSpeed[] = [1, 2, 4, 8, 16];
     h.onSpeed(currentSpeed === 0 ? lastSpeed : order[(order.indexOf(currentSpeed as SimSpeed) + 1) % order.length]!);
   });
-  // Raccourcis du menu latéral (téléphone) vers les boutons de la barre du haut.
-  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#sidebar [data-proxy]'))) {
-    b.addEventListener('click', () => { $('sidebar').classList.add('hidden'); $('sidebar-scrim').classList.add('hidden'); $(b.dataset['proxy']!).click(); });
-  }
 
   /* ---------- Panneaux de droite : un seul ouvert à la fois ---------- */
   const history = new FinanceHistory();
@@ -262,13 +258,19 @@ export function initUI(h: UIHandlers): UIHandle {
   let cityName = '';
   const modules = new ModuleHost(showToast);
   let dash: Dashboards | null = null;
-  /** Ferme les panneaux de droite autres que `id` (finance, population, dash, info). */
+  /**
+   * Un seul panneau à la fois : ferme les panneaux de droite autres que `id` (finance, population, dash, info),
+   * les anciens panneaux flottants des modules, et, sur téléphone, le tiroir de construction (il passerait dessous).
+   * `id = 'drawer'` : un tiroir de construction s'ouvre, tous les tableaux se ferment.
+   */
   const opened = (id: string): void => {
     if (id !== 'finance') cityPanels.finPanel.classList.add('hidden');
     if (id !== 'population') cityPanels.popPanel.classList.add('hidden');
     if (id !== 'dash') dash?.hide();
     if (id !== 'info' && info?.current) api?.tools.select(null);
     if (id !== 'info') $('info-panel').classList.add('hidden');
+    closeFloatingModulePanels();
+    if (id !== 'drawer' && buildBar?.openDrawerId && matchMedia('(max-width: 760px)').matches) buildBar.closeDrawer();
     queueMicrotask(() => dash?.syncSidebar());
   };
   const cityPanels = new CityPanels({
@@ -293,6 +295,7 @@ export function initUI(h: UIHandlers): UIHandle {
     openFinance: () => { if (cityPanels.financeOpen) cityPanels.finPanel.classList.add('hidden'); else cityPanels.openFinance(); },
     openPop: () => { if (cityPanels.popOpen) cityPanels.popPanel.classList.add('hidden'); else cityPanels.openPop(); },
     opened,
+    closeSidebar: () => setSidebar(false),
     modules,
   });
   const dashboards = dash;
@@ -311,6 +314,11 @@ export function initUI(h: UIHandlers): UIHandle {
   };
   sideBtn.addEventListener('click', () => setSidebar(!document.body.classList.contains('sidebar-open')));
   $('sidebar-scrim').addEventListener('click', () => setSidebar(false));
+  // Raccourcis du menu latéral (téléphone) vers les boutons de la barre du haut : le menu se referme proprement
+  // (même état que le bouton ☰, un seul toucher suffit ensuite pour le rouvrir).
+  for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#sidebar [data-proxy]'))) {
+    b.addEventListener('click', () => { setSidebar(false); $(b.dataset['proxy']!).click(); dashboards.syncSidebar(); });
+  }
 
   /* ---------- Objectifs (phase 2C : aucun objectif simulé, panneau discret repliable) ---------- */
   const objToggle = $('obj-toggle');
@@ -526,7 +534,7 @@ export function initUI(h: UIHandlers): UIHandle {
     },
     enableConstruction(a) {
       api = a;
-      buildBar = new BuildBar({ catalog: a.mirror.catalog, tools: a.tools, machine: a.machine, thumbs: a.thumbs, notify: showToast });
+      buildBar = new BuildBar({ catalog: a.mirror.catalog, tools: a.tools, machine: a.machine, thumbs: a.thumbs, notify: showToast, onDrawerOpen: () => opened('drawer') });
       info = new InfoPanel({ mirror: a.mirror, camera: a.camera, thumbs: a.thumbs, demolish: (p) => a.machine.demolishTarget(p).then((ok) => { if (ok) a.tools.select(null); return ok; }), move: (rec) => { a.tools.select(null); a.machine.startMove(rec); },
         serviceInfo: async (id) => (await a.machine.pluginCommand('ameliorations', 'info', { buildingId: id })) as { level: number; max: number; upgradeCost: number | null; radiusFactor: number; capacityFactor: number; extraUpkeep: number },
         upgradeService: async (id) => { try { await a.machine.pluginCommand('ameliorations', 'upgrade', { buildingId: id }); return true; } catch (e) { showToast(`Amélioration refusée : ${(e as { error?: { message?: string } })?.error?.message ?? String(e)}`, 'error'); return false; } },

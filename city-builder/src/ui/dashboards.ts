@@ -22,7 +22,7 @@ import { $, el, fmt, money, moneyShort, pct, signedMoney } from './dom';
 import { iconEl } from './icons';
 import { clearLog, markAllRead, notifyLog, onNotify, unreadCount } from './notify';
 
-export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications' | 'policy' | 'research';
+export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications' | 'policy' | 'research' | 'energy' | 'water' | 'waste';
 
 const META: Record<DashId, { title: string; icon: string; cls: string; kicker: string }> = {
   city: { title: 'Vue ville', icon: 'home', cls: 't-city', kicker: 'Tableau de bord' },
@@ -33,10 +33,22 @@ const META: Record<DashId, { title: string; icon: string; cls: string; kicker: s
   notifications: { title: 'Notifications', icon: 'bell', cls: 't-notif', kicker: 'Journal' },
   policy: { title: 'Politiques', icon: 'policy', cls: 't-city', kicker: 'Gouvernance' },
   research: { title: 'Recherche', icon: 'research', cls: 't-city', kicker: 'Progression' },
+  energy: { title: 'Énergie', icon: 'energy', cls: 't-energy', kicker: 'Services urbains' },
+  water: { title: 'Eau & égouts', icon: 'water', cls: 't-water', kicker: 'Services urbains' },
+  waste: { title: 'Déchets', icon: 'waste', cls: 't-waste', kicker: 'Services urbains' },
 };
 
 /** Tableau de bord hôte de chaque module de phase 2. */
-const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research', paliers: 'city', secteurs: 'policy' };
+const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research', paliers: 'city', secteurs: 'policy', electricite: 'energy', eau: 'water', dechets: 'waste' };
+
+/** Ferme les anciens panneaux flottants des modules (Énergie, Eau, Déchets) : un seul panneau à la fois. */
+export function closeFloatingModulePanels(): void {
+  const elec = document.getElementById('elec-panel');
+  if (elec && !elec.classList.contains('hidden')) elec.dispatchEvent(new CustomEvent('elec-close', { bubbles: true }));
+  const eau = document.getElementById('eau-panel');
+  if (eau && !eau.classList.contains('hidden')) (eau.querySelector('.icon-x') as HTMLButtonElement | null)?.click();
+  (window as unknown as { __dechets?: { closePanel?: () => void } }).__dechets?.closePanel?.();
+}
 
 export interface ModuleBridge { pluginCommand(plugin: string, name: string, payload?: unknown): Promise<unknown> }
 
@@ -72,6 +84,8 @@ export interface DashDeps {
   openPop(): void;
   /** Ferme les autres panneaux de droite (id = panneau qui s'ouvre). */
   opened(id: string): void;
+  /** Referme le menu latéral (tiroir du téléphone) en gardant son état synchronisé. */
+  closeSidebar(): void;
   modules: ModuleHost;
 }
 
@@ -93,16 +107,17 @@ export class Dashboards {
         const id = b.dataset['dash'] ?? '';
         if (id === 'finance') d.openFinance();
         else if (id === 'population') d.openPop();
-        // Modules électricité et eau : leur propre tableau de bord (le même que dans les tiroirs de construction).
-        else if (id === 'waste') { this.hide(); window.dispatchEvent(new Event('dechets:open')); }
-        else if (id === 'energy' || id === 'water') { this.hide(); document.getElementById(id === 'energy' ? 'elec-launcher' : 'eau-btn')?.click(); }
+        // Énergie, Eau, Déchets : panneau du module monté dans le même panneau que les autres tableaux de bord.
         else this.toggle(id as DashId);
-        document.body.classList.remove('sidebar-open');
-        $('btn-sidebar').setAttribute('aria-expanded', 'false');
+        d.closeSidebar();
         this.syncSidebar();
       });
     }
     $('dash-close').addEventListener('click', () => this.close());
+    // Bouton ✕ intégré au panneau Énergie : ferme le tableau de bord qui l'héberge.
+    this.body.addEventListener('elec-close', () => this.close());
+    // Tiroirs de construction (Énergie, Eau, Déchets) : « Tableau de bord » ouvre le même panneau.
+    window.addEventListener('ui:open-dash', (e) => { const id = (e as CustomEvent<DashId>).detail; if (id && id in META) this.open(id); });
     $('dash-fold').addEventListener('click', () => this.panel.classList.toggle('folded'));
     $('btn-stats').addEventListener('click', () => this.toggle('stats'));
     $('btn-notif').addEventListener('click', () => this.toggle('notifications'));
@@ -129,12 +144,19 @@ export class Dashboards {
     for (const b of Array.from(this.sidebar.querySelectorAll<HTMLButtonElement>('button[data-dash]'))) b.classList.toggle('active', b.dataset['dash'] === open);
     $('btn-stats').classList.toggle('active', this.current === 'stats');
     $('btn-notif').classList.toggle('active', this.current === 'notifications');
+    // Raccourcis du menu latéral (téléphone) : même état actif que le bouton de la barre du haut.
+    for (const b of Array.from(this.sidebar.querySelectorAll<HTMLButtonElement>('button[data-proxy]'))) {
+      const p = b.dataset['proxy'];
+      b.classList.toggle('active', (p === 'btn-stats' && this.current === 'stats') || (p === 'btn-notif' && this.current === 'notifications'));
+    }
   }
 
   toggle(id: DashId): void { if (this.current === id && !this.panel.classList.contains('hidden')) this.close(); else this.open(id); }
 
   open(id: DashId, tab?: string): void {
     this.d.opened('dash');
+    closeFloatingModulePanels();
+    if (this.current && this.current !== id) this.unmountModule();
     this.current = id;
     if (tab) this.tab[id] = tab;
     const m = META[id];
@@ -223,7 +245,7 @@ export class Dashboards {
       environment: [{ id: 'env', label: 'Qualité' }],
       stats: [{ id: 'pop', label: 'Habitants' }, { id: 'money', label: 'Trésorerie' }, { id: 'happy', label: 'Satisfaction' }, { id: 'jobs', label: 'Emploi' }],
       notifications: [{ id: 'log', label: 'Journal' }],
-      policy: [], research: [],
+      policy: [], research: [], energy: [], water: [], waste: [],
     };
     const mods = UI_PANELS.filter((p) => typeof p.mount === 'function' && (MODULE_DASH[p.id] ?? 'city') === id).map((p) => ({ id: `mod:${p.id}`, label: p.title, module: p }));
     return [...base[id], ...mods];
@@ -250,7 +272,7 @@ export class Dashboards {
       case 'environment': return this.buildEnvironment(r, m);
       case 'stats': return this.buildStats(r, tab);
       case 'notifications': return this.buildNotifications();
-      case 'policy': case 'research': return []; // contenu : panneau du module (politiques / recherche)
+      case 'policy': case 'research': case 'energy': case 'water': case 'waste': return []; // contenu : panneau du module
     }
   }
 
@@ -281,11 +303,10 @@ export class Dashboards {
         act(cam.mode === 'street' ? 'Vue aérienne' : 'Vue rue', 'walk', () => { this.d.toggleCamera(); this.render(true); }, 'Basculer vue aérienne / vue rue (touche V)', 'street'),
         act('Survol', 'plane', () => cam.toggleCinematic(), 'Survol cinématique (touche C)', 'cine'))));
     }
-    // Modules de phase 2 enregistrés sans panneau livré.
+    // Modules enregistrés sans panneau livré.
     const pending = UI_PANELS.filter((p) => typeof p.mount !== 'function');
     if (pending.length) {
-      out.push(...this.section('Modules de phase 2', el('ul', { cls: 'mod-list' }, ...pending.map((p) => el('li', {}, el('span', { text: p.title }), el('span', { cls: 'phase', text: `Phase ${p.phase}` }))))));
-      out.push(el('p', { cls: 'muted small', text: 'Leur panneau apparaîtra ici (ou dans Transports) dès que le module le fournit.' }));
+      out.push(...this.section('Bientôt disponible', el('ul', { cls: 'mod-list' }, ...pending.map((p) => el('li', {}, el('span', { text: p.title }))))));
     }
     return out;
   }
@@ -343,7 +364,7 @@ export class Dashboards {
         el('dt', { text: 'Trajets arrivés' }), el('dd', { text: fmt(t.arrived) }),
         el('dt', { text: 'Bâtiments reliés au réseau' }), el('dd', { text: `${fmt(t.connectedBuildings)}${s ? ` / ${fmt(s.buildings)}` : ''}` }),
         el('dt', { text: 'Trajets des habitants vers le trafic' }), el('dd', { text: fmt(t.tripsFromCitizens) })),
-      el('p', { cls: 'muted small', text: 'Bus, tramway, port et aéroport : phase 2C. La gare se construit depuis la barre d’outils Transports.' }),
+      el('p', { cls: 'muted small', text: 'La gare, le port et l’aéroport se construisent depuis la barre d’outils Transports. Bus et tramway : bientôt.' }),
     ];
   }
 
@@ -356,7 +377,7 @@ export class Dashboards {
       el('div', { cls: 'kpis' }, this.kpi('Attractivité', pct(d.attractiveness)), this.kpi('Pollution moyenne', d.pollution.toLocaleString('fr-FR', { maximumFractionDigits: 2 }))),
       el('div', { cls: 'act-bars' }, barRow('Attractivité', d.attractiveness, 1, pct(d.attractiveness)), ...(leisure !== undefined ? [barRow('Accès aux loisirs', leisure, 1, pct(leisure))] : [])),
       el('dl', { cls: 'rows' }, el('dt', { text: 'Parcs et espaces verts' }), el('dd', { text: fmt(parks) })),
-      el('p', { cls: 'muted small', text: 'Pollution : indice moyen subi par les habitants (sources industrielles, rayon 400 m). Qualité de l’air, de l’eau et du bruit détaillée : phase 2B.' }),
+      el('p', { cls: 'muted small', text: 'Pollution : indice moyen subi par les habitants (sources industrielles, rayon 400 m).' }),
     ];
   }
 

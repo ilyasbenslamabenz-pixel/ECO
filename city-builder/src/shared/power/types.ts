@@ -159,7 +159,7 @@ export interface ElectriciteBudget {
   /** Entretien mensuel nominal des lignes et du réseau (avant financement) et dépense réelle (après). */
   upkeepNominal: number;
   upkeepActual: number;
-  /** Entretien des centrales et postes facturé par la simulation de base (catalogue). */
+  /** Entretien des centrales et postes facturé par la simulation de base (catalogue), en centimes comme les autres montants. */
   facilitiesUpkeep: number;
   /** Recettes du mois passé (vente d'électricité). */
   lastIncome: number;

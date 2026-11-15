@@ -120,6 +120,16 @@ export function normalizeSettings(cur: WaterSettings, p: Partial<WaterSettings>)
   };
 }
 
+/**
+ * Facteur de demande des restrictions d'eau. Le réglage du service (`restrictions`, −20 %) et la politique
+ * « Restrictions d'eau » (facteur de gouvernance, −20 %) décrivent la même mesure : elle ne s'applique qu'une fois
+ * (le plus fort des deux), au lieu de −36 % quand les deux sont actifs.
+ */
+export function waterRestrictionFactor(settingOn: boolean, governanceFactor: number): number {
+  const g = Number.isFinite(governanceFactor) && governanceFactor > 0 ? governanceFactor : 1;
+  return Math.min(settingOn ? 0.8 : 1, g);
+}
+
 export class WaterSystem {
   active = false;
   settings: WaterSettings = { ...DEFAULT_WATER_SETTINGS };
@@ -265,7 +275,12 @@ export class WaterSystem {
   private topologyKey(ctx: PluginContext): string {
     const st = ctx.buildings.store;
     let h = 2166136261;
-    for (let i = 0; i < ctx.buildings.count; i++) { h ^= st.id[i]!; h = Math.imul(h, 16777619); }
+    // Identifiant ET position : un bâtiment déplacé (outil Déplacer, même identifiant) doit être rebranché.
+    for (let i = 0; i < ctx.buildings.count; i++) {
+      h ^= st.id[i]!; h = Math.imul(h, 16777619);
+      h ^= Math.round(st.x[i]! * 10); h = Math.imul(h, 16777619);
+      h ^= Math.round(st.z[i]! * 10); h = Math.imul(h, 16777619);
+    }
     return `${ctx.roads.version}|${ctx.buildings.count}|${h >>> 0}`;
   }
 
@@ -468,12 +483,13 @@ export class WaterSystem {
     const nodeDemand = new Float64Array(nRoad);
     const demand = new Float64Array(this.consumers.length);
     let totalDemand = 0;
-    const govWater = governanceModifiers((n) => ctx.use(n)).waterDemandFactor; // politique « restrictions d'eau »
+    const restrict = waterRestrictionFactor(s.restrictions, governanceModifiers((n) => ctx.use(n)).waterDemandFactor);
+    const sNoRestrict = { tariff: s.tariff, restrictions: false };
     for (let i = 0; i < this.consumers.length; i++) {
       const c = this.consumers[i]!;
       const bi = ctx.buildings.indexOf(c.id);
       const res = bi >= 0 ? st.residents[bi]! : 0, wk = bi >= 0 ? st.workers[bi]! : 0;
-      const d = buildingDemand(c.category, res, wk, hour, s) * govWater;
+      const d = buildingDemand(c.category, res, wk, hour, sNoRestrict) * restrict;
       demand[i] = d;
       totalDemand += d;
       if (c.road >= 0) nodeDemand[this.roadIndex.get(c.road)!]! += d;
@@ -981,7 +997,11 @@ export class WaterSystem {
   growthAllowed(id: number): boolean {
     if (!this.active) return true;
     const st = this.buildingState(id);
-    return st ? st.growthAllowed : true;
+    if (st) return st.growthAllowed;
+    // Juste après un chargement, les branchements ne sont reconstruits qu'à la prochaine heure : la desserte
+    // sauvegardée (moyenne glissante) fait foi en attendant.
+    const ema = this.servedEma.get(id);
+    return ema === undefined ? true : ema >= SERVED_THRESHOLD;
   }
 
   facilityStates(): WaterFacilityState[] {

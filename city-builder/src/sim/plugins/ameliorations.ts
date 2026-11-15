@@ -79,7 +79,7 @@ export function createAmeliorationsPlugin(): SimPlugin & { readonly state: () =>
         const cost = costOf(ctx, id, lv);
         if (ctx.economy.money < cost) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: `Fonds insuffisants (${cost} CHF requis)` };
         if (p['dryRun'] === true) return { ok: true, data: { ...info(ctx, id), cost } };
-        ctx.economy.applyService(-cost);
+        ctx.economy.applyService(-cost, true);
         levels.set(id, lv + 1);
         version++;
         ctx.notify('info', `${ctx.buildings.assetOf(id)?.nameFr ?? 'Équipement'} amélioré au niveau ${lv + 1} : rayon ×${levelRadius(lv + 1).toFixed(2)}, capacité ×${levelCapacity(lv + 1).toFixed(1)}`);

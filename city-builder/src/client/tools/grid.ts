@@ -126,6 +126,25 @@ export function uncoveredPieces(l: [number, number, number, number], mirror: Wor
   return out;
 }
 
+/**
+ * Vrai si tous les sommets de la polyligne `poly` sont à moins de `tol` d'UNE même polyligne de `paths`
+ * (dans son étendue). Sert à retrouver les morceaux d'un tracé découpé par des croisements posés depuis.
+ */
+export function polyOnPaths(poly: ArrayLike<number>, paths: readonly (readonly number[])[], tol = 0.75): boolean {
+  const n = poly.length;
+  if (n < 4) return false;
+  const near = (px: number, pz: number, p: readonly number[]): boolean => {
+    for (let k = 0; k + 3 < p.length; k += 2) {
+      const ax = p[k]!, az = p[k + 1]!, ex = p[k + 2]! - ax, ez = p[k + 3]! - az;
+      const l2 = ex * ex + ez * ez;
+      const t = l2 > 1e-9 ? Math.max(0, Math.min(1, ((px - ax) * ex + (pz - az) * ez) / l2)) : 0;
+      if (Math.hypot(ax + ex * t - px, az + ez * t - pz) <= tol) return true;
+    }
+    return false;
+  };
+  return paths.some((p) => { for (let i = 0; i + 1 < n; i += 2) if (!near(poly[i]!, poly[i + 1]!, p)) return false; return true; });
+}
+
 /** Vrai si le tronçon (polyligne) est posé sur l'une des rues du quadrillage (pour l'annulation groupée). */
 export function edgeOnGrid(poly: ArrayLike<number>, g: { x0: number; z0: number; x1: number; z1: number; block: number; angle?: number; ox?: number; oz?: number }): boolean {
   const n = poly.length;

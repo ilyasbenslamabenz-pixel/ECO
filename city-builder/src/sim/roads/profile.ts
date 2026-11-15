@@ -33,6 +33,8 @@ export const BRIDGE_MIN_HEIGHT = 3.2;
 export const PROFILE_STEP = 4;
 /** Longueur de pont maximale (m). */
 export const MAX_BRIDGE_LENGTH = 600;
+/** Allongement estimé d'un pont au-delà de l'eau franchie (culées, rampes), pour décider d'une réunion de bras (m). */
+const BRIDGE_JOIN_MARGIN = 32;
 /** Espacement cible des piles de pont (m). */
 export const PIER_SPACING = 32;
 /** Pas des hauteurs imposées pendant le tracé (boutons ▲ / ▼), en m. */
@@ -114,19 +116,35 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
   const g = maxGrade * step * 0.98;
   const lower = new Float64Array(count).fill(-Infinity);
   for (let i = 0; i < count; i++) if (ground[i]! < wl[i]! + 0.4) lower[i] = wl[i]! + BRIDGE_CLEARANCE;
-  // Tablier à plat au-dessus de l'eau, prolongé de ~8 m sur chaque rive (culées) : pas de pointe au sommet du pont.
+  // Tablier à plat au-dessus de l'eau, prolongé sur chaque rive (culées) : pas de pointe au sommet du pont.
+  // Prolongement limité : 4 m par rive, jusqu'à 8 m pour un bras étroit (tablier plat d'au moins ~24 m).
+  const wetMask = new Uint8Array(count);
+  for (let i = 0; i < count; i++) if (lower[i] !== -Infinity) wetMask[i] = 1;
   {
-    const ext = Math.max(1, Math.round(8 / step));
     const base = lower.slice();
-    for (let i = 0; i < count; i++) {
-      if (base[i] === -Infinity) continue;
-      for (let k = -ext; k <= ext; k++) { const j = i + k; if (j >= 0 && j < count) lower[j] = Math.max(lower[j]!, base[i]!); }
+    let s0 = -1;
+    for (let i = 0; i <= count; i++) {
+      const on = i < count && wetMask[i] === 1;
+      if (on && s0 < 0) s0 = i;
+      if (on || s0 < 0) continue;
+      const span = (i - s0) * step;
+      const ext = Math.max(1, Math.round(Math.min(8, Math.max(4, (24 - span) / 2)) / step));
+      for (let j = s0; j < i; j++) {
+        for (let k = -ext; k <= ext; k++) { const q = j + k; if (q >= 0 && q < count) lower[q] = Math.max(lower[q]!, base[j]!); }
+      }
+      s0 = -1;
     }
-    // Plat continu entre deux sections mouillées proches (moins de 24 m) : un seul tablier.
-    let last = -1;
+    // Plat continu entre deux sections mouillées proches (moins de 24 m) : un seul tablier, sauf si le pont
+    // ainsi formé dépasserait la longueur maximale.
+    let last = -1, runStart = -1;
     for (let i = 0; i < count; i++) {
-      if (base[i] === -Infinity) continue;
-      if (last >= 0 && i - last > 1 && (i - last) * step <= 24) { const v = Math.max(base[last]!, base[i]!); for (let j = last + 1; j < i; j++) lower[j] = Math.max(lower[j]!, v); }
+      if (!wetMask[i]) continue;
+      if (runStart < 0) runStart = i;
+      if (last >= 0 && i - last > 1) {
+        if ((i - last) * step <= 24 && (i - runStart + 1) * step + BRIDGE_JOIN_MARGIN <= MAX_BRIDGE_LENGTH) {
+          const v = Math.max(base[last]!, base[i]!); for (let j = last + 1; j < i; j++) lower[j] = Math.max(lower[j]!, v);
+        } else runStart = i;
+      }
       last = i;
     }
   }
@@ -166,11 +184,9 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
     const grow = Math.max(1, Math.round(16 / step));
     const z2 = zone.slice();
     for (let i = 0; i < count; i++) if (zone[i]) for (let k = -grow; k <= grow; k++) { const j = i + k; if (j > 0 && j < count - 1) z2[j] = 1; }
-    let a = 1;
-    while (a < count - 1) {
-      if (!z2[a]) { a++; continue; }
-      let b = a;
-      while (b + 1 < count - 1 && z2[b + 1]) b++;
+    // Comblement d'une plage [a, b] : niveau = min des plus hauts points à gauche et à droite, puis arrondi.
+    const fill = (a: number, b: number): void => {
+      if (b < a) return;
       const L = new Float64Array(b - a + 1), R = new Float64Array(b - a + 1);
       let m = -Infinity;
       for (let i = a; i <= b; i++) { m = Math.max(m, h[i]!); L[i - a] = m; }
@@ -178,6 +194,38 @@ export function computeProfile(curve: Cubic, arc: ArcTable, hA: number, hB: numb
       for (let i = b; i >= a; i--) { m = Math.max(m, h[i]!); R[i - a] = m; }
       for (let i = a; i <= b; i++) h[i] = Math.max(h[i]!, Math.min(L[i - a]!, R[i - a]!));
       for (let pass = 0; pass < 12; pass++) for (let i = Math.max(1, a); i <= Math.min(count - 2, b); i++) h[i] = Math.max((h[i - 1]! + 2 * h[i]! + h[i + 1]!) / 4, lowerOrig[i]! > -Infinity ? Math.min(lowerOrig[i]!, h[i]!) : -Infinity);
+    };
+    let a = 1;
+    while (a < count - 1) {
+      if (!z2[a]) { a++; continue; }
+      let b = a;
+      while (b + 1 < count - 1 && z2[b + 1]) b++;
+      // Plusieurs bras d'eau dans la même zone : on ne les réunit en un seul tablier que si la chaussée ne
+      // retrouve pas le sol entre eux (sinon deux ponts distincts, la route repose sur l'île) et si le pont
+      // réuni ne dépasse pas la longueur maximale. Sinon la zone est coupée au point le plus bas entre eux.
+      const clusters: [number, number][] = [];
+      for (let i = a; i <= b; i++) {
+        if (!wetMask[i]) continue;
+        const c = clusters[clusters.length - 1];
+        if (c && c[1] === i - 1) c[1] = i; else clusters.push([i, i]);
+      }
+      let from = a, groupFirst = clusters.length ? clusters[0]![0] : a;
+      for (let k = 1; k < clusters.length; k++) {
+        const g0 = clusters[k - 1]![1] + 1, g1 = clusters[k]![0] - 1;
+        let grounded = 0, cut = g0, best = Infinity;
+        for (let i = g0; i <= g1; i++) {
+          const above = h[i]! - ground[i]!;
+          if (above <= BRIDGE_MIN_HEIGHT) grounded++;
+          if (above < best) { best = above; cut = i; }
+        }
+        const merged = (clusters[k]![1] - groupFirst + 1) * step + BRIDGE_JOIN_MARGIN;
+        if (grounded * step >= 16 || merged > MAX_BRIDGE_LENGTH) {
+          fill(from, cut - 1);
+          from = cut + 1;
+          groupFirst = clusters[k]![0];
+        }
+      }
+      fill(from, b);
       a = b + 1;
     }
     for (let pass = 0; pass < 3; pass++) {

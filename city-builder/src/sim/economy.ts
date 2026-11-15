@@ -89,8 +89,16 @@ export interface Forecast {
   totalIncome: number;
   expenses: ExpenseBreakdown;
   totalExpenses: number;
+  /**
+   * Solde mensuel prévu COMPLET : impôts + services municipaux récurrents (électricité, eau, déchets, politiques,
+   * recherche…) − entretien − salaires − échéances d'emprunt. = `baseBalance + services`.
+   */
   balance: number;
-  /** Trésorerie projetée en fin de chacun des 12 prochains mois (état actuel inchangé). */
+  /** Solde net mensuel prévu des services municipaux récurrents (hors montants ponctuels : investissements, primes). */
+  services: number;
+  /** Solde hors services : impôts − entretien − salaires − échéances (`totalIncome − totalExpenses`). */
+  baseBalance: number;
+  /** Trésorerie projetée en fin de chacun des 12 prochains mois (état actuel inchangé, services compris). */
   projection: number[];
   /** Mois avant trésorerie négative selon la projection (-1 si jamais sur 12 mois). */
   monthsUntilNegative: number;
@@ -122,7 +130,13 @@ export interface EconomyJSON {
   history: MonthRecord[];
   monthsInDeficit: number;
   bankrupt: boolean;
-  month: { construction: number; refunds: number; loansTaken: number; operating?: number; hours?: number; acc?: { income: Record<TaxSector, number>; buildings: number; roads: number; salaries: number }; services?: number; lastServices?: number };
+  month: { construction: number; refunds: number; loansTaken: number; operating?: number; hours?: number; acc?: { income: Record<TaxSector, number>; buildings: number; roads: number; salaries: number }; services?: number; lastServices?: number; servicesRecurring?: number; lastServicesRecurring?: number | null };
+  /**
+   * Assiettes fiscales et effectif des services en vigueur (fixés chaque jour / mois par la démographie). Absents des
+   * anciennes sauvegardes : recalculés depuis la population au chargement (partie alors légèrement différente).
+   */
+  taxBase?: Record<TaxSector, number>;
+  serviceWorkers?: number;
 }
 
 const zeroSectors = (): Record<TaxSector, number> => ({ residential: 0, commercial: 0, industrial: 0, office: 0 });
@@ -155,6 +169,9 @@ export class Economy {
   /** Solde des services des modules versé ce mois-ci (appliqué au fil de l'eau). */
   private monthServices = 0;
   private lastServices = 0;
+  /** Part RÉCURRENTE de ces soldes (hors investissements, primes, travaux ponctuels) : base des prévisions. */
+  private monthServicesRecurring = 0;
+  private lastServicesRecurring: number | null = null;
   private monthLoans = 0;
   /** Solde d'exploitation déjà versé heure par heure ce mois-ci (recettes − entretien − salaires). */
   private monthOperating = 0;
@@ -178,6 +195,8 @@ export class Economy {
     this.monthRefunds = 0;
     this.lastServices = 0;
     this.monthServices = 0;
+    this.monthServicesRecurring = 0;
+    this.lastServicesRecurring = null;
     this.monthLoans = 0;
     this.monthOperating = 0;
     this.monthHours = 0;
@@ -200,7 +219,18 @@ export class Economy {
     return s;
   }
 
-  get monthlyBalance(): number { return this.forecastBalance(); }
+  /** Solde mensuel prévu complet (impôts, services récurrents, entretien, salaires, emprunts). */
+  get monthlyBalance(): number { return this.forecastBalance() + this.servicesForecast(); }
+
+  /**
+   * Solde net mensuel prévu des services récurrents : celui du dernier mois clos (les clôtures mensuelles des modules
+   * tombent au début du mois suivant, un mois clos contient donc un cycle complet) ; avant le premier mois clos,
+   * extrapolation du mois en cours.
+   */
+  servicesForecast(): number {
+    if (this.lastServicesRecurring !== null) return this.lastServicesRecurring;
+    return this.monthHours > 0 ? (this.monthServicesRecurring * HOURS_PER_MONTH) / this.monthHours : 0;
+  }
 
   canAfford(cost: number): boolean { return !this.bankrupt && this.money >= cost; }
   spend(cost: number): void { this.money -= cost; this.monthConstruction += cost; }
@@ -209,10 +239,12 @@ export class Economy {
    * Recette (+) ou dépense (−) d'un service municipal (modules électricité, eau, déchets, port/aéroport),
    * appliquée tout de suite à la trésorerie et cumulée dans le bilan du mois (`services`).
    */
-  applyService(amount: number): void {
+  applyService(amount: number, oneOff = false): void {
     if (!Number.isFinite(amount) || amount === 0) return;
     this.money += amount;
     this.monthServices += amount;
+    // Montant ponctuel (investissement, prime, travaux) : compté dans le bilan, pas dans les prévisions.
+    if (!oneOff) this.monthServicesRecurring += amount;
   }
 
   addUpkeep(v: number, kind: 'buildings' | 'roads' = 'buildings'): void {
@@ -263,6 +295,7 @@ export class Economy {
     for (const s of TAX_SECTORS) { income[s] = r2(this.taxIncome(s)); totalIncome += this.taxIncome(s); }
     const e = this.expenses();
     const totalExpenses = e.buildings + e.roads + e.salaries + e.loanInterest + e.loanPrincipal;
+    const services = this.servicesForecast();
     // Projection sur 12 mois avec amortissement réel des emprunts (copie locale).
     const loans = this.loans.map((l) => ({ ...l }));
     let money = this.money;
@@ -277,14 +310,15 @@ export class Economy {
         l.remaining -= pay - i;
         loanPay += pay;
       }
-      money += totalIncome - (e.buildings + e.roads + e.salaries) - loanPay;
+      money += totalIncome + services - (e.buildings + e.roads + e.salaries) - loanPay;
       projection.push(Math.round(money));
       if (money < 0 && monthsUntilNegative < 0) monthsUntilNegative = m + 1;
     }
     return {
       income, totalIncome: r2(totalIncome),
       expenses: { buildings: r2(e.buildings), roads: r2(e.roads), salaries: r2(e.salaries), loanInterest: r2(e.loanInterest), loanPrincipal: r2(e.loanPrincipal) },
-      totalExpenses: r2(totalExpenses), balance: r2(totalIncome - totalExpenses), projection, monthsUntilNegative,
+      totalExpenses: r2(totalExpenses), balance: r2(totalIncome - totalExpenses + services), services: r2(services),
+      baseBalance: r2(totalIncome - totalExpenses), projection, monthsUntilNegative,
     };
   }
 
@@ -367,8 +401,9 @@ export class Economy {
 
   /** Solde d'exploitation horaire courant (affichage « / h »). */
   get hourlyBalance(): number {
-    // Services municipaux : moyenne horaire du mois en cours (ou du dernier mois clos en début de mois).
-    const svc = this.monthHours > 0 ? this.monthServices / this.monthHours : this.lastServices / HOURS_PER_MONTH;
+    // Services municipaux récurrents au prorata horaire (les montants ponctuels et les clôtures mensuelles versées
+    // d'un coup en début de mois ne faussent plus le solde horaire).
+    const svc = this.servicesForecast() / HOURS_PER_MONTH;
     return (this.monthlyIncome - (this.effBuildings + this.effRoads + this.salaries())) / HOURS_PER_MONTH + svc;
   }
 
@@ -429,6 +464,8 @@ export class Economy {
     this.monthRefunds = 0;
     this.lastServices = this.monthServices;
     this.monthServices = 0;
+    this.lastServicesRecurring = this.monthServicesRecurring;
+    this.monthServicesRecurring = 0;
     this.monthLoans = 0;
     return rec;
   }
@@ -438,7 +475,8 @@ export class Economy {
       money: this.money, taxRates: { ...this.taxRates }, loans: this.loans.map((l) => ({ ...l })), nextLoanId: this.nextLoanId,
       history: this.history.map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } })),
       monthsInDeficit: this.monthsInDeficit, bankrupt: this.bankrupt,
-      month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans, operating: this.monthOperating, hours: this.monthHours, acc: { ...this.acc, income: { ...this.acc.income } }, services: this.monthServices, lastServices: this.lastServices },
+      month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans, operating: this.monthOperating, hours: this.monthHours, acc: { ...this.acc, income: { ...this.acc.income } }, services: this.monthServices, lastServices: this.lastServices, servicesRecurring: this.monthServicesRecurring, lastServicesRecurring: this.lastServicesRecurring },
+      taxBase: { ...this.taxBase }, serviceWorkers: this.serviceWorkers,
     };
   }
 
@@ -458,7 +496,19 @@ export class Economy {
     this.monthHours = j.month.hours ?? 0;
     this.monthServices = j.month.services ?? 0;
     this.lastServices = j.month.lastServices ?? 0;
+    // Anciennes sauvegardes : pas de distinction récurrent / ponctuel, le dernier solde des services fait foi.
+    this.monthServicesRecurring = j.month.servicesRecurring ?? this.monthServices;
+    this.lastServicesRecurring = j.month.lastServicesRecurring !== undefined ? j.month.lastServicesRecurring
+      : j.month.lastServices !== undefined && j.history.length > 0 ? j.month.lastServices : null;
     this.acc = j.month.acc ? { ...j.month.acc, income: { ...zeroSectors(), ...j.month.acc.income } } : { income: zeroSectors(), buildings: 0, roads: 0, salaries: 0 };
+    const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    for (const s of TAX_SECTORS) this.taxBase[s] = fin(j.taxBase?.[s]) ? j.taxBase[s] : 0;
+    this.serviceWorkers = fin(j.serviceWorkers) ? j.serviceWorkers : 0;
+  }
+
+  /** Vrai si la sauvegarde relue contenait les assiettes (sinon le monde les recalcule depuis la population). */
+  static hasTaxBase(j: EconomyJSON): boolean {
+    return typeof j.taxBase === 'object' && j.taxBase !== null && typeof j.serviceWorkers === 'number';
   }
 }
 

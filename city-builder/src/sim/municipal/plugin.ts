@@ -20,7 +20,7 @@ import { DEFAULT_CELL_SIZE, Municipal, MUNICIPAL_SERVICE } from './municipal';
  * Accès facultatif au bilan mensuel de l'économie de base. N'existe PAS encore dans `PluginContext` :
  * demandé dans docs/requests/municipal.md. Dès que le cœur l'ajoute, le miroir budgétaire s'active seul.
  */
-interface EconomyAccess { economy?: { lastMonth(): EconomyMonthLike | undefined } }
+interface EconomyAccess { economy?: { lastMonth(): EconomyMonthLike | undefined; applyService?(amount: number, oneOff?: boolean): void } }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
@@ -59,7 +59,7 @@ export function createMunicipalPlugin(opts: MunicipalPluginOptions = {}): SimPlu
       muni.scheduler.log = (m) => { console.error(m); };
       muni.economySource = () => (ctx as PluginContext & EconomyAccess).economy?.lastMonth();
       // Lignes des modules (électricité, déchets, port/aéroport…) appliquées à la trésorerie au fil de l'eau.
-      muni.onModuleMoney = (v) => (ctx as PluginContext & EconomyAccess).economy?.applyService?.(v);
+      muni.onModuleMoney = (v, oneOff) => (ctx as PluginContext & EconomyAccess).economy?.applyService?.(v, oneOff);
     },
 
     onNewGame(ctx) {

@@ -10,6 +10,8 @@
  */
 import type { SecteursService } from './plugins/secteurs';
 import type { AmeliorationsService } from './plugins/ameliorations';
+import type { ZonagePlugin } from './plugins/zonage';
+import { ZONAGE_ID } from '../shared/protocol-ext/zonage';
 import {
   CHUNK_SIZE,
   GAME_MINUTES_PER_TICK,
@@ -117,6 +119,9 @@ export function distSegmentRect(ax: number, az: number, bx: number, bz: number, 
     distPointSegment(minX, maxZ, ax, az, bx, bz), distPointSegment(maxX, maxZ, ax, az, bx, bz));
 }
 
+/** Reçu de démolition (annulation neutre) : ce qu'il faut rendre pour reconstruire. */
+type RestoreReceipt = { what: 'building'; assetId: string; refund: number; private: boolean } | { what: 'road'; kind: RoadKindId; refund: number };
+
 export class Simulation {
   /** Modules de phase 2 (registre src/sim/plugins/index.ts ; les tests peuvent injecter leur propre liste). */
   readonly plugins: PluginHost;
@@ -159,6 +164,17 @@ export class Simulation {
   private readonly obbs = new Map<number, Obb>();
   /** Catégorie du modèle de chaque bâtiment (écart minimal autour des maisons). */
   private readonly categoryOf = new Map<number, string>();
+  /**
+   * Bâtiments PRIVÉS (promotion privée : nés du zonage, jamais payés par la ville) : aucun remboursement à la
+   * démolition. Sauvegardé (champ `privateBuildings`) ; repli pour les anciennes sauvegardes : lots du zonage.
+   */
+  private readonly privateIds = new Set<number>();
+  /**
+   * Reçus de démolition (annulation neutre, en mémoire seulement : la pile d'annulation du client est vidée à chaque
+   * instantané) : jeton -> ce qu'il faut rendre pour reconstruire (le remboursement perçu, rien pour le privé).
+   */
+  private readonly restoreReceipts = new Map<number, RestoreReceipt>();
+  private nextRestoreToken = 1;
   private tilesPerSide = 0;
   private nextBuildingId = 1;
   private roadLength = 0;
@@ -247,6 +263,8 @@ export class Simulation {
     this.tilesPerSide = this.terrain.samplesX - 1;
     this.obbs.clear();
     this.categoryOf.clear();
+    this.privateIds.clear();
+    this.restoreReceipts.clear();
     const size = this.tilesPerSide * TILE_SIZE;
     this.buildingIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
     this.edgeIndex = new ChunkIndex(this.terrain.originX, this.terrain.originZ, size, CHUNK_SIZE);
@@ -480,16 +498,21 @@ export class Simulation {
     if (hMin < t.waterLevel + 0.3) return fail('UNDER_WATER', 'Impossible de construire dans l\'eau');
     const span = Math.max(asset.footprint.tilesX, asset.footprint.tilesZ) * TILE_SIZE;
     if ((hMax - hMin) / span > MAX_BUILDING_SLOPE) return fail('TOO_STEEP', 'Terrain trop pentu pour ce bâtiment');
-    if (!privateDev) {
+    // Annulation d'une démolition : on ne rend que ce qui a été remboursé (rien pour un bâtiment privé).
+    const rc = !privateDev && a.restoreToken !== undefined ? this.restoreReceipts.get(a.restoreToken) : undefined;
+    const receipt = rc && rc.what === 'building' && rc.assetId === asset.id ? rc : undefined;
+    const cost = privateDev ? 0 : receipt ? receipt.refund : asset.cost;
+    if (!privateDev && !(receipt && cost === 0)) {
       if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
-      if (!this.economy.canAfford(asset.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${asset.cost} crédits requis)`);
+      if (!this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
     }
-    const cost = privateDev ? 0 : asset.cost;
     if (a.dryRun) return { ok: true, data: { buildingId: 0, cost } };
 
     const id = this.nextBuildingId++;
     const y = hSum / n;
     this.insertBuilding({ id, assetId: asset.id, variant, x, z, y, rot });
+    if (privateDev || receipt?.private) this.privateIds.add(id);
+    if (receipt) this.restoreReceipts.delete(a.restoreToken!);
     if (cost > 0) this.economy.spend(cost);
     return { ok: true, data: { buildingId: id, cost } };
   }
@@ -529,6 +552,9 @@ export class Simulation {
     this.demography?.markCoverageDirty();
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;
+    // Accès du trafic (point d'entrée sur la voirie, départs et arrivées) recalculés tout de suite, pas à la
+    // prochaine synchronisation : les trajets partent de la nouvelle position.
+    this.onEvent(SimEvent.TrafficSync);
     // Rendu et miroir du client : retiré puis rajouté avec le même identifiant.
     this.pendingBuildingsRemoved.push(id);
     this.pendingBuildingsAdded.push({ id, assetId: asset.id, variant: st.variant[i]!, x, z, y, rot });
@@ -595,13 +621,28 @@ export class Simulation {
     this.buildings.remove(a.buildingId);
     this.buildingIndex.remove(a.buildingId);
     this.economy.removeUpkeep(asset.upkeepPerMonth, 'buildings');
-    const refund = privateDev ? 0 : Math.round(asset.cost * DEMOLISH_REFUND_RATE);
+    // Bâtiment privé (né du zonage, jamais payé par la ville) : aucun remboursement, même démoli par le joueur.
+    const wasPrivate = this.privateIds.delete(a.buildingId);
+    const refund = privateDev || wasPrivate ? 0 : Math.round(asset.cost * DEMOLISH_REFUND_RATE);
     if (refund > 0) this.economy.refund(refund);
     this.pendingBuildingsRemoved.push(a.buildingId);
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;
     if (displaced > 0 && !privateDev) this.notify('warn', `${asset.nameFr} démoli : ${displaced} habitant(s) relogé(s) ou partis`);
-    return { ok: true, data: { refund } };
+    if (privateDev) return { ok: true, data: { refund } };
+    const restoreToken = this.addReceipt({ what: 'building', assetId: asset.id, refund, private: wasPrivate });
+    return { ok: true, data: { refund, restoreToken } };
+  }
+
+  /** Bâtiment privé (né du zonage) : démolition sans remboursement. */
+  isPrivateBuilding(id: number): boolean { return this.privateIds.has(id); }
+
+  private addReceipt(r: RestoreReceipt): number {
+    const t = this.nextRestoreToken++;
+    this.restoreReceipts.set(t, r);
+    // Borné : au-delà, les plus anciens reçus sont oubliés (l'annulation retombe alors sur le prix catalogue).
+    if (this.restoreReceipts.size > 2000) this.restoreReceipts.delete(this.restoreReceipts.keys().next().value!);
+    return t;
   }
 
   /* ------------------------------ Routes ------------------------------ */
@@ -668,7 +709,11 @@ export class Simulation {
       cost += p.plan.cost;
       if (a.dryRun && a.elevation) path.push(...roadPreviewPath(this.net, p.plan));
     }
-    if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
+    // Annulation d'une suppression de tronçon : la reconstruction coûte le remboursement perçu, pas le prix plein.
+    const rc = a.restoreToken !== undefined ? this.restoreReceipts.get(a.restoreToken) : undefined;
+    const receipt = rc && rc.what === 'road' && rc.kind === kind ? rc : undefined;
+    if (receipt) cost = Math.min(cost, receipt.refund);
+    if (this.economy.bankrupt && !(receipt && cost === 0)) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
     if (!this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
     if (a.dryRun) return { ok: true, data: path.length ? { edgeIds: [], cost, path } : { edgeIds: [], cost } };
     // 2) Construction : chaque morceau est re-planifié sur le réseau modifié par le précédent.
@@ -685,6 +730,7 @@ export class Simulation {
       edgeIds.push(...c.segmentIds);
       spent += p.plan.cost;
     }
+    if (receipt) { spent = Math.min(spent, receipt.refund); this.restoreReceipts.delete(a.restoreToken!); }
     this.economy.spend(spent);
     this.applyNetworkChanges(true);
     return { ok: true, data: { edgeIds, cost: spent } };
@@ -769,7 +815,7 @@ export class Simulation {
     this.net.removeSegment(a.edgeId);
     this.economy.refund(refund);
     this.applyNetworkChanges(true);
-    return { ok: true, data: { refund } };
+    return { ok: true, data: { refund, restoreToken: this.addReceipt({ what: 'road', kind: info.kind, refund }) } };
   }
 
   /** Bâtiment qui gêne le plus une emprise de demi-largeur `half` le long de `curve` (outil « Améliorer »). */
@@ -1307,6 +1353,8 @@ export class Simulation {
     };
     // Éditions du terrain (champ facultatif, absent si aucune : format v2 inchangé, rejouées au chargement).
     if (this.terrainEdits.length) save.terrainEdits = this.terrainEdits.map((e) => ({ ...e }));
+    // Bâtiments privés (zonage : démolis sans remboursement), champ facultatif.
+    if (this.privateIds.size) (save as { privateBuildings?: number[] }).privateBuildings = [...this.privateIds].sort((x, y) => x - y);
     // Sections des modules (champ facultatif, absent si aucune) : sections inconnues conservées telles quelles.
     const plugins = this.plugins.save();
     if (plugins) save.plugins = plugins;
@@ -1395,14 +1443,26 @@ export class Simulation {
     } else {
       this.scheduleRecurring();
     }
-    // Assiettes fiscales et effectifs recalculés depuis la population restaurée.
-    const tb = this.demo.computeTaxBase(false);
-    Object.assign(this.economy.taxBase, tb.taxBase);
-    this.economy.serviceWorkers = tb.serviceWorkers;
+    // Assiettes fiscales et effectifs : ceux de la sauvegarde (partie identique) ; anciennes sauvegardes : recalculés
+    // depuis la population restaurée.
+    if (!Economy.hasTaxBase(s.economy)) {
+      const tb = this.demo.computeTaxBase(false);
+      Object.assign(this.economy.taxBase, tb.taxBase);
+      this.economy.serviceWorkers = tb.serviceWorkers;
+    }
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;
     // Modules : après l'état de base ; une section en erreur est notifiée et n'empêche pas le chargement.
     this.plugins.load((s as SaveFileV2 & PluginSaveField).plugins);
+    // Bâtiments privés : champ de la sauvegarde ; anciennes sauvegardes sans ce champ : lots possédés par le zonage.
+    const priv = (s as { privateBuildings?: unknown }).privateBuildings;
+    if (Array.isArray(priv)) {
+      for (const id of priv) if (typeof id === 'number' && this.buildings.indexOf(id) >= 0) this.privateIds.add(id);
+    } else {
+      const zp = this.plugins.plugins.find((p) => p.id === ZONAGE_ID) as ZonagePlugin | undefined;
+      const zctx = this.plugins.contextOf(ZONAGE_ID);
+      if (zp?.systemOf && zctx) for (const id of zp.systemOf(zctx).owned.keys()) if (this.buildings.indexOf(id) >= 0) this.privateIds.add(id);
+    }
     this.clearPending();
     return null;
   }

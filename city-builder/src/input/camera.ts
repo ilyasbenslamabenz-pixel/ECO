@@ -8,8 +8,8 @@
  *              R/F ou Page↑/Page↓ = incliner ; +/- = zoom ; T = vue de dessus ; N = nord en haut ;
  *              H = retour au point de départ ; C = mode cinématique (orbite lente) ;
  *   tactile  : 1 doigt = outil (ou déplacement avec l'outil Sélection) ; 2 doigts = déplacement
- *              du point milieu + pincer (zoom vers le milieu) + torsion (rotation) ;
- *              glisser vertical des 2 doigts ensemble = inclinaison.
+ *              du point milieu dans tous les sens + pincer (zoom vers le milieu) + torsion (rotation), quel que
+ *              soit l'outil ; inclinaison = 2 doigts posés immobiles ~0,35 s puis glissés verticalement ensemble.
  *   L'inclinaison suit automatiquement le zoom (vue plongeante de loin, rasante de près) ;
  *   le joueur garde un décalage personnel. Toutes les commandes visent une pose « but » que la
  *   caméra rejoint avec un amortissement exponentiel. Bornes de carte, distance et altitude
@@ -63,6 +63,18 @@ export function autoPitch(distance: number): number {
   const t = clamp((Math.log(distance) - Math.log(MIN_DISTANCE)) / (Math.log(MAX_DISTANCE) - Math.log(MIN_DISTANCE)), 0, 1);
   const s = t * t * (3 - 2 * t);
   return 0.2 + s * (1.12 - 0.2);
+}
+
+/** Durée (ms) pendant laquelle deux doigts doivent rester posés immobiles avant un glisser vertical = inclinaison. */
+export const TILT_HOLD_MS = 350;
+
+/**
+ * Geste à deux doigts : « tilt » seulement si les doigts sont restés immobiles `TILT_HOLD_MS` puis glissent
+ * verticalement ensemble (écart et angle quasi constants) ; sinon « free » (déplacement + pincer + torsion).
+ */
+export function classifyTwoFinger(acc: { mx: number; my: number; d: number; a: number }, heldMs: number): 'tilt' | 'free' {
+  const vertical = Math.abs(acc.my) > 2 * Math.abs(acc.mx) && Math.abs(acc.d) < 0.3 * Math.abs(acc.my) && Math.abs(acc.a) < 0.06;
+  return vertical && heldMs >= TILT_HOLD_MS ? 'tilt' : 'free';
 }
 
 /** Amortissement exponentiel indépendant de la fréquence d'images. */
@@ -129,8 +141,26 @@ export class CameraController implements ICameraController {
       this.quickKey(e.code);
     });
     on(window, 'keyup', (e) => this.keys.delete(e.code));
-    on(window, 'blur', () => { this.keys.clear(); this.pointers.clear(); this.gesture = 'none'; });
+    // Perte du focus (changement d'appli en plein geste, appel entrant, onglet masqué) : le geste en cours est
+    // abandonné ET l'outil prévenu (sinon le pinceau de terrain continuerait de peindre sans doigt posé).
+    on(window, 'blur', () => this.abortGestures());
+    const onVisibility = (): void => { if (document.hidden) this.abortGestures(); };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+      this.disposers.push(() => document.removeEventListener('visibilitychange', onVisibility));
+    }
     dom.style.touchAction = 'none';
+  }
+
+  /** Abandonne tout geste en cours (touches, pointeurs) ; un geste d'outil est annulé côté outil. */
+  abortGestures(): void {
+    const wasTool = this.gesture === 'tool';
+    this.keys.clear();
+    this.pointers.clear();
+    this.gesture = 'none';
+    this.pinchDirty = false;
+    this.flingV = null;
+    if (wasTool) this.toolSink?.cancel();
   }
 
   setModeListener(fn: (m: CameraMode) => void): void { this.onModeChange = fn; }
@@ -314,6 +344,8 @@ export class CameraController implements ICameraController {
   /* -------- Gestes tactiles d'appoint : double tap (zoom), tap à deux doigts (dézoom), élan du glissé -------- */
   private lastTap = { t: 0, x: 0, y: 0 };
   private pinchStart = 0;
+  /** Instant du premier mouvement notable des deux doigts (0 = encore immobiles). */
+  private pinchFirstMove = 0;
   private pinchTravel = 0;
   /** Vitesse du glissé à un doigt (px/ms) mesurée sur les derniers mouvements ; élan appliqué au relâcher. */
   private panVel = { vx: 0, vy: 0, t: 0 };
@@ -323,6 +355,7 @@ export class CameraController implements ICameraController {
     const [a, b] = [...this.pointers.values()];
     if (!a || !b) return;
     this.pinchMode = 'undecided';
+    this.pinchFirstMove = 0;
     this.pinchAcc = { mx: 0, my: 0, d: 0, a: 0 };
     this.pinchDirty = false;
     this.lastPinch = { dist: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x), midX: (a.x + b.x) / 2, midY: (a.y + b.y) / 2 };
@@ -387,16 +420,16 @@ export class CameraController implements ICameraController {
     const r = this.dom.getBoundingClientRect();
     if (this.mode === 'aerial') {
       // Classement du geste sur les premiers pixels, puis verrouillé jusqu'au lever des doigts :
-      // glissé vertical des deux doigts ensemble (écart et angle quasi constants) = inclinaison ;
-      // sinon déplacement + pincer + torsion combinés.
+      // déplacement (dans tous les sens) + pincer + torsion combinés ; l'inclinaison est un geste distinct
+      // (deux doigts posés immobiles un instant, puis glissés verticalement ensemble), pour que le glisser vertical
+      // ordinaire à deux doigts déplace la carte.
       const acc = this.pinchAcc;
       acc.mx += dMidX; acc.my += dMidY; acc.d += dDist; acc.a += dAngle;
       if (this.pinchMode === 'undecided') {
         const mag = Math.max(Math.hypot(acc.mx, acc.my), Math.abs(acc.d), Math.abs(acc.a) * 120);
-        if (mag > 10) {
-          const vertical = Math.abs(acc.my) > 2 * Math.abs(acc.mx) && Math.abs(acc.d) < 0.3 * Math.abs(acc.my) && Math.abs(acc.a) < 0.06;
-          this.pinchMode = vertical ? 'tilt' : 'free';
-        }
+        // Immobilité mesurée jusqu'au premier mouvement notable (un glisser lent reste un déplacement).
+        if (!this.pinchFirstMove && mag > 3) this.pinchFirstMove = performance.now();
+        if (mag > 10) this.pinchMode = classifyTwoFinger(acc, this.pinchFirstMove - this.pinchStart);
       }
       if (this.pinchMode === 'tilt') {
         this.goal.pitchOffset = this.clampOffset(this.goal.pitchOffset + dMidY * 0.004);

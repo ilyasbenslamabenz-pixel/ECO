@@ -69,14 +69,14 @@ export class BudgetLedger {
    * l'autre sens. Renvoie le cumul de la ligne.
    */
   /** Appelé à chaque ligne de module postée (+ recette, − dépense) : application à la trésorerie (Municipal). */
-  onPost: ((signed: number) => void) | null = null;
+  onPost: ((signed: number, category: string) => void) | null = null;
 
   post(side: BudgetSide, category: string, amount: number, service = '', district = ''): number {
     if (side !== 'income' && side !== 'expense') throw new Error(`budget : sens ${String(side)} inconnu`);
     if (!category) throw new Error('budget : poste vide');
     if (!Number.isFinite(amount) || amount < 0) throw new Error(`budget : montant ${amount} invalide (≥ 0 attendu)`);
     const r = this.put(this.current, { side, category, service, district, amount });
-    if (amount > 0) this.onPost?.(side === 'income' ? amount : -amount);
+    if (amount > 0) this.onPost?.(side === 'income' ? amount : -amount, category);
     return r;
   }
 

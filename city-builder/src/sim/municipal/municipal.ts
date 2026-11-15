@@ -23,13 +23,19 @@ export const MUNICIPAL_SERVICE = 'municipal';
 /** Résolution par défaut des grilles : 32 m (4 tuiles de 8 m) ; carte de 2 048 m = 64 × 64 cellules. */
 export const DEFAULT_CELL_SIZE = 32;
 export const BUILTIN_TASK_ORDER = 1000;
+/**
+ * Postes budgétaires PONCTUELS (investissement, construction, démolition) : appliqués à la trésorerie mais exclus du
+ * solde prévu et du solde horaire (ils ne se répètent pas chaque mois).
+ */
+export const ONE_OFF_CATEGORY_PREFIXES = ['investissement:', 'construction:', 'demolition:'] as const;
+export const isOneOffCategory = (category: string): boolean => ONE_OFF_CATEGORY_PREFIXES.some((p) => category.startsWith(p));
 
 export class Municipal {
   grids: IndicatorGrids;
   networks: Networks;
   budget: BudgetLedger;
   /** Trésorerie de la ville : reçoit le solde de chaque ligne de module (branché par le plugin municipal). */
-  onModuleMoney: ((signed: number) => void) | null = null;
+  onModuleMoney: ((signed: number, oneOff: boolean) => void) | null = null;
   effects: EffectRegistry;
   readonly scheduler = new MultiRateScheduler();
   /** Source facultative du bilan mensuel de l'économie de base (branchée par le module si le cœur l'expose). */
@@ -55,7 +61,7 @@ export class Municipal {
     });
   }
 
-  private hooked(b: BudgetLedger): BudgetLedger { b.onPost = (v) => this.onModuleMoney?.(v); return b; }
+  private hooked(b: BudgetLedger): BudgetLedger { b.onPost = (v, category) => this.onModuleMoney?.(v, isOneOffCategory(category)); return b; }
 
   /** Façade couvrant un rectangle monde avec des cellules de `cellSize` m. */
   static forBounds(bounds: { minX: number; minZ: number; maxX: number; maxZ: number }, cellSize = DEFAULT_CELL_SIZE): Municipal {

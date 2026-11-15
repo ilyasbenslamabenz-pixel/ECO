@@ -176,7 +176,16 @@ export class ConstructionTools {
     mirror.onChange(() => this.refresh());
     // Nouvelle partie ou partie chargée : les identifiants repartent de 1, l'historique d'annulation de l'ancienne
     // ville détruirait des objets de la nouvelle.
-    sim.onSnapshot(() => { this.undo.clear(); this.draft.reset(); });
+    // L'outil en cours (Déplacer, tracé, quadrillage…) ne survit pas non plus au chargement : retour à la Sélection.
+    sim.onSnapshot(() => {
+      this.undo.clear();
+      this.draft.reset();
+      this.draft.elevation = 0;
+      this.junction = null;
+      this.junctionModes.clear();
+      if (this.moving) this.stopMove();
+      this.setTool('select');
+    });
     this.terrain = new TerrainTool({
       terrainEdit: (args) => (sim.sendExt ? sim.sendExt('terrainEdit', args) : Promise.reject(new Error('Éditions du terrain indisponibles'))),
     }, notify, () => { if (this.tool === 'terraform') this.refresh(); });
@@ -202,8 +211,13 @@ export class ConstructionTools {
     this.areaStart = null;
     if (this.moving) this.stopMove();
     this.draft.reset();
+    this.draft.elevation = 0; // hauteur ▲▼ propre au tracé en cours
     this.gridStart = null;
+    this.gridKey = '';
+    this.roundaboutKey = '';
     this.draft.type = this.roadType;
+    // Terrain : départ de quai / canal ou points de rivière posés ne survivent pas au changement d'outil.
+    if (this.terrain.hasStart) this.terrain.reset();
     this.refresh();
     for (const l of this.toolListeners) l(t);
     return true;
@@ -251,9 +265,12 @@ export class ConstructionTools {
     }
     const n = this.draft.chained;
     this.draft.reset();
+    // Tracé terminé : la hauteur imposée (viaduc, tunnel) revient au niveau du terrain pour le suivant.
+    const elev = this.draft.elevation;
+    this.draft.elevation = 0;
     this.gridStart = null;
     this.gridKey = '';
-    if (n > 0) this.notify(`Tracé terminé : ${n} tronçon${n > 1 ? 's' : ''}`, 'info');
+    if (n > 0) this.notify(`Tracé terminé : ${n} tronçon${n > 1 ? 's' : ''}${elev ? ' · hauteur remise à 0 m' : ''}`, 'info');
     this.refresh();
     return true;
   }
@@ -410,8 +427,9 @@ export class ConstructionTools {
       try {
         const r = await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'quoteLine', payload: { a: a.id, b: b.id } });
         const d = r.data as { lengthM: number; cost: number; upkeepPerMonth: number };
-        cost = d.cost; length = d.lengthM;
-        message = `${fmt(length)} m · entretien ${fmt(d.upkeepPerMonth)} ¢/mois`;
+        // Le module électricité chiffre en centimes ; la trésorerie (et l'affichage ¢ → CHF) en francs.
+        cost = d.cost / 100; length = d.lengthM;
+        message = `${fmt(length)} m · entretien ${fmt(d.upkeepPerMonth / 100)} ¢/mois`;
       } catch (e) { validity = 'error'; message = errorOf(e).message; }
       const cur = this.preview;
       if (cur.kind === 'powerline' && this.lineKey === key) { this.preview = { ...cur, validity, cost, length: length || cur.length, message }; this.emit(); }
@@ -424,9 +442,14 @@ export class ConstructionTools {
     if (!this.lineA) { if (p.b) { this.lineA = p.b; this.refresh(); } else this.notify('Touchez une centrale, une éolienne ou un poste', 'info'); return; }
     if (!p.b || p.validity === 'error') { if (p.validity === 'error') this.notify(`Ligne refusée : ${p.message}`, 'error'); return; }
     try {
-      await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'buildLine', payload: { a: this.lineA.id, b: p.b.id } });
+      const r = await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'buildLine', payload: { a: this.lineA.id, b: p.b.id } });
+      const d = r.data as { line?: { id: number }; cost?: number } | undefined;
+      const cost = typeof d?.cost === 'number' ? d.cost / 100 : p.cost;
       this.applied++;
-      this.notify(`Ligne haute tension construite : ${this.lineA.name} → ${p.b.name} (−${fmt(p.cost)} ¢)`, 'ok');
+      if (d?.line && typeof d.line.id === 'number') {
+        this.undo.push({ label: `Ligne haute tension ${this.lineA.name} → ${p.b.name}`, steps: [{ kind: 'plugin', plugin: 'electricite', name: 'removeLine', payload: { id: d.line.id } }] });
+      } else this.undo.push({ label: 'Ligne haute tension', steps: [], irreversible: true });
+      this.notify(`Ligne haute tension construite : ${this.lineA.name} → ${p.b.name} (−${fmt(cost)} ¢)`, 'ok');
       this.lineA = p.b; // enchaîner depuis l'arrivée
     } catch (e) { this.notify(`Ligne refusée : ${errorOf(e).message}`, 'error'); }
     this.lineKey = '';
@@ -582,10 +605,12 @@ export class ConstructionTools {
   async setJunctionMode(mode: JunctionChoice): Promise<void> {
     const j = this.junction;
     if (!j) return;
+    const prev = this.junctionModeOf(j.id);
     try {
       await this.sim.send('pluginCommand', { plugin: 'circulation', name: 'carrefour', payload: { nodeId: j.id, mode } });
       if (mode === 'auto') this.junctionModes.delete(j.id); else this.junctionModes.set(j.id, mode);
       this.applied++;
+      if (prev !== mode) this.undo.push({ label: `Carrefour : ${JUNCTION_LABELS[mode]}`, steps: [{ kind: 'plugin', plugin: 'circulation', name: 'carrefour', payload: { nodeId: j.id, mode: prev } }] });
       this.notify(`Carrefour (${j.legs} branches) : ${JUNCTION_LABELS[mode]}`, 'ok');
     } catch (e) { this.notify(`Réglage refusé : ${errorOf(e).message}`, 'error'); }
     this.refresh();

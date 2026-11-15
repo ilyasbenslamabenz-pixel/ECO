@@ -18,7 +18,7 @@
  */
 import { governanceModifiers } from '../../shared/governance';
 import {
-  baseDemandKw, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hash32, hourlyFactor, hydroShare,
+  baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hash32, hourlyFactor, hydroShare,
   hydroSiteCheck, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
   TARIFF_CENTS_PER_KWH, windPowerShare, windProfile,
 } from '../../shared/power/model';
@@ -339,9 +339,9 @@ export class PowerSystem {
     const m = this.getMunicipal();
     const fa = this.facilities.get(a)!, fb = this.facilities.get(b)!;
     if (m) {
-      m.budget.post('expense', 'investissement:lignes_ht', q.cost, 'electricite');
+      m.budget.post('expense', 'investissement:lignes_ht', centsToChf(q.cost), 'electricite');
       const cause = m.effects.cause({ kind: 'electricite:ligne', label: `Ligne HT ${fa.nameFr} – ${fb.nameFr}`, source: 'joueur', at: ctx.clock.totalMinutes, x: (fa.x + fb.x) / 2, z: (fa.z + fb.z) / 2, ref: line.id });
-      m.effects.record(cause, 'budget:investissement', -q.cost, '¢', ctx.clock.totalMinutes, { x: (fa.x + fb.x) / 2, z: (fa.z + fb.z) / 2 });
+      m.effects.record(cause, 'budget:investissement', -centsToChf(q.cost), 'CHF', ctx.clock.totalMinutes, { x: (fa.x + fb.x) / 2, z: (fa.z + fb.z) / 2 });
     }
     this.event(ctx, 'ligne', `Ligne HT construite (${(q.lengthM / 1000).toFixed(2)} km, ${Math.round(q.cost / 100).toLocaleString('fr-FR')} CHF)`, line.id);
     this.allocate(ctx, false);
@@ -585,6 +585,9 @@ export class PowerSystem {
     this.refreshRoadComponents(ctx);
     this.facComp.clear();
     for (const f of facs) this.facComp.set(f.id, this.compAt(ctx, f.x, f.z, ROAD_ATTACH_M));
+    // Installations reliées à une centrale (topologie, pannes comprises) : un poste isolé plus proche ne doit pas
+    // « capter » un bâtiment qu'un poste ou une centrale alimenté(e) peut desservir.
+    const fed = this.energizedSet();
     const geom = m?.grids.defaultGeometry;
     const consumers: Consumer[] = [];
     const st = ctx.buildings.store;
@@ -599,13 +602,17 @@ export class PowerSystem {
       const residents = st.residents[i]!, workers = st.workers[i]!;
       const demand = baseDemandKw(cls, tiles, residents, workers, a.capacity.jobs) * hourlyFactor(cls, hourOfDay) * seasonF * govDemand;
       const x = st.x[i]!, z = st.z[i]!;
-      let hub = -1, best = Infinity;
+      let hub = -1, best = Infinity, fedHub = -1, fedBest = Infinity;
       const comp = this.compAt(ctx, x, z, ROAD_ATTACH_M);
       for (const f of facs) {
         const d = Math.hypot(f.x - x, f.z - z);
         const linked = (comp >= 0 && this.facComp.get(f.id) === comp) || d <= LOCAL_FALLBACK_M;
-        if (linked && d < best) { best = d; hub = f.id; }
+        if (!linked) continue;
+        if (d < best) { best = d; hub = f.id; }
+        if (fed.has(f.id) && d < fedBest) { fedBest = d; fedHub = f.id; }
       }
+      // Priorité à l'installation alimentée la plus proche ; repli : la plus proche (réseau isolé, coupé).
+      if (fedHub >= 0) hub = fedHub;
       let cell = -1;
       if (geom) {
         const ci = Math.min(geom.cols - 1, Math.max(0, Math.floor((x - geom.originX) / geom.cellSize)));
@@ -906,7 +913,7 @@ export class PowerSystem {
     for (const id of add) this.rooftopSet.add(id);
     const cost = add.length * ROOFTOP_SPEC.costPerBuilding;
     this.state.investments += cost;
-    this.getMunicipal()?.budget.post('expense', 'investissement:toitures_solaires', cost, 'electricite');
+    this.getMunicipal()?.budget.post('expense', 'investissement:toitures_solaires', centsToChf(cost), 'electricite');
     this.version++;
   }
 
@@ -924,8 +931,9 @@ export class PowerSystem {
     const expense = Math.round(this.upkeepNominal() * this.state.settings.funding);
     const income = Math.round(this.state.month.deliveredKwh * TARIFF_CENTS_PER_KWH);
     if (m) {
-      if (expense > 0) m.budget.post('expense', 'entretien:reseau_electrique', expense, 'electricite');
-      if (income > 0) m.budget.post('income', 'vente:electricite', income, 'electricite');
+      // Montants du module en centimes ; trésorerie et grand livre en CHF (comme l'affichage du panneau).
+      if (expense > 0) m.budget.post('expense', 'entretien:reseau_electrique', centsToChf(expense), 'electricite');
+      if (income > 0) m.budget.post('income', 'vente:electricite', centsToChf(income), 'electricite');
     }
     this.state.lastMonth = { income, expense, failures: this.state.month.failures };
     this.state.month = { producedKwh: 0, deliveredKwh: 0, shedKwh: 0, failures: 0 };
@@ -935,7 +943,8 @@ export class PowerSystem {
 
   budget(): ElectriciteBudget {
     let fac = 0;
-    for (const f of this.facilities.values()) fac += f.upkeep;
+    // Entretien catalogue (CHF, débité par la simulation de base) exprimé en centimes comme les autres champs.
+    for (const f of this.facilities.values()) fac += f.upkeep * 100;
     const nominal = this.upkeepNominal();
     return {
       upkeepNominal: nominal, upkeepActual: Math.round(nominal * this.state.settings.funding), facilitiesUpkeep: fac,

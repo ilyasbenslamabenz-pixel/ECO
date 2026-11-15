@@ -128,7 +128,7 @@ export class PluginHost {
       report: () => sim.demography!.report(sim.clock.totalMinutes, sim.economy.taxRates.residential),
     };
     const economy: PluginEconomy = {
-      applyService: (amount) => sim.economy.applyService(amount),
+      applyService: (amount, oneOff) => sim.economy.applyService(amount, oneOff === true),
       get money() { return sim.economy.money; },
       get taxRates() { return { ...sim.economy.taxRates }; },
       lastMonth: () => {

@@ -17,18 +17,33 @@ import type { RoadKindId } from '../../shared/contracts';
 
 export type UndoStep =
   | { kind: 'demolish'; buildingId: number }
-  | { kind: 'removeRoad'; edgeId: number }
+  /**
+   * `path` (facultatif) : axe du tracé construit (x/z alternés). Si le tronçon a été découpé depuis (route posée
+   * ensuite en travers), l'annulation retire les morceaux plus récents posés sur cet axe.
+   */
+  | { kind: 'removeRoad'; edgeId: number; path?: number[] }
   | { kind: 'placeBuilding'; assetId: string; x: number; z: number; rot: number; variant: number }
   /** Bâtiment déplacé → remis à sa position d'origine. */
   | { kind: 'moveBuilding'; buildingId: number; x: number; z: number; rot: number }
-  | { kind: 'buildRoad'; kindId: RoadKindId; points: number[]; c1?: [number, number]; c2?: [number, number] }
+  /** `elevation` : hauteur imposée d'origine (viaduc, tunnel), conservée à la reconstruction. */
+  | { kind: 'buildRoad'; kindId: RoadKindId; points: number[]; c1?: [number, number]; c2?: [number, number]; elevation?: number }
   | { kind: 'upgradeRoad'; edgeId: number; toKind: RoadKindId; reverse: boolean }
-  /** Tronçons d'id ≥ minEdgeId posés sur les rues du quadrillage (x0..x1, z0..z1, pas `block`). */
-  | { kind: 'removeGrid'; minEdgeId: number; x0: number; z0: number; x1: number; z1: number; block: number; angle?: number; ox?: number; oz?: number };
+  /**
+   * Tronçons d'id ≥ minEdgeId posés sur les rues du quadrillage (x0..x1, z0..z1, pas `block`). `lines` : morceaux
+   * réellement construits ; un tronçon doit être posé sur l'un d'eux (une rue existante découpée n'est pas retirée).
+   */
+  | { kind: 'removeGrid'; minEdgeId: number; x0: number; z0: number; x1: number; z1: number; block: number; angle?: number; ox?: number; oz?: number; lines?: number[][] }
+  /** Commande d'un module (ligne haute tension retirée, pôle retiré, réglage de carrefour rétabli…). */
+  | { kind: 'plugin'; plugin: string; name: string; payload: Record<string, unknown> };
 
 export interface UndoEntry {
   label: string;
   steps: UndoStep[];
+  /**
+   * Action impossible à annuler (terrain, giratoire) : marque la pile pour que Ctrl+Z n'annule pas par erreur
+   * l'action précédente ; le premier Ctrl+Z l'explique et retire la marque.
+   */
+  irreversible?: boolean;
 }
 
 export class UndoStack {
@@ -36,7 +51,9 @@ export class UndoStack {
   constructor(private readonly max = 50) {}
 
   push(e: UndoEntry): void {
-    if (e.steps.length === 0) return;
+    if (e.steps.length === 0 && !e.irreversible) return;
+    // Deux marques consécutives : une seule suffit.
+    if (e.irreversible && this.peek()?.irreversible) { this.entries[this.entries.length - 1] = e; return; }
     this.entries.push(e);
     if (this.entries.length > this.max) this.entries.shift();
   }
@@ -48,13 +65,14 @@ export class UndoStack {
 
   /** Après une démolition externe, retire les étapes qui visent un objet disparu. */
   forgetBuilding(id: number): void {
-    for (const e of this.entries) e.steps = e.steps.filter((s) => !(s.kind === 'demolish' && s.buildingId === id));
-    this.entries = this.entries.filter((e) => e.steps.length > 0);
+    // Construction ET déplacement du bâtiment disparu : plus rien à annuler pour lui.
+    for (const e of this.entries) e.steps = e.steps.filter((s) => !((s.kind === 'demolish' || s.kind === 'moveBuilding') && s.buildingId === id));
+    this.entries = this.entries.filter((e) => e.steps.length > 0 || e.irreversible);
   }
 
   forgetEdge(id: number): void {
     for (const e of this.entries) e.steps = e.steps.filter((s) => !((s.kind === 'removeRoad' || s.kind === 'upgradeRoad') && s.edgeId === id));
-    this.entries = this.entries.filter((e) => e.steps.length > 0);
+    this.entries = this.entries.filter((e) => e.steps.length > 0 || e.irreversible);
   }
 
   /** Un tronçon modifié (upgradeRoad) change d'identifiant : les étapes qui le visent suivent. */

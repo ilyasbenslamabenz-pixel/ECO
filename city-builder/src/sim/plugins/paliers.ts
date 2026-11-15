@@ -58,7 +58,7 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
         if (p < m.population || s.reached.includes(m.id)) continue;
         s.reached.push(m.id);
         s.at[m.id] = ctx.clock.totalMinutes;
-        ctx.economy.applyService(m.reward);
+        ctx.economy.applyService(m.reward, true);
         ctx.notify('info', `Palier atteint : ${m.nameFr} (${m.population.toLocaleString('fr-FR')} habitants) — prime de ${m.reward.toLocaleString('fr-FR')} CHF versée à la trésorerie`);
         version++;
       }

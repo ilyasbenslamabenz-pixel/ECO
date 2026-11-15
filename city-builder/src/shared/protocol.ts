@@ -44,11 +44,17 @@ export interface CommandMap {
        * Les extrémités libres du tracé restent au niveau du terrain (rampes), les points intermédiaires sont surélevés.
        */
       elevation?: number;
+      /**
+       * Annulation d'une suppression (Ctrl+Z) : jeton `restoreToken` renvoyé par `removeRoad`. Valable une fois, pour
+       * le même type de route : la reconstruction coûte exactement le remboursement perçu (annulation neutre).
+       */
+      restoreToken?: number;
     };
     /** `path` (dryRun seulement) : aperçu 3D du tracé, quadruplets x, y, z, état (0 sol, 1 pont, 2 tunnel) tous les ~4 m. */
     result: { edgeIds: number[]; cost: number; path?: number[] };
   };
-  removeRoad: { args: { edgeId: number }; result: { refund: number } };
+  /** `restoreToken` : jeton d'annulation à repasser à `buildRoad` (voir ce champ). */
+  removeRoad: { args: { edgeId: number }; result: { refund: number; restoreToken?: number } };
   /**
    * Modifie un tronçon existant sans le démolir (ajout rétrocompatible) : nouveau type `kind` et/ou inversion du
    * sens (`reverse`, rue à sens unique). La géométrie est conservée ; le tronçon reçoit un nouvel identifiant
@@ -60,10 +66,22 @@ export interface CommandMap {
     result: { edgeId: number; kind: RoadKindId; cost: number; refund: number };
   };
   placeBuilding: {
-    args: { assetId: string; x: number; z: number; rot: number; variant?: number; dryRun?: boolean; /** Lot planifié (quartier généré, rangée mitoyenne) : pas d'écart minimal entre maisons, seul le recouvrement est refusé. */ planned?: boolean };
+    args: {
+      assetId: string; x: number; z: number; rot: number; variant?: number; dryRun?: boolean; /** Lot planifié (quartier généré, rangée mitoyenne) : pas d'écart minimal entre maisons, seul le recouvrement est refusé. */ planned?: boolean;
+      /**
+       * Annulation d'une démolition (Ctrl+Z) : jeton `restoreToken` renvoyé par `demolish`. Valable une fois, pour le
+       * même modèle : la reconstruction coûte exactement le remboursement perçu (0 pour un bâtiment privé du zonage,
+       * qui redevient privé). Sans jeton (ou jeton inconnu / déjà utilisé) : pose ordinaire au prix catalogue.
+       */
+      restoreToken?: number;
+    };
     result: { buildingId: number; cost: number };
   };
-  demolish: { args: { buildingId: number }; result: { refund: number } };
+  /**
+   * `refund` : remboursement versé (25 % du prix pour un bâtiment payé par la ville, 0 pour un bâtiment privé né du
+   * zonage). `restoreToken` : jeton d'annulation à repasser à `placeBuilding` (voir ce champ).
+   */
+  demolish: { args: { buildingId: number }; result: { refund: number; restoreToken?: number } };
   setSpeed: { args: { speed: SimSpeed }; result: { speed: SimSpeed } };
   terraform: { args: { x: number; z: number; radius: number; delta: number }; result: Record<string, never> };
   save: { args: { slot: string }; result: { slot: string; data: SaveFile } };
@@ -266,6 +284,7 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
         if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum) || p.length !== 4) return bad('Point de contrôle de courbe invalide');
       }
       if (a.elevation !== undefined && (!isNum(a.elevation) || Math.abs(a.elevation) > 40)) return bad('Hauteur de route invalide (±40 m)');
+      if (a.restoreToken !== undefined && !isNum(a.restoreToken)) return bad('Jeton d\'annulation invalide');
       return null;
     }
     case 'removeRoad':
@@ -280,6 +299,7 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
     case 'placeBuilding':
       if (typeof a.assetId !== 'string' || !isNum(a.x) || !isNum(a.z) || !isNum(a.rot)) return bad('Placement invalide');
       if (a.variant !== undefined && !isNum(a.variant)) return bad('Variante invalide');
+      if (a.restoreToken !== undefined && !isNum(a.restoreToken)) return bad('Jeton d\'annulation invalide');
       return null;
     case 'demolish':
       return isNum(a.buildingId) ? null : bad('buildingId invalide');

@@ -10,6 +10,7 @@ const P: Record<string, string> = {
   /* --- Identité --- */
   logo: '<rect class="f" x="2.5" y="2.5" width="19" height="19" rx="5"/><path d="M6 18.5v-6.5a6 6 0 0112 0v6.5"/><path d="M9 18.5v-5a3 3 0 016 0v5"/><path d="M4 18.5h16"/><path d="M12 3.5v2.5"/>',
   /* --- Barre supérieure --- */
+  dice: '<rect class="f" x="3.5" y="3.5" width="17" height="17" rx="3.5"/><circle cx="8.3" cy="8.3" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.7" cy="8.3" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="8.3" cy="15.7" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.7" cy="15.7" r="1.2" fill="currentColor" stroke="none"/>',
   pause: '<rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/>',
   play: '<path d="M8 5.2v13.6a.8.8 0 001.2.7l10.6-6.8a.8.8 0 000-1.4L9.2 4.5A.8.8 0 008 5.2z" fill="currentColor" stroke="none"/>',
   sun: '<circle class="f" cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.5 1.5M17.2 17.2l1.5 1.5M5.3 18.7l1.5-1.5M17.2 6.8l1.5-1.5"/>',

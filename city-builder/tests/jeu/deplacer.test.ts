@@ -34,3 +34,21 @@ test('déplacer : même identifiant, habitants conservés, gratuit ; refus sur u
   const d = s.takeDelta();
   assert.ok(d.buildingsRemoved.includes(id) && d.buildingsAdded.some((b) => b.id === id), 'delta retiré + rajouté');
 });
+
+test('déplacer loin de la voirie : accès routier et accès du trafic recalculés immédiatement', () => {
+  const s = newTownSim(); buildTown(s); runDays(s, 1);
+  const st = s.buildings;
+  s.tick(1);
+  const before = s.traffic.stats.connectedBuildings;
+  assert.ok(before > 0);
+  let id = -1;
+  for (let k = 0; k < st.count; k++) if (st.roadAccess[k]) { id = st.id[k]!; break; }
+  let moved = false;
+  for (const [x, z] of [[360, 360], [-360, 360], [360, -360], [-360, -360]] as const) {
+    if (s.runExt('moveBuilding', { buildingId: id, x, z, rot: st.rot[st.indexOf(id)]! }).ok) { moved = true; break; }
+  }
+  assert.ok(moved);
+  assert.equal(st.roadAccess[st.indexOf(id)], 0, 'plus d’accès routier');
+  s.tick(1);
+  assert.equal(s.traffic.stats.connectedBuildings, before - 1, 'le trafic ne relie plus le bâtiment déplacé');
+});
