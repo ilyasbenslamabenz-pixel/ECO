@@ -8,6 +8,7 @@
  * (TrafficSystem du module trafic), deltas pour le rendu, sauvegarde versionnée (v2).
  * Modules de phase 2 : crochets appelés via PluginHost (src/sim/plugins) ; registres vides = aucun effet.
  */
+import type { SecteursService } from './plugins/secteurs';
 import {
   CHUNK_SIZE,
   GAME_MINUTES_PER_TICK,
@@ -210,10 +211,12 @@ export class Simulation {
     this.demography.serviceSatisfaction = (id) => {
       const g = this.plugins.service<Muni>('municipal')?.grids.get('satisfaction');
       const i = g ? this.buildings.indexOf(id) : -1;
-      if (!g || i < 0) return this.govMods.happiness;
+      const local = this.plugins.service<SecteursService>('secteurs')?.happinessOf(id) ?? 0;
+      if (!g || i < 0) return this.govMods.happiness + local;
       const d = g.at(this.buildings.x[i]!, this.buildings.z[i]!) - 50;
-      return (d < -40 ? -40 : d > 20 ? 20 : d) + this.govMods.happiness;
+      return (d < -40 ? -40 : d > 20 ? 20 : d) + this.govMods.happiness + local;
     };
+    this.demography.pollutionFactorOf = (id) => this.plugins.service<SecteursService>('secteurs')?.pollutionFactorOf(id) ?? 1;
   }
 
   getAsset(id: string): CatalogAsset | undefined {
@@ -888,7 +891,11 @@ export class Simulation {
     this.economy.roadUpkeepFactor = m.roadUpkeepFactor;
     this.economy.buildingUpkeepFactor = m.buildingUpkeepFactor;
     if (this.demography) this.demography.pollutionFactor = m.pollutionFactor;
+    // Politiques locales des secteurs : la pollution subie est recalculée quand elles changent.
+    const sv = this.plugins.service<SecteursService>('secteurs')?.version() ?? 0;
+    if (sv !== this.secteursVersion) { this.secteursVersion = sv; this.demography?.markCoverageDirty(); }
   }
+  private secteursVersion = 0;
 
   tick(minutes: number = GAME_MINUTES_PER_TICK): void {
     if (!this.terrain) return;

@@ -8,6 +8,7 @@ import { powerView } from '../shared/power/view';
 import { waterView, type WaterViewMode } from '../render/water-network/view';
 import { DECHETS_LAYER_EVENT } from './panels/dechets';
 import { setAlertsVisible, alertsVisible } from '../render/plugins/alertes';
+import { setSecteursLayer } from '../render/plugins/secteurs';
 import { $, el } from './dom';
 import { iconEl } from './icons';
 
@@ -21,7 +22,7 @@ const LAYERS: readonly { id: LayerId; label: string; icon: string; tip: string }
   { id: 'waterPollution', label: 'Eau : pollution', icon: 'treatment', tip: 'Pollution des rivières et de la nappe' },
   { id: 'waste', label: 'Déchets', icon: 'waste', tip: 'Nuisances des déchets et remplissage des bacs' },
   { id: 'traffic', label: 'Circulation', icon: 'transport', tip: 'Congestion des routes (vert fluide → rouge saturé)' },
-  { id: 'districts', label: 'Quartiers', icon: 'home', tip: 'Contours et types des quartiers' },
+  { id: 'districts', label: 'Quartiers', icon: 'home', tip: 'Contours des quartiers et des secteurs (politiques locales)' },
 ];
 
 export interface LayersPort {
@@ -41,13 +42,13 @@ export function initLayersMenu(port: LayersPort): { set(id: LayerId): void; curr
     if ((prev === 'water' || prev === 'pressure' || prev === 'waterPollution') && !(id === 'water' || id === 'pressure' || id === 'waterPollution')) waterView.set('off');
     if (prev === 'waste' && id !== 'waste') window.dispatchEvent(new CustomEvent(DECHETS_LAYER_EVENT, { detail: { visible: false } }));
     if (prev === 'traffic' && id !== 'traffic') void port.pluginCommand('circulation', 'afficherCongestion', { on: false }).catch(() => undefined);
-    if (prev === 'districts' && id !== 'districts') void port.pluginCommand('batiments', 'setOverlay', { on: false }).catch(() => undefined);
+    if (prev === 'districts' && id !== 'districts') { void port.pluginCommand('batiments', 'setOverlay', { on: false }).catch(() => undefined); setSecteursLayer(false); }
     if (id === 'power') powerView.setOverlay(true);
     const wm: Partial<Record<LayerId, WaterViewMode>> = { water: 'desserte', pressure: 'pression', waterPollution: 'pollution' };
     if (wm[id]) waterView.set(wm[id]!);
     if (id === 'waste') window.dispatchEvent(new CustomEvent(DECHETS_LAYER_EVENT, { detail: { visible: true } }));
     if (id === 'traffic') void port.pluginCommand('circulation', 'afficherCongestion', { on: true }).catch(() => undefined);
-    if (id === 'districts') void port.pluginCommand('batiments', 'setOverlay', { on: true }).catch(() => undefined);
+    if (id === 'districts') { void port.pluginCommand('batiments', 'setOverlay', { on: true }).catch(() => undefined); setSecteursLayer(true); }
     btn.classList.toggle('active', id !== 'none');
     btn.setAttribute('aria-pressed', String(id !== 'none'));
     render();
