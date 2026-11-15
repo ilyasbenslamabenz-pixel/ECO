@@ -41,7 +41,7 @@ proches d'abord, améliorations : rayon +25 %, capacité +50 % par niveau), comp
 | Pompiers | engin | 900 | caserne : 4 engins → 3 600 hab., 370 000, entretien 1 700 / mois |
 | Santé | lit | 20 | centre de santé : 90 lits → 1 800 hab., 322 000 ; hôpital : 260 lits → 5 200 hab. |
 
-Aucun bâtiment n'est verrouillé (paliers) : les trois services sont constructibles dès le début. Leur entretien et les
+Police, pompiers et centre de santé sont constructibles dès le début (l'hôpital se débloque au palier Bourg dans une partie en déblocages progressifs, docs/PROGRESSION.md). Leur entretien et les
 salaires des agents passent par le budget existant (entretien des bâtiments, salaires des services publics) ; l'onglet
 Services affiche l'entretien de catalogue par service.
 

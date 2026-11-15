@@ -19,6 +19,14 @@ Tests : `tests/circulation/**`, `tests/vehicles/**`.
 
 Un pas dure 0,1 s de temps physique (`step(dt, hour)`), appelé une fois par tick de simulation.
 
+**Demande et trajets détaillés (équilibrage, vague 4).** Une minute de jeu ne dure que 0,1 s de conduite : un trajet
+d'un kilomètre occupe la chaussée pendant des heures de jeu. Le nombre de voitures simultanées visé suit le profil
+horaire `demandShare` (≈ 5 % des habitants à la pointe) × facteur voiture du bus : c'est `demandCeiling(hour)`. La
+demande statistique en couvre la part non détaillée ; les trajets individuels des habitants détaillés (proches de la
+caméra, `world.ts`) ne sont plus admis au-delà de ce plafond (compteur `report.traffic.tripsCapped`). Auparavant chaque
+actif détaillé ajoutait sa voiture sans limite et une ville vue de près se bloquait (mesures : docs/PROGRESSION.md §5).
+Capacités, IDM, MOBIL, carrefours et feux sont inchangés.
+
 ### Carrefours
 
 Régime déduit du réseau : impasse, aucun, **priorité à droite**, **cédez-le-passage** (rangs des voies),

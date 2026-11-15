@@ -32,8 +32,8 @@ modifier une ligne » du panneau Bus.
   retiré ↔ `addStop` au même rang, réglages ↔ `updateLine` aux valeurs d'avant. Ctrl+Z ou bouton Annuler.
 - **Au doigt** : boutons et pastilles d'au moins 44 px ; un doigt sur la carte la déplace, sauf s'il commence sur un
   arrêt (glisser) ; un toucher bref pose ; deux doigts gardent la caméra (`setPointerOverride` + `capturesAt`).
-- **Débloquage** : disponible dès le début de la partie (aucun palier ne verrouille d'outil dans ce jeu,
-  `src/shared/milestones.ts`) ; les aides de croissance le suggèrent quand c'est utile (§5).
+- **Débloquage** : outil et dépôt disponibles dès le début ; dans une partie en déblocages progressifs, 2 lignes au
+  départ puis davantage à chaque palier (docs/PROGRESSION.md) ; les aides de croissance le suggèrent quand c'est utile (§5).
 
 ## 2. Tracé (`src/sim/transit/route.ts`)
 

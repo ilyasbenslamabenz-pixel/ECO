@@ -70,6 +70,8 @@ try {
   // 2) Cadenas dans la barre de construction (Services).
   await page.tap('#toolbar button[data-cat=services]').catch(async () => { await page.tap('#toolbar [data-family]'); });
   await page.waitForTimeout(800);
+  await page.tap('#drawer-tabs [data-tab=sante]').catch(() => undefined);
+  await page.waitForTimeout(600);
   const lock = await page.evaluate(() => { const c = document.querySelector('#drawer-body .card[data-asset="public_hopital"]'); return c ? { locked: c.classList.contains('locked'), badge: c.querySelector('.lock-badge')?.textContent ?? '' } : null; });
   check(lock?.locked && /Bourg/.test(lock.badge), `hôpital verrouillé dans le tiroir Services (${JSON.stringify(lock)})`);
   await shot('cadenas');
@@ -77,6 +79,13 @@ try {
   await page.waitForTimeout(300);
 
   // 3) Événement annoncé : notification « Voir ».
+  // Première notification d'une partie : jamais affichée (main.ts) ; une annonce annulée la précède donc.
+  await plug('evenements', 'declencher', { kind: 'epidemie' });
+  await plug('evenements', 'reglage', { frequence: 'off' });
+  await plug('evenements', 'reglage', { frequence: 'normal' });
+  await send('setSpeed', { speed: 1 });
+  await page.waitForTimeout(1500);
+  await send('setSpeed', { speed: 0 });
   const d = await plug('evenements', 'declencher', { kind: 'afflux' });
   check(d?.current?.kind === 'afflux', `événement annoncé par la simulation (${d?.current?.title ?? d?.error})`);
   await send('setSpeed', { speed: 1 });
@@ -111,7 +120,10 @@ try {
   await shot('rappel');
 
   // 4) Options › Événements.
-  await page.tap('#btn-menu');
+  // Téléphone : le bouton Réglages est dans le menu latéral (raccourci vers #btn-menu).
+  await page.tap('#btn-sidebar');
+  await page.waitForTimeout(300);
+  await page.tap('#sidebar [data-proxy=btn-menu]');
   await page.waitForTimeout(400);
   await page.tap('#btn-options');
   await page.waitForTimeout(400);
