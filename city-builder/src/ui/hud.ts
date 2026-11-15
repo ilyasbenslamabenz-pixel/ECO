@@ -460,7 +460,7 @@ export function initUI(h: UIHandlers): UIHandle {
       // Argent réellement versé chaque heure (les emprunts sont remboursés en une fois en fin de mois).
       const h = s.hourlyBalance ?? s.monthlyBalance / 720;
       const perHour = Math.abs(h) >= 1 ? signedShort(Math.round(h)) : `${h < 0 ? '−' : '+'}${Math.abs(h).toFixed(2).replace('.', ',')} CHF`;
-      elBalance.replaceChildren(perHour, el('span', { cls: 'per', text: ' / h' }));
+      elBalance.replaceChildren(matchMedia('(max-width: 760px)').matches ? perHour.replace(/\s*CHF$/, '') : perHour, el('span', { cls: 'per', text: ' / h' }));
       elBalance.classList.toggle('neg', h < 0);
       elBalance.classList.toggle('pos', h > 0);
       const phoneBar = matchMedia('(max-width: 760px)').matches;

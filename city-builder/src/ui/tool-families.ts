@@ -38,6 +38,13 @@ export function initToolFamilies(): void {
     });
   }
   document.addEventListener('pointerdown', (e) => { if (open && !pop.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('[data-family]')) close(); });
+  // Panneaux en demi-écran (téléphone) : un toucher sur l'en-tête (hors boutons) les passe en plein écran et inversement.
+  document.addEventListener('click', (e) => {
+    const t = e.target as HTMLElement;
+    const head = t.closest?.('.panel-head');
+    if (!head || t.closest('button') || !matchMedia('(max-width: 760px)').matches) return;
+    head.closest('.panel')?.classList.toggle('full');
+  });
   // Aide d'outil repliée sur une ligne : un toucher la déplie.
   $('tool-hint').addEventListener('click', () => $('tool-hint').classList.toggle('open'));
 }

@@ -767,3 +767,9 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   #hud .speed button[data-speed="0"], #hud .speed .spd-cycle { min-width: 40px !important; }
   #hud > .hud-stat { column-gap: 3px; }
 }
+@media (max-width: 760px) {
+  /* Panneaux en demi-écran posés au-dessus des outils (la ville reste visible) ; toucher l'en-tête : plein écran. */
+  .panel:not(.folded) { top: auto; height: min(56dvh, calc(100dvh - var(--hud-h) - var(--tb-h) - 16px)); }
+  .panel.full:not(.folded) { top: calc(var(--hud-h) + 6px); height: auto; }
+  .panel-head { cursor: ns-resize; }
+}
