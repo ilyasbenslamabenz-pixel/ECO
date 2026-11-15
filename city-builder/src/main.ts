@@ -128,6 +128,11 @@ function errText(e: unknown): string {
 
 async function boot(): Promise<void> {
   applyTheme(loadOptions().theme);
+  // iPhone : pas de zoom de PAGE (pincement ou double toucher sur l'interface la décalait hors de l'écran) ;
+  // le zoom de la carte reste géré par la caméra.
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend'] as const) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', (e) => { if ((e as TouchEvent & { scale?: number }).scale !== undefined && (e as TouchEvent & { scale?: number }).scale !== 1) e.preventDefault(); }, { passive: false });
+  window.addEventListener('resize', () => { if (window.visualViewport && window.visualViewport.scale > 1.01) window.scrollTo(0, 0); });
   const params = new URLSearchParams(location.search);
   const debug: DebugInfo = {
     ready: false, workerReady: false, snapshotReceived: false, deltas: 0, frames: () => 0, catalogAssets: 0, errors: [],

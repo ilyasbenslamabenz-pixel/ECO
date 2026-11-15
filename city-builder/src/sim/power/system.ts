@@ -866,7 +866,8 @@ export class PowerSystem {
       const label = s.shortfallKw > 0 ? `Pénurie électrique : ${Math.round(s.shortfallKw)} kW non servis` : 'Coupures électriques (pannes du réseau)';
       this.state.shortageCause = m.effects.cause({ kind: 'electricite:penurie', label, source: 'electricite', at: now });
       this.event(ctx, 'penurie', `${label} — ${s.cut} bâtiments coupés`);
-      ctx.notify('warn', `${label} : ${s.cut} bâtiments coupés (${s.byClass.filter((b) => b.cut).map((b) => b.cls).join(', ')}).`);
+      const CLS_FR: Record<string, string> = { sante: 'santé', services: 'services', residentiel: 'logements', commerce: 'commerces', industrie: 'industrie' };
+      ctx.notify('warn', `${label} : ${s.cut} bâtiments coupés (${s.byClass.filter((b) => b.cut).map((b) => CLS_FR[b.cls] ?? b.cls).join(', ')}). Ajoutez une centrale ou une éolienne.`);
     }
     if (this.state.shortageCause && changed) {
       const cause = this.state.shortageCause;

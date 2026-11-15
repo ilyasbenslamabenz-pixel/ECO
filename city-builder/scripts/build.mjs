@@ -40,7 +40,7 @@ function html({ fragment }) {
   const markup = readFileSync(join(root, 'src/ui/markup.html'), 'utf8');
   const head = [
     '<title>Meknes City</title>',
-    '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">',
     '<meta name="description" content="Meknes City — city-builder 3D">',
     '<meta name="theme-color" content="#0b0f13">',
     `<style>\n${css}</style>`,

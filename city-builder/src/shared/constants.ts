@@ -44,7 +44,7 @@ export const MAX_BUILDING_SLOPE = 0.25;
 export const MAX_ROAD_SLOPE = 0.12;
 
 /** Argent de départ par défaut (en « crédits », monnaie fictive du jeu). */
-export const DEFAULT_START_MONEY = 500_000;
+export const DEFAULT_START_MONEY = 3_000_000;
 
 /** Version du format de sauvegarde (incrémenter à chaque changement incompatible). */
 export const SAVE_FORMAT_VERSION = 2;

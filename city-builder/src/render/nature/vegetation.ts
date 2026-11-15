@@ -592,16 +592,22 @@ export class VegetationSystem {
   }
 
   /** Mise à jour LOD / culling (sans allocation hors reconstruction). */
+  private readonly wideProj = new THREE.Matrix4();
+
   update(camera: THREE.Camera): void {
     if (!this.loaded) return;
     if (this.dirty) this.rebuild();
     camera.getWorldDirection(this.camDir);
     this.frameCounter++;
-    const moved = camera.position.distanceToSquared(this.lastCam) > 4 || this.camDir.dot(this.lastDir) < 0.9995;
+    // Recalcul (et envoi à la carte graphique) seulement après un vrai déplacement : ≥ 4 m ou ≥ ~3,5° de rotation.
+    // Le champ de culling est élargi (~25 %) pour qu'aucun arbre n'apparaisse en retard au bord de l'écran.
+    const moved = camera.position.distanceToSquared(this.lastCam) > 16 || this.camDir.dot(this.lastDir) < 0.998;
     if (!moved) return;
     this.lastCam.copy(camera.position);
     this.lastDir.copy(this.camDir);
-    this.pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    this.wideProj.copy(camera.projectionMatrix);
+    this.wideProj.elements[0]! *= 0.8; this.wideProj.elements[5]! *= 0.8;
+    this.pv.multiplyMatrices(this.wideProj, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.pv);
     const S = Math.max(1, this.species.length);
     const C = this.cellsX * this.cellsZ;

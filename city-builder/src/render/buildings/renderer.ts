@@ -59,6 +59,7 @@ const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _frustum = new THREE.Frustum();
+const _wide = new THREE.Matrix4();
 const _pv = new THREE.Matrix4();
 const _sphere = new THREE.Sphere();
 const _camPos = new THREE.Vector3();
@@ -363,10 +364,12 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     if (this.uploads.length) this.pumpUploads(6);
     _camPos.set(cx, cy, cz);
     const cam = this.camera;
-    let moved = this.forceUpdate || _camPos.distanceToSquared(_lastPos) > 0.25;
+    // Recalcul des instances visibles (et envoi à la carte graphique) seulement après un vrai déplacement :
+    // ≥ 3 m ou ≥ ~2,5° de rotation ; champ élargi (~25 %) pour ne rien voir apparaître en retard au bord de l'écran.
+    let moved = this.forceUpdate || _camPos.distanceToSquared(_lastPos) > 9;
     if (cam) {
       cam.updateMatrixWorld();
-      if (!moved && Math.abs(cam.quaternion.dot(_lastQ)) < 0.99999) moved = true;
+      if (!moved && Math.abs(cam.quaternion.dot(_lastQ)) < 0.99976) moved = true;
     }
     for (let i = 0; i < this.batchList.length && !moved; i++) if (this.batchList[i]!.dirty) moved = true;
     if (!moved) return;
@@ -374,7 +377,9 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     _lastPos.copy(_camPos);
     if (cam) {
       _lastQ.copy(cam.quaternion);
-      _pv.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+      _wide.copy(cam.projectionMatrix);
+      _wide.elements[0]! *= 0.8; _wide.elements[5]! *= 0.8;
+      _pv.multiplyMatrices(_wide, cam.matrixWorldInverse);
       _frustum.setFromProjectionMatrix(_pv);
     }
     this.visible[0] = this.visible[1] = this.visible[2] = 0;

@@ -5057,7 +5057,7 @@
         "tilesX": 4,
         "tilesZ": 3
       },
-      "cost": 1600000,
+      "cost": 800000,
       "upkeepPerMonth": 2400,
       "capacity": {
         "residents": 0,
@@ -5169,7 +5169,7 @@
         "tilesX": 4,
         "tilesZ": 3
       },
-      "cost": 820000,
+      "cost": 410000,
       "upkeepPerMonth": 1500,
       "capacity": {
         "residents": 0,
@@ -5285,7 +5285,7 @@
         "tilesX": 3,
         "tilesZ": 3
       },
-      "cost": 740000,
+      "cost": 370000,
       "upkeepPerMonth": 1700,
       "capacity": {
         "residents": 0,
@@ -5395,7 +5395,7 @@
         "tilesX": 3,
         "tilesZ": 2
       },
-      "cost": 680000,
+      "cost": 340000,
       "upkeepPerMonth": 1600,
       "capacity": {
         "residents": 0,
@@ -5504,7 +5504,7 @@
         "tilesX": 5,
         "tilesZ": 4
       },
-      "cost": 4200000,
+      "cost": 2100000,
       "upkeepPerMonth": 6500,
       "capacity": {
         "residents": 0,
@@ -5631,7 +5631,7 @@
         "tilesX": 4,
         "tilesZ": 3
       },
-      "cost": 1350000,
+      "cost": 675000,
       "upkeepPerMonth": 1900,
       "capacity": {
         "residents": 0,
@@ -5744,7 +5744,7 @@
         "tilesX": 2,
         "tilesZ": 4
       },
-      "cost": 900000,
+      "cost": 450000,
       "upkeepPerMonth": 700,
       "capacity": {
         "residents": 0,
@@ -5851,7 +5851,7 @@
         "tilesX": 5,
         "tilesZ": 3
       },
-      "cost": 2100000,
+      "cost": 1050000,
       "upkeepPerMonth": 2600,
       "capacity": {
         "residents": 0,
@@ -5969,7 +5969,7 @@
         "tilesX": 4,
         "tilesZ": 4
       },
-      "cost": 180000,
+      "cost": 90000,
       "upkeepPerMonth": 450,
       "capacity": {
         "residents": 0,
@@ -17662,7 +17662,7 @@
         "tilesX": 4,
         "tilesZ": 4
       },
-      "cost": 686000,
+      "cost": 343000,
       "upkeepPerMonth": 1100,
       "capacity": {
         "residents": 0,
@@ -17824,7 +17824,7 @@
         "tilesX": 4,
         "tilesZ": 4
       },
-      "cost": 438000,
+      "cost": 219000,
       "upkeepPerMonth": 700,
       "capacity": {
         "residents": 0,
@@ -17978,7 +17978,7 @@
         "tilesX": 3,
         "tilesZ": 3
       },
-      "cost": 224000,
+      "cost": 112000,
       "upkeepPerMonth": 360,
       "capacity": {
         "residents": 0,
@@ -18136,7 +18136,7 @@
         "tilesX": 4,
         "tilesZ": 3
       },
-      "cost": 886000,
+      "cost": 443000,
       "upkeepPerMonth": 1420,
       "capacity": {
         "residents": 0,
@@ -18303,7 +18303,7 @@
         "tilesX": 3,
         "tilesZ": 3
       },
-      "cost": 464000,
+      "cost": 232000,
       "upkeepPerMonth": 740,
       "capacity": {
         "residents": 0,
@@ -18461,7 +18461,7 @@
         "tilesX": 3,
         "tilesZ": 2
       },
-      "cost": 248000,
+      "cost": 124000,
       "upkeepPerMonth": 400,
       "capacity": {
         "residents": 0,
@@ -18618,7 +18618,7 @@
         "tilesX": 3,
         "tilesZ": 3
       },
-      "cost": 643000,
+      "cost": 322000,
       "upkeepPerMonth": 1030,
       "capacity": {
         "residents": 0,
@@ -18771,7 +18771,7 @@
         "tilesX": 4,
         "tilesZ": 4
       },
-      "cost": 273000,
+      "cost": 136000,
       "upkeepPerMonth": 440,
       "capacity": {
         "residents": 0,
@@ -18924,7 +18924,7 @@
         "tilesX": 4,
         "tilesZ": 3
       },
-      "cost": 214000,
+      "cost": 107000,
       "upkeepPerMonth": 340,
       "capacity": {
         "residents": 0,
@@ -19086,7 +19086,7 @@
         "tilesX": 2,
         "tilesZ": 4
       },
-      "cost": 178000,
+      "cost": 89000,
       "upkeepPerMonth": 280,
       "capacity": {
         "residents": 0,
@@ -19246,7 +19246,7 @@
         "tilesX": 2,
         "tilesZ": 4
       },
-      "cost": 165000,
+      "cost": 82000,
       "upkeepPerMonth": 260,
       "capacity": {
         "residents": 0,
@@ -19405,7 +19405,7 @@
         "tilesX": 6,
         "tilesZ": 5
       },
-      "cost": 8500000,
+      "cost": 3500000,
       "upkeepPerMonth": 9500,
       "capacity": {
         "residents": 0,
@@ -19511,7 +19511,7 @@
         "tilesX": 2,
         "tilesZ": 2
       },
-      "cost": 1200000,
+      "cost": 400000,
       "upkeepPerMonth": 1100,
       "capacity": {
         "residents": 0,
@@ -19606,7 +19606,7 @@
         "tilesX": 6,
         "tilesZ": 6
       },
-      "cost": 2400000,
+      "cost": 900000,
       "upkeepPerMonth": 900,
       "capacity": {
         "residents": 0,
@@ -19700,7 +19700,7 @@
         "tilesX": 6,
         "tilesZ": 4
       },
-      "cost": 9000000,
+      "cost": 5000000,
       "upkeepPerMonth": 5000,
       "capacity": {
         "residents": 0,
@@ -19803,7 +19803,7 @@
         "tilesX": 4,
         "tilesZ": 4
       },
-      "cost": 650000,
+      "cost": 200000,
       "upkeepPerMonth": 700,
       "capacity": {
         "residents": 0,
@@ -19902,7 +19902,7 @@
         "tilesX": 4,
         "tilesZ": 3
       },
-      "cost": 900000,
+      "cost": 300000,
       "upkeepPerMonth": 1500,
       "capacity": {
         "residents": 0,
@@ -20017,7 +20017,7 @@
         "tilesX": 5,
         "tilesZ": 4
       },
-      "cost": 1800000,
+      "cost": 800000,
       "upkeepPerMonth": 2500,
       "capacity": {
         "residents": 0,
@@ -20125,7 +20125,7 @@
         "tilesX": 5,
         "tilesZ": 4
       },
-      "cost": 4500000,
+      "cost": 2200000,
       "upkeepPerMonth": 5000,
       "capacity": {
         "residents": 0,
@@ -20237,7 +20237,7 @@
         "tilesX": 8,
         "tilesZ": 8
       },
-      "cost": 1200000,
+      "cost": 350000,
       "upkeepPerMonth": 1200,
       "capacity": {
         "residents": 0,
@@ -23378,7 +23378,7 @@
         "tilesX": 3,
         "tilesZ": 3
       },
-      "cost": 420000,
+      "cost": 150000,
       "upkeepPerMonth": 650,
       "capacity": {
         "residents": 0,
@@ -23493,7 +23493,7 @@
         "tilesX": 5,
         "tilesZ": 4
       },
-      "cost": 1350000,
+      "cost": 450000,
       "upkeepPerMonth": 1600,
       "capacity": {
         "residents": 0,
@@ -23603,7 +23603,7 @@
         "tilesX": 2,
         "tilesZ": 2
       },
-      "cost": 380000,
+      "cost": 150000,
       "upkeepPerMonth": 300,
       "capacity": {
         "residents": 0,
@@ -23707,7 +23707,7 @@
         "tilesX": 6,
         "tilesZ": 5
       },
-      "cost": 1600000,
+      "cost": 550000,
       "upkeepPerMonth": 1900,
       "capacity": {
         "residents": 0,
@@ -23819,7 +23819,7 @@
         "tilesX": 2,
         "tilesZ": 2
       },
-      "cost": 120000,
+      "cost": 60000,
       "upkeepPerMonth": 90,
       "capacity": {
         "residents": 0,

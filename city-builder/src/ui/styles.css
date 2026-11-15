@@ -85,6 +85,8 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   font: 14px/1.4 var(--font); letter-spacing: 0.005em; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 input, select, textarea { -webkit-user-select: text; user-select: text; }
+/* Pas de zoom de page au double toucher (les clics restent instantanés) ; la carte gère ses propres gestes. */
+html, body, button, .panel, #hud, #bottom { touch-action: manipulation; }
 #scene { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; touch-action: none; }
 .hidden { display: none !important; }
 .muted { color: var(--muted); }
