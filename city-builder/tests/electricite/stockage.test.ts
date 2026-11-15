@@ -58,7 +58,7 @@ test('profil de vent : facteur de charge annuel des éoliennes dans l\'ordre de 
     let cf = 0, zero = 0, n = 0, v = 0;
     for (let m = 0; m < YEAR; m += 60) { const w = windProfile(m, seed); const s = windPowerShare(w); cf += s; v += w; if (s === 0) zero++; n++; }
     assert.ok(Math.abs(v / n - 7) < 0.2, `vitesse moyenne ${(v / n).toFixed(2)} m/s`);
-    assert.ok(cf / n >= 0.2 && cf / n <= 0.35, `facteur de charge ${(100 * cf / n).toFixed(1)} %`);
+    assert.ok(cf / n >= 0.25 && cf / n <= 0.32, `facteur de charge ${(100 * cf / n).toFixed(1)} %`);
     assert.ok(zero / n > 0.03 && zero / n < 0.12, `heures à 0 : ${(100 * zero / n).toFixed(1)} %`);
   }
 });

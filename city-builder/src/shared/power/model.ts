@@ -189,8 +189,8 @@ export function baseDemandKw(cls: ConsumerClass, tiles: number, residents: numbe
 export function windPowerShare(ms: number): number {
   if (!(ms >= 3) || ms >= 25) return 0;      // démarrage à 3 m/s, arrêt de sécurité à 25 m/s
   if (ms >= 12) return 1;                      // puissance nominale
-  const a = (ms - 3) / 9;
-  return a * a * a;
+  // Courbe en v³ entre le démarrage et la vitesse nominale (facteur de charge annuel ≈ 28 % sur le profil de vent).
+  return (ms * ms * ms - 27) / (12 * 12 * 12 - 27);
 }
 
 /**
