@@ -104,8 +104,40 @@ détaillés remplissent le **même nombre de voitures simultanées** que la dema
 horaire × habitants × facteur bus), au-delà ils ne vont pas sur la chaussée simulée. Capacités, IDM, carrefours et feux
 inchangés (docs/CIRCULATION.md §1).
 
-MESURES
+Mesures (Node, catalogue réel, graine 42, impôt résidentiel 11 %, 360 jours, moyennes des jours 120 à 360 à la pointe
+7 h 30–9 h et 17 h–18 h 30, une minute de jeu par tick comme dans le jeu ; avant / après) :
+
+| Ville | Véhicules à la pointe | Vitesse moyenne | Réseau saturé |
+|---|---|---|---|
+| Partie type de la vague 3 (grille 7 × 7 au pas de 160 m + avenue, 2 lignes de bus), point focal au centre | 1 842 / 103 | 4,0 / 24,8 km/h | 91,7 / 9,3 % |
+| Même ville, point focal loin (demande statistique seule) | 112 / 111 | 25,5 / 25,3 km/h | 10,3 / 10,3 % |
+| Ville « comme un joueur » (2 avenues + rues de desserte) | 1 029 / 129 | 2,9 / 17,3 km/h | 97,1 / 17,7 % |
+| Ville de démonstration (`buildCity demo`, 2 869 hab.) | 491 / 113 | 7,2 / 18,3 km/h | 82,6 / 29,2 % |
+| Protocole d'origine de la vague 3 (pas de 10 min, pointe 6 h–9 h), jour 360 | 2 217 / 112 | 2,5 / 22,3 km/h | 97,6 / 11,9 % |
+
+Partie type complète (avant / après, vague 3 au centre) : population moyenne 2 765 / 2 734 (fin 2 797 / 2 770),
+satisfaction 61,3 / 65,2, chômage moyen 1,4 / 2,6 %, trésorerie au jour 360 2,18 M / 2,85 M CHF, paliers atteints
+Bourg / Petite ville (5 465 points d'expansion), 5 objectifs
+accomplis, 7 réalisations, 7 événements (2 investisseurs non suivis par le script, panne du réseau voisin — jusqu'à 65 %
+des bâtiments coupés, le script ne réagit pas —, 2 grèves tenues, 2 épidémies de 103 et 132 malades), voyageurs en bus
+586 / 596 par jour. Le script ne réagit à rien : les objectifs restants (écoles, soins, électricité) et les investisseurs
+demandent un joueur.
 
 ## 6. Coût
 
-COUT
+
+Ville de charge (`buildCity stress` : 500 bâtiments, 21 034 habitants, 30 jours à une minute par tick, Node 22, ce
+conteneur ; avant / après) : tick moyen 2,86 / 1,60 ms (p95 5,93 / 1,83 ms) ; tick du début de jour 129 / 107 ms en
+moyenne (médiane 108 / 100 ms) ; clôture mensuelle 233 / 162 ms. La baisse vient du trafic : 2 068 / 448 véhicules à
+8 h au quatrième jour (5,1 / 17,4 km/h), le plafond des trajets détaillés retirant l'excès de voitures. Coût propre des
+modules par appel : `paliers.onDayStart` 4,9 ms (rapport de la démographie, partagé avec les objectifs),
+`objectifs.onDayStart` 0,17 ms, `evenements.onDayStart` 0,008 ms, `onTick` et `takeDelta` < 0,001 ms ; aucune boucle
+par citoyen, une boucle par bâtiment par jour (bacs pleins).
+
+## 7. Limites connues
+
+- Les verrous ne valent que pour les poses du joueur : la croissance des zones (promotion privée) n'est pas filtrée.
+- Les cadenas du tiroir de construction se mettent à jour à la prochaine ouverture du tiroir.
+- La première notification d'une partie n'est jamais affichée (règle existante de `main.ts`) ; elle reste dans l'onglet.
+- Pas d'achat de cases de carte (ce système n'existe pas dans le jeu).
+- Réglages (fréquences, récompenses) non sauvegardés : constantes du code.
