@@ -20,7 +20,7 @@ import { barRow } from './city-panels';
 import { drawChart, MONTHS_SHORT } from './charts';
 import { $, el, fmt, money, moneyShort, pct, signedMoney } from './dom';
 import { iconEl } from './icons';
-import { clearLog, markAllRead, notifyLog, onNotify, unreadCount } from './notify';
+import { clearLog, markAllRead, notifyLog, onNotify, unreadCount, type NotifyEntry } from './notify';
 
 export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications' | 'policy' | 'research' | 'energy' | 'water' | 'waste';
 
@@ -407,13 +407,17 @@ export class Dashboards {
     if (!notifyLog.length) return [el('p', { cls: 'muted small', text: 'Aucune notification pour l’instant.' })];
     const clear = el('button', { cls: 'chip', attrs: { 'data-act': 'clear' } }, iconEl('close'), el('span', { text: 'Tout effacer' }));
     clear.addEventListener('click', () => { clearLog(); this.render(true); });
-    const fmtT = (t: number): string => new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    return [
-      el('ul', { cls: 'notif-list' }, ...notifyLog.slice().reverse().map((n) => el('li', { cls: n.kind },
-        el('span', { cls: 'nico' }, iconEl(n.kind === 'error' ? 'alert' : n.kind === 'ok' ? 'check' : 'info')),
-        el('span', { cls: 'ntext', text: n.count > 1 ? `${n.text} (×${n.count})` : n.text }), el('span', { cls: 'ntime', text: fmtT(n.at) })))),
-      el('div', { cls: 'chips' }, clear),
-    ];
+    // Date de jeu (jour, mois, an) ; à défaut, date réelle complète (jamais une heure seule, ambiguë).
+    const fmtT = (n: NotifyEntry): string => n.gameDate || new Date(n.at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const item = (n: NotifyEntry, pinned = false): HTMLElement => el('li', { cls: `${n.kind}${pinned ? ' notif-pinned' : ''}` },
+      el('span', { cls: 'nico' }, iconEl(n.kind === 'error' ? 'alert' : n.kind === 'ok' ? 'check' : 'info')),
+      el('span', { cls: 'ntext', text: n.count > 1 && !n.group ? `${n.text} (×${n.count})` : n.text }), el('span', { cls: 'ntime', text: fmtT(n) }));
+    // Alertes épinglées en tête (les 3 plus récentes), puis tout le journal du plus récent au plus ancien.
+    const alerts = notifyLog.filter((n) => n.kind === 'error').slice(-3).reverse();
+    const out: HTMLElement[] = [];
+    if (alerts.length) out.push(el('div', { cls: 'sec-title', text: 'Alertes récentes' }), el('ul', { cls: 'notif-list' }, ...alerts.map((n) => item(n, true))), el('div', { cls: 'sec-title', text: 'Journal' }));
+    out.push(el('ul', { cls: 'notif-list' }, ...notifyLog.slice().reverse().map((n) => item(n))), el('div', { cls: 'chips' }, clear));
+    return out;
   }
 }
 

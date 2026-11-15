@@ -9,7 +9,7 @@
  */
 import type { DechetsDelta, DechetsLayer, DechetsSnapshot } from '../../shared/protocol-ext/dechets';
 import { PLUGIN_TRANSFER_KEY } from '../../shared/protocol';
-import { WASTE_PARAMS } from '../../shared/waste/types';
+import { DEFAULT_WASTE_SETTINGS, WASTE_PARAMS } from '../../shared/waste/types';
 import { MUNICIPAL_SERVICE, type Municipal } from '../municipal/municipal';
 import { ROAD_KINDS } from '../roads/types';
 import { DECHETS_SAVE_VERSION, loadWaste, migrateDechets, saveWaste } from '../waste/save';
@@ -28,6 +28,13 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
   let lastTrucks = 0;
   /** Le module n'émet rien tant qu'aucun bâtiment n'a produit de déchets ni aucune installation n'existe. */
   const active = (): boolean => !!muni && (waste.producers > 0 || waste.facilities.size > 0 || waste.runs.length > 0);
+  /**
+   * État à sauvegarder : `producers` est remis à zéro au chargement et recalculé à la première heure produite ; une
+   * sauvegarde faite entre-temps perdait toute la section (bacs, réglages, décalages des grilles, cumuls).
+   */
+  const hasState = (): boolean => active() || (!!muni && (waste.bins.size > 0 || !!waste.appliedSat || !!waste.appliedLand
+    || waste.month.recycling > 0 || waste.month.energy > 0
+    || (Object.keys(DEFAULT_WASTE_SETTINGS) as (keyof typeof DEFAULT_WASTE_SETTINGS)[]).some((k) => waste.settings[k] !== DEFAULT_WASTE_SETTINGS[k])));
 
   const layer = (ctx: PluginContext): DechetsLayer | null => {
     const g = muni?.grids.get(NUISANCE_ID), soil = muni?.grids.get('pollution_sol');
@@ -166,7 +173,7 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
       }
     },
 
-    save() { return active() ? saveWaste(waste) : undefined; },
+    save() { return hasState() ? saveWaste(waste) : undefined; },
 
     load(ctx, data, version) {
       ctxRef = ctx;

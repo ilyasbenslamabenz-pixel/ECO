@@ -5,6 +5,7 @@
  * Sans amélioration : aucun delta, aucune section, aucun effet. TypeScript pur : AUCUN import de three ni du DOM.
  */
 import { runMigrations } from '../save-sections/types';
+import { isCoverageServiceTag } from '../demography';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 
 export const AMELIORATIONS_SAVE_VERSION = 1;
@@ -34,7 +35,9 @@ export interface ServiceLevelInfo { buildingId: number; level: number; max: numb
 export function createAmeliorationsPlugin(): SimPlugin & { readonly state: () => AmeliorationsSave } {
   const levels = new Map<number, number>();
   let version = 0, sent = -1, everSent = false;
-  const serviceTag = (ctx: PluginContext, id: number): string | null => ctx.buildings.assetOf(id)?.tags.find((t) => t.startsWith('service:')) ?? null;
+  // Seuls les services dont la démographie lit le niveau (couverture : éducation, santé, police, incendie, loisirs…)
+  // sont améliorables : pour les autres (`service:eau`, `service:commerces`…), l'amélioration serait payée sans effet.
+  const serviceTag = (ctx: PluginContext, id: number): string | null => ctx.buildings.assetOf(id)?.tags.find(isCoverageServiceTag) ?? null;
   const costOf = (ctx: PluginContext, id: number, lv: number): number => Math.round((ctx.buildings.assetOf(id)?.cost ?? 0) * 0.5 * lv);
   const upkeepOf = (ctx: PluginContext, id: number, lv: number): number => Math.round((ctx.buildings.assetOf(id)?.upkeepPerMonth ?? 0) * 0.4 * (lv - 1));
   const prune = (ctx: PluginContext): void => { for (const id of [...levels.keys()]) if (ctx.buildings.indexOf(id) < 0) { levels.delete(id); version++; } };
@@ -73,10 +76,11 @@ export function createAmeliorationsPlugin(): SimPlugin & { readonly state: () =>
       if (!Number.isInteger(id) || ctx.buildings.indexOf(id) < 0) return { ok: false, code: 'NOT_FOUND', message: 'Bâtiment introuvable' };
       if (name === 'info') return { ok: true, data: info(ctx, id) };
       if (name === 'upgrade') {
-        if (!serviceTag(ctx, id)) return { ok: false, code: 'INVALID_ARGS', message: 'Seuls les équipements de service peuvent être améliorés' };
+        if (!serviceTag(ctx, id)) return { ok: false, code: 'INVALID_ARGS', message: 'Seuls les équipements de service couverts (éducation, santé, sécurité, incendie, loisirs) peuvent être améliorés' };
         const lv = levels.get(id) ?? 1;
         if (lv >= MAX_SERVICE_LEVEL) return { ok: false, code: 'INVALID_ARGS', message: 'Niveau maximal atteint' };
         const cost = costOf(ctx, id, lv);
+        if (ctx.economy.bankrupt) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: 'Ville en faillite : travaux d\'amélioration suspendus jusqu\'au retour d\'une trésorerie positive' };
         if (ctx.economy.money < cost) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: `Fonds insuffisants (${cost} CHF requis)` };
         if (p['dryRun'] === true) return { ok: true, data: { ...info(ctx, id), cost } };
         ctx.economy.applyService(-cost, true);

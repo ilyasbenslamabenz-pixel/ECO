@@ -83,6 +83,14 @@ export function slotId(name: string): string {
   return s || 'partie';
 }
 
+/** Identifiant d'emplacement qui GARDE la casse du nom saisi (espaces → « _ », réaffichées en espaces). */
+export function slotIdKeepCase(name: string): string {
+  const s = name.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^[-_]+|[-_]+$/g, '').slice(0, 32);
+  return s || 'partie';
+}
+/** Nom affiché d'un emplacement. */
+export const slotLabel = (slot: string): string => slot.replace(/_/g, ' ');
+
 /**
  * Indicateur discret des sauvegardes en ligne (« Sauvegardé en ligne » / « Hors ligne — sauvegarde
  * locale ») : écoute l'évènement 'meknes:cloudsave' (src/save/cloud.ts). Rien n'est affiché hors

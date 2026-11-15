@@ -42,7 +42,9 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.8;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // PCFSoftShadowMap est retiré de three 0.187 (remplacé à l'exécution par PCFShadowMap, avec avertissement) :
+  // même rendu, sans l'avertissement.
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fb8cf);
@@ -131,7 +133,14 @@ export function initScene(canvas: HTMLCanvasElement): RenderContext {
 
   return {
     renderer, scene, camera, sun, hemi, onFrame, perf,
-    start() { if (!running) { running = true; last = performance.now(); requestAnimationFrame(loop); } },
+    start() {
+      if (running) return;
+      running = true; last = performance.now();
+      // Fenêtre de mesure de la résolution adaptative remise à zéro : sinon, au retour d'arrière-plan, la durée
+      // passée boucle arrêtée compte comme des images manquées et la résolution baisse à tort.
+      winStart = last; winFrames = 0;
+      requestAnimationFrame(loop);
+    },
     stop() { running = false; },
     renderNow(dt = 1 / 30) {
       for (const f of onFrame) f(dt);

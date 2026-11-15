@@ -130,6 +130,7 @@ export class PluginHost {
     const economy: PluginEconomy = {
       applyService: (amount, oneOff) => sim.economy.applyService(amount, oneOff === true),
       get money() { return sim.economy.money; },
+      get bankrupt() { return sim.economy.bankrupt; },
       get taxRates() { return { ...sim.economy.taxRates }; },
       lastMonth: () => {
         const h = sim.economy.history[sim.economy.history.length - 1];
@@ -277,6 +278,11 @@ export class PluginHost {
    * notification et n'empêche pas le chargement du reste ; une section inconnue ou trop récente est conservée.
    */
   load(raw: unknown): void {
+    this.loadSections(raw);
+    for (const p of this.plugins) if (p.afterLoad) this.guard(p, 'afterLoad', () => p.afterLoad!(this.ctx(p)), undefined);
+  }
+
+  private loadSections(raw: unknown): void {
     this.foreign = {};
     if (raw === undefined || raw === null) return;
     if (!isObj(raw)) { this.sim.notify('warn', 'Sauvegarde : sections des modules illisibles, ignorées.'); return; }

@@ -108,7 +108,7 @@ function mount(root: HTMLElement, api: UiPanelApi): () => void {
     parts.push(row('Mois en cours : recettes', money(cur.income)));
     parts.push(row('Mois en cours : dépenses', money(cur.expenses)));
     if (last) parts.push(row('Dernier mois : solde', money(last.income - last.expenses), Object.entries(last.lines).map(([k, v]) => `${k} : ${fmt(v)}`).join('\n')));
-    parts.push(el('p', { cls: 'muted small', text: 'Lignes du budget municipal (service « eau ») ; leur application à la trésorerie attend la sous-étape Fiscalité et budget.' }));
+    parts.push(el('p', { cls: 'muted small', text: 'Recettes et dépenses du service de l’eau, comptées dans la ligne « Services » des finances municipales.' }));
     // Réglages.
     parts.push(el('h4', { text: 'Réglages' }));
     parts.push(slider('Financement eau potable', 'fundingWater', 0, 1.5, 0.05, pct, 'Capacité de pompage / traitement et rendement de potabilisation'));

@@ -80,6 +80,16 @@ export class BudgetLedger {
     return r;
   }
 
+  /**
+   * Comme `post`, mais SANS application à la trésorerie : pour un module qui a déjà versé ces montants au fil de
+   * l'eau (ex. l'eau, versée heure par heure via `applyService`) et ne fait que les inscrire au grand livre.
+   */
+  record(side: BudgetSide, category: string, amount: number, service = '', district = ''): number {
+    const hook = this.onPost;
+    this.onPost = null;
+    try { return this.post(side, category, amount, service, district); } finally { this.onPost = hook; }
+  }
+
   /** Ventile un montant par quartier selon des poids (centimes exacts), une ligne par quartier. */
   postByDistrict(side: BudgetSide, category: string, amount: number, weights: Record<string, number>, service = ''): void {
     const parts = allocateByWeight(amount, weights);

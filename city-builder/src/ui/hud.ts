@@ -14,8 +14,8 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import { CityPanels, type ExtPort } from './city-panels';
-import { zoningView } from '../client/zoning-view';
 import { SECTOR_COLORS, SECTOR_LABELS_FR, type DemandSector } from '../shared/protocol-ext/zonage';
+import { cityDemand, DEMAND_NOTE, DEMAND_ORDER, demandPct } from './demand';
 import { closeFloatingModulePanels, Dashboards, ModuleHost, type ModuleBridge } from './dashboards';
 import { hydrateIcons, iconEl } from './icons';
 import { Minimap } from './minimap';
@@ -28,13 +28,13 @@ import type { ConstructionTools } from '../client/tools/machine';
 import type { CameraController } from '../input/camera';
 import type { ToolController, ToolUiHooks } from '../input/tools';
 import { BuildBar } from './buildbar';
-import { $, chfText, el, fmt, money, moneyShort, signedShort } from './dom';
+import { $, chfText, el, fmt, money, moneyShort, signedMoney } from './dom';
 import { FinanceHistory } from './finance';
 import { MONTHS_SHORT } from './charts';
-import { toast as showToast } from './notify';
+import { setNotifyDate, toast as showToast } from './notify';
 import { loadOptions, sanitizeOptions, saveOptions, type GraphicsOptions } from './options';
 import { InfoPanel } from './panels';
-import { listSlotsAsync, removeSlotAsync, slotId } from './save-slots';
+import { listSlotsAsync, removeSlotAsync, slotIdKeepCase, slotLabel } from './save-slots';
 import type { ThumbnailSource } from './thumbnails';
 import { initTooltips } from './tooltips';
 
@@ -176,7 +176,7 @@ export function initUI(h: UIHandlers): UIHandle {
       const load = el('button', { cls: 'primary', text: 'Charger' });
       load.addEventListener('click', () => h.onLoadSlot?.(s.slot));
       const del = deleteButton(s.slot, () => { void renderLoadList(); });
-      ul.append(el('li', { cls: 'slot' }, el('div', { cls: 'meta' }, el('div', { cls: 'name', text: `${s.cityName} — ${s.slot === 'auto' ? 'sauvegarde rapide' : s.slot}` }),
+      ul.append(el('li', { cls: 'slot' }, el('div', { cls: 'meta' }, el('div', { cls: 'name', text: `${s.cityName} — ${s.slot === 'auto' ? 'sauvegarde rapide' : slotLabel(s.slot)}` }),
         el('div', { cls: 'sub', text: `${s.gameDate} · ${money(s.money)} · ${fmt(s.buildings)} bâtiments · ${formatSavedAt(s.savedAt)}` })), load, del));
     }
   };
@@ -226,7 +226,7 @@ export function initUI(h: UIHandlers): UIHandle {
     for (const s of slots) {
       const over = el('button', { text: 'Écraser' });
       over.addEventListener('click', () => { void Promise.resolve(h.onSaveSlot?.(s.slot)).then(() => renderSaveList()); });
-      ul.append(el('li', { cls: 'slot' }, el('div', { cls: 'meta' }, el('div', { cls: 'name', text: s.slot === 'auto' ? 'Sauvegarde rapide' : s.slot }),
+      ul.append(el('li', { cls: 'slot' }, el('div', { cls: 'meta' }, el('div', { cls: 'name', text: s.slot === 'auto' ? 'Sauvegarde rapide' : slotLabel(s.slot) }),
         el('div', { cls: 'sub', text: `${s.cityName} · ${s.gameDate} · ${formatSavedAt(s.savedAt)}` })), over, deleteButton(s.slot, () => { void renderSaveList(); })));
     }
   };
@@ -237,7 +237,7 @@ export function initUI(h: UIHandlers): UIHandle {
   $<HTMLFormElement>('form-save').addEventListener('submit', (e) => {
     e.preventDefault();
     const input = $<HTMLInputElement>('save-name');
-    const id = slotId(input.value);
+    const id = slotIdKeepCase(input.value);
     input.value = '';
     void Promise.resolve(h.onSaveSlot?.(id)).then(() => renderSaveList());
   });
@@ -254,6 +254,7 @@ export function initUI(h: UIHandlers): UIHandle {
   /* ---------- Panneaux de droite : un seul ouvert à la fois ---------- */
   const history = new FinanceHistory();
   let api: ConstructionUiApi | null = null;
+  let extPort: ExtPort | null = null;
   let lastStats: SimStats | null = null;
   let cityName = '';
   const modules = new ModuleHost(showToast);
@@ -374,6 +375,11 @@ export function initUI(h: UIHandlers): UIHandle {
 
   let currentSpeed: SimSpeed = 1;
   let lastFinRender = 0;
+  // Journal : messages datés en date de jeu (jour, mois, an, heure).
+  setNotifyDate(() => {
+    const d = lastStats?.date;
+    return d ? `${d.day} ${MONTHS_SHORT[d.month - 1] ?? ''} an ${d.year}, ${String(d.hour).padStart(2, '0')}:${String(d.minute).padStart(2, '0')}` : '';
+  });
   const elDay = $('hud-day');
   const elClock = $('hud-clock');
   const elMoney = $('hud-money');
@@ -387,18 +393,36 @@ export function initUI(h: UIHandlers): UIHandle {
   let heightAt: ((x: number, z: number) => number) | null = null;
   const cursorTag = $('cursor-tag');
   const touchBar = $('touch-confirm');
+  /**
+   * Bouton « Construire » de la barre tactile : reflète la validation (dryRun) de l'emplacement par la simulation,
+   * grisé avec la raison au lieu d'un refus après coup.
+   */
+  let tcLabel = '';
+  const syncTouchConfirm = (): void => {
+    const ok = $<HTMLButtonElement>('tc-ok');
+    const reason = $('tc-reason');
+    const m = api?.machine;
+    const p = m?.preview;
+    const bad = !touchBar.classList.contains('hidden') && !!m && m.tool === 'building' && p?.kind === 'building' && p.validity === 'error';
+    ok.disabled = bad;
+    ok.textContent = bad ? 'Emplacement invalide' : tcLabel || 'Construire';
+    // Avertissement de la simulation sur un emplacement valide (ex. aucune route ne dessert le bâtiment).
+    const warn = !bad && !touchBar.classList.contains('hidden') && m?.tool === 'building' && p?.kind === 'building' && p.validity === 'ok' && !!p.message;
+    reason.textContent = p?.kind === 'building' && (bad || warn) ? chfText(p.message || 'Emplacement refusé par la simulation') : '';
+    reason.classList.toggle('hidden', !bad && !warn);
+    reason.classList.toggle('warn', warn);
+  };
   const ensureMinimap = (): void => {
     if (minimap || !api || !heightAt) return;
     minimap = new Minimap({ camera: api.camera, mirror: api.mirror, heightAt });
     (window as unknown as { __aubeMinimap?: Minimap }).__aubeMinimap = minimap;
   };
-  /** Jauge de demande : zonage (demande qui fait pousser les zones) si actif, sinon demande de la démographie. */
+  /** Jauge de demande : même source et même échelle que Population > Demande (voir ui/demand.ts). */
   const renderDemand = (r: SimReport): void => {
-    const z = zoningView.demand;
-    const dd = r.demography.demand;
-    const v: Record<DemandSector, number> = z ? { ...z } : { R: dd.residential, C: dd.commercial, I: dd.industrial, B: dd.office };
+    const v = cityDemand(r);
+    if (!v) return;
     const box = $('hud-demand');
-    if (!box.childElementCount) for (const s of ['R', 'C', 'I', 'B'] as const) box.append(el('span', { cls: 'col', attrs: { 'data-sector': s } }, el('span', { cls: 'bar' }, el('i', { attrs: { style: `background:${SECTOR_COLORS[s]}` } })), el('b', { text: s, attrs: { style: `color:${SECTOR_COLORS[s]}` } })));
+    if (!box.childElementCount) for (const s of DEMAND_ORDER) box.append(el('span', { cls: 'col', attrs: { 'data-sector': s } }, el('span', { cls: 'bar' }, el('i', { attrs: { style: `background:${SECTOR_COLORS[s]}` } })), el('b', { text: s, attrs: { style: `color:${SECTOR_COLORS[s]}` } })));
     const parts: string[] = [];
     for (const col of box.children) {
       const s = (col as HTMLElement).dataset['sector'] as DemandSector;
@@ -407,9 +431,9 @@ export function initUI(h: UIHandlers): UIHandle {
       i.style.height = `${Math.round(Math.abs(x) * 50)}%`;
       i.style.bottom = x >= 0 ? '50%' : ''; i.style.top = x < 0 ? '50%' : '';
       (col as HTMLElement).dataset['value'] = x.toFixed(2);
-      parts.push(`${SECTOR_LABELS_FR[s]} ${x >= 0 ? '+' : '−'}${Math.round(Math.abs(x) * 100)} %`);
+      parts.push(`${SECTOR_LABELS_FR[s]} ${demandPct(x)}`);
     }
-    $('hud-demand-btn').dataset['tip'] = `Demande — ${parts.join(' · ')}. Ouvrir le détail.`;
+    $('hud-demand-btn').dataset['tip'] = `Demande de construction — ${parts.join(' · ')}. ${DEMAND_NOTE} Ouvrir le détail.`;
   };
 
   /** Satisfaction et variation de population : rapport de la simulation (jamais inventées). */
@@ -462,17 +486,19 @@ export function initUI(h: UIHandlers): UIHandle {
       const d = s.date;
       elDay.textContent = `${d.day} ${MONTHS_SHORT[d.month - 1] ?? ''} an ${d.year}`;
       elClock.textContent = `${String(d.hour).padStart(2, '0')}:${String(d.minute).padStart(2, '0')}`;
-      // Téléphone (barre sur une ligne) : montant compact dès 10 000 (« 509 k CHF »).
-      elMoney.textContent = matchMedia('(max-width: 760px)').matches && Math.abs(s.money) >= 1e4 ? signedShort(s.money).replace(/^\+/, '').replace(/\s*CHF$/, '') : moneyShort(s.money);
-      elMoney.classList.toggle('neg', s.money < 0);
-      // Argent gagné ou perdu à chaque heure de jeu (versé heure par heure par la simulation : 720 h par mois).
-      // Argent réellement versé chaque heure (les emprunts sont remboursés en une fois en fin de mois).
-      const h = s.hourlyBalance ?? s.monthlyBalance / 720;
-      const perHour = Math.abs(h) >= 1 ? signedShort(Math.round(h)) : `${h < 0 ? '−' : '+'}${Math.abs(h).toFixed(2).replace('.', ',')} CHF`;
-      elBalance.replaceChildren(matchMedia('(max-width: 760px)').matches ? perHour.replace(/\s*CHF$/, '') : perHour, el('span', { cls: 'per', text: ' / h' }));
-      elBalance.classList.toggle('neg', h < 0);
-      elBalance.classList.toggle('pos', h > 0);
       const phoneBar = matchMedia('(max-width: 760px)').matches;
+      // Téléphone (barre sur une ligne) : montant compact dès 10 000 (« 509 k »), jamais tronqué.
+      elMoney.textContent = phoneBar && Math.abs(s.money) >= 1e4 ? tinyNumber(s.money) : moneyShort(s.money);
+      elMoney.classList.toggle('neg', s.money < 0);
+      // Solde MENSUEL prévu : la même valeur que « Solde mensuel prévu » du panneau Finances (rapport de la
+      // simulation : impôts + services − entretien − salaires − emprunts), sinon celle des statistiques.
+      const fc = cityPanels.report?.economy.forecast;
+      const mb = fc ? fc.balance : s.monthlyBalance;
+      const sign = mb > 0 ? '+' : mb < 0 ? '−' : '±';
+      elBalance.replaceChildren(phoneBar ? `${sign}${tinyNumber(Math.abs(mb))}` : `${sign}${moneyShort(Math.abs(mb))}`, el('span', { cls: 'per', text: phoneBar ? '/mois' : ' / mois' }));
+      elBalance.classList.toggle('neg', mb < 0);
+      elBalance.classList.toggle('pos', mb > 0);
+      $('hud-money-btn').dataset['tip'] = `Trésorerie ${money(s.money)} · solde mensuel prévu ${signedMoney(mb)} (même calcul que le panneau Finances) — ouvrir les finances`;
       // Téléphone : habitants compacts dès 1 000 (« 2,9 k »).
       elPop.textContent = phoneBar && s.population >= 1000 ? `${(s.population / 1000).toLocaleString('fr-FR', { maximumFractionDigits: s.population >= 1e5 ? 0 : 1 })}k` : fmt(s.population);
       currentSpeed = s.speed;
@@ -496,7 +522,8 @@ export function initUI(h: UIHandlers): UIHandle {
       if (dashboards.current === 'city') dashboards.render(true);
     },
     toast(text, kind = 'info') { showToast(text, kind); },
-    setMenuFoot(text) { $('menu-foot').textContent = text; },
+    // Pied du menu : sans détail technique (support de stockage des sauvegardes).
+    setMenuFoot(text) { $('menu-foot').textContent = text.replace(/\s*·\s*sauvegardes\s*:\s*\S+/i, ' · sauvegardes dans ce navigateur'); },
     toolHooks() {
       return {
         cursorTag(text, kind, sx, sy) {
@@ -521,10 +548,11 @@ export function initUI(h: UIHandlers): UIHandle {
         },
         touchConfirm(o) {
           document.body.classList.toggle('confirming', !!o);
-          if (!o) { touchBar.classList.add('hidden'); return; }
-          $('tc-ok').textContent = chfText(o.label);
+          if (!o) { touchBar.classList.add('hidden'); tcLabel = ''; syncTouchConfirm(); return; }
+          tcLabel = chfText(o.label);
           $('tc-rotate').classList.toggle('hidden', !o.canRotate);
           touchBar.classList.remove('hidden');
+          syncTouchConfirm();
         },
         selection(p: PickResult | null) {
           if (p) opened('info');
@@ -537,9 +565,11 @@ export function initUI(h: UIHandlers): UIHandle {
       buildBar = new BuildBar({ catalog: a.mirror.catalog, tools: a.tools, machine: a.machine, thumbs: a.thumbs, notify: showToast, onDrawerOpen: () => opened('drawer') });
       info = new InfoPanel({ mirror: a.mirror, camera: a.camera, thumbs: a.thumbs, demolish: (p) => a.machine.demolishTarget(p).then((ok) => { if (ok) a.tools.select(null); return ok; }), move: (rec) => { a.tools.select(null); a.machine.startMove(rec); },
         serviceInfo: async (id) => (await a.machine.pluginCommand('ameliorations', 'info', { buildingId: id })) as { level: number; max: number; upgradeCost: number | null; radiusFactor: number; capacityFactor: number; extraUpkeep: number },
+        inspect: async (id) => (extPort ? await extPort.sendExt('inspectBuilding', { buildingId: id }) : null),
         upgradeService: async (id) => { try { await a.machine.pluginCommand('ameliorations', 'upgrade', { buildingId: id }); return true; } catch (e) { showToast(`Amélioration refusée : ${(e as { error?: { message?: string } })?.error?.message ?? String(e)}`, 'error'); return false; } },
         close: () => a.tools.select(null) });
-      $('tc-ok').addEventListener('click', () => a.tools.confirmTouch());
+      $('tc-ok').addEventListener('click', () => { if (!$<HTMLButtonElement>('tc-ok').disabled) a.tools.confirmTouch(); });
+      a.machine.onPreview(() => syncTouchConfirm());
       $('tc-rotate').addEventListener('click', () => a.tools.rotate());
       const mag = $('tc-magnet');
       mag.addEventListener('click', () => { a.machine.setMagnet(!a.machine.magnet); mag.setAttribute('aria-pressed', String(a.machine.magnet)); mag.classList.toggle('active', a.machine.magnet); });
@@ -555,7 +585,7 @@ export function initUI(h: UIHandlers): UIHandle {
       renderReportStats();
       dashboards.render();
     },
-    setExtPort(p) { cityPanels.setPort(p); },
+    setExtPort(p) { extPort = p; cityPanels.setPort(p); },
     attachWorld(o) { heightAt = o.heightAt; ensureMinimap(); },
     setModuleBridge(b) { modules.bridge = b; },
     moduleSnapshot(ext) { modules.setSnapshot(ext); },
@@ -567,6 +597,18 @@ export function initUI(h: UIHandlers): UIHandle {
 }
 
 function randomSeed(): number { return (Math.random() * 2 ** 31) | 0; }
+
+/** Nombre très compact pour la barre du téléphone : « 2,95 M », « 509 k », « 37 k », « 3,7 k », « 845 ». */
+export function tinyNumber(n: number): string {
+  const a = Math.abs(n);
+  const s = n < 0 ? '−' : '';
+  const d = (v: number, max: number): string => v.toLocaleString('fr-FR', { maximumFractionDigits: max });
+  if (a >= 1e9) return `${s}${d(a / 1e9, 1)} Md`;
+  if (a >= 1e6) return `${s}${d(a / 1e6, a >= 1e7 ? 1 : 2)} M`;
+  if (a >= 1e4) return `${s}${d(a / 1e3, 0)} k`;
+  if (a >= 1e3) return `${s}${d(a / 1e3, 1)} k`;
+  return `${s}${fmt(a)}`;
+}
 
 function formatSavedAt(iso: string): string {
   const d = new Date(iso);

@@ -75,7 +75,12 @@ export interface CommandMap {
        */
       restoreToken?: number;
     };
-    result: { buildingId: number; cost: number };
+    /**
+     * `noRoadAccess` / `warning` (avertissement, pas un refus ; aussi en `dryRun` pour l'aperçu) : aucune route ne
+     * passe assez près pour desservir le bâtiment (même règle que l'alerte « Pas d'accès routier ») ; `warning` est
+     * le message à afficher. Absents quand le bâtiment est desservi.
+     */
+    result: { buildingId: number; cost: number; noRoadAccess?: true; warning?: string };
   };
   /**
    * `refund` : remboursement versé (25 % du prix pour un bâtiment payé par la ville, 0 pour un bâtiment privé né du

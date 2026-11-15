@@ -4,10 +4,11 @@
  * Un seul appel de rendu (points texturés, atlas dessiné au canevas) : coût négligeable même sur téléphone.
  */
 import * as THREE from 'three';
-import { ALERT_BITS, ALERT_KINDS, type AlertesPayload } from '../../shared/protocol-ext/alertes';
+import { ALERT_BITS, ALERT_KINDS, type AlertKind, type AlertesPayload } from '../../shared/protocol-ext/alertes';
 import type { RenderPlugin, RenderPluginContext } from './types';
 
-const COLORS: Record<string, string> = { road: '#8a8f98', power: '#f2b01e', water: '#2f8de4', waste: '#7a9b3a' };
+// Typé par AlertKind : un nouveau bit d'alerte sans couleur ne compile pas.
+const COLORS: Record<AlertKind, string> = { road: '#8a8f98', power: '#f2b01e', water: '#2f8de4', waste: '#7a9b3a', isolated: '#e0701e' };
 
 /** Glyphe blanc de chaque problème, dessiné dans une case de 64 px centrée en (32, 32). */
 function glyph(g: CanvasRenderingContext2D, kind: string): void {
@@ -16,6 +17,14 @@ function glyph(g: CanvasRenderingContext2D, kind: string): void {
   if (kind === 'power') { g.moveTo(36, 12); g.lineTo(22, 35); g.lineTo(32, 35); g.lineTo(27, 53); g.lineTo(43, 28); g.lineTo(33, 28); g.closePath(); g.fill(); return; }
   if (kind === 'water') { g.moveTo(32, 12); g.bezierCurveTo(40, 26, 46, 32, 46, 40); g.arc(32, 40, 14, 0, Math.PI); g.bezierCurveTo(18, 32, 24, 26, 32, 12); g.fill(); return; }
   if (kind === 'road') { g.moveTo(24, 14); g.lineTo(18, 50); g.moveTo(40, 14); g.lineTo(46, 50); g.stroke(); g.beginPath(); g.moveTo(32, 16); g.lineTo(32, 24); g.moveTo(32, 30); g.lineTo(32, 36); g.moveTo(32, 42); g.lineTo(32, 48); g.stroke(); return; }
+  if (kind === 'isolated') {
+    // Route coupée : deux tronçons de chaussée (bords parallèles) séparés par une brèche en zigzag.
+    g.moveTo(9, 22); g.lineTo(23, 22); g.moveTo(9, 42); g.lineTo(23, 42);
+    g.moveTo(41, 22); g.lineTo(55, 22); g.moveTo(41, 42); g.lineTo(55, 42);
+    g.stroke();
+    g.beginPath(); g.lineWidth = 4; g.moveTo(32, 13); g.lineTo(27, 23); g.lineTo(37, 32); g.lineTo(27, 41); g.lineTo(32, 51); g.stroke();
+    return;
+  }
   // Déchets : poubelle.
   g.fillRect(20, 22, 24, 28); g.fillRect(16, 16, 32, 5); g.fillRect(27, 11, 10, 5);
 }
@@ -68,6 +77,9 @@ export function createAlertesRenderPlugin(): RenderPlugin & { readonly count: ()
       ks.forEach((ki, j) => { pos.push(items[i + 2]!, items[i + 3]! + 6, items[i + 4]!); kind.push(ki); slot.push(j - (ks.length - 1) / 2); });
     }
     n = kind.length;
+    // Attributs remplacés : three ne supprime leurs tampons GPU qu'au dispose() de la géométrie (sinon, un jeu de
+    // tampons orphelins par mise à jour des alertes). La géométrie est ré-envoyée à son prochain rendu.
+    geo.dispose();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('kind', new THREE.Float32BufferAttribute(kind, 1));
     geo.setAttribute('slot', new THREE.Float32BufferAttribute(slot, 1));

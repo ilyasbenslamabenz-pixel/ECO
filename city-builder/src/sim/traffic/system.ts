@@ -99,6 +99,8 @@ const RESIDENTIAL = new Set(['house', 'townhouse', 'apartment_low', 'apartment_m
 const WORK = new Set(['commercial', 'industrial', 'public', 'skyscraper', 'apartment_mid']);
 const ROUTE_MAX = 512;
 const APPROACH = 45; // m : distance de demande d'accès au carrefour
+const STOP_SPEED = 0.3; // m/s : vitesse sous laquelle l'arrêt au « stop » est considéré comme marqué
+const STOP_LINE_MARGIN = 1.5; // m : au-delà de la distance de sécurité (s0), distance maximale à la ligne pour que l'arrêt compte
 
 /** Part de la population résidente circulant en voiture selon l'heure (profil journalier). */
 export function demandShare(hour: number): number {
@@ -157,6 +159,8 @@ export class TrafficSystem {
   lcCool = new Float32Array(0);
   waitT = new Float32Array(0);
   holdConn = new Int32Array(0);
+  /** Carrefour en « stop » : lien sur lequel le véhicule a marqué l'arrêt complet à la ligne (−1 : pas encore). */
+  stopLink = new Int32Array(0);
   granted = new Uint8Array(0);
   /** Instant (temps du trafic) avant lequel l'itinéraire du véhicule n'est pas réexaminé. */
   rrNext = new Float32Array(0);
@@ -287,7 +291,7 @@ export class TrafficSystem {
     this.len = f32(this.len); this.vDes = f32(this.vDes); this.aMax = f32(this.aMax); this.bComf = f32(this.bComf); this.T = f32(this.T); this.s0 = f32(this.s0);
     this.routeOff = i32(this.routeOff); this.routeLen = i32(this.routeLen); this.routeIdx = i32(this.routeIdx); this.destS = f32(this.destS);
     this.nextLink = i32(this.nextLink); { const b = new Int8Array(n); b.set(this.needLane); this.needLane = b; }
-    this.latOff = f32(this.latOff); this.lcCool = f32(this.lcCool); this.waitT = f32(this.waitT); this.rrNext = f32(this.rrNext); this.holdConn = i32(this.holdConn);
+    this.latOff = f32(this.latOff); this.lcCool = f32(this.lcCool); this.waitT = f32(this.waitT); this.rrNext = f32(this.rrNext); this.holdConn = i32(this.holdConn); this.stopLink = i32(this.stopLink);
     this.granted = u8(this.granted); this.denyReason = u8(this.denyReason); this.wasGranted = u8(this.wasGranted); this.flags = u8(this.flags);
     this.act = i32(this.act); this.actPos = i32(this.actPos);
     const nf = new Int32Array(n);
@@ -528,6 +532,7 @@ export class TrafficSystem {
     this.rrNext[v] = this.time + 3 + this.rand() * 6;
     this.waitT[v] = 0;
     this.holdConn[v] = -1;
+    this.stopLink[v] = -1;
     this.granted[v] = 0; this.wasGranted[v] = 0;
     this.flags[v] = 0;
     this.actPos[v] = this.actCount;
@@ -701,6 +706,11 @@ export class TrafficSystem {
         continue;
       }
       if (dist > APPROACH) { this.granted[v] = 0; continue; }
+      // carrefour en « stop » : arrêt complet à la ligne avant toute demande d'accès (chaque véhicule, pas de peloton)
+      if (g.nodeStop[node] && this.stopLink[v] !== l && !(this.wasGranted[v] === 1 && dist < (this.v[v]! * this.v[v]!) / (2 * this.bComf[v]!) + 1.5)) {
+        if (this.v[v]! < STOP_SPEED && dist < this.s0[v]! + STOP_LINE_MARGIN) this.stopLink[v] = l;
+        else { this.granted[v] = 0; this.denyReason[v] = 2; continue; }
+      }
       // tous les véhicules proches demandent l'accès (peloton : un suiveur est autorisé avec son meneur,
       // ce qui évite un arrêt à la ligne pour chaque véhicule) ; l'ordre de passage reste celui de la file (IDM)
       const k = this.reqCount++;

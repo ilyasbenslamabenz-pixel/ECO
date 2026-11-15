@@ -107,7 +107,10 @@ export class ThumbnailRenderer implements ThumbnailSource {
     if (!this.scene) {
       const scene = new THREE.Scene();
       const pm = new THREE.PMREMGenerator(renderer);
-      scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+      const room = new RoomEnvironment();
+      scene.environment = pm.fromScene(room, 0.04).texture;
+      // Scène de studio utilisée une seule fois : ses géométries et matériaux (envoyés au GPU) sont libérés.
+      room.dispose();
       pm.dispose();
       const sun = new THREE.DirectionalLight(0xfff0dc, 1.6);
       sun.position.set(-3, 5, 4);

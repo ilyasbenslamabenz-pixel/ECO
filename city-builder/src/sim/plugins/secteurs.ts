@@ -34,24 +34,29 @@ export function createSecteursPlugin(): SimPlugin & { readonly state: () => Sect
   let s = emptySecteursSave();
   let version = 0, sent = -1, everSent = false;
   let ctxRef: PluginContext | null = null;
-  // Cache bâtiment -> secteur (index dans s.secteurs), recalculé quand les bâtiments ou les secteurs changent.
-  let cacheKey = '', cache = new Map<number, number>();
-  const sectorOf = (ctx: PluginContext): Map<number, number> => {
-    const key = `${version}:${ctx.buildings.count}`;
-    if (key === cacheKey) return cache;
-    cacheKey = key; cache = new Map();
+  // Cache bâtiment -> secteur (index dans s.secteurs, -1 hors secteur) avec la position mémorisée : vidé à chaque
+  // modification des secteurs (création, suppression, politiques, chargement) ; une entrée est recalculée si le
+  // bâtiment a bougé (outil Déplacer) ; un bâtiment nouveau (même s'il en remplace un autre) est calculé à la
+  // demande. (L'ancienne clé « version:nombre de bâtiments » ratait les démolitions suivies d'une pose et les
+  // déplacements : politiques appliquées au mauvais bâtiment.)
+  let cacheVersion = -1;
+  const cache = new Map<number, { k: number; x: number; z: number }>();
+  const sectorIndex = (ctx: PluginContext, id: number): number => {
+    if (cacheVersion !== version) { cache.clear(); cacheVersion = version; }
+    const i = ctx.buildings.indexOf(id);
+    if (i < 0) return -1;
     const st = ctx.buildings.store;
-    for (let i = 0; i < ctx.buildings.count; i++) {
-      const x = st.x[i]!, z = st.z[i]!;
-      const k = s.secteurs.findIndex((d) => x >= d.x0 && x <= d.x1 && z >= d.z0 && z <= d.z1);
-      if (k >= 0) cache.set(st.id[i]!, k);
-    }
-    return cache;
+    const x = st.x[i]!, z = st.z[i]!;
+    const e = cache.get(id);
+    if (e && e.x === x && e.z === z) return e.k;
+    const k = s.secteurs.findIndex((d) => x >= d.x0 && x <= d.x1 && z >= d.z0 && z <= d.z1);
+    cache.set(id, { k, x, z });
+    return k;
   };
   const effect = (id: number, kind: 'happiness' | 'pollution'): number => {
     if (!ctxRef || !s.secteurs.length) return kind === 'happiness' ? 0 : 1;
-    const k = sectorOf(ctxRef).get(id);
-    if (k === undefined) return kind === 'happiness' ? 0 : 1;
+    const k = sectorIndex(ctxRef, id);
+    if (k < 0) return kind === 'happiness' ? 0 : 1;
     let v = kind === 'happiness' ? 0 : 1;
     for (const pid of s.secteurs[k]!.policies) {
       const p = DISTRICT_POLICIES.find((x) => x.id === pid);
@@ -62,7 +67,8 @@ export function createSecteursPlugin(): SimPlugin & { readonly state: () => Sect
   };
   const counts = (ctx: PluginContext): number[] => {
     const n = s.secteurs.map(() => 0);
-    for (const k of sectorOf(ctx).values()) n[k]!++;
+    const st = ctx.buildings.store;
+    for (let i = 0; i < ctx.buildings.count; i++) { const k = sectorIndex(ctx, st.id[i]!); if (k >= 0) n[k]!++; }
     return n;
   };
   const costOf = (d: SecteurSave, buildings: number): number => Math.round(d.policies.reduce((a, pid) => a + (DISTRICT_POLICIES.find((p) => p.id === pid)?.costPerBuilding ?? 0), 0) * buildings);
@@ -79,7 +85,7 @@ export function createSecteursPlugin(): SimPlugin & { readonly state: () => Sect
     saveVersion: SECTEURS_SAVE_VERSION,
     state: () => s,
     init(ctx) { ctxRef = ctx; ctx.provide('secteurs', service); },
-    onNewGame() { s = emptySecteursSave(); version++; everSent = false; cacheKey = ''; },
+    onNewGame() { s = emptySecteursSave(); version++; everSent = false; cache.clear(); },
     onMonthStart(ctx) {
       if (!s.secteurs.length) return;
       const n = counts(ctx);
@@ -95,7 +101,7 @@ export function createSecteursPlugin(): SimPlugin & { readonly state: () => Sect
     },
     snapshot(ctx) { return s.secteurs.length ? view(ctx) : undefined; },
     save() { return s.secteurs.length ? { next: s.next, secteurs: s.secteurs.map((d) => ({ ...d, policies: [...d.policies] })) } : undefined; },
-    load(_ctx, data, v) { s = migrateSecteurs(data, v); version++; cacheKey = ''; },
+    load(_ctx, data, v) { s = migrateSecteurs(data, v); version++; cache.clear(); },
     command(ctx, name, payload): PluginCommandResult {
       const p = (typeof payload === 'object' && payload !== null ? payload : {}) as Record<string, unknown>;
       if (name === 'state') return { ok: true, data: view(ctx) };

@@ -221,8 +221,8 @@ try {
     await settle(page, 800);
     await shot(page, 'i02-iphone-catalogue');
     await page.tap('#drawer-body .card');
-    // Toucher la carte près de la route : l'aperçu suit le doigt (décalé), puis barre de confirmation.
-    const p = { x: 195, y: 420 }; // doigt au centre ; l'aperçu se place ~70 px au-dessus
+    // Toucher la carte près de la route : l'aperçu suit le doigt, puis barre de confirmation.
+    const p = { x: 195, y: 420 }; // doigt au centre ; l'aperçu se place sous le doigt
     const cdp = await page.context().newCDPSession(page);
     const touch = async (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id })) });
     await touch('touchStart', [[p.x, p.y]]);

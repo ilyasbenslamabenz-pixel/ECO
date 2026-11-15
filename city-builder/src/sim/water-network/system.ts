@@ -952,7 +952,8 @@ export class WaterSystem {
     for (const [k, v] of Object.entries(this.month.lines).sort(([a], [c]) => a.localeCompare(c))) {
       const amount = Math.round(v);
       if (amount <= 0) continue;
-      b.post(k.startsWith('vente') ? 'income' : 'expense', k, amount, 'eau');
+      // Déjà versé heure par heure à la trésorerie : inscription au grand livre seulement (pas de double paiement).
+      b.record(k.startsWith('vente') ? 'income' : 'expense', k, amount, 'eau');
     }
     this.lastBudget = this.month;
     this.month = emptyBudget();

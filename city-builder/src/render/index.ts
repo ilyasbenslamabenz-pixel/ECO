@@ -90,7 +90,11 @@ export async function initRender(
   const profile = deviceProfile(quality);
   // Mode allégé : toute texture d'image plus grande est réduite par three avant l'envoi au GPU (resizeImage).
   // Fixé AVANT tout envoi ; la carte d'ombre a déjà lu la vraie limite à la création du rendu.
-  if (Number.isFinite(profile.gpuTextureCap)) ctx.renderer.capabilities.maxTextureSize = Math.min(ctx.renderer.capabilities.maxTextureSize, profile.gpuTextureCap);
+  // Réappliqué après une restauration du contexte WebGL (three recrée alors ses `capabilities`) : voir rebuildGpu.
+  const applyTextureCap = (): void => {
+    if (Number.isFinite(profile.gpuTextureCap)) ctx.renderer.capabilities.maxTextureSize = Math.min(ctx.renderer.capabilities.maxTextureSize, profile.gpuTextureCap);
+  };
+  applyTextureCap();
   const cycleJourNuit = (() => { try { const q = new URLSearchParams(globalThis.location?.search ?? ''); return q.get('nuit') === '1' || q.has('h'); } catch { return false; } })();
   const sky = await SkySystem.create({
     renderer: ctx.renderer, scene: ctx.scene, sun: ctx.sun, hemi: ctx.hemi, catalog, assetsBase,
@@ -155,7 +159,8 @@ export async function initRender(
   const handle: RenderHandle = {
     ctx, profile, sky, terrain, water, roads, buildings, vehicles, signals, veg, quays, plugins,
     disposePlugins() { plugins.dispose(); },
-    rebuildGpu() { sky.rebuildEnvironment(); veg.rebakeImpostors(ctx.renderer); buildings.invalidate(); },
+    // Plafond de textures d'abord : les textures sont ré-envoyées au GPU à l'image suivante.
+    rebuildGpu() { applyTextureCap(); sky.rebuildEnvironment(); veg.rebakeImpostors(ctx.renderer); buildings.invalidate(); },
     setTimeOfDay(hour) {
       // Toujours de jour (demande du propriétaire, allège le rendu) : lumière fixe de début d'après-midi.
       // Le cycle jour/nuit reste disponible avec ?nuit=1 (ou une heure imposée ?h=, captures) ; l'horloge de la simulation n'est pas touchée.

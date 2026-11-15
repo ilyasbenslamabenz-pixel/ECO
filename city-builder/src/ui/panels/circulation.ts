@@ -16,9 +16,9 @@ export function formatCirculation(s: CirculationStats): { label: string; value: 
   const nf = (v: number): string => v.toLocaleString('fr-FR');
   return [
     { label: 'Véhicules en circulation', value: nf(s.vehicles) },
-    { label: 'Vitesse moyenne', value: `${s.meanSpeedKmh.toFixed(1)} km/h` },
+    { label: 'Vitesse moyenne', value: `${s.meanSpeedKmh.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km/h` },
     { label: 'À l’arrêt', value: `${nf(s.stopped)} (${s.vehicles > 0 ? Math.round((s.stopped / s.vehicles) * 100) : 0} %)` },
-    { label: 'Réseau saturé', value: `${pct.toFixed(1)} % (${(s.congestedMeters / 1000).toFixed(1)} km)` },
+    { label: 'Réseau saturé', value: `${pct.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} % (${(s.congestedMeters / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km)` },
     { label: 'Trajets terminés', value: nf(s.arrived) },
     { label: 'Changements de voie', value: `${nf(s.laneChanges)} (dont ${nf(s.mandatoryLaneChanges)} de présélection)` },
     { label: 'Réacheminements', value: nf(s.rerouted) },

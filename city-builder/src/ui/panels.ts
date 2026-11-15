@@ -5,6 +5,7 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import type { BuildingRecord } from '../shared/contracts';
+import type { BuildingOccupancy } from '../sim/demography';
 import { alertMaskOf } from '../render/plugins/alertes';
 import { ALERT_BITS, ALERT_KINDS, ALERT_LABELS } from '../shared/protocol-ext/alertes';
 import { TILE_SIZE } from '../shared/constants';
@@ -13,7 +14,7 @@ import { roadDef } from '../client/tools/mirror';
 import { DEMOLISH_REFUND_RATE } from '../client/tools/machine';
 import type { CameraController } from '../input/camera';
 import { CATEGORY_FR } from './buildbar';
-import { $, el, fmt, money, phaseBadge } from './dom';
+import { $, el, fmt, money } from './dom';
 import type { ThumbnailSource } from './thumbnails';
 
 export interface InfoPanelDeps {
@@ -26,8 +27,13 @@ export interface InfoPanelDeps {
   /** Améliorations des équipements de service (facultatif) : niveau actuel, puis passage au niveau suivant. */
   serviceInfo?(id: number): Promise<{ level: number; max: number; upgradeCost: number | null; radiusFactor: number; capacityFactor: number; extraUpkeep: number } | null>;
   upgradeService?(id: number): Promise<boolean>;
+  /** Occupation réelle d'un bâtiment (simulation : habitants, employés, services, habitants suivis). */
+  inspect?(id: number): Promise<BuildingOccupancy | null>;
   close(): void;
 }
+
+const dec = (v: number, d = 1): string => v.toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const share = (a: number, b: number): string => (b > 0 ? ` (${Math.round((100 * a) / b)} %)` : '');
 
 const VEHICLE_FR: Record<string, string> = { car: 'Voiture', van: 'Utilitaire', bus: 'Bus', truck: 'Camion', service: 'Véhicule de service' };
 
@@ -77,18 +83,40 @@ export class InfoPanel {
       this.kicker.textContent = a ? CATEGORY_FR[a.category] : 'Bâtiment';
       this.title.textContent = a?.nameFr ?? rec.assetId;
       const pm = alertMaskOf(rec.id);
-      if (pm) this.row('Problèmes', el('span', { cls: 'neg' }, ALERT_KINDS.filter((k) => pm & ALERT_BITS[k]).map((k) => ALERT_LABELS[k]).join(' · ')));
+      this.row('Problèmes', pm ? el('span', { cls: 'neg' }, ALERT_KINDS.filter((k) => pm & ALERT_BITS[k]).map((k) => ALERT_LABELS[k]).join(' · ')) : el('span', { cls: 'pos', text: 'aucun signalé' }));
       if (a) {
+        const isService = a.tags.some((t) => t.startsWith('service:'));
+        // Occupation réelle (habitants, satisfaction, employés / taux d'utilisation, services), relue à l'ouverture.
+        const occRows: { key: string; label: string; node: HTMLElement }[] = [];
+        if (a.capacity.residents) occRows.push({ key: 'res', label: 'Habitants', node: el('span', { text: `… / ${fmt(a.capacity.residents)}` }) }, { key: 'happy', label: 'Satisfaction', node: el('span', { text: '…' }) });
+        if (a.capacity.jobs) occRows.push({ key: 'jobs', label: isService ? 'Taux d’utilisation' : 'Employés', node: el('span', { text: `… / ${fmt(a.capacity.jobs)}` }) });
+        if (this.d.inspect && occRows.length) occRows.push({ key: 'svc', label: 'Services à proximité', node: el('span', { text: '…' }) });
+        for (const r of occRows) this.row(r.label, r.node);
+        if (!this.d.inspect || !occRows.length) this.row('Capacité', a.capacity.residents ? `${fmt(a.capacity.residents)} habitants` : a.capacity.jobs ? `${fmt(a.capacity.jobs)} emplois` : '—');
+        if (this.d.inspect && occRows.length) {
+          const shownId = rec.id;
+          const node = (k: string): HTMLElement | undefined => occRows.find((r) => r.key === k)?.node;
+          void this.d.inspect(rec.id).then((o) => {
+            if (!o || this.shownBuilding !== shownId) return;
+            const res = node('res'); if (res) res.textContent = `${fmt(o.residents)} / ${fmt(o.residentCapacity)}${share(o.residents, o.residentCapacity)}`;
+            const hp = node('happy');
+            if (hp) {
+              const h = o.occupants.length ? o.occupants.reduce((t, c) => t + c.happiness, 0) / o.occupants.length : null;
+              hp.textContent = h === null ? '—' : `${fmt(h)} %`;
+              hp.className = h === null ? '' : h >= 60 ? 'pos' : h < 40 ? 'neg' : '';
+            }
+            const jobs = node('jobs');
+            if (jobs) jobs.textContent = isService ? (o.jobCapacity > 0 ? `${Math.round((100 * o.workers) / o.jobCapacity)} % (${fmt(o.workers)} / ${fmt(o.jobCapacity)} agents)` : '—') : `${fmt(o.workers)} / ${fmt(o.jobCapacity)}${share(o.workers, o.jobCapacity)}`;
+            const svc = node('svc'); if (svc) svc.textContent = o.services.length ? o.services.join(', ') : 'aucun';
+            if (!o.roadAccess) this.row('Accès routier', el('span', { cls: 'neg', text: 'aucun : reliez-le à une route' }));
+          }).catch(() => { for (const r of occRows) if (r.node.textContent?.startsWith('…')) r.node.textContent = '—'; });
+        }
         if (v) this.row('Variante', v.nameFr);
-        this.row('Capacité', a.capacity.residents ? `${fmt(a.capacity.residents)} habitants` : a.capacity.jobs ? `${fmt(a.capacity.jobs)} emplois` : '—');
-        if (a.capacity.residents && a.capacity.jobs) this.row('Emplois', fmt(a.capacity.jobs));
-        this.row('Occupants', el('span', {}, '— ', phaseBadge(2)));
         this.row('Entretien', `${money(a.upkeepPerMonth)} / mois`);
         this.row('Coût de construction', money(a.cost));
         this.row('Emprise', `${a.footprint.tilesX}×${a.footprint.tilesZ} cases (${a.footprint.tilesX * TILE_SIZE}×${a.footprint.tilesZ * TILE_SIZE} m)`);
         this.row('Hauteur', `${Math.round(a.dimensions.height * (v?.heightScale ?? 1))} m`);
-        this.row('Altitude du sol', `${rec.y.toFixed(1)} m`);
-        this.row('Modèle', a.license.source.startsWith('http') ? 'Poly Haven (CC0)' : 'Généré par le projet (CC0)');
+        this.row('Altitude du sol', `${dec(rec.y)} m`);
         this.setThumb(a.id, a.nameFr);
       }
       const refund = Math.round((a?.cost ?? 0) * DEMOLISH_REFUND_RATE);
@@ -101,7 +129,7 @@ export class InfoPanel {
         const shownId = rec.id;
         void this.d.serviceInfo(rec.id).then((inf) => {
           if (!inf || this.shownBuilding !== shownId) return;
-          row.textContent = `${inf.level} / ${inf.max} · rayon ×${inf.radiusFactor.toFixed(2)} · capacité ×${inf.capacityFactor.toFixed(1)}${inf.extraUpkeep ? ` · entretien +${money(inf.extraUpkeep)}/mois` : ''}`;
+          row.textContent = `${inf.level} / ${inf.max} · rayon ×${dec(inf.radiusFactor, 2)} · capacité ×${dec(inf.capacityFactor)}${inf.extraUpkeep ? ` · entretien +${money(inf.extraUpkeep)}/mois` : ''}`;
           if (inf.upgradeCost !== null && this.d.upgradeService) {
             this.action(`Améliorer · ${money(inf.upgradeCost)}`, () => { void this.d.upgradeService!(rec.id).then((ok) => { if (ok) this.show(p); }); }, '', `Niveau ${inf.level + 1} : rayon +25 %, capacité +50 %, entretien +40 %`);
           }
@@ -116,13 +144,12 @@ export class InfoPanel {
       this.title.textContent = def?.nameFr ?? e.kindId;
       this.row('Longueur', `${fmt(e.length)} m`);
       if (def) {
-        this.row('Largeur', `${def.width} m`);
+        this.row('Largeur', `${def.width.toLocaleString('fr-FR')} m`);
         this.row('Voies', def.lanesBackward === 0 ? `${def.lanesForward} (sens unique)` : `${def.lanesForward} + ${def.lanesBackward}`);
         this.row('Vitesse limite', `${def.speedKmh} km/h`);
         this.row('Entretien', `${money(e.length * def.upkeepPerMeterMonth)} / mois`);
       }
-      this.row('Pente', `${((Math.abs(e.by - e.ay) / Math.max(1, e.length)) * 100).toFixed(1)} %`);
-      this.row('Trafic', el('span', {}, '— ', phaseBadge(3)));
+      this.row('Pente', `${dec((Math.abs(e.by - e.ay) / Math.max(1, e.length)) * 100)} %`);
       const refund = Math.round(e.length * (def?.costPerMeter ?? 0) * DEMOLISH_REFUND_RATE);
       this.action('Supprimer', () => { void this.d.demolish(p); }, 'danger', `Supprimer le tronçon (remboursement +${money(refund)}) — Suppr`);
       this.action('Centrer', () => cam.flyTo({ targetX: (e.ax + e.bx) / 2, targetZ: (e.az + e.bz) / 2, distance: Math.max(80, e.length * 1.2) }));
@@ -137,7 +164,6 @@ export class InfoPanel {
         this.row('Longueur', `${a.vehicle.lengthM.toLocaleString('fr-FR')} m`);
         this.setThumb(a.id, a.nameFr);
       }
-      this.row('Trajet', el('span', {}, '— ', phaseBadge(3)));
       this.action('Centrer', () => cam.flyTo({ targetX: p.x, targetZ: p.z, distance: 40 }));
     }
   }

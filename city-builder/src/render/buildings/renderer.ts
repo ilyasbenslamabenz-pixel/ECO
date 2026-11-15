@@ -35,6 +35,8 @@ interface LodSlot {
   matrices: THREE.InstancedBufferAttribute | null;
   colors: THREE.InstancedBufferAttribute | null;
   count: number;
+  /** Dernière fois (performance.now) que ce LOD a été dessiné ou chargé : libéré après un long abandon. */
+  lastUsed: number;
 }
 interface Batch {
   key: string;
@@ -65,6 +67,10 @@ const _sphere = new THREE.Sphere();
 const _camPos = new THREE.Vector3();
 const _lastPos = new THREE.Vector3(Infinity, Infinity, Infinity);
 const _lastQ = new THREE.Quaternion();
+/** Lot sans instance : ses LOD sont libérés au bout de 30 s (une démolition suivie d'une reconstruction les garde). */
+const LOD_RELEASE_EMPTY_MS = 30_000;
+/** LOD détaillé non dessiné depuis 90 s (caméra partie ailleurs) : libéré. */
+const LOD_RELEASE_IDLE_MS = 90_000;
 
 /**
  * Géométrie flottante prête pour l'instanciation : attributs quantifiés (KHR_mesh_quantization) convertis en
@@ -192,6 +198,9 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
 
   /** Force le recalcul des LOD à la prochaine mise à jour. */
   invalidate(): void { this.forceUpdate = true; }
+  /** Projection de la caméra au dernier recalcul du culling (rotation de l'écran / redimensionnement). */
+  private lastProjX = NaN;
+  private lastProjY = NaN;
 
   /** Facteur de nuit 0..1 (fenêtres allumées). */
   setNight(f: number): void {
@@ -213,7 +222,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
         const hs = a.variants[vi]?.heightScale ?? 1;
         b = {
           key, asset: a, variant: vi, heightScale: hs,
-          lods: a.lods.map(() => ({ state: 0, parts: [], matrices: null, colors: null, count: 0 })),
+          lods: a.lods.map(() => ({ state: 0, parts: [], matrices: null, colors: null, count: 0, lastUsed: 0 })),
           ids: [], mats: new Float32Array(16 * 16), spheres: new Float32Array(4 * 16), tints: new Float32Array(3 * 16),
           capacity: 16, dirty: true,
         };
@@ -278,6 +287,10 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   /** (Ré)alloue les tampons d'instances d'un LOD à la capacité du lot et les partage entre sous-maillages. */
   private allocLod(b: Batch, l: number): void {
     const slot = b.lods[l]!;
+    // Anciens tampons d'instances (agrandissement du lot) : three ne libère le tampon GPU de `instanceMatrix` /
+    // `instanceColor` qu'au dispose() de l'InstancedMesh (événement écouté par le rendu) ; sans cela, chaque
+    // agrandissement laissait les anciens tampons orphelins sur le GPU. Le maillage reste utilisable.
+    if (slot.matrices) for (const p of slot.parts) p.mesh.dispose();
     const mat = new THREE.InstancedBufferAttribute(new Float32Array(b.capacity * 16), 16);
     mat.setUsage(THREE.DynamicDrawUsage);
     const col = new THREE.InstancedBufferAttribute(new Float32Array(b.capacity * 3).fill(1), 3);
@@ -318,6 +331,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       });
       const finish = (): void => {
         slot.state = 2;
+        slot.lastUsed = performance.now();
         this.allocLod(b, l);
         this.forceUpdate = true;
       };
@@ -359,8 +373,38 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
 
   get loading(): number { return this.pending; }
 
+  /**
+   * Libère les LOD abandonnés (maillages instanciés, géométries propres au lot, tampons d'instances) :
+   * lot vide depuis LOD_RELEASE_EMPTY_MS (tous ses LOD), ou LOD détaillé non dessiné depuis LOD_RELEASE_IDLE_MS
+   * (le LOD le plus grossier d'un lot habité est gardé : jamais de bâtiment invisible le temps d'un rechargement).
+   * Matériaux et textures sont partagés (BuildingMaterials) : non libérés ici. Un LOD libéré redevient
+   * « non demandé » et sera rechargé à la demande. Renvoie le nombre de LOD libérés.
+   */
+  releaseUnusedLods(now = performance.now()): number {
+    let n = 0;
+    for (const b of this.batchList) {
+      const nl = b.lods.length;
+      for (let l = 0; l < nl; l++) {
+        const slot = b.lods[l]!;
+        if (slot.state !== 2) continue;
+        if (slot.count > 0) { slot.lastUsed = now; continue; }
+        const empty = b.ids.length === 0;
+        if (!empty && l === nl - 1) continue;
+        if (now - slot.lastUsed < (empty ? LOD_RELEASE_EMPTY_MS : LOD_RELEASE_IDLE_MS)) continue;
+        for (const p of slot.parts) { p.mesh.removeFromParent(); p.mesh.dispose(); p.mesh.geometry.dispose(); }
+        slot.parts = []; slot.matrices = null; slot.colors = null; slot.count = 0; slot.state = 0;
+        n++;
+      }
+    }
+    if (n) this.forceUpdate = true;
+    return n;
+  }
+  private nextReleaseCheck = 0;
+
   update(cx: number, cy: number, cz: number): void {
     this.yards.update();
+    const now = performance.now();
+    if (now >= this.nextReleaseCheck) { this.nextReleaseCheck = now + 5000; this.releaseUnusedLods(now); }
     if (this.uploads.length) this.pumpUploads(6);
     _camPos.set(cx, cy, cz);
     const cam = this.camera;
@@ -370,6 +414,10 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     if (cam) {
       cam.updateMatrixWorld();
       if (!moved && Math.abs(cam.quaternion.dot(_lastQ)) < 0.99976) moved = true;
+      // Changement de projection (rotation de l'écran, redimensionnement : rapport largeur/hauteur, champ) :
+      // la caméra n'a pas bougé mais le champ de vision, si — recalcul obligatoire.
+      const pe = cam.projectionMatrix.elements;
+      if (!moved && (pe[0] !== this.lastProjX || pe[5] !== this.lastProjY)) moved = true;
     }
     for (let i = 0; i < this.batchList.length && !moved; i++) if (this.batchList[i]!.dirty) moved = true;
     if (!moved) return;
@@ -377,6 +425,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     _lastPos.copy(_camPos);
     if (cam) {
       _lastQ.copy(cam.quaternion);
+      this.lastProjX = cam.projectionMatrix.elements[0]!; this.lastProjY = cam.projectionMatrix.elements[5]!;
       _wide.copy(cam.projectionMatrix);
       _wide.elements[0]! *= 0.92; _wide.elements[5]! *= 0.92;
       _pv.multiplyMatrices(_wide, cam.matrixWorldInverse);
@@ -439,7 +488,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   }
 
   dispose(): void {
-    for (const b of this.batchList) for (const s of b.lods) for (const p of s.parts) p.mesh.dispose();
+    for (const b of this.batchList) for (const s of b.lods) for (const p of s.parts) { p.mesh.dispose(); p.mesh.geometry.dispose(); }
     this.batches.clear();
     this.batchList.length = 0;
     this.idToBatch.clear();

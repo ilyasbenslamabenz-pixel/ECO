@@ -64,7 +64,8 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
   applyTheme(o.theme);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const prof = deviceProfile(o.quality);
-  const ratio = o.quality === 'basse' ? Math.min(dpr, 1) * 0.75 : o.quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, prof.lite ? prof.maxPixelRatio : 1.5);
+  // Basse : 1 pixel par point au plus (0,75 rendait l'image trop floue) ; la résolution adaptative remonte au-delà si l'appareil suit.
+  const ratio = o.quality === 'basse' ? Math.min(dpr, 1) : o.quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, prof.lite ? prof.maxPixelRatio : 1.5);
   t.renderer.setPixelRatio(ratio);
   if (t.perf) {
     t.perf.maxFps = o.fps === '30' ? 30 : o.fps === '60' ? 60 : o.fps === 'max' ? 0 : prof.lite ? 60 : 0;
@@ -79,6 +80,9 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
   t.renderer.setSize(size.x, size.y, false);
   // Mode allégé : carte d'ombre plafonnée (mémoire graphique des téléphones).
   const sz = prof.lite ? Math.min(SHADOW_SIZE[o.shadows], prof.shadowSize) : SHADOW_SIZE[o.shadows];
+  // Recompilation des shaders seulement si l'état des ombres change (un changement de thème, purement CSS, ou de
+  // distance de vue ne doit pas recompiler toute la scène).
+  const shadowsChanged = t.renderer.shadowMap.enabled !== sz > 0 || (!!t.sun && t.sun.castShadow !== sz > 0);
   t.renderer.shadowMap.enabled = sz > 0;
   if (t.sun) {
     t.sun.castShadow = sz > 0;
@@ -89,7 +93,7 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
     }
   }
   // Les matériaux doivent recompiler leurs shaders quand les ombres changent.
-  t.scene.traverse((obj) => {
+  if (shadowsChanged) t.scene.traverse((obj) => {
     const m = (obj as THREE.Mesh).material;
     if (!m) return;
     for (const mat of Array.isArray(m) ? m : [m]) mat.needsUpdate = true;

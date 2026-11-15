@@ -34,6 +34,8 @@ import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './
 import { autoPrefixFor } from './save/autosave';
 import { AutoSaveTriggers, IMPORTANT_COMMANDS, latestSlot } from './save/auto-triggers';
 import { CloudSlotProvider } from './save/cloud';
+import { AccountStore, attachAccounts } from './save/account';
+import { installAccountUi } from './ui/account';
 import { BackupReminder, deliverFile, exportMeknes, importMeknes, importSlotName, requestPersistentStorage, resolveDownloads, type ExportFile } from './save/file-transfer';
 
 const QUICK_SLOT = 'rapide';
@@ -397,11 +399,7 @@ async function boot(): Promise<void> {
     const id = t === 'building' ? cons.machine.asset?.id ?? '' : '';
     const wantPower = t === 'powerline' || id.startsWith('elec_');
     const wantWater = id.startsWith('eau_');
-    // Téléphone : caméra rapprochée en choisissant un bâtiment si elle est très loin (maison minuscule à l'écran).
-    if (t === 'building' && render.profile.lite) {
-      const pose = input.camera.getPose();
-      if (pose.distance > 230) input.camera.flyTo({ distance: 170 });
-    }
+    // Choisir un bâtiment ne zoome plus la caméra (le saut 600 m → 170 m désorientait) : la vue reste celle du joueur.
     if (wantPower && !powerView.overlay) { powerView.setOverlay(true); autoPower = true; }
     else if (!wantPower && autoPower) { powerView.setOverlay(false); autoPower = false; }
     if (wantWater && waterView.mode === 'off') { waterView.set('desserte'); autoWater = true; }
@@ -518,8 +516,16 @@ async function boot(): Promise<void> {
   // Sauvegardes en ligne (docs/SAUVEGARDES.md) : dans l'artifact claude.ai, SaveStore synchronisé
   // (locale immédiate + envoi en arrière-plan) ; ailleurs (window.claude absent), store inchangé.
   installCloudSaveBadge();
-  store = await attachCloudSaves(store);
+  // Comptes joueurs Supabase (docs/COMPTES.md) : seulement hors artifact et si src/save/account-config.ts est
+  // renseigné ; sinon null (aucune requête) et le comportement reste celui d'avant.
+  const accounts = typeof (globalThis as { claude?: { use?: unknown } }).claude?.use === 'function' ? null : attachAccounts(store);
+  store = accounts ? accounts.store : await attachCloudSaves(store);
   const st = store;
+  if (accounts) {
+    installAccountUi(accounts, { toast: (m, k) => ui.toast(m, k ?? 'info') });
+    // Changement de compte : « Continuer / Charger » montrent les parties du joueur courant.
+    accounts.onChange(() => { if (document.getElementById('main-menu')?.classList.contains('hidden') === false) void refreshMenu(); });
+  }
   setSlotProvider({
     list: async () => (await st.list()).map((s): UiSlotInfo => ({
       slot: s.slot, cityName: s.cityName, savedAt: s.savedAt, money: s.money, buildings: s.buildings, gameDate: gameDateLabel(s.totalMinutes), version: s.version,
@@ -534,7 +540,7 @@ async function boot(): Promise<void> {
   // Sauvegarde entièrement automatique : arrière-plan/fermeture, retour au menu, actions importantes.
   autoTriggers = new AutoSaveTriggers({
     saveNow: () => auto.saveNow(), isActive: () => auto.running && !demoRunning,
-    flushCloud: () => (st instanceof CloudSlotProvider ? st.flush() : Promise.resolve()),
+    flushCloud: () => (st instanceof CloudSlotProvider || st instanceof AccountStore ? st.flush() : Promise.resolve()),
   });
   autoTriggers.install();
 
@@ -542,17 +548,57 @@ async function boot(): Promise<void> {
   // message ; à la restauration, three ré-envoie textures et géométries, on reconstruit ce qui n'existait que
   // sur le GPU (imposteurs, environnement) et l'affichage reprend.
   let contextLost = false;
+  // Diagnostic (e2e perte de contexte) : plafond de textures effectif du rendu.
+  (debug as unknown as Record<string, unknown>).maxTextureSize = () => render.ctx.renderer.capabilities.maxTextureSize;
+  let lossSave: Promise<void> = Promise.resolve();
+  // Restauration qui n'arrive jamais (certains navigateurs mobiles) : après 5 s, message proposant de recharger.
+  let lossTimer: ReturnType<typeof setTimeout> | null = null;
+  let lossHelp: HTMLElement | null = null;
+  const hideLossHelp = (): void => {
+    if (lossTimer) { clearTimeout(lossTimer); lossTimer = null; }
+    lossHelp?.remove(); lossHelp = null;
+  };
+  const showLossHelp = (): void => {
+    if (lossHelp || !contextLost) return;
+    const box = document.createElement('div');
+    box.id = 'contexte-perdu';
+    box.setAttribute('role', 'alertdialog');
+    box.setAttribute('aria-live', 'assertive');
+    box.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10000;max-width:min(420px,calc(100vw - 32px));'
+      + 'box-sizing:border-box;padding:18px 20px;border-radius:12px;background:#1d2430;color:#f2f4f8;font:15px/1.45 system-ui,sans-serif;'
+      + 'box-shadow:0 10px 40px rgba(0,0,0,.45);text-align:center';
+    const p = document.createElement('p');
+    p.style.margin = '0 0 14px';
+    p.textContent = 'L\'affichage 3D ne revient pas (mémoire graphique de l\'appareil saturée). Votre partie est sauvegardée automatiquement : rechargez la page pour la reprendre.';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Recharger la page';
+    btn.style.cssText = 'min-height:44px;padding:0 18px;border:0;border-radius:8px;background:#4fd18b;color:#0d1a12;font:600 15px system-ui,sans-serif;cursor:pointer';
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      btn.textContent = 'Sauvegarde…';
+      // Sauvegarde automatique terminée (celle de la perte, puis une dernière) avant de recharger.
+      void lossSave.then(() => autoTriggers?.saveAndFlush()).catch(() => undefined).finally(() => location.reload());
+    });
+    box.append(p, btn);
+    document.body.appendChild(box);
+    lossHelp = box;
+  };
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault(); // autorise la restauration
     contextLost = true;
     debug.contextLost = (debug.contextLost ?? 0) + 1;
     render.ctx.stop();
     ui.setLoading(0.5, 'Reprise de l\'affichage…');
-    void autoTriggers?.saveAndFlush();
+    lossSave = (autoTriggers?.saveAndFlush() ?? Promise.resolve()).catch(() => undefined);
+    hideLossHelp();
+    lossTimer = setTimeout(showLossHelp, 5000);
   }, false);
   canvas.addEventListener('webglcontextrestored', () => {
     if (!contextLost) return;
     contextLost = false;
+    hideLossHelp();
+    // (Le plafond de textures du mode allégé est réappliqué par rebuildGpu : three recrée ses `capabilities`.)
     try {
       render.rebuildGpu();
       applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf });
@@ -588,7 +634,7 @@ async function boot(): Promise<void> {
     });
     const reminder = new BackupReminder({
       isPlaying: () => auto.running && !demoRunning && (state.stats?.speed ?? 0) > 0,
-      hasCloud: () => st instanceof CloudSlotProvider && (st.status.state === 'online' || st.status.state === 'syncing'),
+      hasCloud: () => (st instanceof CloudSlotProvider && (st.status.state === 'online' || st.status.state === 'syncing')) || (st instanceof AccountStore && st.cloudActive),
       remind: () => fileUi.remind(() => reminder.disable()),
     });
     reminder.start();

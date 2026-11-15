@@ -210,8 +210,8 @@ try {
   let box = await visibleBox(P, '#tool-options');
   check(box && box.x >= 0 && box.right <= box.W && box.bottom <= box.H, `options Routes dans l'écran (${box ? `${Math.round(box.w)}×${Math.round(box.h)}` : 'masquées'})`);
   await shot(P, '08-iphone-options-routes');
-  // Le doigt est décalé de 70 px : on touche 70 px sous le point visé.
-  const tapWorld = async (x, z) => { const q = await scr(P, x, z); R.notes.taps = [...(R.notes.taps ?? []), { x, z, sx: Math.round(q.x), sy: Math.round(q.y + 70), hit: await P.evaluate(([a, b]) => { const e = document.elementFromPoint(a, b); return e ? (e.id || e.tagName + '.' + e.className) : null; }, [q.x, q.y + 70]) }]; await P.touchscreen.tap(q.x, q.y + 70); await P.waitForTimeout(500); await P.evaluate(() => window.__aube.renderNow(1, 0.1)); };
+  // Le point visé est exactement sous le doigt (plus de décalage de 70 px).
+  const tapWorld = async (x, z) => { const q = await scr(P, x, z); R.notes.taps = [...(R.notes.taps ?? []), { x, z, sx: Math.round(q.x), sy: Math.round(q.y), hit: await P.evaluate(([a, b]) => { const e = document.elementFromPoint(a, b); return e ? (e.id || e.tagName + '.' + e.className) : null; }, [q.x, q.y]) }]; await P.touchscreen.tap(q.x, q.y); await P.waitForTimeout(500); await P.evaluate(() => window.__aube.renderNow(1, 0.1)); };
   await tapWorld(cx - 120, cz + 10);
   await tapWorld(cx - 40, cz + 10);
   const tc = await P.evaluate(() => ({ shown: !document.querySelector('#touch-confirm').classList.contains('hidden'), label: document.querySelector('#tc-ok').textContent }));

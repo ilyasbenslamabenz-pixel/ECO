@@ -506,7 +506,10 @@ export class Simulation {
       if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
       if (!this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
     }
-    if (a.dryRun) return { ok: true, data: { buildingId: 0, cost } };
+    // Avertissement (pas un refus) : aucune route assez proche pour desservir le bâtiment.
+    const access = this.roadClearance(o, MAX_ROAD_HALF_WIDTH + ROAD_ACCESS_MARGIN_M) <= ROAD_ACCESS_MARGIN_M;
+    const warn = access ? {} : { noRoadAccess: true as const, warning: 'Pas d’accès routier : le bâtiment ne sera ni desservi ni occupé tant qu’aucune route ne passe à proximité' };
+    if (a.dryRun) return { ok: true, data: { buildingId: 0, cost, ...warn } };
 
     const id = this.nextBuildingId++;
     const y = hSum / n;
@@ -514,7 +517,7 @@ export class Simulation {
     if (privateDev || receipt?.private) this.privateIds.add(id);
     if (receipt) this.restoreReceipts.delete(a.restoreToken!);
     if (cost > 0) this.economy.spend(cost);
-    return { ok: true, data: { buildingId: id, cost } };
+    return { ok: true, data: { buildingId: id, cost, ...warn } };
   }
 
   /**

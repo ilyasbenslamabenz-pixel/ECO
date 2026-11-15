@@ -260,12 +260,14 @@
         <div class="kpi"><span class="lbl">Trésorerie</span><b id="fin-money">—</b></div>
         <div class="kpi"><span class="lbl">Solde mensuel prévu</span><b id="fin-balance">—</b></div>
       </div>
+      <p class="muted small">Prévision pour un mois complet aux taux, équipements et emprunts actuels (même solde que la barre du haut).</p>
       <div class="ledger">
         <div class="lg-head inc"><i data-icon="trend"></i><span>Recettes</span><b id="fin-income">—</b></div>
         <dl id="fin-inc-rows" class="lg-rows"></dl>
         <div class="lg-head exp"><i data-icon="cash"></i><span>Dépenses</span><b id="fin-expense">—</b></div>
         <dl id="fin-exp-rows" class="lg-rows"></dl>
-        <div class="lg-total"><span>Solde mensuel</span><b id="fin-net">—</b></div>
+        <div class="lg-head svc" data-tip="Solde net prévu des services municipaux : ventes d'électricité et d'eau, recyclage, moins leur exploitation"><i data-icon="services"></i><span>Services (électricité, eau, déchets…)</span><b id="fin-services">—</b></div>
+        <div class="lg-total"><span>Solde mensuel prévu</span><b id="fin-net">—</b></div>
       </div>
       <div class="chart-wrap">
         <div class="chart-title">Évolution (12 derniers mois clos)<span id="fin-mrange" class="muted"></span></div>
@@ -379,6 +381,7 @@
 </div>
 
 <div id="touch-confirm" class="hidden" role="toolbar" aria-label="Confirmer l'action">
+  <div id="tc-reason" class="hidden" role="status" aria-live="polite"></div>
   <button id="tc-cancel" aria-label="Annuler"><i data-icon="close"></i></button>
   <button id="tc-rotate" aria-label="Pivoter"><i data-icon="undo"></i></button>
   <button id="tc-magnet" aria-label="Aimanter" aria-pressed="true" title="Aimanter (angles droits, alignement)">🧲</button>

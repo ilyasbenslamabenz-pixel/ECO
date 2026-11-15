@@ -143,7 +143,7 @@ export const batimentsPanel: UiPanel = {
           const s = (r as { plan?: { stats?: Record<string, number> } }).plan?.stats;
           summary.textContent = s
             ? `Plan : ${s['roads']} tronçons (${s['roadLength']} m), ${s['lots']} bâtiments, ${s['distinctAssets']} modèles, `
-              + `répétition ${((s['repetitionIndex'] ?? 0) * 100).toFixed(0)} %, ${s['residents']} habitants, ${s['jobs']} emplois, coût ${s['cost']} CHF.`
+              + `répétition ${((s['repetitionIndex'] ?? 0) * 100).toFixed(0)} %, ${s['residents']} habitants, ${s['jobs']} emplois, coût ${Number(s['cost'] ?? 0).toLocaleString('fr-FR')} CHF.`
             : 'Plan vide.';
         })
         .catch(fail);

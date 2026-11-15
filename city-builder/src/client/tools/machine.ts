@@ -27,7 +27,7 @@ import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMes
 import type { Ray } from './geometry';
 import { roadDef, type PickResult, type WorldMirror } from './mirror';
 import { RoadDraft, angleLabel, snapRoadPoint, type RoadMode, type SnapPoint } from './road-draft';
-import { DEFAULT_GRID_BLOCK, edgeOnGrid, gridCorner, gridLayout, type GridLayout } from './grid';
+import { DEFAULT_GRID_BLOCK, edgeOnGrid, gridCorner, gridLayout, polyOnPaths, type GridLayout } from './grid';
 import { nextUpgradeKind, prevUpgradeKind } from '../../sim/roads/upgrade';
 import type { RoadEdgeView } from './mirror';
 import { proposePlacement, setSnapIgnore, type PlacementProposal } from './snapping';
@@ -258,7 +258,7 @@ export class ConstructionTools {
     if (!this.drawing) return false;
     if (this.tool === 'terraform') {
       // Rivière : « Terminer » creuse le tracé (2 points au moins), sinon abandonne le point posé.
-      if (this.terrain.riverPoints >= 2) void this.terrain.finishRiver().then((ok) => { if (ok) this.applied++; this.refresh(); });
+      if (this.terrain.riverPoints >= 2) void this.terrain.finishRiver().then((ok) => { if (ok) { this.applied++; this.markTerrainEdit(); } this.refresh(); });
       else this.terrain.reset();
       this.refresh();
       return true;
@@ -365,10 +365,7 @@ export class ConstructionTools {
           message: d.phase === 'idle' ? 'Placez le départ' : d.mode === 'curve' && d.phase === 'start' ? 'Placez le point de courbure' : '',
           angle: points && d.start && d.hover ? angleLabel(this.mirror, d.start, d.hover) : '', chained: d.chained,
         };
-        if (d.mode === 'roundabout') {
-          this.preview = { ...this.preview, message: 'Cliquez sur un carrefour ou sur une route pour poser le giratoire' };
-          break;
-        }
+        if (d.mode === 'roundabout') { if (this.refreshRoundabout()) return; break; }
         if (d.elevation) this.preview = { ...this.preview, elevation: d.elevation };
         if (points) this.validateRoad(points);
         break;
@@ -386,6 +383,49 @@ export class ConstructionTools {
   }
 
   private validatedVersion = -1;
+
+  /* ------------------------------ Giratoire ------------------------------ */
+
+  private roundaboutKey = '';
+
+  /**
+   * Aperçu du giratoire : devis et refus de la simulation (dryRun) à l'endroit visé, comme les autres outils.
+   * Renvoie true si le devis déjà obtenu (même endroit, même taille, même état du monde) est conservé.
+   */
+  private refreshRoundabout(): boolean {
+    const d = this.draft;
+    const base = this.preview;
+    if (base.kind !== 'road') return false;
+    const h = d.hover;
+    if (!h) {
+      this.roundaboutKey = '';
+      this.preview = { ...base, validity: 'ok', cost: 0, message: 'Touchez un carrefour ou une route pour poser le giratoire' };
+      return false;
+    }
+    const key = `${h.x.toFixed(1)},${h.z.toFixed(1)},${d.roundaboutSize},${this.mirror.version}`;
+    const prev = this.roundaboutPreview;
+    if (key === this.roundaboutKey && prev) { this.preview = { ...base, validity: prev.validity, cost: prev.cost, message: prev.message }; this.emit(); return true; }
+    this.roundaboutKey = key;
+    this.roundaboutPreview = { validity: 'pending', cost: 0, message: 'Giratoire : calcul du coût…' };
+    this.preview = { ...base, validity: 'pending', cost: 0, message: 'Giratoire : calcul du coût…' };
+    const seq = ++this.previewSeq;
+    const args = { x: h.x, z: h.z, size: d.roundaboutSize, dryRun: true };
+    this.dry.run(async () => {
+      if (seq !== this.previewSeq) return;
+      let res: { validity: Validity; cost: number; message: string };
+      try {
+        const send = this.sim.send as unknown as (n: string, a: unknown) => Promise<{ edgeIds: number[]; cost: number }>;
+        const r = await send.call(this.sim, 'buildRoundabout', args);
+        res = { validity: 'ok', cost: r.cost, message: `${d.roundaboutSize === 'large' ? 'Grand giratoire' : 'Giratoire'} · ${fmt(r.cost)} ¢` };
+      } catch (e) { res = { validity: 'error', cost: 0, message: `Giratoire refusé : ${errorOf(e).message}` }; }
+      if (this.roundaboutKey !== key) return;
+      this.roundaboutPreview = res;
+      const cur = this.preview;
+      if (cur.kind === 'road' && cur.mode === 'roundabout') { this.preview = { ...cur, ...res }; this.emit(); }
+    });
+    return false;
+  }
+  private roundaboutPreview: { validity: Validity; cost: number; message: string } | null = null;
 
   /* ------------------------------ Ligne haute tension ------------------------------ */
 
@@ -651,7 +691,8 @@ export class ConstructionTools {
     try {
       const r = await this.sim.send('buildRoad', { type: legacyRoadType(this.roadType), kind: this.roadType, ...cmd });
       this.applied++;
-      this.undo.push({ label: `Route parallèle : ${roadDef(this.roadType)?.nameFr ?? this.roadType}`, steps: r.edgeIds.map((edgeId) => ({ kind: 'removeRoad', edgeId }) as UndoStep) });
+      const path = this.preview.kind === 'road' && this.preview.points ? [...this.preview.points] : [...cmd.points];
+      this.undo.push({ label: `Route parallèle : ${roadDef(this.roadType)?.nameFr ?? this.roadType}`, steps: r.edgeIds.map((edgeId) => ({ kind: 'removeRoad', edgeId, path }) as UndoStep) });
       this.notify(`Route parallèle construite à ${this.parallelDist} m (−${fmt(r.cost)} ¢)`, 'ok');
     } catch (e) { this.notify(`Route refusée : ${errorOf(e).message}`, 'error'); }
     this.parallelKey = '';
@@ -750,6 +791,8 @@ export class ConstructionTools {
           cost = r.cost;
           const refusal = await this.easementRefusal(args);
           if (refusal) throw { error: { code: 'INVALID_ARGS', message: refusal } };
+          // Avertissement (pas un refus) : gardé dans `message` d'un aperçu valide (barre de confirmation).
+          if (r.warning) message = r.warning;
         }
         validity = 'ok';
       } catch (e) { validity = 'error'; message = errorOf(e).message; }
@@ -812,7 +855,9 @@ export class ConstructionTools {
           else await this.roadClick();
           break;
         case 'bulldoze': await this.bulldozeCurrent(); break;
-        case 'terraform': if (await this.terrain.click()) this.applied++; break;
+        case 'terraform':
+          if (await this.terrain.click()) { this.applied++; this.markTerrainEdit(); }
+          break;
         case 'powerline': await this.powerLineClick(); break;
         default: break;
       }
@@ -850,6 +895,9 @@ export class ConstructionTools {
       try {
         const r = await this.sim.send('pluginCommand', { plugin: 'hubs', name: 'place', payload: { assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot } });
         this.applied++;
+        const hubId = (r.data as { id?: number } | undefined)?.id;
+        if (typeof hubId === 'number') this.undo.push({ label: `Construction : ${p.asset.nameFr}`, steps: [{ kind: 'plugin', plugin: 'hubs', name: 'remove', payload: { id: hubId } }] });
+        else this.undo.push({ label: p.asset.nameFr, steps: [], irreversible: true });
         this.notify(`${p.asset.nameFr} construit (−${fmt((r.data as { cost: number }).cost)} ¢)`, 'ok');
         this.preview = { kind: 'none' };
         this.refresh();
@@ -862,7 +910,7 @@ export class ConstructionTools {
       const r = await this.sim.send('placeBuilding', { assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot, variant: p.variant });
       this.applied++;
       this.undo.push({ label: `Construction : ${p.asset.nameFr}`, steps: [{ kind: 'demolish', buildingId: r.buildingId }] });
-      this.notify(`${p.asset.nameFr} construit (−${fmt(r.cost)} ¢)`, 'ok');
+      this.notify(`${p.asset.nameFr} construit (−${fmt(r.cost)} ¢)${r.warning ? ` — ${r.warning}` : ''}`, r.warning ? 'info' : 'ok');
       this.variant = this.randomVariant(p.asset);
       this.preview = { kind: 'none' };
       this.refresh();
@@ -880,8 +928,12 @@ export class ConstructionTools {
         const send = this.sim.send as unknown as (n: string, a: unknown) => Promise<{ edgeIds: number[]; cost: number }>;
         const r = await send.call(this.sim, 'buildRoundabout', { x: d.hover.x, z: d.hover.z, size: d.roundaboutSize });
         this.applied++;
+        // Le giratoire recoupe les routes existantes : pas d'inverse simple. La pile est marquée pour que Ctrl+Z
+        // n'annule pas par erreur l'action précédente.
+        this.undo.push({ label: 'Giratoire', steps: [], irreversible: true });
         this.notify(`Giratoire construit (−${fmt(r.cost)} ¢)`, 'ok');
       } catch (e) { this.notify(`Giratoire refusé : ${errorOf(e).message}`, 'error'); }
+      this.roundaboutKey = '';
       this.refresh();
       return;
     }
@@ -893,7 +945,8 @@ export class ConstructionTools {
       const cmd = d.command() ?? { points };
       const r = await this.sim.send('buildRoad', { type: legacyRoadType(this.roadType), kind: this.roadType, ...cmd });
       this.applied++;
-      this.undo.push({ label: `Route : ${roadDef(this.roadType)?.nameFr ?? this.roadType}`, steps: r.edgeIds.map((edgeId) => ({ kind: 'removeRoad', edgeId }) as UndoStep) });
+      const path = [...points];
+      this.undo.push({ label: `Route : ${roadDef(this.roadType)?.nameFr ?? this.roadType}`, steps: r.edgeIds.map((edgeId) => ({ kind: 'removeRoad', edgeId, path }) as UndoStep) });
       this.notify(`${roadDef(this.roadType)?.nameFr ?? 'Route'} construite : ${fmt(d.length())} m (−${fmt(r.cost)} ¢)`, 'ok');
       d.chainFrom({ x: end.x, z: end.z, snap: 'node' });
     } catch (e) {
@@ -922,16 +975,18 @@ export class ConstructionTools {
     const layout = p.layout;
     const type = this.roadType;
     let built = 0; let spent = 0; let minEdge = Infinity; let lastErr = '';
+    const builtLines: number[][] = [];
     for (const l of layout.lines) {
       try {
         const r = await this.sim.send('buildRoad', { type: legacyRoadType(type), kind: type, points: [...l] });
         built++; spent += r.cost;
+        builtLines.push([...l]);
         for (const id of r.edgeIds) minEdge = Math.min(minEdge, id);
       } catch (e) { lastErr = errorOf(e).message; }
     }
     if (built > 0) {
       this.applied++;
-      this.undo.push({ label: `Quadrillage ${layout.nx}×${layout.nz}`, steps: [{ kind: 'removeGrid', minEdgeId: minEdge, x0: layout.x0, z0: layout.z0, x1: layout.x1, z1: layout.z1, block: layout.block, angle: layout.angle, ox: layout.ox, oz: layout.oz }] });
+      this.undo.push({ label: `Quadrillage ${layout.nx}×${layout.nz}`, steps: [{ kind: 'removeGrid', minEdgeId: minEdge, x0: layout.x0, z0: layout.z0, x1: layout.x1, z1: layout.z1, block: layout.block, angle: layout.angle, ox: layout.ox, oz: layout.oz, lines: builtLines }] });
     }
     const blocks = `${layout.nx}×${layout.nz} îlot${layout.nx * layout.nz > 1 ? 's' : ''} de ${layout.block} m`;
     if (built === layout.lines.length) this.notify(`Quadrillage ${blocks} : ${fmt(layout.length)} m de rues (−${fmt(spent)} ¢)`, 'ok');
@@ -1031,7 +1086,7 @@ export class ConstructionTools {
         const r = await this.sim.send('demolish', { buildingId: rec.id });
         refund += r.refund; nb++;
         this.undo.forgetBuilding(rec.id);
-        steps.push({ kind: 'placeBuilding', assetId: rec.assetId, x: rec.x, z: rec.z, rot: rec.rot, variant: rec.variant });
+        steps.push({ kind: 'placeBuilding', assetId: rec.assetId, x: rec.x, z: rec.z, rot: rec.rot, variant: rec.variant, ...(r.restoreToken !== undefined ? { restoreToken: r.restoreToken } : {}) });
       } catch { failed++; }
     }
     for (const e of area.edges) {
@@ -1041,7 +1096,7 @@ export class ConstructionTools {
         const r = await this.sim.send('removeRoad', { edgeId: e.id });
         refund += r.refund; ne++;
         this.undo.forgetEdge(e.id);
-        if (v) steps.push({ kind: 'buildRoad', kindId: v.kindId, points: [v.ax, v.az, v.bx, v.bz], ...(v.c1 && v.c2 ? { c1: v.c1, c2: v.c2 } : {}) });
+        if (v) steps.push({ kind: 'buildRoad', kindId: v.kindId, points: [v.ax, v.az, v.bx, v.bz], ...(v.c1 && v.c2 ? { c1: v.c1, c2: v.c2 } : {}), ...elevationOf(e), ...(r.restoreToken !== undefined ? { restoreToken: r.restoreToken } : {}) });
       } catch { failed++; }
     }
     if (steps.length) {
@@ -1062,7 +1117,7 @@ export class ConstructionTools {
         const r = await this.sim.send('demolish', { buildingId: t.id });
         this.applied++;
         this.undo.forgetBuilding(t.id);
-        this.undo.push({ label: `Démolition : ${t.asset?.nameFr ?? rec.assetId}`, steps: [{ kind: 'placeBuilding', assetId: rec.assetId, x: rec.x, z: rec.z, rot: rec.rot, variant: rec.variant }] });
+        this.undo.push({ label: `Démolition : ${t.asset?.nameFr ?? rec.assetId}`, steps: [{ kind: 'placeBuilding', assetId: rec.assetId, x: rec.x, z: rec.z, rot: rec.rot, variant: rec.variant, ...(r.restoreToken !== undefined ? { restoreToken: r.restoreToken } : {}) }] });
         this.notify(`${t.asset?.nameFr ?? 'Bâtiment'} démoli (+${fmt(r.refund)} ¢)`, 'ok');
         return true;
       }
@@ -1071,7 +1126,7 @@ export class ConstructionTools {
         const r = await this.sim.send('removeRoad', { edgeId: t.id });
         this.applied++;
         this.undo.forgetEdge(t.id);
-        this.undo.push({ label: 'Suppression de route', steps: [{ kind: 'buildRoad', kindId: e.kindId, points: [e.ax, e.az, e.bx, e.bz], ...(e.c1 && e.c2 ? { c1: e.c1, c2: e.c2 } : {}) }] });
+        this.undo.push({ label: 'Suppression de route', steps: [{ kind: 'buildRoad', kindId: e.kindId, points: [e.ax, e.az, e.bx, e.bz], ...(e.c1 && e.c2 ? { c1: e.c1, c2: e.c2 } : {}), ...elevationOf(e), ...(r.restoreToken !== undefined ? { restoreToken: r.restoreToken } : {}) }] });
         this.notify(`Tronçon supprimé (+${fmt(r.refund)} ¢)`, 'ok');
         return true;
       }
@@ -1081,10 +1136,42 @@ export class ConstructionTools {
     return false;
   }
 
+  /** Abonnés prévenus quand l'étape en cours est abandonnée (barre de confirmation tactile à fermer…). */
+  private abandonListeners: (() => void)[] = [];
+  onAbandon(fn: () => void): void { this.abandonListeners.push(fn); }
+
+  /**
+   * Abandonne l'étape en cours sans changer d'outil (coin de quadrillage, départ de route ou de ligne, coin de zone,
+   * départ de quai / canal, points de rivière). Renvoie true si quelque chose était en cours.
+   */
+  abandonStep(): boolean {
+    const busy = this.gridStart !== null || this.draft.phase !== 'idle' || this.lineA !== null || this.areaStart !== null || this.terrain.hasStart;
+    if (!busy) return false;
+    this.gridStart = null; this.gridKey = '';
+    this.draft.reset();
+    this.lineA = null;
+    this.areaStart = null;
+    if (this.terrain.hasStart) this.terrain.reset();
+    for (const l of this.abandonListeners) l();
+    this.refresh();
+    return true;
+  }
+
+  /** Modification du terrain appliquée : sans inverse, elle marque la pile d'annulation. */
+  markTerrainEdit(): void { this.undo.push({ label: 'Modification du terrain', steps: [], irreversible: true }); }
+
   /** Clic droit / Échap : recule d'une étape, sinon revient à la sélection. Renvoie false si déjà au repos. */
   secondary(): boolean {
     if (this.tool === 'road' && this.gridStart) { this.gridStart = null; this.gridKey = ''; this.refresh(); return true; }
-    if (this.tool === 'road' && this.draft.back()) { this.refresh(); return true; }
+    if (this.tool === 'road') {
+      const chained = this.draft.chained;
+      if (this.draft.back()) {
+        // Fin d'un tracé enchaîné (Échap) : la hauteur imposée revient à 0 m comme avec « Terminer ».
+        if (chained > 0 && this.draft.phase === 'idle') this.draft.elevation = 0;
+        this.refresh();
+        return true;
+      }
+    }
     if (this.tool === 'terraform' && this.terrain.back()) return true;
     if (this.tool === 'powerline' && this.lineA) { this.lineA = null; this.refresh(); return true; }
     if (this.tool === 'bulldoze' && this.areaStart) { this.areaStart = null; this.refresh(); return true; }
@@ -1094,34 +1181,69 @@ export class ConstructionTools {
 
   /** Annule la dernière action (Ctrl+Z) en envoyant les commandes inverses à la simulation. */
   async undoLast(): Promise<boolean> {
+    // Étape en cours (coin de quadrillage, départ de route, de ligne, de zone…) abandonnée : sinon le geste suivant
+    // la reprendrait à son ancien emplacement (quadrillage posé loin de l'endroit visé).
+    this.abandonStep();
     const e = this.undo.pop();
     if (!e) { this.notify('Rien à annuler', 'info'); return false; }
+    if (e.irreversible) {
+      this.notify(`${e.label} : action impossible à annuler (Ctrl+Z annulera l'action précédente)`, 'info');
+      return false;
+    }
     let ok = 0;
     let lastErr = '';
+    /** Tronçons déjà retirés par cette annulation (le miroir n'est mis à jour qu'au delta suivant). */
+    const removed = new Set<number>();
+    const removeEdge = async (id: number): Promise<void> => {
+      if (removed.has(id)) return;
+      await this.sim.send('removeRoad', { edgeId: id });
+      removed.add(id);
+      this.undo.forgetEdge(id);
+    };
     for (const s of e.steps) {
       try {
         if (s.kind === 'demolish') await this.sim.send('demolish', { buildingId: s.buildingId });
-        else if (s.kind === 'removeRoad') await this.sim.send('removeRoad', { edgeId: s.edgeId });
-        else if (s.kind === 'placeBuilding') await this.sim.send('placeBuilding', { assetId: s.assetId, x: s.x, z: s.z, rot: s.rot, variant: s.variant });
+        else if (s.kind === 'removeRoad') {
+          if (removed.has(s.edgeId)) { ok++; continue; }
+          if (this.mirror.edges.has(s.edgeId) || !s.path) await removeEdge(s.edgeId);
+          else {
+            // Tronçon découpé depuis (route posée en travers) : ses morceaux, plus récents, posés sur le même axe.
+            const ids: number[] = [];
+            for (const r of this.mirror.edges.values()) {
+              if (r.id <= s.edgeId || removed.has(r.id)) continue;
+              const v = this.mirror.edgeView(r);
+              if (v && polyOnPaths(v.poly, [s.path], 1.5)) ids.push(r.id);
+            }
+            if (ids.length === 0) throw new Error('Route introuvable (déjà démolie ?)');
+            for (const id of ids) await removeEdge(id);
+          }
+        } else if (s.kind === 'plugin') {
+          await this.sim.send('pluginCommand', { plugin: s.plugin, name: s.name, payload: s.payload });
+          if (s.plugin === 'circulation') void this.loadJunctionModes();
+        }
+        else if (s.kind === 'placeBuilding') await this.sim.send('placeBuilding', { assetId: s.assetId, x: s.x, z: s.z, rot: s.rot, variant: s.variant, ...(s.restoreToken !== undefined ? { restoreToken: s.restoreToken } : {}) });
         else if (s.kind === 'moveBuilding') { if (!this.sim.sendExt) throw new Error('Déplacement indisponible'); await this.sim.sendExt('moveBuilding', { buildingId: s.buildingId, x: s.x, z: s.z, rot: s.rot }); }
         else if (s.kind === 'upgradeRoad') {
           const r = await this.sim.send('upgradeRoad', { edgeId: s.edgeId, ...(s.toKind ? { kind: s.toKind } : {}), ...(s.reverse ? { reverse: true } : {}) });
           this.undo.renameEdge(s.edgeId, r.edgeId);
         } else if (s.kind === 'removeGrid') {
           // Tronçons créés par le quadrillage (découpés par ses propres croisements) : résolus maintenant.
+          // Seulement les morceaux posés sur les rues réellement construites (`lines`) : une rue existante découpée
+          // par le quadrillage (partie déjà couverte, non reconstruite) n'est pas retirée.
           const ids: number[] = [];
           for (const e of this.mirror.edges.values()) {
-            if (e.id < s.minEdgeId) continue;
+            if (e.id < s.minEdgeId || removed.has(e.id)) continue;
             const v = this.mirror.edgeView(e);
-            if (v && edgeOnGrid(v.poly, s)) ids.push(e.id);
+            if (v && edgeOnGrid(v.poly, s) && (!s.lines || polyOnPaths(v.poly, s.lines))) ids.push(e.id);
           }
-          for (const id of ids) { await this.sim.send('removeRoad', { edgeId: id }); this.undo.forgetEdge(id); }
+          for (const id of ids) await removeEdge(id);
           if (ids.length === 0) throw new Error('Rues du quadrillage introuvables');
         } else {
           // Route courbe : point de contrôle quadratique retrouvé depuis la Bézier cubique stockée (c1 = a + 2/3 (q - a)).
           const [ax, az] = [s.points[0]!, s.points[1]!];
           const control: [number, number] | undefined = s.c1 ? [(3 * s.c1[0] - ax) / 2, (3 * s.c1[1] - az) / 2] : undefined;
-          await this.sim.send('buildRoad', { type: legacyRoadType(s.kindId), kind: s.kindId, points: s.points, ...(control ? { control } : {}) });
+          // Viaduc / tunnel : même hauteur imposée qu'à l'origine (sinon reconstruit au sol).
+          await this.sim.send('buildRoad', { type: legacyRoadType(s.kindId), kind: s.kindId, points: s.points, ...(control ? { control } : {}), ...(s.elevation ? { elevation: s.elevation } : {}), ...(s.restoreToken !== undefined ? { restoreToken: s.restoreToken } : {}) });
         }
         ok++;
       } catch (err) { lastErr = errorOf(err).message; }
@@ -1131,6 +1253,12 @@ export class ConstructionTools {
     this.applied += ok;
     return ok > 0;
   }
+}
+
+/** Hauteur imposée d'un tronçon (viaduc > 0, tunnel < 0) telle que publiée par la simulation (`elev`), à reconstruire à l'identique. */
+function elevationOf(e: RoadEdgeRecord): { elevation?: number } {
+  const h = (e as RoadEdgeRecord & { elev?: number }).elev;
+  return typeof h === 'number' && h !== 0 ? { elevation: h } : {};
 }
 
 function sameNumbers(a: readonly number[], b: readonly number[]): boolean {

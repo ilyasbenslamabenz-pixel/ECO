@@ -24,8 +24,8 @@ export function migratePaliers(data: unknown, from: number): PaliersSave {
 export function createPaliersPlugin(): SimPlugin & { readonly state: () => PaliersSave } {
   let s = emptyPaliersSave();
   let version = 0, sent = -1;
-  /** Faux jusqu'au premier jour évalué (ou au chargement d'une section) : voir onDayStart. */
-  let primed = false;
+  /** Vrai si la sauvegarde en cours de chargement contenait la section (voir `afterLoad`). */
+  let sectionLoaded = false;
   const pop = (ctx: PluginContext): number => ctx.demography?.population ?? 0;
   const view = (ctx: PluginContext): PaliersState => {
     const done = new Set(s.reached);
@@ -40,20 +40,21 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
     id: 'paliers',
     saveVersion: PALIERS_SAVE_VERSION,
     state: () => s,
-    // Partie neuve OU chargement (appelé avant la relecture des sections) : `load` confirme le suivi existant.
-    onNewGame() { s = emptyPaliersSave(); version++; sent = -1; primed = false; },
+    // Partie neuve (rien d'acquis : toutes les primes à gagner) OU début d'un chargement (avant les sections).
+    onNewGame() { s = emptyPaliersSave(); version++; sent = -1; sectionLoaded = false; },
+    // Chargement sans section : sauvegarde antérieure aux paliers (ou ville sous le premier seuil). Les seuils déjà
+    // dépassés sont acquis sans prime rétroactive ; les suivants seront primés normalement.
+    afterLoad(ctx) {
+      const had = sectionLoaded;
+      sectionLoaded = false;
+      if (had) return;
+      const p = pop(ctx);
+      const past = MILESTONES.filter((m) => p >= m.population && !s.reached.includes(m.id));
+      for (const m of past) { s.reached.push(m.id); s.at[m.id] = ctx.clock.totalMinutes; }
+      if (past.length) { ctx.notify('info', `Paliers déjà atteints par cette ville : ${past.map((m) => m.nameFr).join(', ')} (sans prime rétroactive)`); version++; }
+    },
     onDayStart(ctx) {
       const p = pop(ctx);
-      if (!primed) {
-        primed = true;
-        // Ville neuve (deux premiers jours) : primes normales. Sinon, sauvegarde d'avant les paliers : seuils notés sans prime.
-        if (ctx.clock.totalMinutes > 2 * 1440) {
-          const past = MILESTONES.filter((m) => p >= m.population && !s.reached.includes(m.id));
-          for (const m of past) { s.reached.push(m.id); s.at[m.id] = ctx.clock.totalMinutes; }
-          if (past.length) { ctx.notify('info', `Paliers déjà atteints par cette ville : ${past.map((m) => m.nameFr).join(', ')} (sans prime rétroactive)`); version++; }
-          return;
-        }
-      }
       for (const m of MILESTONES) {
         if (p < m.population || s.reached.includes(m.id)) continue;
         s.reached.push(m.id);
@@ -69,8 +70,10 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
       return s.reached.length ? view(ctx) : undefined;
     },
     snapshot(ctx) { return s.reached.length ? view(ctx) : undefined; },
-    save() { return s.reached.length ? { reached: [...s.reached], at: { ...s.at } } : undefined; },
-    load(_ctx, data, v) { s = migratePaliers(data, v); version++; primed = true; },
+    // Section écrite dès qu'un seuil est atteint OU dépassé (prime pas encore versée : évaluée au jour suivant) : une
+    // sauvegarde sans section signifie « sous le premier seuil » ou « antérieure aux paliers » (voir afterLoad).
+    save(ctx) { return s.reached.length || pop(ctx) >= MILESTONES[0]!.population ? { reached: [...s.reached], at: { ...s.at } } : undefined; },
+    load(_ctx, data, v) { s = migratePaliers(data, v); version++; sectionLoaded = true; },
     command(ctx, name) {
       if (name === 'state') return { ok: true, data: view(ctx) };
       return { ok: false, code: 'INVALID_ARGS', message: `Commande inconnue : ${name}` };

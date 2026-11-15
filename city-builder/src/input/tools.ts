@@ -8,8 +8,8 @@
  *          (ou glisser), le tracé continue depuis l'extrémité jusqu'à Entrée / « Terminer » ;
  *          quadrillage = coin puis coin opposé (ou glisser) ; améliorer = clic sur une route ;
  *          clic droit / Échap = étape précédente puis retour à la Sélection.
- * Tactile: le doigt déplace l'aperçu (décalé au-dessus du doigt pour rester visible) ; le
- *          relâcher ouvre la barre de confirmation (Construire / Pivoter / Annuler).
+ * Tactile: le point visé est exactement sous le doigt (aucun décalage, comme les zones) ; le
+ *          relâcher ouvre la barre de confirmation (Construire / Pivoter / Annuler), avec le coût.
  * Clavier: R = pivoter, X = variante, G = alignement auto, Ctrl+Z = annuler, Suppr = démolir la
  *          sélection, Échap = annuler l'étape, Maj (route) = angle magnétique 15°.
  * Sans `attach()` (amorçage de fondation), seul l'outil Sélection existe et ne fait rien.
@@ -46,7 +46,6 @@ export interface ToolUiHooks {
   selection(p: PickResult | null): void;
 }
 
-const TOUCH_LIFT_PX = 70;
 /** Noms courts des types de route (étiquette de l'outil Améliorer). */
 const ROAD_NAMES: Record<string, string> = { street: 'Rue', avenue: 'Avenue', boulevard: 'Boulevard', oneway: 'Sens unique', pedestrian: 'Rue piétonne', highway: 'Autoroute' };
 const fmt = (n: number): string => new Intl.NumberFormat('fr-FR').format(Math.round(n));
@@ -91,6 +90,16 @@ export class ToolController implements IToolController, PointerToolSink {
     deps.machine.onPreview((p) => this.render(p));
     deps.machine.onSelect = (p) => this.select(p);
     deps.machine.mirror.onChange(() => this.revalidateSelection());
+    // Changement d'outil (barre, Déplacer, chargement d'une partie…) ou étape abandonnée (Ctrl+Z) : le pinceau
+    // s'arrête et la barre de confirmation tactile, devenue sans objet, se ferme.
+    deps.machine.onToolChange(() => this.resetGesture());
+    deps.machine.onAbandon(() => this.resetGesture());
+    // Perte du focus (changement d'appli en plein geste) : le pinceau ne doit jamais continuer seul.
+    const blur = (): void => this.stopPaint(false);
+    const vis = (): void => { if (document.hidden) this.stopPaint(false); };
+    window.addEventListener('blur', blur);
+    document.addEventListener('visibilitychange', vis);
+    this.disposers.push(() => window.removeEventListener('blur', blur), () => document.removeEventListener('visibilitychange', vis));
     const key = (e: KeyboardEvent): void => this.keydown(e);
     const keyup = (e: KeyboardEvent): void => { if (e.key === 'Shift' && this.deps) { this.deps.machine.angleSnap = false; this.deps.machine.refresh(); } };
     // Phase de capture : les touches d'outil passent avant la caméra et le HUD (Échap, R).
@@ -102,9 +111,17 @@ export class ToolController implements IToolController, PointerToolSink {
   setTool(tool: ToolId, options?: { roadType?: RoadKindId; assetId?: string }): void {
     if (!this.deps) return;
     if (tool !== 'select' && this.override) this.setPointerOverride(null);
-    this.hooks?.touchConfirm(null);
-    this.pendingTouchConfirm = false;
+    this.resetGesture();
+    // Bulle d'aide de l'outil précédent effacée (le nouvel outil affiche la sienne au prochain aperçu).
+    this.hooks?.cursorTag(null, 'info', 0, 0);
     if (this.deps.machine.setTool(tool, options) && tool !== 'select') this.select(null);
+  }
+
+  /** Arrête le pinceau et ferme la barre de confirmation tactile (geste devenu sans objet). */
+  private resetGesture(): void {
+    this.stopPaint(false);
+    this.pendingTouchConfirm = false;
+    this.hooks?.touchConfirm(null);
   }
 
   /**
@@ -153,8 +170,7 @@ export class ToolController implements IToolController, PointerToolSink {
     // Position actuelle du bâtiment à l'écran (la carte a pu bouger depuis le dernier geste).
     const s = d.camera.worldToScreen(pv.proposal.x, this.lastGroundY ?? 0, pv.proposal.z);
     const gx = s ? s.x : this.lastScreen.x, gy = s ? s.y : this.lastScreen.y;
-    const near = Math.hypot(sx - gx, sy - gy) < 110 || Math.hypot(sx - gx, sy - (gy + TOUCH_LIFT_PX)) < 110;
-    return near;
+    return Math.hypot(sx - gx, sy - gy) < 110;
   }
 
   private lastGroundY: number | undefined;
@@ -163,12 +179,11 @@ export class ToolController implements IToolController, PointerToolSink {
     const d = this.deps;
     if (!d) return;
     this.lastType = type;
-    // Au doigt, l'aperçu est décalé au-dessus du point de contact pour rester visible.
-    // (Outil Améliorer : on désigne la route sous le doigt, sans décalage.)
-    const lift = type === 'touch' && this.activeTool !== 'select' && !(this.activeTool === 'road' && (d.machine.roadSub === 'upgrade' || d.machine.roadSub === 'parallel' || d.machine.roadSub === 'junction')) ? TOUCH_LIFT_PX : 0;
-    this.lastScreen.x = sx; this.lastScreen.y = sy - lift;
-    const ray = d.camera.screenRay(sx, sy - lift);
-    const g = d.camera.groundAt(sx, sy - lift);
+    // Le point visé est celui sous le doigt (ou le curseur), pour tous les outils : un décalage invisible faisait
+    // tomber le point 70 px au-dessus du doigt, même sur un simple toucher (et pas pour les zones).
+    this.lastScreen.x = sx; this.lastScreen.y = sy;
+    const ray = d.camera.screenRay(sx, sy);
+    const g = d.camera.groundAt(sx, sy);
     if (g) this.lastGroundY = g.y;
     d.machine.snapRadius = Math.max(5, Math.min(40, d.camera.getPose().distance * 0.035));
     d.machine.hover(g ? { x: g.x, z: g.z } : null, ray);
@@ -203,6 +218,8 @@ export class ToolController implements IToolController, PointerToolSink {
     const p = this.paint, d = this.deps;
     if (!p || !d) return;
     const t = d.machine.terrain;
+    // Garde-fou : plus d'outil Terrain en mode pinceau (outil changé, mode changé) → le geste s'arrête.
+    if (d.machine.tool !== 'terraform' || !isBrushMode(t.mode)) { this.stopPaint(false); return; }
     if (this.pendingHover) { const h = this.pendingHover; this.pendingHover = null; this.feed(h.x, h.y, h.type); }
     const g = t.hoverPoint;
     if (!g) return;
@@ -222,7 +239,9 @@ export class ToolController implements IToolController, PointerToolSink {
     if (apply) this.paintTick(true); // simple appui : au moins une passe
     clearInterval(p.timer);
     this.paint = null;
-    void this.deps?.machine.terrain.endStroke().then(() => this.deps?.machine.refresh());
+    const m = this.deps?.machine;
+    // Passes appliquées : sans inverse, elles marquent la pile d'annulation (Ctrl+Z n'annule pas l'action d'avant).
+    void m?.terrain.endStroke().then((n) => { if (n > 0) m.markTerrainEdit(); m.refresh(); });
   }
 
   down(sx: number, sy: number, type: string): void {
@@ -280,6 +299,13 @@ export class ToolController implements IToolController, PointerToolSink {
       // Route : les étapes intermédiaires se posent au relâcher ; l'action finale se confirme.
       if (m.tool === 'road' && m.roadSub === 'junction') { void m.primary(); return; } // choisir le carrefour (réglages dans la barre)
       if (m.tool === 'road' && m.roadSub === 'parallel' && !(m.preview.kind === 'road' && m.preview.points)) return;
+      // Giratoire : pas de pose d'un simple toucher — confirmation avec le coût, comme les autres outils.
+      if (m.tool === 'road' && m.roadSub === 'draw' && m.draft.mode === 'roundabout') {
+        if (!m.draft.hover) return;
+        this.pendingTouchConfirm = true;
+        this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
+        return;
+      }
       if (m.tool === 'road' && m.roadSub !== 'upgrade' && m.roadSub !== 'parallel' && (!m.drawing || (m.roadSub === 'draw' && m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
       if (m.tool === 'road' && m.roadSub === 'upgrade' && !(m.preview.kind === 'upgrade' && m.preview.target)) return;
       if (m.tool === 'road' && m.roadSub === 'draw' && !m.draft.points()) return; // doigt relâché sur le départ
@@ -316,7 +342,8 @@ export class ToolController implements IToolController, PointerToolSink {
       return n ? `Démolir ${n} objet${n > 1 ? 's' : ''} · +${fmt(a.refund)} ¢` : 'Zone vide';
     }
     if (m.tool === 'terraform') return terrainLabel(m.terrain.mode);
-    if (p.kind === 'powerline') return !p.a ? 'Choisir le départ' : p.validity === 'error' ? 'Ligne refusée' : p.b ? `Construire la ligne · ${fmt(p.cost)} ¢` : 'Choisir l’arrivée';
+    if (p.kind === 'powerline') return !p.a ? 'Choisir le départ' : p.validity === 'error' ? 'Ligne refusée' : !p.b ? 'Choisir l’arrivée' : p.validity === 'pending' ? 'Ligne · calcul du coût…' : `Construire la ligne · ${fmt(p.cost)} ¢`;
+    if (p.kind === 'road' && p.mode === 'roundabout') return p.validity === 'error' ? 'Giratoire refusé' : p.validity === 'pending' ? 'Giratoire · calcul du coût…' : `Construire le giratoire · ${fmt(p.cost)} ¢`;
     if (p.kind === 'grid') return p.validity === 'error' ? 'Îlot refusé' : `Construire l’îlot · ${fmt(p.cost)} ¢`;
     if (p.kind === 'upgrade') return p.validity === 'error' ? 'Modification refusée' : p.refund > 0 ? `Modifier · +${fmt(p.refund)} ¢` : `Modifier · ${fmt(p.cost)} ¢`;
     if (p.kind === 'road') return p.validity === 'error' ? 'Tracé refusé' : `Tracer · ${fmt(p.cost)} ¢`;
@@ -341,7 +368,13 @@ export class ToolController implements IToolController, PointerToolSink {
     if (!this.deps || !this.pendingTouchConfirm) return;
     this.pendingTouchConfirm = false;
     this.hooks?.touchConfirm(null);
-    void this.deps.machine.primary();
+    const m = this.deps.machine;
+    const before = m.applied;
+    void m.primary().then(() => {
+      // Bâtiment posé au doigt : le fantôme suivant ne reste pas sur le bâtiment construit (« Emplacement déjà
+      // occupé ») ; il réapparaît au prochain toucher, à l'endroit touché.
+      if (m.tool === 'building' && m.applied > before && this.lastType === 'touch') m.hover(null, null);
+    });
   }
 
   /** Bouton « Annuler » de la barre tactile. */
@@ -446,7 +479,7 @@ export class ToolController implements IToolController, PointerToolSink {
     if (p.kind !== 'road' && p.kind !== 'upgrade') this.road.hide();
     if (p.kind !== 'grid') this.grid?.hide();
     // Barre de confirmation tactile ouverte : son libellé suit le coût validé par la simulation.
-    if (this.pendingTouchConfirm && (p.kind === 'road' || p.kind === 'grid' || p.kind === 'upgrade')) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
+    if (this.pendingTouchConfirm && (p.kind === 'road' || p.kind === 'grid' || p.kind === 'upgrade' || p.kind === 'powerline')) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
     if (p.kind !== 'select' && p.kind !== 'bulldoze') this.hoverMarker.hide();
     if (p.kind !== 'terrain') this.terrainPrev?.hide();
     if (!(p.kind === 'bulldoze' && p.area) && p.kind !== 'junction') this.areaMarker?.hide();
@@ -478,7 +511,8 @@ export class ToolController implements IToolController, PointerToolSink {
       case 'road': {
         this.road.show({ points: p.points, width: roadWidth(p.type), validity: p.points ? p.validity : 'ok', start: p.start, control: p.control, hover: p.hover, arrows: p.type === 'oneway', ...(p.path ? { path: p.path } : {}) });
         const head = `${fmt(p.length)} m${p.angle ? ` · ${p.angle}` : ''}`;
-        if (!p.points) tag(p.message ? `${p.message}${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}${p.chained ? `\n${p.chained} tronçon${p.chained > 1 ? 's' : ''} · Terminer pour arrêter` : ''}` : null, 'info');
+        if (p.mode === 'roundabout') tag(p.message || null, p.validity === 'error' ? 'error' : p.validity === 'pending' ? 'pending' : p.hover ? 'ok' : 'info');
+        else if (!p.points) tag(p.message ? `${p.message}${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}${p.chained ? `\n${p.chained} tronçon${p.chained > 1 ? 's' : ''} · Terminer pour arrêter` : ''}` : null, 'info');
         else if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');
         else tag(`${head} · ${fmt(p.cost)} ¢${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;

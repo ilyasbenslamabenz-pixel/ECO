@@ -51,7 +51,7 @@ async function main(): Promise<void> {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.62;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xb3c2cf, 900, 3200);
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.3, 8000);

@@ -55,6 +55,28 @@ export const enum Turn { Straight = 0, Left = 1, Right = 2, UTurn = 3 }
 
 const growF = (a: Float32Array, n: number): Float32Array => { const b = new Float32Array(n); b.set(a.subarray(0, Math.min(a.length, n))); return b; };
 
+/**
+ * Axe principal d'un carrefour réglé en « priorité » : la paire de bras entrants la plus alignée (en face l'un de
+ * l'autre), départagée par le rang de route puis le nombre de voies ; à défaut de paire (sens uniques), le bras de
+ * plus haut rang. Renvoie les indices des bras prioritaires.
+ */
+export function mainAxis(arms: readonly { angle: number; rank: number; lanes: number }[]): Set<number> {
+  let best: [number, number] | null = null, bestScore = -Infinity;
+  for (let i = 0; i < arms.length; i++) {
+    for (let j = i + 1; j < arms.length; j++) {
+      let da = Math.abs(arms[i]!.angle - arms[j]!.angle) % (Math.PI * 2);
+      if (da > Math.PI) da = Math.PI * 2 - da;
+      if (da < Math.PI * 0.6) continue; // pas « en face »
+      const score = (arms[i]!.rank + arms[j]!.rank) * 100 + (arms[i]!.lanes + arms[j]!.lanes) * 10 + da;
+      if (score > bestScore) { bestScore = score; best = [i, j]; }
+    }
+  }
+  if (best) return new Set(best);
+  let k = -1;
+  arms.forEach((a, i) => { if (k < 0 || a.rank > arms[k]!.rank || (a.rank === arms[k]!.rank && a.lanes > arms[k]!.lanes)) k = i; });
+  return new Set(k >= 0 ? [k] : []);
+}
+
 export class TrafficGraph {
   /* ---------- nœuds ---------- */
   readonly nodeCount: number;
@@ -63,6 +85,8 @@ export class TrafficGraph {
   readonly nodeY: Float32Array;
   readonly nodeZ: Float32Array;
   readonly nodeControl: Uint8Array;
+  /** 1 : carrefour réglé en « stop » par le joueur (arrêt complet obligatoire à la ligne pour chaque branche). */
+  readonly nodeStop: Uint8Array;
   /** Rognage des voies au carrefour (m). */
   readonly nodeTrim: Float32Array;
   /** Feux : nombre de phases, durée de vert de chaque phase (s). */
@@ -216,6 +240,7 @@ export class TrafficGraph {
 
     // régime des carrefours, rognage, bras
     this.nodeControl = new Uint8Array(this.nodeCount);
+    this.nodeStop = new Uint8Array(this.nodeCount);
     this.nodeTrim = new Float32Array(this.nodeCount);
     this.nodePhases = new Uint8Array(this.nodeCount);
     this.nodeGreen = new Float32Array(this.nodeCount * 4);
@@ -254,11 +279,18 @@ export class TrafficGraph {
       let control = Control.None;
       const ov = nodes[n]!.control;
       let allWay = false;
+      // Bras prioritaires imposés (réglage « priorité ») : indices dans nodeArms ; null = par rang de route.
+      let mainArms: Set<number> | null = null;
       if (d === 1) control = Control.DeadEnd;
       else if (d >= 3 && ov) {
         // Réglage du joueur (outil Carrefour) : prioritaire sur le choix automatique.
-        control = ov === 'signal' ? Control.Signal : ov === 'stop' ? Control.Yield : Control.Priority;
+        //  - « stop » : toutes les branches cèdent et marquent l'arrêt complet ;
+        //  - « priorité » : un axe principal passe sans arrêt, les autres branches lui cèdent le passage
+        //    (et non une priorité à droite).
+        control = ov === 'signal' ? Control.Signal : Control.Yield;
         allWay = ov === 'stop';
+        if (ov === 'stop') this.nodeStop[n] = 1;
+        if (ov === 'priority') mainArms = mainAxis(nodeArms);
       } else if (d >= 3) {
         const big = inc.filter((e) => Math.max(this.edgeLanes[e * 2]!, this.edgeLanes[e * 2 + 1]!) >= 2).length;
         const ranks = inc.map((e) => this.edgeRank[e]!);
@@ -295,7 +327,7 @@ export class TrafficGraph {
       nodeArms.forEach((a, i) => {
         this.legArm[a.leg] = arms.length; armLeg.push(a.leg);
         arms.push(a.arc); armPhase.push(Math.min(3, phaseOf[i]!)); armAngle.push(a.angle);
-        armPrio.push(control === Control.Yield && !allWay && a.rank === maxRank ? 1 : 0);
+        armPrio.push(control === Control.Yield && !allWay && (mainArms ? mainArms.has(i) : a.rank === maxRank) ? 1 : 0);
       });
     }
     this.nodeArmStart[this.nodeCount] = arms.length;

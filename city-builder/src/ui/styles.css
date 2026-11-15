@@ -54,21 +54,22 @@
   --line-2: rgba(22, 38, 58, 0.22);
   --text: #18232f;
   --text-strong: #0d1620;
-  --muted: #5d6b7a;
-  --accent: #1a8cff;
-  --accent-2: #1a8cff;
-  --accent-strong: #0b74e0;
+  /* Couleurs de texte vérifiées ≥ 4,5:1 sur les surfaces claires (#f4f7fa). */
+  --muted: #56636f;
+  --accent: #0b6fd6;
+  --accent-2: #0b6fd6;
+  --accent-strong: #0a5cb4;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(26, 140, 255, 0.12);
-  --accent-glow: 0 0 0 1px rgba(26, 140, 255, 0.55), 0 4px 14px rgba(26, 140, 255, 0.22);
-  --danger: #e0453c;
-  --ok: #1fa760;
-  --warn: #d98e04;
+  --accent-soft: rgba(11, 111, 214, 0.12);
+  --accent-glow: 0 0 0 1px rgba(11, 111, 214, 0.55), 0 4px 14px rgba(11, 111, 214, 0.22);
+  --danger: #c4322a;
+  --ok: #13804a;
+  --warn: #9a6400;
   --radius: 10px;
   --shadow: 0 10px 30px rgba(18, 32, 52, 0.18);
   --blur: blur(18px) saturate(160%);
   --ink: 22, 38, 58;
-  --accent-rgb: 26, 140, 255;
+  --accent-rgb: 11, 111, 214;
   color-scheme: light;
 }
 /* Thème clair : icônes colorées plus denses (contraste sur fond clair), boutons actifs bleus à texte blanc. */
@@ -106,7 +107,8 @@ button:hover:not(:disabled) { background: rgba(var(--ink), 0.11); border-color: 
 button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: .42; cursor: not-allowed; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
-button.primary { background: linear-gradient(180deg, #4ce892, #25bf69); color: var(--accent-ink); border-color: transparent; font-weight: 650; }
+/* Bouton principal : vert vif, texte vert très foncé (contraste ≥ 6:1, au lieu de blanc sur vert ≈ 2:1). */
+button.primary { background: linear-gradient(180deg, #4ce892, #25bf69); color: #062a14; border-color: transparent; font-weight: 700; }
 button.primary:hover:not(:disabled) { background: linear-gradient(180deg, #62f0a2, #2fcf76); }
 button.active { border-color: rgba(var(--accent-rgb), .6); color: var(--text-strong); background: var(--accent-soft); }
 button.danger { border-color: rgba(255,107,107,.45); color: #ffb3b3; }
@@ -129,7 +131,7 @@ button.danger:hover:not(:disabled) { background: rgba(255,107,107,.14); }
 .tagline { margin: 0 0 8px; color: var(--muted); }
 .menu-screen > button { width: 100%; min-height: 48px; justify-content: flex-start; padding: 10px 16px; font-size: 15px; gap: 12px; }
 .menu-screen > button svg.ic { color: var(--accent); }
-.menu-screen > button.primary svg.ic { color: var(--accent-ink); }
+.menu-screen > button.primary svg.ic { color: #062a14; }
 .menu-foot { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .progress { height: 6px; background: rgba(var(--ink), .08); border-radius: 4px; overflow: hidden; }
 #loading-bar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-strong), var(--accent), #b6f5d2); transition: width .2s; }
@@ -137,7 +139,7 @@ button.danger:hover:not(:disabled) { background: rgba(255,107,107,.14); }
 
 .form { display: flex; flex-direction: column; gap: 12px; }
 .form label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--muted); }
-.form input, .form select { font: inherit; font-size: 15px; color: var(--text); background: rgba(0,0,0,.28); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; min-height: var(--tap); width: 100%; }
+.form input, .form select { font: inherit; font-size: 16px; color: var(--text); background: rgba(0,0,0,.28); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; min-height: var(--tap); width: 100%; }
 .form input[type=range] { padding: 0; accent-color: var(--accent); background: none; border: 0; }
 .form .inline { display: flex; gap: 8px; }
 .form .inline input { flex: 1; }
@@ -344,11 +346,16 @@ body.drawer-open #tool-options, body.confirming #tool-options { display: none; }
 .tool-hint { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tool-actions { display: flex; gap: 4px; flex: 0 0 auto; }
 .tool-actions button { min-height: 32px; padding: 4px 11px; font-size: 12px; border-radius: 999px; }
+/* Hauteur du tracé ▼ / 0 m / ▲ : cibles tactiles de 40 px au moins. */
+.tool-actions button.ta-elev { min-height: 40px; min-width: 40px; font-size: 14px; }
 .tool-actions { flex-wrap: wrap; justify-content: center; }
 .tool-actions .ta-break { width: 1px; align-self: stretch; margin: 4px 3px; background: var(--line-2); }
 /* « Terminer le tracé » : grand bouton au-dessus des options, visible tant qu'un tracé enchaîné est en cours. */
 #road-finish { align-self: center; min-height: 46px; padding: 0 24px; font-size: 15px; font-weight: 700; border-radius: 999px; box-shadow: var(--shadow); animation: rise .2s ease-out; }
-body.confirming #road-finish { margin-bottom: 86px; }
+/* Le bouton est juste au-dessus de la barre d'outils ; la barre de confirmation tactile se place au-dessus de lui. */
+body.confirming.road-drawing:not(.drawer-open) #touch-confirm { bottom: calc(var(--tb-h) + 66px); }
+/* Bulle du curseur : masquée pendant qu'une sous-barre est ouverte (elle décrivait l'outil précédent). */
+body.drawer-open #cursor-tag { display: none; }
 body.drawer-open #road-finish { display: none; }
 
 /* Objectifs (phase 2C : panneau discret repliable) */
@@ -455,7 +462,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 .tax-grid .inc { grid-column: 2 / 4; color: var(--muted); font-size: 11.5px; margin-top: -6px; text-align: right; }
 .loan-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12.5px; }
 .loan-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); }
-.loan-form input, .loan-form select { min-height: 38px; font: inherit; color: var(--text); background: rgba(0,0,0,.28); border: 1px solid var(--line-2); border-radius: 9px; padding: 6px 9px; width: 100%; }
+.loan-form input, .loan-form select { min-height: 40px; font: inherit; font-size: 16px; color: var(--text); background: rgba(0,0,0,.28); border: 1px solid var(--line-2); border-radius: 9px; padding: 6px 9px; width: 100%; }
 .loan-offer { grid-column: 1 / 3; font-size: 12px; }
 .loan-form button { grid-column: 1 / 3; min-height: 40px; }
 .loan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
@@ -680,7 +687,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 #elec-launcher, #eau-btn { display: none !important; }
 /* Panneau Eau : sous la barre du haut (plus haute sur téléphone), en-tête et bouton fermer toujours visibles. */
 @media (max-width: 760px) {
-  #eau-ui { top: calc(162px + env(safe-area-inset-top, 0px)) !important; z-index: 41 !important; right: calc(12px + env(safe-area-inset-right, 0px)); }
+  #eau-ui { top: calc(162px + env(safe-area-inset-top, 0px)) !important; z-index: 16 !important; right: calc(12px + env(safe-area-inset-right, 0px)); }
   #eau-panel { width: auto !important; max-height: calc(100dvh - 162px - 240px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) !important; }
 }
 /* Panneau Énergie : les chiffres longs passent à la ligne au lieu d'être coupés. */
@@ -696,7 +703,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 /* Téléphone, outil de construction actif : barre du haut réduite à une ligne (argent, date, pause/lecture) pour
    agrandir la carte ; étiquette de l'outil fixée sous la barre (au lieu de couvrir le bâtiment sous le doigt). */
 @media (max-width: 760px) {
-  body.tool-opts #hud .hud-brand, body.tool-opts #hud .hud-actions, body.tool-opts #btn-sidebar,
+  body.tool-opts #hud .hud-brand, body.tool-opts #hud .hud-actions,
   body.tool-opts #hud-pop-btn, body.tool-opts #hud-happy-btn, body.tool-opts #hud-weather,
   body.tool-opts #hud .speed .spd-x { display: none !important; }
   body.tool-opts #hud { row-gap: 0 !important; padding-top: calc(4px + env(safe-area-inset-top, 0px)) !important; padding-bottom: 4px !important; }
@@ -880,3 +887,110 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 :root[data-theme="nuit"] .card .thumb { background: radial-gradient(ellipse at 50% 30%, #23344a, #101826); }
 :root[data-theme="nuit"] .form input, :root[data-theme="nuit"] .form select { background: rgba(5, 10, 18, .5); }
 :root[data-theme="nuit"] #toolbar button { color: #c9d6e6; }
+
+/* ===================== Corrections d'interface (iPhone, panneaux, contrastes) ===================== */
+/* Un seul système de panneaux : les anciens panneaux flottants des modules restent sous le menu latéral. */
+#elec-panel { z-index: 16 !important; }
+#dechets-panel { z-index: 16; }
+/* Panneaux des modules montés dans le tableau de bord (Énergie, Eau, Déchets) : textes à la ligne, couleurs du thème. */
+#dash-body .elec { color: var(--text); font-size: 13px; }
+#dash-body .elec h3 { font-size: 14px; flex-wrap: wrap; gap: 6px; }
+#dash-body .elec h3 > span { display: flex; gap: 6px; }
+#dash-body .elec table { table-layout: fixed; }
+#dash-body .elec td, #dash-body .elec th { overflow-wrap: anywhere; vertical-align: top; }
+#dash-body .elec .kpi b { white-space: normal; overflow-wrap: anywhere; font-size: 15px; }
+#dash-body .elec .kpi { background: rgba(var(--ink), .045); }
+#dash-body .elec .muted, #dash-body .elec h4, #dash-body .elec .kpi span { color: var(--muted); }
+#dash-body .elec button { color: var(--text); background: rgba(var(--ink), .06); border-color: var(--line-2); min-height: 36px; }
+#dash-body .elec button.primary { background: linear-gradient(180deg, #ffd36a, #e8b65a); color: #2a1c02; border-color: transparent; }
+#dash-body .elec select { background: var(--panel-solid); color: var(--text); border-color: var(--line-2); min-height: 36px; }
+#dash-body .elec td, #dash-body .elec th { border-bottom-color: var(--line); }
+#dash-body .elec .warn { color: var(--danger); } #dash-body .elec .ok { color: var(--ok); }
+#dash-body .dechets-panel { width: auto; }
+#dash-body .eau-row { overflow-wrap: anywhere; }
+
+/* Menu latéral : voile visible (fermeture d'un toucher), au-dessus des panneaux. */
+#sidebar-scrim { display: none; }
+#sidebar .badge { font-size: 10.5px; }
+
+/* Barre du haut (téléphone) : trésorerie et solde mensuel lisibles en entier, date compacte sous la barre. */
+@media (max-width: 760px) {
+  #hud > #hud-money-btn { flex: 2 1 0 !important; }
+  #hud-money-btn .mrow { gap: 0; line-height: 1.1; }
+  #hud-money { font-size: 13.5px !important; letter-spacing: -0.01em; }
+  #hud-balance { font-size: 10.5px !important; white-space: nowrap; letter-spacing: -0.01em; }
+  #hud-balance .per { display: inline !important; font-weight: 500; opacity: .8; }
+  #hud > #hud-date { display: flex !important; position: absolute !important; top: 100%; right: max(8px, var(--safe-r)); margin-top: 4px; order: 9;
+    flex-direction: row; align-items: baseline; gap: 6px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--glass-2); box-shadow: 0 4px 14px rgba(0, 0, 0, .25); pointer-events: none; line-height: 1.3; }
+  #hud > #hud-date .day { font-size: 11px; font-weight: 600; color: var(--text-strong); }
+  #hud > #hud-date .clock { font-size: 11px; font-weight: 700; color: var(--muted); }
+  /* Menu latéral accessible même pendant la construction (bouton ☰ conservé dans la barre réduite). */
+  body.tool-opts #btn-sidebar { display: inline-flex !important; width: 40px; height: 40px; min-height: 40px; }
+}
+
+/* Cibles tactiles ≥ 40 px. */
+@media (pointer: coarse) {
+  .chip-tab, .zn-growth, .gov-btn, .gov-chip, .loan-list li button, .panel-btns .icon-btn, .eau-modes button, .dechets-panel select { min-height: 40px; }
+  .panel-btns .icon-btn { min-width: 40px; }
+  #dash-body .elec button, #dash-body .elec select { min-height: 40px; }
+  #layers-pop .layer-item { min-height: 40px; }
+}
+
+/* Tiroir Routes : cartes des types sur une rangée défilante, outils à la ligne (rien hors de l'écran). */
+.road-cards { display: flex; gap: 10px; flex: 0 0 auto; }
+@media (max-width: 760px) {
+  .drawer-body.road-body { flex-direction: column; overflow-x: hidden; overflow-y: auto; gap: 8px; scroll-snap-type: none; }
+  .road-cards { overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; padding-bottom: 2px; }
+  .road-cards::-webkit-scrollbar { display: none; }
+  .road-body .drawer-opts { flex-direction: row; flex-wrap: wrap; padding-left: 0; gap: 6px; }
+  .road-body .drawer-opts .seg { flex-wrap: wrap; }
+  .road-body .drawer-opts .seg button { min-height: 40px; padding: 4px 12px; }
+  .road-body .drawer-opts .hint { display: none; }
+  /* Tiroir Services : onglets par famille, tous visibles (retour à la ligne). */
+  #build-drawer[data-drawer="services"] .drawer-head .tabs { flex-wrap: wrap; row-gap: 5px; overflow: visible; }
+  #build-drawer[data-drawer="services"] .chip-tab { font-size: 12px; padding: 3px 9px 3px 7px; }
+}
+
+/* Cartes de construction : chiffres clés et dépendances. */
+.card .kf { font-size: 11px; font-weight: 650; color: var(--text-strong); line-height: 1.25; }
+.card .dep { font-size: 10.5px; line-height: 1.25; color: var(--warn); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Barre de confirmation : emplacement invalide affiché AVANT de toucher « Construire ». */
+#touch-confirm { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 16px); }
+#tc-reason { flex-basis: 100%; order: -1; font-size: 12px; line-height: 1.3; color: var(--danger); text-align: center; padding: 0 4px; }
+#touch-confirm #tc-ok:disabled { opacity: 1; background: rgba(var(--ink), .1); color: var(--muted); }
+
+/* Fiche d'un bâtiment : actions (Améliorer, Démolir…) visibles sans défiler. */
+#info-panel .panel-body > #info-thumb { order: -2; }
+#info-panel .panel-body > #info-actions { order: -1; }
+
+/* Menu des calques : plus compact (ne couvre plus la moitié de la carte). */
+#layers-pop { width: min(264px, calc(100vw - 24px)); padding: 8px; max-height: min(320px, calc(100dvh - 300px)); }
+#layers-pop .layers-head { margin-bottom: 6px; }
+#layers-pop .layers-list { gap: 4px; }
+#layers-pop .layer-item { min-height: 36px; padding: 4px 8px; font-size: 12px; gap: 6px; }
+#layers-pop .layer-item svg.ic { width: 16px; height: 16px; }
+#layers-pop .layer-check { margin-top: 6px; }
+
+/* Journal : alertes épinglées, chantiers regroupés. */
+.notif-pinned { border-left: 3px solid var(--danger); }
+.notif-list .ntime { white-space: nowrap; }
+.notif-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* Thème clair : surfaces et textes codés pour le sombre, contrastes ≥ 4,5:1. */
+:root[data-theme="clair"] .lg-head.exp { color: #7a1c17; }
+:root[data-theme="clair"] .lg-head.exp svg.ic, :root[data-theme="clair"] .lg-head.exp b { color: var(--danger); }
+:root[data-theme="clair"] button.danger { color: var(--danger); border-color: rgba(196, 50, 42, .45); }
+:root[data-theme="clair"] .hud-time .clock { color: var(--text-strong); }
+:root[data-theme="clair"] #cursor-tag.error { color: var(--danger); }
+:root[data-theme="clair"] #sidebar button .tl, :root[data-theme="clair"] #sidebar button svg.ic { color: var(--text); }
+:root[data-theme="clair"] #toolbar button { color: var(--text); }
+/* Boutons actifs (thèmes Nuit et Clair) : bleu assez foncé pour un texte blanc ≥ 4,5:1. */
+:root:is([data-theme="clair"], [data-theme="nuit"]) #toolbar button.active, :root:is([data-theme="clair"], [data-theme="nuit"]) .ptabs button.active, :root:is([data-theme="clair"], [data-theme="nuit"]) .seg button.active,
+:root:is([data-theme="clair"], [data-theme="nuit"]) #sidebar button.active, :root:is([data-theme="clair"], [data-theme="nuit"]) .gov-chip.on, :root:is([data-theme="clair"], [data-theme="nuit"]) #layers-pop .layer-item.on {
+  background: linear-gradient(180deg, #1f70cc, #1458ab); border-color: #1458ab; color: #fff; }
+.lg-head.svc { background: linear-gradient(90deg, rgba(124, 196, 255, .2), rgba(124, 196, 255, .06)); color: var(--text-strong); border-top: 1px solid var(--line); }
+.lg-head.svc svg.ic { color: var(--accent-2); }
+.lg-head.svc span { font-weight: 600; font-size: 12.5px; }
+#tc-reason.warn { color: var(--warn); }

@@ -309,7 +309,12 @@ export class SkySystem {
   private readonly sSnap = new THREE.Vector3();
 
   /** Après une perte du contexte WebGL : carte d'environnement (PMREM) recalculée. */
-  rebuildEnvironment(): void { this.refreshEnvironment(); }
+  rebuildEnvironment(): void {
+    // L'ancienne cible est abandonnée SANS dispose() : ses objets WebGL sont morts avec le contexte perdu, et
+    // les supprimer dans le contexte restauré provoquait « delete: object does not belong to this context ».
+    this.envRT = null;
+    this.refreshEnvironment();
+  }
 
   private refreshEnvironment(): void {
     this.envHour = this.hour;

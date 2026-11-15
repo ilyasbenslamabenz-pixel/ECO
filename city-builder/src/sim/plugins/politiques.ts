@@ -7,6 +7,7 @@
 import { POLICIES, POLICY_SERVICE, combine, type GovernanceService, type PolicyDef } from '../../shared/governance';
 import type { PluginCommandResult, SimPlugin } from './types';
 import { runMigrations } from '../save-sections/types';
+import { MINUTES_PER_MONTH } from '../clock';
 
 export const POLITIQUES_SAVE_VERSION = 1;
 export interface PolitiquesSave { active: string[]; lastCost: number; since: Record<string, number> }
@@ -26,6 +27,10 @@ export interface PolitiquesState {
   lastCost: number;
   totalCost: number;
 }
+
+/** Part d'un mois [from, to) pendant laquelle une politique adoptée à `since` était active (0..1). */
+export const activeShare = (since: number, from: number, to: number): number =>
+  Math.max(0, Math.min(1, (to - Math.max(since, from)) / MINUTES_PER_MONTH));
 
 /** Coût mensuel d'une politique pour une population donnée (CHF). */
 export const policyCost = (p: PolicyDef, population: number): number => Math.round(p.costPerMonth + p.costPerResident * population);
@@ -50,7 +55,12 @@ export function createPolitiquesPlugin(): SimPlugin & { readonly state: () => Po
     onMonthStart(ctx) {
       if (!s.active.length) return;
       const n = pop(ctx);
-      const cost = POLICIES.filter((p) => s.active.includes(p.id)).reduce((a, p) => a + policyCost(p, n), 0);
+      // Facturation à terme échu, au prorata du temps d'activité pendant le mois écoulé (adoptée en cours de mois :
+      // seulement la part du mois ; abandonnée avant la fin : déjà facturée à l'abandon, voir `toggle`).
+      const monthStart = Math.floor(ctx.clock.totalMinutes / MINUTES_PER_MONTH) * MINUTES_PER_MONTH;
+      const prevStart = monthStart - MINUTES_PER_MONTH;
+      let cost = 0;
+      for (const p of POLICIES) if (s.active.includes(p.id)) cost += Math.round(policyCost(p, n) * activeShare(s.since[p.id] ?? 0, prevStart, monthStart));
       if (cost > 0) ctx.economy.applyService(-cost);
       s.lastCost = cost;
       version++;
@@ -73,7 +83,16 @@ export function createPolitiquesPlugin(): SimPlugin & { readonly state: () => Po
         if (!def) return { ok: false, code: 'INVALID_ARGS', message: 'Politique inconnue' };
         const on = typeof p.on === 'boolean' ? p.on : !s.active.includes(def.id);
         if (on && !s.active.includes(def.id)) { s.active.push(def.id); s.since[def.id] = ctx.clock.totalMinutes; ctx.notify('info', `Politique adoptée : ${def.nameFr}`); }
-        if (!on && s.active.includes(def.id)) { s.active = s.active.filter((x) => x !== def.id); delete s.since[def.id]; ctx.notify('info', `Politique abandonnée : ${def.nameFr}`); }
+        if (!on && s.active.includes(def.id)) {
+          // Part du mois en cours déjà consommée : facturée tout de suite (sinon adopter puis abandonner entre deux
+          // débuts de mois serait gratuit).
+          const now = ctx.clock.totalMinutes;
+          const monthStart = Math.floor(now / MINUTES_PER_MONTH) * MINUTES_PER_MONTH;
+          const due = Math.round(policyCost(def, pop(ctx)) * activeShare(s.since[def.id] ?? 0, monthStart, now));
+          if (due > 0) ctx.economy.applyService(-due);
+          s.active = s.active.filter((x) => x !== def.id); delete s.since[def.id];
+          ctx.notify('info', `Politique abandonnée : ${def.nameFr}${due > 0 ? ` (${due.toLocaleString('fr-FR')} CHF facturés pour la part du mois écoulée)` : ''}`);
+        }
         version++;
         return { ok: true, data: view(pop(ctx), ctx.clock.totalMinutes) };
       }

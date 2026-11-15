@@ -34,3 +34,30 @@ test('secteur : embellissement -> bonheur en hausse, coût prélevé ; chevauche
   const back = cmd(c, 'state').data!;
   assert.deepEqual(back.secteurs.map((d) => [d.name, d.policies]), [['Centre', ['embellissement', 'police_proximite']]]);
 });
+
+test('secteur : cache à jour après démolition + pose (même nombre de bâtiments) et suppression', () => {
+  const s = newTownSim(); buildTown(s); runDays(s, 1);
+  const svc = s.plugins.contextOf('secteurs')!.use<{ happinessOf(id: number): number }>('secteurs')!;
+  const st = s.buildings;
+  // Secteur couvrant la rue z = 0 (côté nord, bâtiments vers z < 0).
+  const r = cmd(s, 'create', { name: 'Sud', x0: -240, z0: -70, x1: 240, z1: 2 });
+  assert.ok(r.ok, r.message);
+  const id = r.data!.secteurs[0]!.id;
+  assert.ok(cmd(s, 'toggle', { id, policy: 'embellissement', on: true }).ok);
+  let inside = -1;
+  for (let i = 0; i < st.count; i++) if (st.z[i]! < 0 && st.z[i]! > -70) { inside = st.id[i]!; break; }
+  assert.ok(inside > 0);
+  assert.equal(svc.happinessOf(inside), 3, 'politique appliquée');
+  const count = cmd(s, 'state').data!.secteurs[0]!.buildings;
+  // Démolition puis pose d'un nouveau bâtiment au même endroit (même nombre de bâtiments, nouvel identifiant).
+  const k = st.indexOf(inside);
+  const x = st.x[k]!, z = st.z[k]!, rot = st.rot[k]!;
+  assert.ok(s.demolish({ buildingId: inside }).ok);
+  const p1 = s.placeBuilding({ assetId: 'maison', x, z, rot });
+  assert.ok(p1.ok, p1.ok ? '' : p1.error.message);
+  assert.equal(svc.happinessOf(p1.data.buildingId), 3, 'nouveau bâtiment du secteur : politique appliquée');
+  assert.equal(cmd(s, 'state').data!.secteurs[0]!.buildings, count, 'décompte à jour');
+  // Suppression du secteur : plus d'effet.
+  assert.ok(cmd(s, 'remove', { id }).ok);
+  assert.equal(svc.happinessOf(p1.data.buildingId), 0, 'secteur supprimé : plus d’effet');
+});

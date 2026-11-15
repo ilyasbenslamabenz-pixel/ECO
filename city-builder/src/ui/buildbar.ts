@@ -17,6 +17,7 @@ import { $, el, fmt, money, phaseBadge } from './dom';
 import { iconEl } from './icons';
 import type { ThumbnailSource } from './thumbnails';
 import { zonageDrawer } from './panels/zonage';
+import { cardInfo } from './card-info';
 import { renderTerrainDrawer, terrainHint, terrainToolActions } from './terrain-drawer';
 
 export type DrawerId = 'road' | 'building' | 'services' | 'transport' | 'environment' | 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
@@ -29,6 +30,11 @@ interface Tab { id: string; label: string; cats: AssetCategory[]; placeable: boo
 const isTransport = (a: CatalogAsset): boolean => a.tags.includes('transport');
 const isHub = (a: CatalogAsset): boolean => a.tags.includes('hub');
 const isGreen = (a: CatalogAsset): boolean => a.tags.includes('espace_vert') || a.tags.includes('parc');
+/** Équipement de service du tiroir Services (hors gares et parcs, qui ont leur tiroir). */
+const isService = (a: CatalogAsset): boolean => !isTransport(a) && !isGreen(a);
+const hasSvc = (a: CatalogAsset, ...keys: string[]): boolean => keys.some((k) => a.tags.includes(`service:${k}`));
+/** Familles qui ont leur propre onglet dans le tiroir Services (le reste va dans « Culte et autres »). */
+const SERVICE_TAB_KEYS = ['education', 'petite_enfance', 'sante', 'police', 'incendie', 'eau', 'assainissement', 'dechets', 'culture', 'sport', 'loisirs'];
 
 export const DRAWER_TABS: Record<CatalogDrawer, Tab[]> = {
   building: [
@@ -40,7 +46,17 @@ export const DRAWER_TABS: Record<CatalogDrawer, Tab[]> = {
     { id: 'commercial', label: 'Commerces & bureaux', cats: ['commercial'], placeable: true, icon: 'shop', color: '#5ab8ff' },
     { id: 'industrial', label: 'Industrie', cats: ['industrial'], placeable: true, icon: 'factory', color: '#ffcf4a' },
   ],
-  services: [{ id: 'public', label: 'Services publics', cats: ['public'], placeable: true, icon: 'services', color: '#ff7a7a', filter: (a) => !isTransport(a) && !isGreen(a) }],
+  // Services : un onglet par famille d'équipements (étiquettes `service:*` du catalogue) au lieu d'une seule rangée.
+  services: [
+    { id: 'education', label: 'Éducation', cats: ['public'], placeable: true, icon: 'school', color: '#ffb14a', filter: (a) => isService(a) && hasSvc(a, 'education', 'petite_enfance') },
+    { id: 'sante', label: 'Santé', cats: ['public'], placeable: true, icon: 'hospital', color: '#ff7a7a', filter: (a) => isService(a) && hasSvc(a, 'sante') },
+    { id: 'securite', label: 'Sécurité', cats: ['public'], placeable: true, icon: 'police', color: '#6ea8ff', filter: (a) => isService(a) && hasSvc(a, 'police', 'incendie') },
+    { id: 'eau', label: 'Eau', cats: ['public'], placeable: true, icon: 'water', color: '#4aa8ff', filter: (a) => isService(a) && hasSvc(a, 'eau', 'assainissement') },
+    { id: 'dechets', label: 'Déchets', cats: ['public'], placeable: true, icon: 'waste', color: '#8fcf5a', filter: (a) => isService(a) && hasSvc(a, 'dechets') },
+    { id: 'energie', label: 'Énergie', cats: ['industrial'], placeable: true, icon: 'energy', color: '#ffc531', filter: (a) => a.id.startsWith('elec_') },
+    { id: 'loisirs', label: 'Loisirs et culture', cats: ['public'], placeable: true, icon: 'museum', color: '#c08bff', filter: (a) => isService(a) && hasSvc(a, 'culture', 'sport', 'loisirs') },
+    { id: 'autres', label: 'Culte et autres', cats: ['public'], placeable: true, icon: 'church', color: '#d9b77a', filter: (a) => isService(a) && !SERVICE_TAB_KEYS.some((k) => hasSvc(a, k)) },
+  ],
   transport: [
     { id: 'station', label: 'Gares', cats: ['public'], placeable: true, icon: 'station', color: '#4fd1e8', filter: isTransport },
     // Pôles de transport (module hubs) : seules les entrées `hub` du catalogue (Port, Aéroport), pas leurs pièces.
@@ -185,6 +201,8 @@ export interface BuildBarDeps {
   machine: ConstructionTools;
   thumbs: ThumbnailSource | null;
   notify: (t: string, k?: 'info' | 'error' | 'ok') => void;
+  /** Un tiroir s'ouvre : les tableaux de bord se ferment (un seul panneau à la fois). */
+  onDrawerOpen?(): void;
 }
 
 /** Actions de l'outil « Améliorer » (barre d'options). */
@@ -219,10 +237,10 @@ export class BuildBar {
     // Active les outils réellement disponibles ; les catégories prévues ouvrent un aperçu grisé (avec leur phase).
     const tips: Record<string, string> = {
       road: 'Routes : 6 types (rue, avenue, boulevard, sens unique, piétonne, autoroute), droites ou courbes', building: 'Bâtiments : maisons, immeubles, tours, commerces, industrie',
-      services: 'Services publics : mairie, école, hôpital, pompiers, police…', environment: 'Nature : parcs (constructibles) ; arbres, végétation, mobilier (phase 2C)',
-      transport: 'Transports : gare de voyageurs, port et aéroport ; bus, tramway (phase 2C)',
+      services: 'Services publics : mairie, école, hôpital, pompiers, police…', environment: 'Nature : parcs ; arbres, végétation, mobilier (bientôt)',
+      transport: 'Transports : gare de voyageurs, port et aéroport ; bus, tramway (bientôt)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
-      zones: 'Zones (résidentiel, commercial, industriel, bureaux, agricole) : aperçu — phase 2B', energy: 'Énergie : centrales, éoliennes, solaire, barrage, postes ; lignes haute tension depuis le tableau de bord',
+      zones: 'Zones : résidentiel, commercial, industriel, bureaux', energy: 'Énergie : centrales, éoliennes, solaire, barrage, postes ; lignes haute tension depuis le tableau de bord',
       water: 'Eau et égouts : pompage, potabilisation, château d’eau, épuration (canalisations le long des routes)', waste: 'Déchets : dépôt de camions-bennes, centre de tri, incinérateur, décharge', terrain: 'Terrain : défricher, quais et remblais, bassins et canaux',
     };
     for (const b of Array.from(this.toolbar.querySelectorAll<HTMLButtonElement>('button[data-tool], button[data-cat]'))) {
@@ -257,6 +275,9 @@ export class BuildBar {
       this.syncFinish();
     });
     this.finishBtn.addEventListener('click', () => { d.tools.cancel(); d.machine.finishRoad(); this.sync(); });
+    // « Terminer le tracé » hors de la zone de jeu : juste au-dessus de la barre d'outils (sous les options d'outil),
+    // à l'emplacement de la barre de confirmation, et non plus au milieu de l'écran où tombait le point d'arrivée.
+    this.toolbar.before(this.finishBtn);
     window.addEventListener('keydown', (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
@@ -272,6 +293,7 @@ export class BuildBar {
   openDrawer(id: DrawerId): void {
     if (this.open && this.open !== id) DRAWER_PROVIDERS[this.open]?.closed?.();
     this.open = id;
+    this.d.onDrawerOpen?.();
     this.drawer.classList.remove('hidden');
     this.drawer.dataset['drawer'] = id;
     document.body.classList.add('drawer-open');
@@ -295,6 +317,7 @@ export class BuildBar {
     const meta = DRAWER_META[id];
     this.titleEl.className = `drawer-title ${meta.cls}`;
     this.titleEl.replaceChildren(iconEl(meta.icon), el('span', { text: meta.title }));
+    this.body.classList.toggle('road-body', id === 'road');
     if (id === 'road') { this.renderRoads(); return; }
     const provider = DRAWER_PROVIDERS[id];
     if (provider) {
@@ -317,7 +340,7 @@ export class BuildBar {
         for (const t of tabs) {
           const b = el('button', { cls: `chip-tab${t.id === current.id ? ' active' : ''}`, attrs: { role: 'tab', 'aria-selected': String(t.id === current.id), 'data-tab': t.id, style: `--ic:${t.color}` } },
             iconEl(t.icon), el('span', { text: t.label }), el('span', { cls: 'n', text: String(assetsForTab(this.d.catalog, t).length) }));
-          if (!t.placeable) b.append(el('span', { cls: 'phase', text: DECOR_PLACEMENT_PHASE }));
+          if (!t.placeable) b.append(el('span', { cls: 'phase', text: 'Bientôt' }));
           b.addEventListener('click', () => { this.tab[id] = t.id; this.renderDrawer(); });
           this.tabsEl.append(b);
         }
@@ -340,8 +363,8 @@ export class BuildBar {
     const b = el('button', { cls: 'chip-tab', attrs: { type: 'button', 'data-dashboard': id } }, iconEl(id), el('span', { text: id === 'energy' ? 'Tableau de bord et lignes' : 'Tableau de bord' }));
     b.addEventListener('click', () => {
       this.closeDrawer();
-      if (id === 'waste') window.dispatchEvent(new Event('dechets:open'));
-      else document.getElementById(id === 'energy' ? 'elec-launcher' : 'eau-btn')?.click();
+      // Même panneau que le menu latéral (tableau de bord unique, un seul panneau ouvert à la fois).
+      window.dispatchEvent(new CustomEvent('ui:open-dash', { detail: id }));
     });
     return b;
   }
@@ -349,7 +372,7 @@ export class BuildBar {
   private plannedTile(p: { label: string; icon: string; color: string; phase: string; tip: string }): HTMLButtonElement {
     const b = el('button', { cls: 'tile soon', attrs: { disabled: '', style: `--ic:${p.color}`, 'data-planned': p.label } },
       el('span', { cls: 'tile-ico' }, iconEl(p.icon)), el('span', { cls: 'nm', text: p.label }), phaseBadge(p.phase));
-    b.dataset['tip'] = `${p.tip} — phase ${p.phase} (non simulé pour l’instant)`;
+    b.dataset['tip'] = `${p.tip} — bientôt disponible`;
     return b;
   }
 
@@ -357,15 +380,20 @@ export class BuildBar {
     const thumb = el('div', { cls: 'thumb' }, el('span', { cls: 'spin' }));
     const fp = a.footprint.tilesX > 0 ? `${a.footprint.tilesX}×${a.footprint.tilesZ} cases · ${Math.round(a.dimensions.height)} m` : `${Math.round(a.dimensions.height)} m de haut`;
     const cap = a.capacity.residents ? `${fmt(a.capacity.residents)} hab.` : a.capacity.jobs ? `${fmt(a.capacity.jobs)} emplois` : '';
+    // L'essentiel : puissance, capacité, rayon, dépendances (catalogue et modèles partagés de la simulation).
+    const info = cardInfo(a);
     const b = el('button', { cls: 'card', attrs: { 'data-asset': a.id, style: `--ic:${color}` } }, thumb,
-      el('div', { cls: 'cap' }, el('span', { cls: 'nm', text: a.nameFr }), el('span', { cls: 'ct', text: placeable ? money(a.cost) : '' }), el('span', { cls: 'sz', text: [fp, cap].filter(Boolean).join(' · ') })));
+      el('div', { cls: 'cap' }, el('span', { cls: 'nm', text: a.nameFr }), el('span', { cls: 'ct', text: placeable ? money(a.cost) : '' }),
+        info.lines.length ? el('span', { cls: 'kf', text: info.lines.join(' · ') }) : null,
+        el('span', { cls: 'sz', text: [fp, info.lines.length ? '' : cap].filter(Boolean).join(' · ') }),
+        info.depends ? el('span', { cls: 'dep', text: info.depends }) : null));
     if (!placeable) {
       b.disabled = true;
-      b.dataset['tip'] = `Placement libre des décors : phase ${DECOR_PLACEMENT_PHASE} (la simulation ne gère pas encore ces objets ; ils décorent déjà les routes et la démo).`;
+      b.dataset['tip'] = 'Placement libre des décors : bientôt disponible (ils décorent déjà les routes et la démo).';
       thumb.append(el('span', { cls: 'badge' }, phaseBadge(DECOR_PLACEMENT_PHASE)));
       // Pas de transparence sur la vignette elle-même : le modèle reste lisible.
     } else {
-      b.dataset['tip'] = `${a.nameFr} — ${money(a.cost)}, entretien ${money(a.upkeepPerMonth)}/mois${a.variants.length > 1 ? ` · ${a.variants.length} variantes` : ''}`;
+      b.dataset['tip'] = `${a.nameFr} — ${money(a.cost)}, entretien ${money(a.upkeepPerMonth)}/mois${a.variants.length > 1 ? ` · ${a.variants.length} variantes` : ''}${info.lines.length ? ` · ${info.lines.join(' · ')}` : ''}${cap && info.lines.length ? ` · ${cap}` : ''}${info.depends ? ` — ${info.depends}` : ''}`;
       b.addEventListener('click', () => {
         this.d.tools.setTool('building', { assetId: a.id });
         // On libère la vue pour viser (le tiroir se rouvre d'un clic ; la barre d'options de l'outil prend le relais).
@@ -393,6 +421,9 @@ export class BuildBar {
 
   private renderRoads(): void {
     const m = this.d.machine;
+    // Cartes des types de route sur une rangée défilante ; outils (forme, quadrillage, parallèle, carrefour) dans
+    // une rangée à part qui passe à la ligne : tout reste dans l'écran du téléphone.
+    const cards = el('div', { cls: 'road-cards' });
     for (const id of ROAD_KIND_ORDER) {
       const def = roadDef(id)!;
       const k = ROAD_KINDS[id];
@@ -402,9 +433,9 @@ export class BuildBar {
         el('div', { cls: 'thumb' }, roadSvg(def.id)),
         el('div', { cls: 'cap' }, el('span', { cls: 'nm', text: def.nameFr }), el('span', { cls: 'ct', text: `${fmt(def.costPerMeter)} CHF / m` }),
           el('span', { cls: 'sz', text: `${def.width.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} m · ${lanes} · ${def.speedKmh} km/h${extra}` })));
-      b.dataset['tip'] = `${def.nameFr} : ${fmt(def.costPerMeter)} CHF/m, entretien ${def.upkeepPerMeterMonth.toLocaleString('fr-FR')} CHF/m/mois${id === 'highway' ? ' — ne croise pas les autres routes à niveau (échangeurs : phase 4)' : ''}`;
+      b.dataset['tip'] = `${def.nameFr} : ${fmt(def.costPerMeter)} CHF/m, entretien ${def.upkeepPerMeterMonth.toLocaleString('fr-FR')} CHF/m/mois${id === 'highway' ? ' — ne croise pas les autres routes à niveau (échangeurs : bientôt)' : ''}`;
       b.addEventListener('click', () => { this.d.tools.setTool('road', { roadType: def.id }); this.closeDrawer(); });
-      this.body.append(b);
+      cards.append(b);
     }
     const mode = el('div', { cls: 'seg', attrs: { role: 'group', 'aria-label': 'Forme du tracé' } });
     for (const [id, label] of [['straight', 'Droite'], ['curve', 'Courbe']] as const) {
@@ -422,6 +453,7 @@ export class BuildBar {
     }
     this.tabsEl.append(el('span', { cls: 'drawer-note' }, el('span', { text: '6 types · droites ou courbes · quadrillage · carrefours et ponts automatiques' })));
     this.body.append(el('div', { cls: 'drawer-opts' }, mode, more, el('span', { cls: 'hint', text: 'Maj : angle magnétique 15°' }), el('span', { cls: 'hint', text: `Lignes guides parallèles à ${m.gridBlock} m (taille d'îlot)` })));
+    this.body.prepend(cards);
   }
 
   private markActive(): void {
@@ -479,6 +511,14 @@ export class BuildBar {
       b.classList.toggle('active', active);
       b.setAttribute('aria-pressed', String(active));
     }
+    // Familles du téléphone (Réseaux, Paysage) : surlignées quand l'une de leurs catégories est active.
+    const fam: Record<string, string[]> = { reseaux: ['energy', 'water', 'waste', 'transport'], paysage: ['environment', 'terrain'] };
+    for (const b of Array.from(this.toolbar.querySelectorAll<HTMLButtonElement>('button[data-family]'))) {
+      const cats = fam[b.dataset['family'] ?? ''] ?? [];
+      const on = cats.some((c) => this.toolbar.querySelector(`button[data-cat="${c}"]`)?.classList.contains('active'));
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
     this.markActive();
     this.syncUndo();
     this.actions.replaceChildren();
@@ -501,13 +541,13 @@ export class BuildBar {
       act('Courbe', 'Tracé courbe : départ, point de courbure, arrivée', () => m.setRoadMode('curve'), sub === 'draw' && m.draft.mode === 'curve');
       act('Quadrillage', 'Quadrillage : un rectangle devient un îlot de rues sur la grille de 8 m', () => m.setRoadSub(sub === 'grid' ? 'draw' : 'grid'), sub === 'grid');
       act('Améliorer', 'Améliorer : changer le type ou le sens d’une route sans la démolir', () => m.setRoadSub(sub === 'upgrade' ? 'draw' : 'upgrade'), sub === 'upgrade');
-      // Parallèle et Carrefour : ouverts depuis le tiroir Routes (barre compacte au doigt) ; affichés ici quand actifs.
-      if (sub === 'parallel') act('Parallèle', 'Route parallèle : touchez à côté d’une route existante, sa copie décalée est proposée de ce côté', () => m.setRoadSub('draw'), true);
-      if (sub === 'junction') act('Carrefour', 'Carrefour : touchez un carrefour pour choisir automatique, feux, stop ou priorité', () => m.setRoadSub('draw'), true);
+      // Parallèle et Carrefour : toujours à portée dans la barre d'options (aussi dans le tiroir Routes).
+      act('Parallèle', 'Route parallèle : touchez à côté d’une route existante, sa copie décalée est proposée de ce côté', () => m.setRoadSub(sub === 'parallel' ? 'draw' : 'parallel'), sub === 'parallel');
+      act('Carrefour', 'Carrefour : touchez un carrefour pour choisir automatique, feux, stop ou priorité', () => m.setRoadSub(sub === 'junction' ? 'draw' : 'junction'), sub === 'junction');
       if (sub === 'junction' && m.junction) {
         this.actions.append(el('span', { cls: 'ta-break', attrs: { 'aria-hidden': 'true' } }));
         const cur = m.junctionModeOf(m.junction.id);
-        for (const c of ['auto', 'signal', 'stop', 'priority'] as const) act(JUNCTION_LABELS[c], c === 'auto' ? 'Choix automatique selon les routes (feux, cédez-le-passage ou priorité)' : c === 'signal' ? 'Feux tricolores (phases par direction)' : c === 'stop' ? 'Toutes les branches cèdent le passage' : 'Passage libre, sans arrêt', () => { void m.setJunctionMode(c).then(() => this.sync()); }, cur === c);
+        for (const c of ['auto', 'signal', 'stop', 'priority'] as const) act(JUNCTION_LABELS[c], c === 'auto' ? 'Choix automatique selon les routes (feux, cédez-le-passage ou priorité)' : c === 'signal' ? 'Feux tricolores (phases par direction)' : c === 'stop' ? 'Toutes les branches cèdent le passage' : 'Axe principal prioritaire, les autres branches cèdent le passage', () => { void m.setJunctionMode(c).then(() => this.sync()); }, cur === c);
       }
       this.actions.append(el('span', { cls: 'ta-break', attrs: { 'aria-hidden': 'true' } }));
       if (sub === 'grid' || sub === 'draw') {
@@ -526,6 +566,8 @@ export class BuildBar {
         act('▼', 'Descendre le tracé de 4 m (tranchée, tunnel)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(-1); });
         act(h === 0 ? '0 m' : `${h > 0 ? '+' : ''}${h} m`, 'Hauteur du tracé par rapport au terrain', () => { while (m.draft.elevation !== 0) m.setRoadElevation(m.draft.elevation > 0 ? -1 : 1); }, h !== 0);
         act('▲', 'Monter le tracé de 4 m (viaduc, passage supérieur)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(1); });
+        // Boutons de hauteur : cible tactile de 40 px au moins (classe ta-elev).
+        for (const b of Array.from(this.actions.children).slice(-3)) b.classList.add('ta-elev');
         // Giratoire : un bouton à trois états (petit Ø 36 m → grand Ø 56 m → retour au tracé droit).
         const rb = m.draft.mode === 'roundabout' ? m.draft.roundaboutSize : null;
         act(rb === 'large' ? 'Grand giratoire' : 'Giratoire', 'Giratoire posé d\'un clic sur un carrefour ou une route (cliquer à nouveau : grand modèle, puis tracé droit)',
@@ -558,8 +600,8 @@ export class BuildBar {
     if (on !== this.wasDrawing) {
       this.wasDrawing = on;
       // La barre d'options suit (libellés « Terminer » et indications).
-      if (this.d.machine.tool === 'road') this.hint.textContent = this.hintText();
-      else if (this.d.machine.tool === 'terraform') this.sync();
+      // Routes : les boutons suivent aussi (hauteur ▲▼ remise à 0 m à la fin du tracé).
+      if (this.d.machine.tool === 'road' || this.d.machine.tool === 'terraform') this.sync();
     }
   }
 }

@@ -2,10 +2,12 @@
  * Rayon d'action des services pendant la pose d'un bâtiment de service (école, hôpital, police, pompiers, parcs…) :
  * cercle du nouveau bâtiment (couleur vive) et cercles des bâtiments du MÊME service déjà construits (atténués),
  * pour placer le nouveau là où la ville n'est pas encore couverte. Rayon lu dans le catalogue (`rayon:<m>`,
- * 800 m par défaut, comme la simulation : src/sim/demography.ts).
+ * 800 m par défaut, comme la simulation : src/sim/demography.ts). Installations électriques (centrales, poste) :
+ * rayon de distribution locale réel de la simulation (FACILITY_SPECS, src/shared/power/model.ts).
  */
 import * as THREE from 'three';
 import type { CatalogAsset } from '../shared/catalog';
+import { FACILITY_SPECS, facilityKindOf } from '../shared/power/model';
 import { buildGroundRibbon, type HeightFn } from './previews';
 
 /** Service couvert par un modèle (premier tag `service:*`) ; null si ce n'est pas un équipement de service. */
@@ -15,6 +17,10 @@ export function serviceOf(a: Pick<CatalogAsset, 'tags'> | undefined): string | n
 
 /** Rayon d'action (m) d'un équipement de service. */
 export function serviceRadius(a: Pick<CatalogAsset, 'tags'>): number {
+  // Électricité : la simulation raccorde les bâtiments dans le rayon de distribution de l'installation
+  // (src/sim/power/system.ts), pas dans le rayon générique des services.
+  const pk = facilityKindOf(a);
+  if (pk) return FACILITY_SPECS[pk].radius;
   const t = a.tags.find((x) => x.startsWith('rayon:'));
   const v = t ? Number(t.slice(6)) : NaN;
   return Number.isFinite(v) && v > 0 ? v : 800;

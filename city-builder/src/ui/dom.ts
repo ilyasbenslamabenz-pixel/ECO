@@ -44,4 +44,5 @@ export const pct = (v: number, d = 0): string => `${(v * 100).toLocaleString('fr
 
 export const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
-export function phaseBadge(n: number | string): HTMLSpanElement { return el('span', { cls: 'phase', text: `Phase ${n}` }); }
+/** Pastille « Bientôt » d'une fonction prévue (l'étape de développement n'est plus montrée au joueur). */
+export function phaseBadge(n: number | string): HTMLSpanElement { const b = el('span', { cls: 'phase', text: 'Bientôt' }); b.dataset['phase'] = String(n); return b; }

@@ -609,7 +609,8 @@ export class PowerSystem {
         const linked = (comp >= 0 && this.facComp.get(f.id) === comp) || d <= LOCAL_FALLBACK_M;
         if (!linked) continue;
         if (d < best) { best = d; hub = f.id; }
-        if (fed.has(f.id) && d < fedBest) { fedBest = d; fedHub = f.id; }
+        const usable = fed.has(f.id) && !(f.kind === 'poste' && this.facilityState(f.id).failedUntil > 0);
+        if (usable && d < fedBest) { fedBest = d; fedHub = f.id; }
       }
       // Priorité à l'installation alimentée la plus proche ; repli : la plus proche (réseau isolé, coupé).
       if (fedHub >= 0) hub = fedHub;

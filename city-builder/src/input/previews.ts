@@ -38,7 +38,17 @@ const colorOf = (v: Validity): THREE.Color => (v === 'ok' ? COLORS.ok : v === 'e
  * Ruban posé sur le terrain le long d'une polyligne (x,z), largeur `width`.
  * Écrit dans `geo` (réutilisée), échantillonné tous les `step` m.
  */
+/**
+ * Libère les tampons GPU d'une géométrie dont on va REMPLACER les attributs / l'index : three ne supprime le
+ * tampon WebGL d'un attribut remplacé par setAttribute / setIndex qu'au `dispose()` de la géométrie (sinon il
+ * reste orphelin sur le GPU). La géométrie est ré-envoyée automatiquement à son prochain rendu.
+ */
+export function releaseGeometryBuffers(geo: THREE.BufferGeometry): void {
+  if (geo.index || Object.keys(geo.attributes).length > 0) geo.dispose();
+}
+
 export function buildGroundRibbon(geo: THREE.BufferGeometry, pts: readonly number[], width: number, heightAt: HeightFn, lift: number, step = 2, closed = false): void {
+  releaseGeometryBuffers(geo);
   const samples: number[] = [];
   const n = pts.length / 2;
   const seg = closed ? n : n - 1;
@@ -261,6 +271,7 @@ export class RoadPreview {
         idx.push(i, i + 1, i + 2, i, i + 2, i + 3);
       }
       const geo = this.guide.geometry;
+      releaseGeometryBuffers(geo);
       geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       geo.setIndex(idx);
       geo.computeBoundingSphere();
@@ -329,6 +340,7 @@ export class RoadPreview {
       acc -= len;
     }
     const geo = this.arrows.geometry;
+    releaseGeometryBuffers(geo);
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setIndex(idx);
     geo.computeBoundingSphere();
@@ -453,6 +465,7 @@ export class SelectionMarker {
   showPath(points: number[], width: number): void {
     this.group.visible = true;
     buildGroundRibbon(this.outline.geometry, points, width + 1.2, this.heightAt, 0.35, 2);
+    releaseGeometryBuffers(this.fill.geometry);
     this.fill.geometry.setIndex([]);
     for (const p of this.posts) p.visible = false;
   }
@@ -463,6 +476,7 @@ export class SelectionMarker {
     const pts: number[] = [];
     for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2; pts.push(x + Math.cos(a) * radius, z + Math.sin(a) * radius); }
     buildGroundRibbon(this.outline.geometry, pts, 0.5, this.heightAt, 0.3, 1, true);
+    releaseGeometryBuffers(this.fill.geometry);
     this.fill.geometry.setIndex([]);
     for (const p of this.posts) p.visible = false;
   }

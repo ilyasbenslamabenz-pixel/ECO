@@ -22,11 +22,13 @@ export type UndoStep =
    * ensuite en travers), l'annulation retire les morceaux plus récents posés sur cet axe.
    */
   | { kind: 'removeRoad'; edgeId: number; path?: number[] }
-  | { kind: 'placeBuilding'; assetId: string; x: number; z: number; rot: number; variant: number }
+  /** `restoreToken` : jeton renvoyé par `demolish` (annulation neutre : seul le remboursement perçu est repayé). */
+  | { kind: 'placeBuilding'; assetId: string; x: number; z: number; rot: number; variant: number; restoreToken?: number }
   /** Bâtiment déplacé → remis à sa position d'origine. */
   | { kind: 'moveBuilding'; buildingId: number; x: number; z: number; rot: number }
   /** `elevation` : hauteur imposée d'origine (viaduc, tunnel), conservée à la reconstruction. */
-  | { kind: 'buildRoad'; kindId: RoadKindId; points: number[]; c1?: [number, number]; c2?: [number, number]; elevation?: number }
+  /** `restoreToken` : jeton renvoyé par `removeRoad` (annulation neutre). */
+  | { kind: 'buildRoad'; kindId: RoadKindId; points: number[]; c1?: [number, number]; c2?: [number, number]; elevation?: number; restoreToken?: number }
   | { kind: 'upgradeRoad'; edgeId: number; toKind: RoadKindId; reverse: boolean }
   /**
    * Tronçons d'id ≥ minEdgeId posés sur les rues du quadrillage (x0..x1, z0..z1, pas `block`). `lines` : morceaux

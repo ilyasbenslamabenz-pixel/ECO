@@ -14,6 +14,8 @@ import { drawChart, MONTHS_SHORT } from './charts';
 import { $, el, fmt, money, moneyShort, pct, signedMoney } from './dom';
 import { FinanceChart, type FinanceHistory } from './finance';
 import { iconEl } from './icons';
+import { cityDemand, DEMAND_ORDER, demandPct } from './demand';
+import { SECTOR_LABELS_FR } from '../shared/protocol-ext/zonage';
 
 export interface ExtPort {
   sendExt<K extends ExtCommandName>(name: K, args: ExtCommandArgs<K>): Promise<ExtCommandResult<K>>;
@@ -181,6 +183,11 @@ export class CityPanels {
     $('fin-inc-rows').replaceChildren(...SECTORS.flatMap((s) => this.ledgerRow(INCOME_ICON[s], INCOME_FR[s], money(f.income[s] ?? 0), '')));
     $('fin-expense').textContent = f.totalExpenses > 0 ? `−${money(f.totalExpenses)}` : money(0);
     $('fin-exp-rows').replaceChildren(...EXPENSES.flatMap((x) => this.ledgerRow(x.icon, x.label, f.expenses[x.key] > 0 ? `−${money(f.expenses[x.key])}` : money(0), '')));
+    // Services municipaux (électricité, eau, déchets…) : solde net prévu, compris dans le solde mensuel.
+    const svc = (f as { services?: number }).services ?? 0;
+    const svcEl = $('fin-services');
+    svcEl.textContent = signedMoney(svc);
+    svcEl.className = svc < 0 ? 'neg' : svc > 0 ? 'pos' : '';
     const net = $('fin-net');
     net.textContent = signedMoney(f.balance);
     net.parentElement?.classList.toggle('neg', f.balance < 0);
@@ -225,7 +232,9 @@ export class CityPanels {
     if (!r) return;
     const f = r.economy.forecast;
     const max = Math.max(1, ...EXPENSES.map((x) => f.expenses[x.key]));
-    $('fin-budget-bars').replaceChildren(...EXPENSES.map((x) => barRow(x.label, f.expenses[x.key], max, money(f.expenses[x.key]))));
+    const svc = (f as { services?: number }).services ?? 0;
+    $('fin-budget-bars').replaceChildren(...EXPENSES.map((x) => barRow(x.label, f.expenses[x.key], max, money(f.expenses[x.key]))),
+      barRow('Services (solde net prévu)', Math.abs(svc), max, signedMoney(svc)));
     if (r.demography) $('fin-pop').textContent = `${fmt(r.demography.population)} · chômage ${pct(r.demography.unemploymentRate, 1)}`;
     const last = r.economy.history[r.economy.history.length - 1];
     const lm = $('fin-lastmonth');
@@ -283,11 +292,13 @@ export class CityPanels {
         ['Actifs', fmt(d.laborForce)],
         ['En emploi', fmt(d.employed)],
         ['Chômeurs', `${fmt(d.unemployed)} (${pct(d.unemploymentRate, 1)})`],
-        ['Emplois pourvus / offerts', `${fmt(d.jobsFilled)} / ${fmt(d.jobsTotal)}`],
+        // Emplois offerts : postes des bâtiments reliés (chantiers compris), jamais moins que les postes pourvus.
+        ['Emplois pourvus / offerts', `${fmt(d.jobsFilled)} / ${fmt(Math.max(d.jobsTotal, this.d.stats()?.jobs ?? 0, d.jobsFilled))}`],
         ['Élèves · retraités', `${fmt(d.pupils)} · ${fmt(d.retirees)}`],
         ['En trajet maintenant', fmt(commuting)],
         ['Trajets émis vers le trafic', fmt(d.tripsEmitted)],
-        ['Véhicules en circulation', `${fmt(r.traffic.vehicles)} (${fmt(Math.round(r.traffic.meanSpeedKmh))} km/h moy.)`],
+        // Même compteur que les statistiques (plus récent que le rapport).
+        ['Véhicules en circulation', `${fmt(this.d.stats()?.vehicles ?? r.traffic.vehicles)} (${fmt(Math.round(r.traffic.meanSpeedKmh))} km/h moy.)`],
         ['Logements libres / capacité', `${fmt(d.housingFree)} / ${fmt(d.housingCapacity)}`],
         ['Bonheur', `${fmt(Math.round(d.happiness))} / 100`],
         ['Attractivité', pct(d.attractiveness)],
@@ -298,7 +309,9 @@ export class CityPanels {
       ];
       $('pop-rows').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]));
     } else if (this.popTab === 'demand') {
-      $('pop-demand').replaceChildren(...SECTORS.map((s) => barRow(SECTOR_FR[s], d.demand[s], 1, d.demand[s].toLocaleString('fr-FR', { maximumFractionDigits: 2, signDisplay: 'always' }), 'signed')));
+      // Même source, même échelle et même ordre (R C I B) que la jauge de la barre du haut.
+      const dem = cityDemand(r);
+      if (dem) $('pop-demand').replaceChildren(...DEMAND_ORDER.map((s) => barRow(SECTOR_LABELS_FR[s], dem[s], 1, demandPct(dem[s]), 'signed')));
       const maxE = Math.max(1, ...d.education);
       $('pop-edu').replaceChildren(...d.education.map((v, i) => barRow(d.educationNames[i] ?? `Niveau ${i}`, v, maxE, fmt(v))));
     } else if (this.popTab === 'acts') {
@@ -349,7 +362,7 @@ export class CityPanels {
     if (!this.port) return;
     try {
       const r = await this.port.sendExt('takeLoan', this.loanArgs());
-      this.d.toast(`Emprunt de ${money(r.loan.principal)} accordé (${money(r.loan.monthlyPayment)}/mois)`, 'ok');
+      this.d.toast(`Emprunt de ${money(r.loan.principal)} accordé : mensualité ${money(r.loan.monthlyPayment)} pendant ${fmt(r.loan.months)} mois`, 'ok');
       this.update(await this.port.sendExt('getReport', {}));
       void this.refreshOffer();
     } catch (e) { this.d.toast(`Emprunt refusé : ${errMsg(e)}`, 'error'); }

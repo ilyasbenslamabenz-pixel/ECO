@@ -111,6 +111,8 @@ export interface PluginTerrain {
 /** Économie en LECTURE SEULE (copies : aucun montant ne peut être modifié par un module). */
 export interface PluginEconomy {
   readonly money: number;
+  /** Ville en faillite (trésorerie négative depuis trois mois) : dépenses d'investissement refusées. */
+  readonly bankrupt: boolean;
   readonly taxRates: Readonly<Record<TaxSector, number>>;
   /** Dernier bilan mensuel clos (copie ; undefined avant le premier mois). */
   lastMonth(): MonthRecord | undefined;
@@ -192,6 +194,11 @@ export interface SimPlugin {
   command?(ctx: PluginContext, name: string, payload: unknown): PluginCommandResult;
   save?(ctx: PluginContext): unknown;
   load?(ctx: PluginContext, data: unknown, version: number): void;
+  /**
+   * Fin du chargement d'une sauvegarde (après toutes les sections, que le module en ait une ou non) ; jamais appelé
+   * pour une partie neuve. Permet de distinguer « partie neuve » et « sauvegarde sans section ».
+   */
+  afterLoad?(ctx: PluginContext): void;
   /** Version de la section de sauvegarde écrite par `save` (défaut 1). */
   readonly saveVersion?: number;
 }

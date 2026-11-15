@@ -8,8 +8,9 @@
  * Toutes les valeurs viennent de la simulation (`zoningView`, commande `state`) ; les commandes passent par
  * `window.__aube.send('pluginCommand', …)`.
  */
+import { DEMAND_ORDER } from '../demand';
 import {
-  DEMAND_SECTORS, SECTOR_COLORS, SECTOR_LABELS_FR, ZONE_COLORS, ZONE_DEPTH_MAX, ZONE_DEPTH_MIN, ZONE_LABELS_FR, ZONE_SHORT_FR, ZONE_TYPES,
+  SECTOR_COLORS, SECTOR_LABELS_FR, ZONE_COLORS, ZONE_DEPTH_MAX, ZONE_DEPTH_MIN, ZONE_LABELS_FR, ZONE_SHORT_FR, ZONE_TYPES,
   type ZonageDemand, type ZonageSnapshot, type ZoneType,
 } from '../../shared/protocol-ext/zonage';
 import { TILE_SIZE } from '../../shared/constants';
@@ -51,7 +52,7 @@ const pct = (v: number): string => `${v >= 0 ? '+' : '−'}${Math.round(Math.abs
 /** Jauge de demande : une barre par secteur, centrée sur zéro (vers le haut = demande, vers le bas = excédent). */
 export function demandGauge(d: ZonageDemand | null, compact = false): HTMLElement {
   const g = el('div', { cls: `zn-gauge${compact ? ' compact' : ''}`, attrs: { role: 'group', 'aria-label': 'Demande par secteur' } });
-  for (const s of DEMAND_SECTORS) {
+  for (const s of DEMAND_ORDER) {
     const v = d ? d[s] : 0;
     const h = Math.round(Math.min(1, Math.abs(v)) * 50);
     const bar = el('div', { cls: 'zn-bar' },

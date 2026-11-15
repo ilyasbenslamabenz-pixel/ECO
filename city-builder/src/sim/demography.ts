@@ -70,6 +70,9 @@ const SERVICE_TAG: Record<string, number> = {
   'service:patrimoine': Service.Leisure,
 };
 
+/** Étiquette `service:*` dont la démographie lit la couverture (rayon, capacité, niveau d'amélioration). */
+export const isCoverageServiceTag = (tag: string): boolean => SERVICE_TAG[tag] !== undefined;
+
 export const TripPurpose = { Work: 0, Home: 1, Leisure: 2, School: 3 } as const;
 
 /* ------------------------------------------------------------------ */

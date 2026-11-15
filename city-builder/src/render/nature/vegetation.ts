@@ -157,6 +157,9 @@ export class VegetationSystem {
   private readonly pv = new THREE.Matrix4();
   private readonly sphere = new THREE.Sphere();
   private readonly lastCam = new THREE.Vector3(1e9, 0, 0);
+  /** Projection de la caméra au dernier recalcul du culling (rotation de l'écran / redimensionnement). */
+  private lastProjX = NaN;
+  private lastProjY = NaN;
   private readonly lastDir = new THREE.Vector3();
   private readonly camDir = new THREE.Vector3();
   private frameCounter = 0;
@@ -257,7 +260,8 @@ export class VegetationSystem {
       const u = (rec.imp.mesh.material as THREE.ShaderMaterial).uniforms;
       u['tAlb']!.value = atlas.albedo;
       u['tNor']!.value = atlas.normal;
-      rec.imp.atlas.dispose();
+      // Ancien atlas abandonné SANS dispose() : ses cibles WebGL appartenaient au contexte perdu (les supprimer
+      // dans le contexte restauré : « delete: object does not belong to this context »).
       rec.imp.atlas = atlas;
     }
   }
@@ -601,10 +605,14 @@ export class VegetationSystem {
     this.frameCounter++;
     // Recalcul (et envoi à la carte graphique) seulement après un vrai déplacement : ≥ 4 m ou ≥ ~3,5° de rotation.
     // Le champ de culling est élargi (~8 %) pour qu'aucun arbre n'apparaisse en retard au bord de l'écran.
-    const moved = camera.position.distanceToSquared(this.lastCam) > 16 || this.camDir.dot(this.lastDir) < 0.998;
+    // Projection changée (rotation de l'écran, redimensionnement : rapport largeur/hauteur) : recalcul aussi.
+    const pe = camera.projectionMatrix.elements;
+    const moved = camera.position.distanceToSquared(this.lastCam) > 16 || this.camDir.dot(this.lastDir) < 0.998
+      || pe[0] !== this.lastProjX || pe[5] !== this.lastProjY;
     if (!moved) return;
     this.lastCam.copy(camera.position);
     this.lastDir.copy(this.camDir);
+    this.lastProjX = pe[0]!; this.lastProjY = pe[5]!;
     this.wideProj.copy(camera.projectionMatrix);
     this.wideProj.elements[0]! *= 0.92; this.wideProj.elements[5]! *= 0.92;
     this.pv.multiplyMatrices(this.wideProj, camera.matrixWorldInverse);
