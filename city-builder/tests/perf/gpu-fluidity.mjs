@@ -72,7 +72,17 @@ for (const engine of ['chromium', 'webkit']) {
         window.__orbit = setInterval(() => { yaw += 0.02; window.__aube.lookAt(p.targetX ?? 0, p.targetZ ?? 0, p.distance ?? 300, p.pitch ?? 0.8, yaw); }, 50);
       }, ph.orbit);
       await page.evaluate(() => { window.__fr.length = 0; });
+      // Chromium, caméra en mouvement : profil du code (fonctions les plus coûteuses) pour cibler l'optimisation.
+      let cdp = null;
+      if (engine === 'chromium' && ph.orbit) { cdp = await page.context().newCDPSession(page); await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 250 }); await cdp.send('Profiler.start'); }
       await page.waitForTimeout(PHASE);
+      if (cdp) {
+        const { profile } = await cdp.send('Profiler.stop');
+        const byId = new Map(profile.nodes.map((n) => [n.id, n])); const self = new Map(); let total = 0;
+        for (const sid of profile.samples) { const n = byId.get(sid); const k = `${n.callFrame.functionName || '(anonyme)'}:${n.callFrame.lineNumber}`; self.set(k, (self.get(k) ?? 0) + 1); total++; }
+        r.profile = [...self].sort((a, b) => b[1] - a[1]).slice(0, 18).map(([k, c]) => `${(100 * c / total).toFixed(1)} % ${k}`);
+        console.log(`[${engine}] profil caméra en mouvement :\n  ${r.profile.join('\n  ')}`);
+      }
       const m = await page.evaluate(() => {
         const fr = window.__fr.splice(0).filter((v) => v > 0);
         const s = [...fr].sort((a, b) => a - b);

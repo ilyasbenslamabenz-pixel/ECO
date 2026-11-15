@@ -324,6 +324,9 @@ export class SkySystem {
    * Cadre la boîte d'ombre sur la zone regardée : centre = cible de la caméra, demi-taille selon la
    * distance caméra-cible, déplacement aligné sur la taille d'un texel (pas de scintillement).
    */
+  /** Pas de recalage de la boîte d'ombre (fraction de sa demi-taille) : 0 = au texel ; téléphone : grands pas (ombres recalculées rarement). */
+  shadowSnapFraction = 0;
+
   followView(targetX: number, targetY: number, targetZ: number, viewDistance: number): void {
     this.focus.set(targetX, targetY, targetZ);
     this.shadowHalf = THREE.MathUtils.clamp(viewDistance * 0.85, 45, 700);
@@ -339,7 +342,8 @@ export class SkySystem {
     cam.far = 3000;
     cam.updateProjectionMatrix();
     // Alignement texel : on arrondit la cible dans le repère de la lumière.
-    const texel = (2 * half) / sun.shadow.mapSize.x;
+    // Grands pas (téléphone) : la boîte ne bouge qu'en franchissant un pas → carte d'ombre rarement recalculée.
+    const texel = Math.max((2 * half) / sun.shadow.mapSize.x, half * this.shadowSnapFraction);
     const d = this.lightDir;
     const up = Math.abs(d.y) > 0.99 ? V_X : V_Y;
     const right = this.sRight.crossVectors(up, d).normalize();

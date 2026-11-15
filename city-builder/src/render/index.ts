@@ -172,6 +172,7 @@ export async function initRender(
       signals.setNight(n);
     },
     followView(p) {
+      sky.shadowSnapFraction = profile.lite ? 0.18 : 0;
       sky.followView(p.targetX, p.targetY, p.targetZ, Math.min(900, Math.max(60, p.distance)));
     },
     applySnapshot(s) {
