@@ -18,6 +18,14 @@ function attributeSignature(g: THREE.BufferGeometry): string {
 
 interface Internals { _nextVertexStart: number; _nextIndexStart: number; _maxVertexCount: number; _maxIndexCount: number }
 
+/** Ramène les tampons de géométrie d'un BatchedMesh à la place utilisée (+ 10 %), s'il y a au moins 10 % de vide de plus. */
+export function compactBatch(bm: THREE.BatchedMesh): void {
+  const it = bm as unknown as Internals;
+  const v = Math.ceil(it._nextVertexStart * 1.1) + 16, i = Math.ceil(it._nextIndexStart * 1.1) + 16;
+  if (it._nextVertexStart === 0) return;
+  if (v < it._maxVertexCount * 0.9 || (bm.geometry.index && i < it._maxIndexCount * 0.9)) bm.setGeometrySize(Math.min(v, it._maxVertexCount), Math.min(i, it._maxIndexCount));
+}
+
 export class BuildingBatchPool {
   private readonly pools = new Map<string, THREE.BatchedMesh>();
 
@@ -73,6 +81,9 @@ export class BuildingBatchPool {
   show(bm: THREE.BatchedMesh, id: number): void { if (!bm.getVisibleAt(id)) { bm.setVisibleAt(id, true); this.count(bm, 1); } }
   hide(bm: THREE.BatchedMesh, id: number): void { if (bm.getVisibleAt(id)) { bm.setVisibleAt(id, false); this.count(bm, -1); } }
   remove(bm: THREE.BatchedMesh, id: number): void { if (bm.getVisibleAt(id)) this.count(bm, -1); bm.deleteInstance(id); }
+
+  /** Réserve des lots ramenée à la place utilisée (après le chargement : la croissance par doublement en laisse ≈ la moitié). */
+  compact(): void { for (const bm of this.pools.values()) compactBatch(bm); }
 
   /** Lots (diagnostic) : nombre de BatchedMesh et d'instances. */
   stats(): { meshes: number; instances: number } {

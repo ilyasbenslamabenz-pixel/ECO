@@ -522,7 +522,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       }
       if (this.pending > 0) await Promise.race([new Promise<void>((r) => this.waiters.push(r)), new Promise<void>((r) => setTimeout(r, 30))]);
       await this.materials.whenReady();
-      if (this.pending === 0) return;
+      if (this.pending === 0) { this.pool?.compact(); this.shadows?.compact(); return; }
     }
   }
 

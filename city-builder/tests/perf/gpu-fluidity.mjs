@@ -10,7 +10,7 @@
  *  - bureau1080 : navigateur d'ordinateur 1920×1080, densité 1, souris, qualité Haute ;
  *  - bureau1440 : navigateur d'ordinateur 2560×1440, densité 1, souris, qualité Haute.
  * Comparaison dans le MÊME job (machines macOS bruitées d'un job à l'autre) : --builds=apres:dist,avant:chemin
- * sert chaque version sur son propre port et alterne l'ordre (A B puis B A) d'un profil à l'autre.
+ * sert chaque version sur son propre port et alterne l'ordre (A B puis B A) à chaque profil et moteur.
  *   node tests/perf/gpu-fluidity.mjs [dist] [secondes par phase] [--profils=iphone,bureau1080] [--builds=nom:dossier,…]
  */
 import { writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
@@ -126,8 +126,8 @@ async function run(engine, profName, build) {
         const { profile } = await cdp.send('Profiler.stop');
         const byId = new Map(profile.nodes.map((n) => [n.id, n])); const self = new Map(); let total = 0;
         for (const sid of profile.samples) { const n = byId.get(sid); const k = `${n.callFrame.functionName || '(anonyme)'}:${n.callFrame.lineNumber}`; self.set(k, (self.get(k) ?? 0) + 1); total++; }
-        r.profile = [...self].sort((a, b) => b[1] - a[1]).slice(0, 18).map(([k, c]) => `${(100 * c / total).toFixed(1)} % ${k}`);
-        console.log(`${tag} profil caméra en mouvement :\n  ${r.profile.join('\n  ')}`);
+        r.cpuProfile = [...self].sort((a, b) => b[1] - a[1]).slice(0, 18).map(([k, c]) => `${(100 * c / total).toFixed(1)} % ${k}`);
+        console.log(`${tag} profil caméra en mouvement :\n  ${r.cpuProfile.join('\n  ')}`);
       }
       const m = await page.evaluate(() => {
         const fr = window.__fr.splice(0).filter((v) => v > 0);
@@ -169,19 +169,19 @@ async function run(engine, profName, build) {
   } finally { await browser?.close(); }
 }
 
-let flip = false;
-for (const profName of profiles) {
-  for (const engine of ['chromium', 'webkit']) {
-    const order = flip ? [...builds].reverse() : builds;
+// Ordre alterné à chaque (profil, moteur) : le premier chargement d'un moteur trouve les caches froids (fichiers,
+// shaders Metal) et paraît plus lent ; chaque version passe ainsi autant de fois en premier.
+for (const [pi, profName] of profiles.entries()) {
+  for (const [ei, engine] of ['chromium', 'webkit'].entries()) {
+    const order = (pi + ei) % 2 ? [...builds].reverse() : builds;
     for (const b of order) await run(engine, profName, b);
   }
-  flip = !flip;
 }
 for (const b of builds) b.server.close();
 writeFileSync(join(out, 'resultats.json'), JSON.stringify(results, null, 2));
 const md = ['## Fluidité avec processeur graphique (ville de démo)', ''];
 for (const r of results) {
-  md.push(`### ${r.engine} · ${r.profile} · ${r.build} — ${r.gpu?.renderer ?? 'processeur inconnu'}`, '', `Menu ${r.menuSeconds ?? '—'} s · démo chargée ${r.loadSeconds ?? '—'} s · jouable ${r.readySeconds ?? '—'} s (3 s suivantes : image max ${r.firstSeconds?.maxMs ?? '—'} ms, ${r.firstSeconds?.over100 ?? '—'} > 100 ms) · erreurs ${r.errors.length} · en pause ${r.idleFps ?? '—'} img/s · résolution ${r.perf?.ratio ?? '—'} · plafond ${r.perf?.maxFps ?? '—'} · multi-draw ${r.gpu?.multiDraw ?? '—'}`, '', '| Phase | img/s | médiane | 95e | 99e | lentes > 33 ms | > 20 ms | appels | triangles | simulation | tas | textures |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
+  md.push(`### ${r.engine} · ${r.profile} · ${r.build} — ${r.gpu?.renderer ?? 'processeur inconnu'}`, '', `Menu ${r.menuSeconds ?? '—'} s · démo chargée ${r.loadSeconds ?? '—'} s · jouable ${r.readySeconds ?? '—'} s (de −1,5 s à +3 s : image max ${r.firstSeconds?.maxMs ?? '—'} ms, ${r.firstSeconds?.over100 ?? '—'} > 100 ms) · erreurs ${r.errors.length} · en pause ${r.idleFps ?? '—'} img/s · résolution ${r.perf?.ratio ?? '—'} · plafond ${r.perf?.maxFps ?? '—'} · multi-draw ${r.gpu?.multiDraw ?? '—'}`, '', '| Phase | img/s | médiane | 95e | 99e | lentes > 33 ms | > 20 ms | appels | triangles | simulation | tas | textures |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const p of r.phases) md.push(`| ${p.name} | ${p.fps} | ${p.p50} ms | ${p.p95} ms | ${p.p99} ms | ${p.slow33} % | ${p.slow20} % | ${p.calls ?? '—'} | ${p.triangles ?? '—'} | ${p.tickMs} ms | ${p.heapMo ?? '—'} Mo | ${p.gpuMo ?? '—'} Mo |`);
   if (r.errors.length) md.push('', '```', ...r.errors.slice(0, 8), '```');
   md.push('');

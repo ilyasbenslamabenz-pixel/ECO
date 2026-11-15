@@ -12,6 +12,7 @@
  * Les sous-maillages transparents ou découpés (alphaTest) gardent leur propre ombre (silhouette exacte).
  */
 import * as THREE from 'three';
+import { compactBatch } from './batched-parts';
 
 /** Calque des géométries d'ombre (vu par la caméra d'ombre du soleil, pas par la caméra). */
 export const SHADOW_PROXY_LAYER = 1;
@@ -49,10 +50,40 @@ export function mergePositions(geos: readonly THREE.BufferGeometry[]): THREE.Buf
     else { for (let i = 0; i < p.count; i++) idx[io + i] = vo + i; io += p.count; }
     vo += p.count;
   }
+  const w = weldPositions(pos, idx);
   const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('position', new THREE.BufferAttribute(w, 3));
   out.setIndex(new THREE.BufferAttribute(idx, 1));
   return out;
+}
+
+/**
+ * Soude les sommets de positions identiques (bit à bit) et réécrit les indices en place. Les modèles dupliquent
+ * chaque coin d'une arête vive (une normale et des UV par face) ; l'ombre n'a besoin que des positions :
+ * 2 à 3 fois moins de sommets, à l'identique. Table de hachage à adressage ouvert (pas de chaînes, pas de Map).
+ */
+export function weldPositions(pos: Float32Array, idx: Uint32Array): Float32Array {
+  const n = pos.length / 3;
+  const bits = new Uint32Array(pos.buffer, pos.byteOffset, pos.length);
+  let size = 1;
+  while (size < n * 2) size <<= 1;
+  const mask = size - 1;
+  const table = new Int32Array(size).fill(-1);
+  const remap = new Uint32Array(n);
+  const ob = new Uint32Array(pos.length);
+  let m = 0;
+  for (let i = 0; i < n; i++) {
+    const x = bits[i * 3]!, y = bits[i * 3 + 1]!, z = bits[i * 3 + 2]!;
+    let h = (Math.imul(x, 0x9e3779b1) ^ Math.imul(y, 0x85ebca77) ^ Math.imul(z, 0xc2b2ae3d)) & mask;
+    for (;;) {
+      const j = table[h]!;
+      if (j < 0) { table[h] = m; ob[m * 3] = x; ob[m * 3 + 1] = y; ob[m * 3 + 2] = z; remap[i] = m++; break; }
+      if (ob[j * 3] === x && ob[j * 3 + 1] === y && ob[j * 3 + 2] === z) { remap[i] = j; break; }
+      h = (h + 1) & mask;
+    }
+  }
+  for (let k = 0; k < idx.length; k++) idx[k] = remap[idx[k]!]!;
+  return new Float32Array(ob.buffer.slice(0, m * 12));
 }
 
 const _mat = new THREE.Matrix4();
@@ -130,6 +161,9 @@ export class BuildingShadowLayer {
   hide(side: number, id: number): void { this.meshes[side]!.setVisibleAt(id, false); }
 
   remove(side: number, id: number): void { this.meshes[side]!.deleteInstance(id); }
+
+  /** Réserve des lots ramenée à la place utilisée (après le chargement). */
+  compact(): void { for (const bm of this.meshes) if (bm) compactBatch(bm); }
 
   /** Nombre d'instances d'ombre visibles (diagnostic). */
   stats(): { meshes: number; instances: number } {

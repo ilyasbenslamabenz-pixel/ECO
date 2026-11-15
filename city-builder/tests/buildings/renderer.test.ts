@@ -138,8 +138,14 @@ test('update() sans changement de caméra ne réécrit rien', async () => {
   const v = mesh.instanceMatrix.version;
   r.update(0, 10, 0);
   assert.equal(mesh.instanceMatrix.version, v);
+  // Caméra déplacée mais liste des instances visibles identique : rien n'est renvoyé à la carte graphique.
+  r.update(0, 10, 5);
+  assert.equal(mesh.instanceMatrix.version, v);
+  // Liste modifiée (nouveau bâtiment) : envoi limité aux instances dessinées.
+  r.add([{ id: 2, assetId: 'a', variant: 0, x: 20, y: 0, z: 0, rot: 1 }]);
   r.update(0, 10, 5);
   assert.ok(mesh.instanceMatrix.version > v);
+  assert.deepEqual(mesh.instanceMatrix.updateRanges.map((u) => [u.start, u.count]), [[0, 32]]);
   r.dispose();
   await tick();
 });
