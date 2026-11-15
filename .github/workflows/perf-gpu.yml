@@ -1,19 +1,33 @@
 name: Mesure de fluidité avec processeur graphique (macOS)
 
 # Lance la ville de démo de Meknes City dans Chromium (Metal) et WebKit (moteur de Safari) sur une machine macOS
-# à puce Apple, profil iPhone, et publie images/s, temps d'image, mémoire et erreurs (résumé + fichiers joints).
+# à puce Apple et publie images/s, temps d'image, appels de rendu, mémoire et erreurs (résumé + fichiers joints).
+# Lancement manuel : profils au choix (iphone, bureau1080, bureau1440) et, pour comparer dans le MÊME job (les
+# machines macOS varient d'un job à l'autre), une version de référence (commit ou branche) servie à côté.
 on:
   push:
     branches: [claude/amazing-meitner-vtryts]
     paths: [".github/workflows/perf-gpu.yml", "city-builder/tests/perf/**"]
   workflow_dispatch:
+    inputs:
+      profils:
+        description: "Profils séparés par des virgules : iphone, bureau1080, bureau1440"
+        default: "iphone"
+      reference:
+        description: "Commit ou branche de référence à comparer dans le même job (vide : aucune)"
+        default: ""
+      secondes:
+        description: "Durée de chaque phase (s)"
+        default: "60"
 
 jobs:
   mesure:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -24,6 +38,14 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run build
+      - name: Compiler la version de référence
+        if: ${{ github.event.inputs.reference != '' }}
+        env:
+          REF: ${{ github.event.inputs.reference }}
+        run: |
+          git worktree add "$RUNNER_TEMP/reference" "$REF"
+          ln -s "$GITHUB_WORKSPACE/city-builder/node_modules" "$RUNNER_TEMP/reference/city-builder/node_modules"
+          (cd "$RUNNER_TEMP/reference/city-builder" && npm run build)
       - name: Installer Playwright (Chromium et WebKit)
         working-directory: city-builder
         run: |
@@ -33,7 +55,14 @@ jobs:
         run: system_profiler SPDisplaysDataType || true
       - name: Mesurer
         working-directory: city-builder
-        run: node tests/perf/gpu-fluidity.mjs dist 60
+        env:
+          PROFILS: ${{ github.event.inputs.profils || 'iphone' }}
+          REF: ${{ github.event.inputs.reference }}
+          SECONDES: ${{ github.event.inputs.secondes || '60' }}
+        run: |
+          BUILDS="apres:dist"
+          if [ -n "$REF" ]; then BUILDS="apres:dist,avant:$RUNNER_TEMP/reference/city-builder/dist"; fi
+          node tests/perf/gpu-fluidity.mjs dist "$SECONDES" --profils="$PROFILS" --builds="$BUILDS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
