@@ -16,6 +16,7 @@ import type { AssetLibrary } from '../assets';
 import { NO_WATER, type WorldTerrain } from '../../sim/terrain/types';
 import { mulberry32 } from '../../shared/math';
 import { bakeImpostor, makeImpostorMaterial, type ImpostorAtlas, type ImpostorMaterialUniforms } from './impostor';
+import { onPaletteChange, palette } from '../palette';
 
 export type VegRole = 'feuillu' | 'conifere' | 'ornement' | 'arbuste' | 'rocher' | 'fleur';
 
@@ -112,6 +113,7 @@ const _q = new THREE.Quaternion();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 const _c = new THREE.Color();
+const NO_TINT = [1, 1, 1] as const;
 const UP = new THREE.Vector3(0, 1, 0);
 
 export interface VegetationStats {
@@ -172,6 +174,9 @@ export class VegetationSystem {
     uEnv: { value: 0.55 },
   };
   private readonly drawn = { lod0: 0, lod1: 0, lod2: 0, impostor: 0 };
+  /** Teinte du feuillage de la palette (src/render/palette.ts), appliquée aux teintes par arbre (rochers exclus). */
+  private foliage: readonly [number, number, number] = palette().foliage;
+  private readonly offPalette = onPaletteChange((p) => { this.foliage = p.foliage; this.dirty = true; });
 
   constructor(private readonly scene: THREE.Scene, private readonly lib: AssetLibrary, opts: VegetationOptions) {
     this.o = {
@@ -577,9 +582,10 @@ export class VegetationSystem {
       _s.setScalar(this.scl[i]!);
       _m.compose(_p, _q, _s);
       _m.toArray(mats, dst * 16);
-      tints[dst * 3] = this.tint[i * 3]!;
-      tints[dst * 3 + 1] = this.tint[i * 3 + 1]!;
-      tints[dst * 3 + 2] = this.tint[i * 3 + 2]!;
+      const fol = this.species[this.spc[i]!]?.role === 'rocher' ? NO_TINT : this.foliage;
+      tints[dst * 3] = this.tint[i * 3]! * fol[0];
+      tints[dst * 3 + 1] = this.tint[i * 3 + 1]! * fol[1];
+      tints[dst * 3 + 2] = this.tint[i * 3 + 2]! * fol[2];
       const c = Math.floor(k / S);
       cellY[c] = cellY[c]! + this.py[i]!;
       cellN[c]!++;
@@ -740,6 +746,7 @@ export class VegetationSystem {
   }
 
   dispose(): void {
+    this.offPalette();
     for (const r of this.renders) {
       for (const l of r.lods) for (const m of l.meshes) { m.geometry.dispose(); m.dispose(); }
       if (r.imp) { r.imp.atlas.dispose(); r.imp.mesh.geometry.dispose(); (r.imp.mesh.material as THREE.Material).dispose(); r.imp.mesh.dispose(); }

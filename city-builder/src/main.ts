@@ -29,6 +29,7 @@ import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
 import { applyGraphicsOptions, applyTheme, loadOptions, urlQuality, wantMsaa } from './ui/options';
+import { setColorMode } from './render/palette';
 import { ab } from './render/ab';
 import { benchCompareStart, benchMode, benchTrace, benchWatchRenderer, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
 import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
@@ -132,6 +133,7 @@ function errText(e: unknown): string {
 
 async function boot(): Promise<void> {
   applyTheme(loadOptions().theme);
+  setColorMode(loadOptions().colors); // palette choisie avant la création du rendu (pas de recompilation au démarrage)
   // iPhone : pas de zoom de PAGE (pincement ou double toucher sur l'interface la décalait hors de l'écran) ;
   // le zoom de la carte reste géré par la caméra.
   for (const ev of ['gesturestart', 'gesturechange', 'gestureend'] as const) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });

@@ -26,6 +26,42 @@ export interface TerrainEditResult {
   outline: number[];
   /** Niveler : hauteur cible retenue (reprise par les passes suivantes d'un même geste). */
   h?: number;
+  /** Pente : hauteurs retenues aux extrémités. */
+  ah?: number;
+  bh?: number;
+  /** Barrage : crête (m) et débit de la rivière barrée (m³/s). */
+  crest?: number;
+  flow?: number;
+  /** Source, barrage : eau prévue en régime établi (src/sim/hydro). */
+  water?: {
+    /** Niveau du lac ou de la retenue (m) ; null : l'eau rejoint tout de suite une eau existante. */
+    level: number | null;
+    areaM2: number;
+    storedM3: number;
+    /** Exutoire : eau existante, bord de la carte, aucun (cuvette fermée ou retenue pleine sans débordement). */
+    outlet: '' | 'eau' | 'bord';
+    status: 'sink' | 'partial' | 'capped' | 'none';
+    /** Barrage : hauteur de chute et débit entrant en régime établi. */
+    headM?: number;
+    flowM3s?: number;
+  };
+  /** Édition appliquée (hors dryRun) : son rang dans la liste des éditions (annulation `terrainUndo`). */
+  seq?: number;
+}
+
+/** État de l'eau dynamique (commande `hydroState`). */
+export interface HydroStateResult {
+  sources: { id: number; x: number; z: number; q: number }[];
+  dams: { id: number; level: number; tail: number; headM: number; flowM3s: number; crest: number; lengthM: number; full: boolean; x: number; z: number }[];
+  /** Toutes les alimentations ont atteint leur régime établi. */
+  steady: boolean;
+  active: boolean;
+  /** Durée du dernier calcul de l'eau (ms) et nombre de calculs depuis le début de la partie. */
+  lastMs: number;
+  computeCount: number;
+  /** Rang de la plus ancienne édition annulable (-1 : aucune) et nombre d'éditions. */
+  undoable: number;
+  edits: number;
 }
 
 export interface SimNotice {
@@ -94,6 +130,10 @@ export interface ExtCommandMap {
   buildRoundabout: { args: { x: number; z: number; size: 'small' | 'large'; dryRun?: boolean }; result: { edgeIds: number[]; cost: number } };
   /** Édition du terrain par le joueur (src/sim/terrain/edits.ts) ; `dryRun` : coût et contour sans rien modifier. */
   terrainEdit: { args: { edit: TerrainEdit; dryRun?: boolean }; result: TerrainEditResult };
+  /** Annule les éditions du terrain de rang ≥ `since` (coût remboursé ; refus si un bâtiment ou une route y a été construit). */
+  terrainUndo: { args: { since: number }; result: { reverted: number; refund: number } };
+  /** Eau dynamique : sources, barrages (chute, débit), coût du calcul. */
+  hydroState: { args: Record<string, never>; result: HydroStateResult };
   /**
    * Déplace un bâtiment existant (même identifiant : habitants, emplois et élèves conservés), gratuitement, avec les
    * contrôles de la pose (carte, collisions hors lui-même, routes, eau, pente). dryRun : valide sans déplacer.
@@ -109,7 +149,7 @@ export type ExtCommandMessage = { [K in ExtCommandName]: { kind: 'cmd'; reqId: n
 /** Delta enrichi : `report` présent environ une fois par seconde. */
 export type DeltaMessageExt = DeltaMessage & { report?: SimReport };
 
-export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout', 'terrainEdit', 'moveBuilding'];
+export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout', 'terrainEdit', 'moveBuilding', 'terrainUndo', 'hydroState'];
 
 export function isExtCommandName(name: unknown): name is ExtCommandName {
   return typeof name === 'string' && (EXT_COMMANDS as readonly string[]).includes(name);
@@ -160,5 +200,9 @@ export function validateExtCommand(msg: unknown): CommandError | null {
       const e = editShapeError(a.edit);
       return e ? bad(e) : null;
     }
+    case 'terrainUndo':
+      return isNum(a.since) && Number.isInteger(a.since) && a.since >= 0 ? null : bad('since invalide');
+    case 'hydroState':
+      return null;
   }
 }

@@ -62,9 +62,31 @@ import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimRe
 import { NEUTRAL_MODIFIERS, governanceModifiers, type Modifiers } from '../shared/governance';
 import { PALIERS_SERVICE, type PaliersService } from '../shared/milestones';
 import { PluginHost, createSimPlugins, type PluginSaveField, type SimPlugin } from './plugins';
+import { HydroSystem, MAX_DAMS, MAX_SOURCES, type HydroHost } from './hydro/system';
+import { evalCubic } from './roads/bezier';
 
 /** Champ facultatif de la sauvegarde : éditions du terrain du joueur (src/sim/terrain/edits.ts), dans l'ordre. */
 export interface TerrainEditsSaveField { terrainEdits?: TerrainEdit[] }
+/**
+ * Champ facultatif de la sauvegarde : module d'eau (src/sim/hydro). `spreadFrom` = index de la première édition
+ * dont les creusements se remplissent de l'eau voisine (absent : toutes les éditions de la sauvegarde sont
+ * antérieures au module, aucune ne se remplit). Les sources et barrages sont des éditions (rejouées).
+ */
+export interface HydroSaveField { hydro?: { spreadFrom: number } }
+
+/** Annulation d'une édition du terrain (en mémoire seulement) : valeurs d'avant sur les échantillons modifiés. */
+interface EditUndoRecord {
+  seq: number;
+  idx: Int32Array;
+  h: Float32Array;
+  ws: Float32Array;
+  forest: Uint8Array;
+  dug: Uint8Array;
+  quays: number[] | undefined;
+  cost: number;
+}
+/** Nombre d'éditions annulables conservées. */
+const MAX_EDIT_UNDO = 800;
 
 export type CmdOutcome<K extends CommandName> = { ok: true; data: CommandResult<K> } | { ok: false; error: CommandError };
 export type ExtOutcome<K extends ExtCommandName> = { ok: true; data: ExtCommandResult<K> } | { ok: false; error: CommandError };
@@ -140,6 +162,20 @@ export class Simulation {
 
   constructor(plugins: readonly SimPlugin[] = createSimPlugins()) {
     this.plugins = new PluginHost(this, plugins);
+    // Module d'eau du cœur : barrages et retenues publiés pour l'électricité (centrale au pied d'un barrage).
+    this.plugins.provideCore('hydro', this.hydro.service);
+  }
+
+  /** Eau dynamique : sources, barrages, creux reliés à l'eau (src/sim/hydro). */
+  readonly hydro = new HydroSystem();
+  /** Annulation des éditions du terrain (dernières d'abord). */
+  private editUndo: EditUndoRecord[] = [];
+  /** Le patch en attente ne concerne que l'eau (le relief n'a pas changé). */
+  private pendingWaterOnly = false;
+  private readonly rasterFn = (out: Uint8Array): void => this.rasterBarriers(out);
+  /** Accès du module d'eau à la simulation (terrain, relief naturel, barrières). */
+  private hostForHydro(): HydroHost {
+    return { terrain: this.terrain!, natural: this.naturalHeights, rasterBarriers: this.rasterFn };
   }
 
   catalog: AssetCatalog | null = null;
@@ -340,6 +376,9 @@ export class Simulation {
     this.pendingEditLayers = false;
     this.pendingQuays = false;
     this.pendingCleared = [];
+    this.hydro.reset(0);
+    this.editUndo = [];
+    this.pendingWaterOnly = false;
     this.tilesPerSide = this.terrain.samplesX - 1;
     this.obbs.clear();
     this.categoryOf.clear();
@@ -384,7 +423,10 @@ export class Simulation {
         const i = Math.round((x - t.originX) / sp), j = Math.round((z - t.originZ) / sp);
         if (i < 0 || j < 0 || i >= W || j >= H) return -Infinity;
         const k = j * W + i;
-        const w = t.waterSurface[k]!;
+        // Eau DE BASE seulement : l'eau dynamique (retenues, sources) dépend du temps et des barrières ; les profils
+        // des routes, recalculés au chargement, doivent rester identiques (les routes ne traversent pas une retenue
+        // au sol : refus dans buildRoad).
+        const w = this.hydro.baseWater(t)[k]!;
         return w > NO_WATER / 2 && w > this.naturalHeights[k]! ? w : -Infinity;
       },
     };
@@ -629,6 +671,7 @@ export class Simulation {
     if (a.dryRun) { restore(oldObb); return { ok: true, data: { buildingId: id, x, z, rot } }; }
     const o = this.obbFor(asset, x, z, rot);
     restore(o);
+    this.hydro.barrierDirty = true;
     // Altitude : moyenne du terrain sous l'empreinte (comme à la pose).
     let hSum = 0, n = 0;
     const nx = Math.max(1, asset.footprint.tilesX), nz = Math.max(1, asset.footprint.tilesZ);
@@ -662,6 +705,7 @@ export class Simulation {
     const bb = obbAabb(o);
     this.buildingIndex.insert(r.id, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
     this.buildings.roadAccess[bi] = this.computeRoadAccess(bi) ? 1 : 0;
+    this.hydro.barrierDirty = true;
     // Bâtiment privé (promotion du zonage) : son entretien est à la charge de ses propriétaires, pas de la ville.
     if (!this.privateIds.has(r.id)) this.economy.addUpkeep(asset.upkeepPerMonth, 'buildings');
     this.demography?.onBuildingAdded(r.id, this.clock.totalMinutes);
@@ -710,6 +754,7 @@ export class Simulation {
     const asset = this.catalog!.assets[this.buildings.assetIndex[i]!]!;
     this.obbs.delete(a.buildingId);
     this.categoryOf.delete(a.buildingId);
+    this.hydro.barrierDirty = true;
     const displaced = this.buildings.residents[i]!;
     this.demography?.onBuildingRemoved(a.buildingId, this.clock.totalMinutes);
     this.buildings.remove(a.buildingId);
@@ -761,6 +806,25 @@ export class Simulation {
     return null;
   };
 
+  /** Vrai si la courbe passe sur de l'eau dynamique (retenue, lac d'une source, creux rempli). */
+  private crossesDynamicWater(curve: Float64Array): boolean {
+    const t = this.terrain!;
+    const base = this.hydro.base;
+    if (!base) return false;
+    const ws = t.waterSurface, W = t.samplesX, sp = t.spacing;
+    const L = Math.hypot(curve[6]! - curve[0]!, curve[7]! - curve[1]!) + Math.hypot(curve[2]! - curve[0]!, curve[3]! - curve[1]!);
+    const n = Math.max(2, Math.ceil(L / 4));
+    const p = new Float64Array(2);
+    for (let s = 0; s <= n; s++) {
+      evalCubic(curve, s / n, p);
+      const i = Math.round((p[0]! - t.originX) / sp), j = Math.round((p[1]! - t.originZ) / sp);
+      if (i < 0 || j < 0 || i >= W || j >= t.samplesZ) continue;
+      const k = j * W + i;
+      if (ws[k] !== base[k] && ws[k]! > this.naturalHeights[k]! + 0.05) return true;
+    }
+    return false;
+  }
+
   private planOptions(): { bounds: { minX: number; minZ: number; maxX: number; maxZ: number }; blocked: (c: Float64Array, h: number) => string | null } {
     const b = terrainBounds(this.terrain!);
     const m = 24;
@@ -801,6 +865,7 @@ export class Simulation {
     for (const r of reqs) {
       const p = planRoad(this.net, r, opts);
       if (!p.ok) return fail(p.error.code, p.error.message, p.error.phase);
+      if (!r.elevation && this.crossesDynamicWater(p.plan.curve)) return fail('UNDER_WATER', 'La route passerait au fond d\'une retenue ou d\'un lac : passez-la en viaduc (▲) ou contournez l\'eau');
       cost += p.plan.cost;
       if (a.dryRun && a.elevation) path.push(...roadPreviewPath(this.net, p.plan));
     }
@@ -836,6 +901,7 @@ export class Simulation {
    * nivellement du terrain, trafic et deltas pour le rendu. `withDelta` = faux au chargement.
    */
   private applyNetworkChanges(withDelta: boolean): void {
+    this.hydro.barrierDirty = true;
     const ch = this.net.takeChanges();
     const t = this.terrain!;
     let bx0 = Infinity, bz0 = Infinity, bx1 = -Infinity, bz1 = -Infinity;
@@ -889,8 +955,7 @@ export class Simulation {
         }
       }
       if (withDelta && i1 >= 0) {
-        const p = this.pendingPatch;
-        this.pendingPatch = p ? { i0: Math.min(p.i0, i0), j0: Math.min(p.j0, j0), i1: Math.max(p.i1, i1), j1: Math.max(p.j1, j1) } : { i0, j0, i1, j1 };
+        this.queuePatch({ i0, j0, i1, j1 }, false);
       }
       if (withDelta) this.refreshRoadAccessNear(bx0, bz0, bx1, bz1);
     }
@@ -1062,6 +1127,11 @@ export class Simulation {
       demo.drainTrips(TRIPS_PER_TICK, this.sendTrip);
     }
     this.traffic.step(0.1, this.clock.hourOfDay);
+    // Eau dynamique : remplissage par pas de FILL_QUANTUM_MIN minutes tant qu'une retenue n'est pas pleine.
+    if (this.hydro.active || this.hydro.base) {
+      const wr = this.hydro.update(this.hostForHydro(), now);
+      if (wr) this.queuePatch(wr, true);
+    }
     this.plugins.onTick(minutes);
     this.tickCount++;
   }
@@ -1140,6 +1210,9 @@ export class Simulation {
     };
     if (this.pendingPatch && this.terrain) {
       const patch: TerrainPatch = extractPatch(this.terrain, this.pendingPatch);
+      // Seule l'eau a changé (remplissage) : le rendu ne remaille pas le terrain.
+      if (this.pendingWaterOnly) patch.waterOnly = true;
+      this.pendingWaterOnly = false;
       this.decorateEditPatch(patch);
       msg.terrainPatch = patch;
       this.pendingPatch = null;
@@ -1318,6 +1391,13 @@ export class Simulation {
           const r = this.terrainEdit(args as ExtCommandArgs<'terrainEdit'>);
           return r.ok ? ok(r.data) : r;
         }
+        case 'terrainUndo': {
+          const r = this.terrainUndo((args as ExtCommandArgs<'terrainUndo'>).since);
+          return r.ok ? ok(r.data) : r;
+        }
+        case 'hydroState':
+          if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
+          return ok(this.hydroState());
         case 'moveBuilding': {
           const r = this.moveBuilding(args as ExtCommandArgs<'moveBuilding'>);
           return r.ok ? ok(r.data) : fail(r.error.code, r.error.message);
@@ -1347,33 +1427,52 @@ export class Simulation {
 
   /* ------------------------- Éditions du terrain ------------------------- */
 
-  /** Terrain éditable : hauteurs NATURELLES (base des profils et du nivellement), eau et forêt partagées. */
+  /** Terrain éditable : hauteurs NATURELLES (base des profils et du nivellement), eau DE BASE et forêt partagées. */
   private editable(): EditableTerrain {
     const t = this.terrain!;
-    return { ...t, heights: this.naturalHeights, waterSurface: t.waterSurface, forest: t.forest };
+    return { ...t, heights: this.naturalHeights, waterSurface: this.hydro.baseWater(t), forest: t.forest };
   }
 
   /**
-   * Défricher, Quai / remblai, Creuser : plan (coût, zone), obstacles (bâtiments, routes et leurs talus), fonds,
-   * puis application aux hauteurs naturelles, re-nivellement des routes et patch pour le rendu.
+   * Éditions du joueur (Défricher, Quai, Creuser, Rivière, pinceaux de relief, Pente, Barrage, Source) : plan (coût,
+   * zone), obstacles (bâtiments, routes et leurs talus), fonds, puis application aux hauteurs naturelles,
+   * re-nivellement local des routes, eau recalculée et patch pour le rendu.
    */
   terrainEdit(a: ExtCommandArgs<'terrainEdit'>): { ok: true; data: TerrainEditResult } | { ok: false; error: CommandError } {
     if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
     if (this.terrainEdits.length >= 4000) return fail('INVALID_ARGS', 'Trop d\'éditions du terrain dans cette partie');
-    const r = planEdit(this.editable(), a.edit);
+    const raw = a.edit;
+    if (raw.k === 'unsource' && !this.hydro.sourceNear(raw.x, raw.z)) return fail('INVALID_ARGS', 'Aucune source d\'eau ici : touchez une source posée (cercle bleu)');
+    if (raw.k === 'source' && this.hydro.sources.length >= MAX_SOURCES) return fail('INVALID_ARGS', `${MAX_SOURCES} sources au plus : retirez-en une`);
+    if (raw.k === 'dam' && this.hydro.dams.length >= MAX_DAMS) return fail('INVALID_ARGS', `${MAX_DAMS} barrages au plus`);
+    const r = planEdit(this.editable(), raw);
     if (!r.ok) return fail('INVALID_ARGS', r.message);
     const plan = r.plan;
     if (plan.edit.k !== 'clear') {
       const hit = this.editObstacle(plan);
-      if (hit) return fail('COLLISION', hit);
+      if (hit) return fail('COLLISION', plan.edit.k === 'dam' ? hit.replace('la zone', 'l\'axe du barrage') : hit);
     }
     const data: TerrainEditResult = { cost: plan.cost, volume: plan.volume, forestM2: plan.forestM2, wallLength: plan.wallLength, outline: plan.outline };
     if (plan.edit.k === 'flatten' && plan.edit.h !== undefined) data.h = plan.edit.h;
-    if (this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : travaux suspendus jusqu\'au retour d\'une trésorerie positive');
+    if (plan.edit.k === 'slope') { data.ah = plan.edit.ah; data.bh = plan.edit.bh; }
+    if (plan.edit.k === 'dam') { data.crest = plan.edit.h; data.flow = plan.edit.q; }
+    // Aperçu de l'eau en régime établi (source, barrage) : lac ou retenue prévus.
+    if (plan.edit.k === 'source' || plan.edit.k === 'dam') {
+      const pv = this.hydro.preview(this.hostForHydro(), plan.edit.k === 'source' ? { source: { x: plan.edit.x, z: plan.edit.z, q: plan.edit.q } } : { dam: { plan } });
+      data.water = { level: Number.isFinite(pv.level) ? Math.round(pv.level * 10) / 10 : null, areaM2: pv.area, storedM3: pv.stored, outlet: pv.outlet, status: pv.status };
+      if (pv.headM !== undefined) data.water.headM = pv.headM;
+      if (pv.flowM3s !== undefined) data.water.flowM3s = pv.flowM3s;
+    }
+    if (this.economy.bankrupt && plan.cost > 0) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : travaux suspendus jusqu\'au retour d\'une trésorerie positive');
     if (!this.economy.canAfford(plan.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${plan.cost} crédits requis)`);
     if (a.dryRun) return { ok: true, data };
+    // Sources et barrages : minute de jeu de la pose (volume délivré depuis), rejouée telle quelle.
+    if (plan.edit.k === 'source' || plan.edit.k === 'dam') plan.edit = { ...plan.edit, t: Math.round(this.clock.totalMinutes * 100) / 100 };
+    data.seq = this.terrainEdits.length;
     this.applyEditPlan(plan, true);
-    this.economy.spend(plan.cost);
+    if (plan.cost > 0) this.economy.spend(plan.cost);
+    const rec = this.editUndo[this.editUndo.length - 1];
+    if (rec && rec.seq === data.seq) rec.cost = plan.cost;
     return { ok: true, data };
   }
 
@@ -1382,10 +1481,11 @@ export class Simulation {
     const t = this.terrain!;
     const W = t.samplesX, sp = t.spacing;
     const reach = MAX_ROAD_HALF_WIDTH + SLOPE_WIDTH;
+    const base = this.hydro.baseWater(t);
     for (let n = 0; n < plan.idx.length; n++) {
       const k = plan.idx[n]!;
       const dh = Math.abs(plan.h[n]! - this.naturalHeights[k]!);
-      const wetBefore = t.waterSurface[k]! > this.naturalHeights[k]! + 0.05;
+      const wetBefore = base[k]! > this.naturalHeights[k]! + 0.05;
       const wetAfter = plan.ws[n]! > plan.h[n]! + 0.05;
       if (dh < 0.05 && wetBefore === wetAfter) continue;
       const x = t.originX + (k % W) * sp, z = t.originZ + ((k / W) | 0) * sp;
@@ -1395,35 +1495,178 @@ export class Simulation {
     return null;
   }
 
-  /** Applique un plan validé (aussi au rejeu d'une sauvegarde, `live` = faux : ni nivellement ni delta). */
+  /** Applique un plan validé (aussi au rejeu d'une sauvegarde, `live` = faux : ni nivellement ni delta ni eau). */
   private applyEditPlan(plan: EditPlan, live: boolean): void {
     const t = this.terrain!;
-    commitEdit(this.editable(), plan, live ? [] : [t.heights]);
+    const index = this.terrainEdits.length;
+    const ed = this.editable();
+    if (live) {
+      // Annulation : valeurs d'avant (relief naturel, eau de base, forêt, cases creusées, murs).
+      const n = plan.idx.length;
+      const rec: EditUndoRecord = { seq: index, idx: plan.idx.slice(), h: new Float32Array(n), ws: new Float32Array(n), forest: new Uint8Array(n), dug: new Uint8Array(n), quays: plan.walls.length ? (t.quays ? t.quays.slice() : []) : undefined, cost: 0 };
+      for (let i = 0; i < n; i++) {
+        const k = plan.idx[i]!;
+        rec.h[i] = this.naturalHeights[k]!; rec.ws[i] = ed.waterSurface[k]!; rec.forest[i] = t.forest[k]!; rec.dug[i] = this.hydro.dugMask?.[k] ?? 0;
+      }
+      this.editUndo.push(rec);
+      if (this.editUndo.length > MAX_EDIT_UNDO) this.editUndo.shift();
+    }
+    this.hydro.noteDug(plan, index, this.naturalHeights, this.naturalHeights.length);
+    commitEdit(ed, plan, live ? [] : [t.heights]);
+    this.hydro.syncBase(t, plan.idx);
     this.terrainEdits.push(plan.edit);
     if (plan.walls.length) t.quays = flattenWalls(plan.walls, t.quays ? t.quays.slice() : []);
+    this.hydro.onEdit(plan.edit, index, t);
     if (!live) return;
-    // Hauteurs nivelées = naturelles éditées + plateformes et talus de TOUTES les routes (comme au chargement).
-    const before = t.heights;
-    const graded = new Float32Array(this.naturalHeights);
-    t.heights = graded;
-    if (this.net.segCount > 0) gradeTerrainForRoads(t, this.net);
-    let rect = plan.rect;
-    const W = t.samplesX;
-    for (let k = 0; k < graded.length; k++) {
-      if (graded[k] === before[k]) continue;
-      const i = k % W, j = (k / W) | 0;
-      rect = unionRect(rect, { i0: i, j0: j, i1: i, j1: j });
-    }
-    this.pendingPatch = this.pendingPatch ? unionRect(this.pendingPatch, rect) : rect;
-    this.pendingEditLayers = true;
+    let rect = plan.idx.length ? this.regradeLocal(plan.rect) : null;
+    const wr = this.hydro.update(this.hostForHydro(), this.clock.totalMinutes, true);
+    if (wr) rect = rect ? unionRect(rect, wr) : wr;
+    if (rect) this.queuePatch(rect, false);
+    if (plan.idx.length) this.pendingEditLayers = true;
     if (plan.walls.length) this.pendingQuays = true;
     if (plan.edit.k === 'clear') this.pendingCleared.push(plan.edit.x, plan.edit.z, plan.edit.r);
+  }
+
+  /** Ajoute une région au patch du prochain delta (`waterOnly` : le relief n'a pas changé). */
+  private queuePatch(rect: { i0: number; j0: number; i1: number; j1: number }, waterOnly: boolean): void {
+    if (!this.pendingPatch) this.pendingWaterOnly = waterOnly;
+    else if (!waterOnly) this.pendingWaterOnly = false;
+    this.pendingPatch = this.pendingPatch ? unionRect(this.pendingPatch, rect) : rect;
+  }
+
+  /**
+   * Re-nivellement après une édition : hauteurs nivelées = naturelles + plateformes et talus des routes PROCHES de la
+   * région modifiée (les autres ne l'atteignent pas : même résultat que le nivellement complet, sans le coût).
+   * Renvoie la région dont les hauteurs nivelées ont changé.
+   */
+  private regradeLocal(r: { i0: number; j0: number; i1: number; j1: number }): { i0: number; j0: number; i1: number; j1: number } {
+    const t = this.terrain!;
+    const W = t.samplesX, sp = t.spacing;
+    const i0 = Math.max(0, r.i0 - 1), j0 = Math.max(0, r.j0 - 1), i1 = Math.min(W - 1, r.i1 + 1), j1 = Math.min(t.samplesZ - 1, r.j1 + 1);
+    const graded = t.heights;
+    const segs: number[] = [];
+    if (this.net.segCount > 0) {
+      const m = MAX_ROAD_HALF_WIDTH + SLOPE_WIDTH + 2 * sp;
+      this.net.segmentsIn(t.originX + i0 * sp - m, t.originZ + j0 * sp - m, t.originX + i1 * sp + m, t.originZ + j1 * sp + m, segs);
+    }
+    let out = { i0: r.i0, j0: r.j0, i1: r.i1, j1: r.j1 };
+    if (segs.length === 0) {
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const k = j * W + i;
+        if (graded[k] !== this.naturalHeights[k]) { graded[k] = this.naturalHeights[k]!; out = unionRect(out, { i0: i, j0: j, i1: i, j1: j }); }
+      }
+      return out;
+    }
+    // Copie de travail : naturelles + nivellement des seules routes proches ; recopiée dans la région uniquement.
+    const work = new Float32Array(this.naturalHeights);
+    gradeTerrainForRoads({ ...t, heights: work }, this.net, segs);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const k = j * W + i;
+      if (graded[k] !== work[k]) { graded[k] = work[k]!; out = unionRect(out, { i0: i, j0: j, i1: i, j1: j }); }
+    }
+    return out;
   }
 
   /** Rejoue une édition sauvegardée (sans contrôle ni coût : elle a été validée quand le joueur l'a faite). */
   private replayEdit(e: TerrainEdit): void {
     const r = planEdit(this.editable(), e);
     if (r.ok) this.applyEditPlan(r.plan, false);
+  }
+
+  /**
+   * Annule les éditions du terrain d'index ≥ `since` (les plus récentes d'abord) : relief, eau, forêt et murs
+   * d'avant, coût remboursé. Refus si un bâtiment ou une route occupe depuis une zone modifiée.
+   */
+  terrainUndo(since: number): { ok: true; data: { reverted: number; refund: number } } | { ok: false; error: CommandError } {
+    if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
+    const n = this.terrainEdits.length;
+    if (!Number.isInteger(since) || since < 0 || since >= n) return fail('INVALID_ARGS', 'Rien à annuler sur le terrain');
+    const recs = this.editUndo.filter((r) => r.seq >= since);
+    if (recs.length !== n - since || recs[0]?.seq !== since) return fail('INVALID_ARGS', 'Modification du terrain trop ancienne pour être annulée');
+    const t = this.terrain;
+    const W = t.samplesX, sp = t.spacing;
+    const reach = MAX_ROAD_HALF_WIDTH + SLOPE_WIDTH;
+    for (const r of recs) for (let i = 0; i < r.idx.length; i++) {
+      const k = r.idx[i]!;
+      if (Math.abs(r.h[i]! - this.naturalHeights[k]!) < 0.05) continue;
+      const x = t.originX + (k % W) * sp, z = t.originZ + ((k / W) | 0) * sp;
+      if (this.buildingAtPoint(x, z, sp)) return fail('COLLISION', 'Un bâtiment a été construit depuis sur la zone modifiée : démolissez-le d\'abord');
+      if (this.roadClearance(makeObb(x, z, sp / 2, sp / 2, 0), reach) < SLOPE_WIDTH) return fail('COLLISION', 'Une route a été construite depuis sur la zone modifiée : supprimez-la d\'abord');
+    }
+    const base = this.hydro.baseWater(t);
+    let rect: { i0: number; j0: number; i1: number; j1: number } | null = null;
+    let refund = 0, walls = false;
+    for (let q = recs.length - 1; q >= 0; q--) {
+      const r = recs[q]!;
+      for (let i = 0; i < r.idx.length; i++) {
+        const k = r.idx[i]!;
+        this.naturalHeights[k] = r.h[i]!;
+        base[k] = r.ws[i]!;
+        t.forest[k] = r.forest[i]!;
+        if (this.hydro.dugMask && !r.dug[i] && this.hydro.dugMask[k]) { this.hydro.dugMask[k] = 0; this.hydro.dug = this.hydro.dug.filter((c) => c !== k); }
+        const ii = k % W, jj = (k / W) | 0;
+        rect = rect ? unionRect(rect, { i0: ii, j0: jj, i1: ii, j1: jj }) : { i0: ii, j0: jj, i1: ii, j1: jj };
+      }
+      this.hydro.syncBase(t, r.idx);
+      if (r.quays !== undefined) { t.quays = r.quays.length ? r.quays.slice() : undefined; walls = true; }
+      refund += r.cost;
+    }
+    this.terrainEdits.length = since;
+    this.editUndo = this.editUndo.filter((r) => r.seq < since);
+    this.hydro.rebuild(this.terrainEdits, t);
+    let out = rect ? this.regradeLocal(rect) : null;
+    const wr = this.hydro.update(this.hostForHydro(), this.clock.totalMinutes, true);
+    if (wr) out = out ? unionRect(out, wr) : wr;
+    if (out) this.queuePatch(out, false);
+    this.pendingEditLayers = true;
+    if (walls) this.pendingQuays = true;
+    if (refund > 0) this.economy.refund(refund);
+    return { ok: true, data: { reverted: recs.length, refund } };
+  }
+
+  /** Rasterise les barrières de l'eau : emprises des bâtiments, chaussées (hors ponts et tunnels). */
+  private rasterBarriers(out: Uint8Array): void {
+    const t = this.terrain!;
+    const W = t.samplesX, H = t.samplesZ, sp = t.spacing;
+    for (const o of this.obbs.values()) {
+      const bb = obbAabb(o);
+      const ia = Math.max(0, Math.floor((bb.minX - t.originX) / sp)), ib = Math.min(W - 1, Math.ceil((bb.maxX - t.originX) / sp));
+      const ja = Math.max(0, Math.floor((bb.minZ - t.originZ) / sp)), jb = Math.min(H - 1, Math.ceil((bb.maxZ - t.originZ) / sp));
+      for (let j = ja; j <= jb; j++) for (let i = ia; i <= ib; i++) {
+        if (pointInObb(o, t.originX + i * sp, t.originZ + j * sp, sp * 0.5)) out[j * W + i] = 1;
+      }
+    }
+    const p = new Float64Array(2);
+    for (const id of this.net.segmentIds()) {
+      const prof = this.net.profile(id);
+      const arc = this.net.arc(id), curve = this.net.curve(id);
+      const hw = halfWidth(this.net.kindOf(id));
+      const r = Math.max(0, Math.round(hw / sp));
+      for (let s = 0; s < prof.count; s++) {
+        if (prof.bridge[s] || prof.tunnel[s]) continue;
+        evalCubic(curve, arc.tAt(s * prof.step), p);
+        const ci = Math.round((p[0]! - t.originX) / sp), cj = Math.round((p[1]! - t.originZ) / sp);
+        for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+          const i = ci + di, j = cj + dj;
+          if (i >= 0 && j >= 0 && i < W && j < H) out[j * W + i] = 1;
+        }
+      }
+    }
+  }
+
+  /** État de l'eau dynamique (outil Terrain, tests) : sources, barrages et leurs mesures, coût du dernier calcul. */
+  hydroState(): ExtCommandResult<'hydroState'> {
+    const h = this.hydro;
+    return {
+      sources: h.sources.map((s) => ({ id: s.id, x: s.x, z: s.z, q: s.q })),
+      dams: h.damMetrics(),
+      steady: h.steady,
+      active: h.active,
+      lastMs: Math.round(h.lastMs * 100) / 100,
+      computeCount: h.computeCount,
+      undoable: this.editUndo.length ? this.editUndo[0]!.seq : -1,
+      edits: this.terrainEdits.length,
+    };
   }
 
   /** Joint au patch du delta les couches des éditions (forêt, murs de quai, zones défrichées). */
@@ -1465,6 +1708,8 @@ export class Simulation {
     };
     // Éditions du terrain (champ facultatif, absent si aucune : format v2 inchangé, rejouées au chargement).
     if (this.terrainEdits.length) save.terrainEdits = this.terrainEdits.map((e) => ({ ...e }));
+    // Module d'eau : seulement si des éditions postérieures au module existent (sinon format inchangé).
+    if (this.hydro.spreadFrom < this.terrainEdits.length) (save as HydroSaveField).hydro = { spreadFrom: this.hydro.spreadFrom };
     // Bâtiments privés (zonage : démolis sans remboursement), champ facultatif.
     if (this.privateIds.size) (save as { privateBuildings?: number[] }).privateBuildings = [...this.privateIds].sort((x, y) => x - y);
     // Sections des modules (champ facultatif, absent si aucune) : sections inconnues conservées telles quelles.
@@ -1510,6 +1755,10 @@ export class Simulation {
     // Éditions du terrain rejouées sur le terrain régénéré, AVANT les routes (profils et nivellement calculés dessus).
     const edits = parseEdits((s as TerrainEditsSaveField).terrainEdits);
     if (!edits) return { code: 'BAD_SAVE', message: 'Éditions du terrain mal formées' };
+    // Module d'eau : sauvegarde antérieure (sans champ) => aucune de ses éditions ne se remplit d'eau voisine.
+    const hs = (s as HydroSaveField).hydro;
+    const spreadFrom = hs && typeof hs.spreadFrom === 'number' && Number.isFinite(hs.spreadFrom) ? Math.max(0, Math.floor(hs.spreadFrom)) : edits.length;
+    this.hydro.reset(spreadFrom);
     for (const e of edits) this.replayEdit(e);
     this.clock.totalMinutes = s.clock.totalMinutes;
     // Réseau routier : nœuds et tronçons avec leurs identifiants et courbes (absentes en v1 = tronçons droits).
@@ -1565,6 +1814,8 @@ export class Simulation {
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;
     // Modules : après l'état de base ; une section en erreur est notifiée et n'empêche pas le chargement.
+    // Eau dynamique à la minute de la sauvegarde (même quantum de remplissage qu'en jeu : état identique).
+    this.hydro.update(this.hostForHydro(), this.clock.totalMinutes, true);
     this.plugins.load((s as SaveFileV2 & PluginSaveField).plugins);
     // Bâtiments privés : champ de la sauvegarde ; anciennes sauvegardes sans ce champ : lots possédés par le zonage.
     const priv = (s as { privateBuildings?: unknown }).privateBuildings;

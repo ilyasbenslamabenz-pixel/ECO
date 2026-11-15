@@ -9,8 +9,16 @@
  *    (sinon bassin isolé), berges aplanies et murs de quai là où la rive est sèche.
  *  - `river` (Rivière) : tracé courbe (points lissés), lit creusé en auge, berges naturelles en pente (sans mur),
  *    mise en eau descendante d'un bout à l'autre, raccordée au niveau de l'eau existante aux extrémités.
- *  - `raise` / `lower` / `flatten` (Élever, Abaisser, Niveler) : pinceau circulaire à bord adouci (cosinus) ;
- *    l'eau n'est jamais créée ni étendue (un fond relevé au-dessus de l'eau devient terre ferme).
+ *  - `raise` / `lower` / `flatten` / `smooth` (Élever, Abaisser, Niveler, Adoucir) : pinceau circulaire, forme douce
+ *    (cosinus, défaut) ou dure (`s` = 1 : plein effet jusqu'à 75 % du rayon), force `f` (0..1, Niveler et Adoucir) ;
+ *    Niveler vise la hauteur du premier point (`h` fixée par la simulation) ou une hauteur choisie. Le plan ne crée
+ *    pas d'eau : le remplissage des creux est calculé par le module d'eau (src/sim/hydro).
+ *  - `slope` (Pente) : rampe rectiligne entre deux points (hauteurs des extrémités fixées à la pose), largeur `w`.
+ *  - `dam` (Barrage) : ouvrage posé EN TRAVERS d'une vallée ou d'une rivière, ancré sur deux rives plus hautes ; le
+ *    terrain de l'axe est relevé jusqu'à la crête (barrière continue pour l'eau), deux parements de béton (murs de
+ *    quai dos à dos) ; crête, côté amont et débit de la rivière barrée fixés à la pose.
+ *  - `source` / `unsource` : source d'eau (débit m³/s) posée ou retirée ; aucun effet sur le relief (eau calculée
+ *    par src/sim/hydro à partir de la liste des éditions).
  *
  * Chaque édition est d'abord PLANIFIÉE (`planEdit`, sans rien modifier : coût, échantillons touchés, murs), puis
  * APPLIQUÉE (`commitEdit`). La simulation conserve la liste des éditions (sauvegarde) et les rejoue au chargement
@@ -28,13 +36,29 @@ export type TerrainEdit =
   | { k: 'clear'; x: number; z: number; r: number }
   | { k: 'quay'; ax: number; az: number; bx: number; bz: number }
   | { k: 'dig'; ax: number; az: number; bx: number; bz: number; w: number }
-  /** Pinceaux de relief : élever / abaisser de `d` m au centre (bord adouci), niveler à la hauteur `h`. */
-  | { k: 'raise'; x: number; z: number; r: number; d: number }
-  | { k: 'lower'; x: number; z: number; r: number; d: number }
+  /**
+   * Pinceaux de relief : élever / abaisser de `d` m au centre, niveler à la hauteur `h`, adoucir. `s` = 1 : forme dure
+   * (absent : douce, comportement d'origine) ; `f` : force 0..1 de Niveler / Adoucir (absent : 1).
+   */
+  | { k: 'raise'; x: number; z: number; r: number; d: number; s?: 1 }
+  | { k: 'lower'; x: number; z: number; r: number; d: number; s?: 1 }
   /** `h` absent à la pose : hauteur du centre, fixée par la simulation (rejouée telle quelle au chargement). */
-  | { k: 'flatten'; x: number; z: number; r: number; h?: number }
+  | { k: 'flatten'; x: number; z: number; r: number; h?: number; f?: number; s?: 1 }
+  | { k: 'smooth'; x: number; z: number; r: number; f?: number; s?: 1 }
+  /** Pente : rampe de A à B, largeur `w` ; `ah` / `bh` (hauteurs des extrémités) fixées par la simulation. */
+  | { k: 'slope'; ax: number; az: number; bx: number; bz: number; w: number; ah?: number; bh?: number; s?: 1 }
   /** Rivière : points de passage (x, z alternés), largeur du lit `w`. */
-  | { k: 'river'; pts: number[]; w: number };
+  | { k: 'river'; pts: number[]; w: number }
+  /**
+   * Barrage : axe A-B en travers d'une vallée. `hh` : hauteur voulue au-dessus du point le plus bas (0 ou absent :
+   * maximale, jusqu'à la rive la plus basse). Fixés par la simulation à la pose : `h` crête (m), `up` côté amont
+   * (+1 : côté de la normale (-uz, ux), -1 : l'autre), `q` débit de la rivière barrée (m³/s), `t` minute de jeu.
+   */
+  | { k: 'dam'; ax: number; az: number; bx: number; bz: number; hh?: number; h?: number; up?: 1 | -1; q?: number; t?: number }
+  /** Source d'eau : débit `q` (m³/s) ; `t` minute de jeu de la pose (fixée par la simulation). */
+  | { k: 'source'; x: number; z: number; q: number; t?: number }
+  /** Retire la source la plus proche de (x, z) (la simulation vérifie qu'il y en a une). */
+  | { k: 'unsource'; x: number; z: number };
 
 export type TerrainEditKind = TerrainEdit['k'];
 
@@ -60,6 +84,17 @@ export const EDIT_LIMITS = {
   maxRiverLength: 2400,
   /** Nombre maximal d'éditions conservées dans une partie. */
   maxEdits: 4000,
+  /** Pente : largeur de la rampe (m). */
+  minSlopeWidth: 8,
+  maxSlopeWidth: 160,
+  /** Barrage : longueur (m), hauteur au-dessus du point le plus bas de l'axe (m). */
+  minDamLength: 24,
+  maxDamLength: 600,
+  minDamHeight: 3,
+  maxDamHeight: 60,
+  /** Source : débit (m³/s). */
+  minSourceFlow: 2,
+  maxSourceFlow: 200,
 } as const;
 
 /** Coûts (CHF). */
@@ -72,7 +107,20 @@ export const EDIT_COSTS = {
   earthPerM3: 1.5,
   /** Mur de quai : par mètre. */
   wallPerM: 80,
+  /** Barrage : par m³ de béton (axe × hauteur × épaisseur moyenne DAM_THICKNESS). */
+  damPerM3: 18,
+  /** Source d'eau : forfait + par m³/s de débit. */
+  sourceBase: 2000,
+  sourcePerM3s: 150,
 } as const;
+
+/** Barrage : épaisseur moyenne comptée pour le béton (m), demi-épaisseur des parements rendus (m). */
+export const DAM_THICKNESS = 10;
+/** Décalage de chaque mur de parement par rapport à l'axe : face avant à ±(DAM_WALL_OFFSET + QUAY_FRONT) m. */
+export const DAM_WALL_OFFSET = 4.85;
+/** Débit estimé d'une rivière barrée par mètre de largeur mouillée (m³/s/m), plafond (m³/s). */
+export const DAM_FLOW_PER_M = 3;
+export const DAM_FLOW_MAX = 300;
 
 /** Hauteur du quai au-dessus de l'eau (m) et profondeur du pied du mur sous l'eau (m). */
 export const QUAY_FREEBOARD = 1.2;
@@ -125,8 +173,15 @@ export function editShapeError(e: unknown): string | null {
   if (o.k === 'clear') return fin(o.x) && fin(o.z) && fin(o.r) ? null : 'Défrichage invalide';
   if (o.k === 'quay') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) ? null : 'Tracé de quai invalide';
   if (o.k === 'dig') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) && fin(o.w) ? null : 'Tracé de bassin invalide';
-  if (o.k === 'raise' || o.k === 'lower') return fin(o.x) && fin(o.z) && fin(o.r) && fin(o.d) ? null : 'Pinceau de relief invalide';
-  if (o.k === 'flatten') return fin(o.x) && fin(o.z) && fin(o.r) && (o.h === undefined || fin(o.h)) ? null : 'Nivellement invalide';
+  const optF = (v: unknown): boolean => v === undefined || fin(v);
+  const optS = o.s === undefined || o.s === 1;
+  if (o.k === 'raise' || o.k === 'lower') return fin(o.x) && fin(o.z) && fin(o.r) && fin(o.d) && optS ? null : 'Pinceau de relief invalide';
+  if (o.k === 'flatten') return fin(o.x) && fin(o.z) && fin(o.r) && optF(o.h) && optF(o.f) && optS ? null : 'Nivellement invalide';
+  if (o.k === 'smooth') return fin(o.x) && fin(o.z) && fin(o.r) && optF(o.f) && optS ? null : 'Adoucissement invalide';
+  if (o.k === 'slope') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) && fin(o.w) && optF(o.ah) && optF(o.bh) && optS ? null : 'Pente invalide';
+  if (o.k === 'dam') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) && optF(o.hh) && optF(o.h) && (o.up === undefined || o.up === 1 || o.up === -1) && optF(o.q) && optF(o.t) ? null : 'Tracé de barrage invalide';
+  if (o.k === 'source') return fin(o.x) && fin(o.z) && fin(o.q) && optF(o.t) ? null : 'Source d\'eau invalide';
+  if (o.k === 'unsource') return fin(o.x) && fin(o.z) ? null : 'Retrait de source invalide';
   if (o.k === 'river') return Array.isArray(o.pts) && o.pts.length >= 4 && o.pts.length % 2 === 0 && o.pts.length <= EDIT_LIMITS.maxRiverPoints * 2 && o.pts.every(fin) && fin(o.w) ? null : 'Tracé de rivière invalide';
   return 'Type d\'édition du terrain inconnu';
 }
@@ -139,9 +194,47 @@ export function normalizeEdit(e: TerrainEdit): TerrainEdit {
     case 'clear': return { k: 'clear', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)) };
     case 'quay': return { k: 'quay', ax: r2(e.ax), az: r2(e.az), bx: r2(e.bx), bz: r2(e.bz) };
     case 'dig': return { k: 'dig', ax: r2(e.ax), az: r2(e.az), bx: r2(e.bx), bz: r2(e.bz), w: r2(clamp(e.w, L.minDigWidth, L.maxDigWidth)) };
-    case 'raise': case 'lower': return { k: e.k, x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)), d: r2(clamp(e.d, L.minStep, L.maxStep)) };
+    case 'raise': case 'lower': {
+      const o: Extract<TerrainEdit, { k: 'raise' | 'lower' }> = { k: e.k, x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)), d: r2(clamp(e.d, L.minStep, L.maxStep)) };
+      if (e.s === 1) o.s = 1;
+      return o;
+    }
+    case 'smooth': {
+      const o: Extract<TerrainEdit, { k: 'smooth' }> = { k: 'smooth', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)) };
+      if (e.f !== undefined && e.f < 1) o.f = r2(clamp(e.f, 0.05, 1));
+      if (e.s === 1) o.s = 1;
+      return o;
+    }
+    case 'slope': {
+      const o: Extract<TerrainEdit, { k: 'slope' }> = { k: 'slope', ax: r2(e.ax), az: r2(e.az), bx: r2(e.bx), bz: r2(e.bz), w: r2(clamp(e.w, L.minSlopeWidth, L.maxSlopeWidth)) };
+      if (e.ah !== undefined) o.ah = r2(e.ah);
+      if (e.bh !== undefined) o.bh = r2(e.bh);
+      if (e.s === 1) o.s = 1;
+      return o;
+    }
+    case 'dam': {
+      const o: Extract<TerrainEdit, { k: 'dam' }> = { k: 'dam', ax: r2(e.ax), az: r2(e.az), bx: r2(e.bx), bz: r2(e.bz) };
+      if (e.hh !== undefined && e.hh > 0) o.hh = r2(clamp(e.hh, L.minDamHeight, L.maxDamHeight));
+      if (e.h !== undefined) o.h = r2(e.h);
+      if (e.up !== undefined) o.up = e.up;
+      if (e.q !== undefined) o.q = r2(clamp(e.q, 0, DAM_FLOW_MAX));
+      if (e.t !== undefined) o.t = r2(e.t);
+      return o;
+    }
+    case 'source': {
+      const o: Extract<TerrainEdit, { k: 'source' }> = { k: 'source', x: r2(e.x), z: r2(e.z), q: r2(clamp(e.q, L.minSourceFlow, L.maxSourceFlow)) };
+      if (e.t !== undefined) o.t = r2(e.t);
+      return o;
+    }
+    case 'unsource': return { k: 'unsource', x: r2(e.x), z: r2(e.z) };
     case 'river': return { k: 'river', pts: e.pts.slice(0, L.maxRiverPoints * 2).map(r2), w: r2(clamp(e.w, L.minRiverWidth, L.maxRiverWidth)) };
-    case 'flatten': return e.h === undefined ? { k: 'flatten', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)) } : { k: 'flatten', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)), h: r2(e.h) };
+    case 'flatten': {
+      const o: Extract<TerrainEdit, { k: 'flatten' }> = { k: 'flatten', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)) };
+      if (e.h !== undefined) o.h = r2(e.h);
+      if (e.f !== undefined && e.f < 1) o.f = r2(clamp(e.f, 0.05, 1));
+      if (e.s === 1) o.s = 1;
+      return o;
+    }
   }
 }
 
@@ -288,7 +381,7 @@ export function planEdit(t: EditableTerrain, raw: TerrainEdit): PlanOutcome {
     return p ? { ok: true, plan: p } : bad('Zone hors de la carte');
   }
 
-  if (e.k === 'raise' || e.k === 'lower' || e.k === 'flatten') {
+  if (e.k === 'raise' || e.k === 'lower' || e.k === 'flatten' || e.k === 'smooth') {
     const rect = rectFor(t, e.x - e.r, e.z - e.r, e.x + e.r, e.z + e.r);
     if (!rect) return bad('Zone hors de la carte');
     let target = 0;
@@ -300,29 +393,58 @@ export function planEdit(t: EditableTerrain, raw: TerrainEdit): PlanOutcome {
         edit = { ...e, h: target };
       } else target = e.h;
     }
+    const hard = e.s === 1;
+    const force = e.k === 'flatten' || e.k === 'smooth' ? (e.f ?? 1) : 1;
+    // Adoucir : moyenne 5 × 5 lue sur une copie de la région (les voisins avant écriture).
+    let src: Float32Array | null = null;
+    const R = 2;
+    const rw = rect.i1 - rect.i0 + 1 + 2 * R, rh = rect.j1 - rect.j0 + 1 + 2 * R;
+    if (e.k === 'smooth') {
+      src = new Float32Array(rw * rh);
+      for (let j = 0; j < rh; j++) for (let i = 0; i < rw; i++) {
+        const gi = clamp(rect.i0 - R + i, 0, t.samplesX - 1), gj = clamp(rect.j0 - R + j, 0, t.samplesZ - 1);
+        src[j * rw + i] = t.heights[gj * W + gi]!;
+      }
+    }
     const sign = e.k === 'lower' ? -1 : 1;
     for (let j = rect.j0; j <= rect.j1; j++) for (let i = rect.i0; i <= rect.i1; i++) {
       const dist = Math.hypot(t.originX + i * sp - e.x, t.originZ + j * sp - e.z);
       if (dist > e.r) continue;
       const k = j * W + i;
       const h0 = t.heights[k]!;
-      // Bord adouci : plein effet au centre, nul au bord (nivellement : plein jusqu'à 60 % du rayon).
-      const u = e.k === 'flatten' ? clamp((dist / e.r - 0.6) / 0.4, 0, 1) : dist / e.r;
-      const w = 0.5 + 0.5 * Math.cos(Math.PI * u);
-      let h = e.k === 'flatten' ? h0 + (target - h0) * w : h0 + sign * (e as { d: number }).d * w;
+      const w = brushWeight(dist / e.r, e.k === 'flatten' ? (hard ? 0.85 : 0.6) : hard ? 0.75 : 0) * force;
+      let h: number;
+      if (e.k === 'flatten') h = h0 + (target - h0) * w;
+      else if (e.k === 'smooth') {
+        let sum = 0;
+        const li = i - rect.i0 + R, lj = j - rect.j0 + R;
+        for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) sum += src![(lj + dj) * rw + li + di]!;
+        h = h0 + (sum / ((2 * R + 1) * (2 * R + 1)) - h0) * w;
+      } else h = h0 + sign * (e as { d: number }).d * w;
       // Jamais sous le fond de la mer : pas plus bas que le niveau de l'eau − 6 m.
       h = Math.max(h, t.waterLevel - 6);
       if (Math.abs(h - h0) < 0.01) continue;
       const ws0 = t.waterSurface[k]!;
-      // L'eau ne s'étend pas : une case sèche abaissée reste sèche ; une case relevée hors de l'eau devient terre.
+      // Le plan ne crée pas d'eau : une case sèche abaissée reste sèche (le module d'eau remplit les creux reliés à
+      // une eau voisine) ; une case relevée hors de l'eau devient terre.
       const ws = ws0 !== NO_WATER && ws0 > h + 0.05 ? ws0 : NO_WATER;
       c.set(k, Math.round(h * 100) / 100, ws);
     }
-    const outline: number[] = [];
-    for (let a = 0; a <= 32; a++) outline.push(e.x + Math.cos((a / 32) * Math.PI * 2) * e.r, e.z + Math.sin((a / 32) * Math.PI * 2) * e.r);
-    const p = finish(t, edit, c, [], [], 0, outline);
-    return p ? { ok: true, plan: p } : bad(e.k === 'flatten' ? 'Déjà plat ici' : 'Rien à modifier ici');
+    const p = finish(t, edit, c, [], [], 0, circle(e.x, e.z, e.r));
+    return p ? { ok: true, plan: p } : bad(e.k === 'flatten' ? 'Déjà plat ici' : e.k === 'smooth' ? 'Déjà doux ici' : 'Rien à modifier ici');
   }
+
+  if (e.k === 'source' || e.k === 'unsource') {
+    const i = Math.round((e.x - t.originX) / sp), j = Math.round((e.z - t.originZ) / sp);
+    if (i < 1 || j < 1 || i >= t.samplesX - 1 || j >= t.samplesZ - 1) return bad('Source hors de la carte');
+    const k = j * W + i;
+    if (e.k === 'source' && wetK(t, k) && Math.abs(t.waterSurface[k]! - t.waterLevel) < 0.02) return bad('Une source ne se pose pas en mer');
+    const cost = e.k === 'source' ? Math.round(EDIT_COSTS.sourceBase + EDIT_COSTS.sourcePerM3s * e.q) : 0;
+    return { ok: true, plan: { edit: e, rect: { i0: i, j0: j, i1: i, j1: j }, idx: new Int32Array(0), h: new Float32Array(0), ws: new Float32Array(0), volume: 0, forestM2: 0, walls: [], wallLength: 0, cost, outline: circle(e.x, e.z, 10) } };
+  }
+
+  if (e.k === 'slope') return planSlope(t, e, c);
+  if (e.k === 'dam') return planDam(t, e, c);
 
   if (e.k === 'river') return planRiver(t, e, c);
 
@@ -557,6 +679,185 @@ function planRiver(t: EditableTerrain, e: Extract<TerrainEdit, { k: 'river' }>, 
   outline.push(left[0]!, left[1]!);
   const p = finish(t, e, c, [], [], 0, outline);
   return p ? { ok: true, plan: p } : bad('Rien à creuser');
+}
+
+
+/**
+ * Poids d'un pinceau à la distance relative u (0 au centre, 1 au bord) : plein effet jusqu'à `plateau`, puis
+ * raccord en cosinus jusqu'au bord. plateau = 0 : cloche douce d'origine.
+ */
+export function brushWeight(u: number, plateau: number): number {
+  if (u >= 1) return 0;
+  const v = plateau > 0 ? clamp((u - plateau) / (1 - plateau), 0, 1) : u;
+  return 0.5 + 0.5 * Math.cos(Math.PI * v);
+}
+
+function circle(x: number, z: number, r: number): number[] {
+  const out: number[] = [];
+  for (let a = 0; a <= 32; a++) out.push(x + Math.cos((a / 32) * Math.PI * 2) * r, z + Math.sin((a / 32) * Math.PI * 2) * r);
+  return out;
+}
+
+/** Hauteur (naturelle) de l'échantillon le plus proche de (x, z). */
+function heightNear(t: EditableTerrain, x: number, z: number): number {
+  const i = clamp(Math.round((x - t.originX) / t.spacing), 0, t.samplesX - 1), j = clamp(Math.round((z - t.originZ) / t.spacing), 0, t.samplesZ - 1);
+  return t.heights[j * t.samplesX + i]!;
+}
+
+/** Pente : rampe linéaire de la hauteur de A à celle de B, sur une bande de largeur w (bords adoucis). */
+function planSlope(t: EditableTerrain, e: Extract<TerrainEdit, { k: 'slope' }>, c: Changes): PlanOutcome {
+  const bad = (message: string): PlanOutcome => ({ ok: false, message });
+  const L = Math.hypot(e.bx - e.ax, e.bz - e.az);
+  if (L < EDIT_LIMITS.minLength) return bad(`Pente trop courte (${EDIT_LIMITS.minLength} m minimum)`);
+  if (L > EDIT_LIMITS.maxLength) return bad(`Pente trop longue (${EDIT_LIMITS.maxLength} m maximum)`);
+  const ah = e.ah ?? Math.round(heightNear(t, e.ax, e.az) * 100) / 100;
+  const bh = e.bh ?? Math.round(heightNear(t, e.bx, e.bz) * 100) / 100;
+  const edit: TerrainEdit = { ...e, ah, bh };
+  const hw = e.w / 2;
+  const rect = rectFor(t, Math.min(e.ax, e.bx) - hw, Math.min(e.az, e.bz) - hw, Math.max(e.ax, e.bx) + hw, Math.max(e.az, e.bz) + hw);
+  if (!rect) return bad('Zone hors de la carte');
+  const W = t.samplesX, sp = t.spacing;
+  const ux = (e.bx - e.ax) / L, uz = (e.bz - e.az) / L;
+  for (let j = rect.j0; j <= rect.j1; j++) for (let i = rect.i0; i <= rect.i1; i++) {
+    const x = t.originX + i * sp - e.ax, z = t.originZ + j * sp - e.az;
+    const along = x * ux + z * uz;
+    const u = clamp(along / L, 0, 1);
+    const across = Math.abs(-x * uz + z * ux);
+    const out = along < 0 ? -along : along > L ? along - L : 0;
+    const d = Math.hypot(across, out);
+    if (d > hw) continue;
+    const k = j * W + i;
+    const h0 = t.heights[k]!;
+    const w = brushWeight(d / hw, e.s === 1 ? 0.8 : 0.55);
+    const h = Math.max(t.waterLevel - 6, h0 + (ah + (bh - ah) * u - h0) * w);
+    if (Math.abs(h - h0) < 0.01) continue;
+    const ws0 = t.waterSurface[k]!;
+    c.set(k, Math.round(h * 100) / 100, ws0 !== NO_WATER && ws0 > h + 0.05 ? ws0 : NO_WATER);
+  }
+  const nx = -uz * hw, nz = ux * hw;
+  const outline = [e.ax + nx, e.az + nz, e.bx + nx, e.bz + nz, e.bx - nx, e.bz - nz, e.ax - nx, e.az - nz, e.ax + nx, e.az + nz];
+  const p = finish(t, edit, c, [], [], 0, outline);
+  return p ? { ok: true, plan: p } : bad('Le terrain suit déjà cette pente');
+}
+
+/** Géométrie d'un barrage (partagée par le plan et le module d'eau). */
+export interface DamGeometry {
+  /** Échantillons de l'axe (barrière relevée jusqu'à la crête). */
+  band: number[];
+  /** Échantillons voisins côté amont / aval (à 1 à 2,5 cases de l'axe). */
+  upFace: number[];
+  downFace: number[];
+  length: number;
+}
+
+/** Échantillons de l'axe et des deux faces d'un barrage A-B ; `up` = côté amont (+1 : normale (-uz, ux)). */
+export function damGeometry(t: TerrainData, ax: number, az: number, bx: number, bz: number, up: 1 | -1): DamGeometry {
+  const L = Math.hypot(bx - ax, bz - az) || 1;
+  const ux = (bx - ax) / L, uz = (bz - az) / L;
+  const W = t.samplesX, sp = t.spacing;
+  const m = sp * 3;
+  const rect = rectFor(t, Math.min(ax, bx) - m, Math.min(az, bz) - m, Math.max(ax, bx) + m, Math.max(az, bz) + m);
+  const band: number[] = [], upFace: number[] = [], downFace: number[] = [];
+  if (rect) for (let j = rect.j0; j <= rect.j1; j++) for (let i = rect.i0; i <= rect.i1; i++) {
+    const x = t.originX + i * sp - ax, z = t.originZ + j * sp - az;
+    const along = x * ux + z * uz;
+    const n = -x * uz + z * ux;
+    const k = j * W + i;
+    // Axe : bande continue (4-connexe quelle que soit l'orientation), prolongée d'une case aux extrémités.
+    if (Math.abs(n) <= sp * 0.8 && along >= -sp && along <= L + sp) band.push(k);
+    else if (along >= 0 && along <= L && Math.abs(n) <= sp * 2.5) (n * up > 0 ? upFace : downFace).push(k);
+  }
+  return { band, upFace, downFace, length: L };
+}
+
+/**
+ * Barrage en travers d'une vallée : crête = rive la plus basse (ou hauteur voulue au-dessus du fond), axe relevé
+ * jusqu'à la crête, deux parements (murs de quai dos à dos). Refus clairs : trop court / long, en mer, vallée trop
+ * peu profonde (une extrémité ne s'appuie pas sur une rive plus haute).
+ */
+function planDam(t: EditableTerrain, e: Extract<TerrainEdit, { k: 'dam' }>, c: Changes): PlanOutcome {
+  const bad = (message: string): PlanOutcome => ({ ok: false, message });
+  const L = Math.hypot(e.bx - e.ax, e.bz - e.az);
+  const DL = EDIT_LIMITS;
+  if (L < DL.minDamLength) return bad(`Barrage trop court (${DL.minDamLength} m minimum) : tracez-le d'une rive à l'autre`);
+  if (L > DL.maxDamLength) return bad(`Barrage trop long (${DL.maxDamLength} m maximum)`);
+  const ux = (e.bx - e.ax) / L, uz = (e.bz - e.az) / L;
+  // Profil de l'axe (pas de 2 m) : fond, rives, mer.
+  const steps = Math.max(2, Math.ceil(L / 2));
+  let minG = Infinity, sea = false, wetLen = 0;
+  for (let s = 0; s <= steps; s++) {
+    const x = e.ax + (e.bx - e.ax) * (s / steps), z = e.az + (e.bz - e.az) * (s / steps);
+    const i = clamp(Math.round((x - t.originX) / t.spacing), 0, t.samplesX - 1), j = clamp(Math.round((z - t.originZ) / t.spacing), 0, t.samplesZ - 1);
+    const k = j * t.samplesX + i;
+    const wet = wetK(t, k);
+    if (wet && Math.abs(t.waterSurface[k]! - t.waterLevel) < 0.02) sea = true;
+    if (wet && s < steps) wetLen += L / steps;
+    minG = Math.min(minG, t.heights[k]!);
+  }
+  if (sea) return bad('Pas de barrage en mer : posez-le en travers d\'une rivière ou d\'une vallée');
+  // Rives : hauteur aux extrémités (moyenne sur 6 m vers l'extérieur).
+  const endH = (x: number, z: number, dir: number): number => {
+    let s = 0, n = 0;
+    for (let d = 0; d <= 6; d += 2) { s += heightNear(t, x + ux * dir * d, z + uz * dir * d); n++; }
+    return s / n;
+  };
+  const endA = endH(e.ax, e.az, -1), endB = endH(e.bx, e.bz, 1);
+  let crest: number;
+  if (e.h !== undefined) crest = e.h;
+  else {
+    crest = Math.min(endA, endB) - 0.3;
+    if (e.hh !== undefined) crest = Math.min(crest, minG + e.hh);
+    crest = Math.min(crest, minG + DL.maxDamHeight);
+    crest = Math.round(crest * 100) / 100;
+  }
+  if (crest - minG < DL.minDamHeight) return bad(`Vallée trop peu profonde ici : chaque extrémité doit s'appuyer sur une rive au moins ${DL.minDamHeight} m plus haute que le fond`);
+  // Côté amont : surface de l'eau (sinon terrain) la plus haute à 2,5 cases de part et d'autre de l'axe.
+  let up: 1 | -1;
+  if (e.up !== undefined) up = e.up;
+  else {
+    let sp1 = 0, sn = 0, n = 0;
+    for (let s = 1; s < 10; s++) {
+      const x = e.ax + (e.bx - e.ax) * (s / 10), z = e.az + (e.bz - e.az) * (s / 10);
+      for (const side of [1, -1] as const) {
+        const px = x - uz * side * t.spacing * 2.5, pz = z + ux * side * t.spacing * 2.5;
+        const i = clamp(Math.round((px - t.originX) / t.spacing), 0, t.samplesX - 1), j = clamp(Math.round((pz - t.originZ) / t.spacing), 0, t.samplesZ - 1);
+        const k = j * t.samplesX + i;
+        const v = wetK(t, k) ? t.waterSurface[k]! : t.heights[k]!;
+        if (side === 1) sp1 += v; else sn += v;
+      }
+      n++;
+    }
+    up = sp1 / n >= sn / n ? 1 : -1;
+  }
+  const g = damGeometry(t, e.ax, e.az, e.bx, e.bz, up);
+  for (const k of g.band) {
+    if (t.heights[k]! < crest) c.set(k, crest, NO_WATER);
+    else if (wetK(t, k)) c.set(k, t.heights[k]!, NO_WATER);
+  }
+  // Débit de la rivière barrée : largeur mouillée de l'axe × DAM_FLOW_PER_M (0 dans une vallée sèche).
+  const q = e.q ?? Math.round(clamp(wetLen * DAM_FLOW_PER_M, 0, DAM_FLOW_MAX));
+  const edit: TerrainEdit = { ...e, h: crest, up, q };
+  // Parements : murs de quai dos à dos (face amont, face aval), plateformes jointives sur la crête.
+  const nx = -uz * up, nz = ux * up;
+  const off = DAM_WALL_OFFSET;
+  const bottom = Math.round((minG - 1.5) * 100) / 100;
+  const walls: QuayWall[] = [
+    { ax: e.ax + nx * off, az: e.az + nz * off, bx: e.bx + nx * off, bz: e.bz + nz * off, top: crest, bottom, nx, nz },
+    { ax: e.ax - nx * off, az: e.az - nz * off, bx: e.bx - nx * off, bz: e.bz - nz * off, top: crest, bottom, nx: -nx, nz: -nz },
+  ];
+  // Béton : hauteur de l'ouvrage le long de l'axe × épaisseur moyenne.
+  let area = 0;
+  for (let s = 0; s < steps; s++) {
+    const x = e.ax + (e.bx - e.ax) * ((s + 0.5) / steps), z = e.az + (e.bz - e.az) * ((s + 0.5) / steps);
+    area += Math.max(0, crest - heightNear(t, x, z)) * (L / steps);
+  }
+  const hw = off + 2.8;
+  const outline = [e.ax + nx * hw, e.az + nz * hw, e.bx + nx * hw, e.bz + nz * hw, e.bx - nx * hw, e.bz - nz * hw, e.ax - nx * hw, e.az - nz * hw, e.ax + nx * hw, e.az + nz * hw];
+  const p = finish(t, edit, c, [], walls, 0, outline);
+  if (!p) return bad('Rien à construire ici');
+  p.wallLength = Math.round(L);
+  p.cost = Math.round(area * DAM_THICKNESS * EDIT_COSTS.damPerM3);
+  return { ok: true, plan: p };
 }
 
 /** Applique un plan : hauteurs (une ou plusieurs copies : naturelles, nivelées), surface d'eau, forêt. */

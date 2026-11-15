@@ -10,6 +10,7 @@ import type { WorldMirror } from '../client/tools/mirror';
 import type { CameraController } from '../input/camera';
 import { terrainBounds } from '../shared/terrain-gen';
 import { $ } from './dom';
+import { onPaletteChange, palette } from '../render/palette';
 
 const NO_WATER = -10000;
 
@@ -42,6 +43,7 @@ export class Minimap {
 
   constructor(private d: MinimapDeps) {
     d.mirror.onChange(() => { this.dirty = true; });
+    onPaletteChange(() => this.terrainChanged()); // couleurs de la palette (option « Couleurs »)
     const go = (e: PointerEvent): void => {
       const r = this.base.getBoundingClientRect();
       const p = this.toWorld((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
@@ -148,6 +150,9 @@ export class Minimap {
     }
     const span = Math.max(1, hmax - Math.max(hmin, t.waterLevel));
     const cell = (b.maxX - b.minX) / W;
+    // Couleurs de la palette courante (src/render/palette.ts).
+    const mp = palette().minimap;
+    const { plain: pl, hill: hl, beach: bc, forest: fo, waterShallow: ws0, waterDeep: wd } = mp;
     for (let j = 0; j < H; j++) {
       for (let i = 0; i < W; i++) {
         const k = j * W + i;
@@ -161,17 +166,17 @@ export class Minimap {
         let r: number; let gg: number; let bb: number;
         if (wsurf > NO_WATER / 2 && wsurf > y + 0.05) {
           const depth = Math.min(1, (wsurf - y) / 12);
-          r = 46 - depth * 22; gg = 104 - depth * 36; bb = 150 - depth * 30;
+          r = ws0[0] + depth * (wd[0] - ws0[0]); gg = ws0[1] + depth * (wd[1] - ws0[1]); bb = ws0[2] + depth * (wd[2] - ws0[2]);
         } else {
           const e = Math.max(0, Math.min(1, (y - t.waterLevel) / span));
           // Plaine verte → collines olive → roche claire.
-          r = 92 + e * 90; gg = 128 + e * 40; bb = 72 + e * 70;
-          if (y - t.waterLevel < 1.2) { r = 196; gg = 184; bb = 140; } // plage
+          r = pl[0] + e * (hl[0] - pl[0]); gg = pl[1] + e * (hl[1] - pl[1]); bb = pl[2] + e * (hl[2] - pl[2]);
+          if (y - t.waterLevel < 1.2) { r = bc[0]; gg = bc[1]; bb = bc[2]; } // plage
           const f = forest ? forest[s]! / 255 : 0;
-          if (f > 0.15) { const a = Math.min(0.75, f); r = r * (1 - a) + 38 * a; gg = gg * (1 - a) + 84 * a; bb = bb * (1 - a) + 44 * a; }
+          if (f > 0.15) { const a = Math.min(mp.forestMax, f); r = r * (1 - a) + fo[0] * a; gg = gg * (1 - a) + fo[1] * a; bb = bb * (1 - a) + fo[2] * a; }
           // Ombrage (lumière du nord-ouest).
           const yl = hs[j * W + Math.max(0, i - 1)]!; const yu = hs[Math.max(0, j - 1) * W + i]!;
-          const shade = Math.max(-0.35, Math.min(0.35, ((y - yl) + (y - yu)) / (cell * 0.9)));
+          const shade = Math.max(-mp.shade, Math.min(mp.shade, ((y - yl) + (y - yu)) / (cell * 0.9)));
           r *= 1 + shade; gg *= 1 + shade; bb *= 1 + shade;
         }
         const o = k * 4;

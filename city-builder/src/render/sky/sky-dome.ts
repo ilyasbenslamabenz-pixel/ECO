@@ -141,6 +141,8 @@ uniform vec3 uMoonDir;
 uniform float uMoonPhase;
 uniform vec3 uFogColor;
 uniform float uHorizonFog;
+// Palette : teinte du ciel vers le zénith (bleu plus profond), neutre (1, 1, 1) dans l'ancien rendu.
+uniform vec3 uZenithTint;
 uniform vec3 uNightTint;
 // Météo (phase 2C) : couverture nuageuse, assombrissement pluvieux, dérive des nuages, éclairage des nuages, éclair.
 uniform float uCloud;
@@ -176,6 +178,7 @@ void main() {
   vec3 col = vec3(0.0);
   if (uDayW > 0.001) col += texture2D(tDay, equirect(dd, uRotDay)).rgb * uDayW;
   if (uDuskW > 0.001) col += texture2D(tDusk, equirect(dd, uRotDusk)).rgb * uDuskW;
+  col *= mix(vec3(1.0), uZenithTint, smoothstep(0.02, 0.6, d.y) * uDayW);
   // Nuit : dégradé bleu nuit + étoiles + lune.
   if (uNight > 0.001) {
     float up = clamp(d.y, 0.0, 1.0);
@@ -270,6 +273,7 @@ export function createSkyDome(day: HdriSource, dusk: HdriSource): { mesh: THREE.
     uMoonPhase: { value: 0.5 },
     uFogColor: { value: new THREE.Color(0.7, 0.75, 0.8) },
     uHorizonFog: { value: 0.65 },
+    uZenithTint: { value: new THREE.Color(1, 1, 1) },
     uNightTint: { value: new THREE.Color(0.012, 0.018, 0.04) },
     uCloud: { value: 0 },
     uCloudDark: { value: 0 },

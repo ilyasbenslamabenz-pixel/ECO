@@ -127,4 +127,6 @@ export interface TerrainPatch extends SampleRect {
   quays?: number[];
   /** Zones où le rendu retire la végétation naturelle : disques (x, z, rayon) à plat. */
   cleared?: number[];
+  /** Seule la surface de l'eau a changé (remplissage d'une retenue) : hauteurs identiques, pas de remaillage. */
+  waterOnly?: boolean;
 }

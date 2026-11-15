@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { loadHdrTexture } from '../gzip-assets';
 import type { AssetCatalog } from '../../shared/catalog';
 import { createSkyDome, prepareHdri, type HdriSource } from './sky-dome';
+import { onPaletteChange, palette, setRGB, type Palette } from '../palette';
 
 export interface SkyOptions {
   renderer: THREE.WebGLRenderer;
@@ -38,11 +39,11 @@ const tmpColor = new THREE.Color();
 const V_X = new THREE.Vector3(1, 0, 0);
 const V_Y = new THREE.Vector3(0, 1, 0);
 
-/** Couleur approchée de la lumière solaire selon l'élévation (rad). */
-export function sunColorForElevation(el: number, out: THREE.Color): THREE.Color {
+/** Couleur approchée de la lumière solaire selon l'élévation (rad), couleurs haute / rasante de la palette. */
+export function sunColorForElevation(el: number, out: THREE.Color, p: Palette = palette()): THREE.Color {
   const t = THREE.MathUtils.clamp(el / THREE.MathUtils.degToRad(35), 0, 1);
-  const low = tmpColor.setRGB(1.0, 0.48, 0.22);
-  out.setRGB(1.0, 0.95, 0.88).lerp(low, Math.pow(1 - t, 2.2));
+  const low = setRGB(tmpColor, p.sun.colorLow);
+  setRGB(out, p.sun.colorHigh).lerp(low, Math.pow(1 - t, 2.2));
   return out;
 }
 
@@ -107,6 +108,7 @@ export class SkySystem {
   private envHour = -100;
   private readonly fog: THREE.FogExp2;
   private readonly fogColor = new THREE.Color();
+  private readonly fogColor2 = new THREE.Color();
   /** Éclairement ambiant approché du ciel et du sol (linéaire). */
   readonly ambientSky = new THREE.Color();
   readonly ambientGround = new THREE.Color();
@@ -125,10 +127,12 @@ export class SkySystem {
   private day: HdriSource;
   private dusk: HdriSource;
   private elapsed = 0;
-  /** Exposition de base (multipliée selon l'heure). */
-  baseExposure = 0.85;
-  /** Densité de brouillard de jour (exp²). */
-  fogDensity = 0.00022;
+  /** Exposition de base (multipliée selon l'heure) : palette (src/render/palette.ts). */
+  baseExposure = palette().exposure;
+  /** Densité de brouillard de jour (exp²) : palette. */
+  fogDensity = palette().fog.density;
+  private pal: Palette = palette();
+  private readonly offPalette: () => void;
   private shadowHalf = 220;
 
   private constructor(private readonly o: SkyOptions, day: HdriSource, dusk: HdriSource) {
@@ -143,7 +147,9 @@ export class SkySystem {
     o.scene.background = null;
     // Copie du dôme pour la carte d'environnement (sans disque solaire).
     const envDome = new THREE.Mesh(mesh.geometry, (mesh.material as THREE.ShaderMaterial).clone());
-    (envDome.material as THREE.ShaderMaterial).uniforms = { ...uniforms, uSunDisc: { value: 0 }, uHorizonFog: { value: 0.3 } };
+    // Carte d'environnement : ciel sans disque solaire, brume d'horizon réduite, teinte du zénith neutre (l'éclairage
+    // ambiant garde sa couleur ; seul le ciel affiché est approfondi par la palette).
+    (envDome.material as THREE.ShaderMaterial).uniforms = { ...uniforms, uSunDisc: { value: 0 }, uHorizonFog: { value: 0.3 }, uZenithTint: { value: new THREE.Color(1, 1, 1) } };
     envDome.scale.setScalar(100);
     this.envScene.add(envDome);
     this.pmrem = new THREE.PMREMGenerator(o.renderer);
@@ -157,8 +163,20 @@ export class SkySystem {
     sun.shadow.normalBias = 0.35;
     sun.shadow.radius = 2;
     if (!sun.target.parent) o.scene.add(sun.target);
-    this.setTimeOfDay(this.hour);
+    this.offPalette = onPaletteChange((p) => this.applyPalette(p));
+    this.applyPalette(palette());
     activeSky = this;
+  }
+
+  /** Applique une palette (option « Couleurs ») : exposition, brouillard, ciel ; environnement recalculé. */
+  applyPalette(p: Palette): void {
+    this.pal = p;
+    this.baseExposure = p.exposure;
+    this.fogDensity = p.fog.density;
+    setRGB(this.uniforms['uZenithTint']!.value as THREE.Color, p.sky.zenithTint);
+    this.uniforms['uHorizonFog']!.value = p.sky.horizonFog;
+    this.envWeatherKey = '';
+    this.setTimeOfDay(this.hour);
   }
 
   /** Jour de l'année astronomique 0..364 (course du soleil selon la saison). */
@@ -220,7 +238,8 @@ export class SkySystem {
     const simAz = Math.atan2(s.direction.z, s.direction.x);
     u['uRotDay']!.value = simAz - this.day.sunAzimuth;
     u['uRotDusk']!.value = simAz - this.dusk.sunAzimuth;
-    const sunCol = sunColorForElevation(s.elevation, u['uSunColor']!.value as THREE.Color);
+    const pal = this.pal;
+    const sunCol = sunColorForElevation(s.elevation, u['uSunColor']!.value as THREE.Color, pal);
     u['uSunDisc']!.value = THREE.MathUtils.smoothstep(elDeg, -1.5, 1.0);
     // Lune : opposée au soleil, inclinée, phase fixe (gibbeuse).
     this.moonDir.copy(s.direction).multiplyScalar(-1);
@@ -234,7 +253,7 @@ export class SkySystem {
     const sunUp = THREE.MathUtils.smoothstep(elDeg, -1, 8);
     if (elDeg > -2) {
       sun.color.copy(sunCol);
-      sun.intensity = 3.1 * sunUp + 0.02;
+      sun.intensity = pal.sun.intensity * sunUp + 0.02;
       this.lightDir.copy(s.direction);
     } else {
       sun.color.setRGB(0.55, 0.65, 0.95);
@@ -250,19 +269,26 @@ export class SkySystem {
     this.sunBase = sun.intensity;
     // Hémisphère : ciel / sol selon l'heure.
     const hemi = this.o.hemi;
-    hemi.color.setRGB(0.62 * dayW + 0.75 * duskW + 0.12 * night, 0.72 * dayW + 0.55 * duskW + 0.16 * night, 0.9 * dayW + 0.5 * duskW + 0.3 * night);
+    const hs = pal.hemi.skyDay;
+    hemi.color.setRGB(hs[0] * dayW + 0.75 * duskW + 0.12 * night, hs[1] * dayW + 0.55 * duskW + 0.16 * night, hs[2] * dayW + 0.5 * duskW + 0.3 * night);
     if (overcast > 0) {
       const l = (hemi.color.r + hemi.color.g + hemi.color.b) / 3;
       hemi.color.lerp(tmpColor.setRGB(l * 0.95, l * 1.0, l * 1.08), overcast * 0.8);
     }
-    hemi.groundColor.setRGB(0.32, 0.28, 0.22).multiplyScalar(0.2 + 0.8 * dayW + 0.3 * duskW);
-    hemi.intensity = (0.25 + 0.2 * dayW) * (1 + 0.9 * overcast * (dayW + duskW * 0.5)) * (1 - 0.15 * precip);
+    setRGB(hemi.groundColor, pal.hemi.ground).multiplyScalar(0.2 + 0.8 * dayW + 0.3 * duskW);
+    hemi.intensity = (0.25 + 0.2 * dayW) * (1 + 0.9 * overcast * (dayW + duskW * 0.5)) * (1 - 0.15 * precip) * pal.hemi.intensity;
     this.hemiBase = hemi.intensity;
     // Brouillard : couleur de l'horizon du ciel affiché.
     const fc = this.fogColor.set(0, 0, 0)
       .add(tmpColor.copy(this.day.horizon).multiplyScalar(dayW))
       .add(tmpColor.copy(this.dusk.horizon).multiplyScalar(duskW * (1 - night * 0.85)))
       .add(tmpColor.setRGB(0.02, 0.03, 0.06).multiplyScalar(night));
+    // Perspective aérienne (palette) : une part du bleu du zénith dans la brume, de jour (le lointain bleuit au
+    // lieu de blanchir).
+    if (pal.fog.blueMix > 0) {
+      const bl = tmpColor.copy(this.day.zenith).lerp(this.day.horizon, 0.35).multiplyScalar(dayW);
+      fc.lerp(bl.add(this.fogColor2.copy(fc).multiplyScalar(1 - dayW)), pal.fog.blueMix * dayW);
+    }
     // Luminance bornée : un brouillard trop clair délave le paysage.
     let lum = fc.r * 0.2126 + fc.g * 0.7152 + fc.b * 0.0722;
     // Temps gris : brouillard désaturé, plus sombre sous la pluie, laiteux dans le brouillard.
@@ -272,7 +298,7 @@ export class SkySystem {
       fc.lerp(tmpColor.setRGB(g * 0.97, g * 1.0, g * 1.04), grey);
       lum = fc.r * 0.2126 + fc.g * 0.7152 + fc.b * 0.0722;
     }
-    if (lum > 0.9) fc.multiplyScalar(0.9 / lum);
+    if (lum > pal.fog.maxLum) fc.multiplyScalar(pal.fog.maxLum / lum);
     this.fog.color.copy(fc);
     (u['uFogColor']!.value as THREE.Color).copy(fc);
     // Éclairement ambiant approché (ciel / sol) pour les shaders sans IBL (imposteurs d'arbres).
@@ -404,6 +430,7 @@ export class SkySystem {
   strike(power = 1): void { this.flash = power; }
 
   dispose(): void {
+    this.offPalette();
     if (activeSky === this) activeSky = null;
     this.envRT?.dispose();
     this.pmrem.dispose();

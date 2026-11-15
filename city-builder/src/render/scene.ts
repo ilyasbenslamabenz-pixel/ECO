@@ -3,6 +3,7 @@
  * Propriétaire : agent intégration (voir AGENT_TASKS.md).
  */
 import * as THREE from 'three';
+import { applyToneMapping, onPaletteChange } from './palette';
 
 export interface RenderContext {
   renderer: THREE.WebGLRenderer;
@@ -42,7 +43,10 @@ export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderCo
   const renderer = new THREE.WebGLRenderer({ canvas, antialias, powerPreference: 'high-performance', preserveDrawingBuffer: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  // Tone mapping ACES ; palette « vives » : ACES précédé de l'étalonnage final intégré au shader (src/render/palette.ts,
+  // aucun passage plein écran). L'exposition réelle est réglée par le ciel (SkySystem.baseExposure).
+  applyToneMapping(renderer);
+  onPaletteChange((p) => applyToneMapping(renderer, p));
   renderer.toneMappingExposure = 0.8;
   renderer.shadowMap.enabled = true;
   // PCFSoftShadowMap est retiré de three 0.187 (remplacé à l'exécution par PCFShadowMap, avec avertissement) :

@@ -45,6 +45,8 @@ export class PluginHost {
   private initialized = false;
   /** Service publié par un module (`ctx.provide`), ou undefined. */
   service<T>(name: string): T | undefined { return this.services.get(name) as T | undefined; }
+  /** Service publié par le cœur de la simulation (ex. `hydro` : barrages), lisible par les modules via `ctx.use`. */
+  provideCore(name: string, api: unknown): void { this.services.set(name, api); }
   private readonly notified = new Set<string>();
   /** Erreurs attrapées (une entrée par module + crochet, compteur d'occurrences). */
   readonly errors: PluginErrorRecord[] = [];

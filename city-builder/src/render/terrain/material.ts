@@ -13,6 +13,7 @@
  */
 import * as THREE from 'three';
 import { ab } from '../ab';
+import { onPaletteChange, palette, setRGB, type Palette } from '../palette';
 import { TILE_SIZE } from '../../shared/constants';
 import type { AssetCatalog, TextureSet } from '../../shared/catalog';
 
@@ -165,6 +166,16 @@ varying vec3 vTWorld;
 varying vec3 vTNormal;
 uniform vec3 uGrassDry;
 uniform vec3 uGrassLush;
+// Palette (src/render/palette.ts) : herbe en couleur absolue (uGrassRemap), herbe des pentes, roche, terre,
+// sable, gravier, taches de terre. Valeurs neutres = ancien rendu.
+uniform float uGrassRemap;
+uniform vec3 uGrassSlope;
+uniform float uRockDesat;
+uniform vec3 uRockTint;
+uniform vec3 uDirtTint;
+uniform vec3 uSandTint;
+uniform vec3 uGravelTint;
+uniform float uDirtPatch;
 vec3 tAlbedo;
 vec3 tWorldN;
 float tRough;
@@ -202,7 +213,7 @@ const FRAG_MAIN = /* glsl */ `
     wRock = max(wRock, smoothstep(0.30, 0.48, slopeF + (mac2.a - 0.5) * 0.12));
     float wGrass = max(0.0, 1.0 - wDirt - wRock - wSand - wGrav);
     // Taches de terre et d'herbe sèche (macro) pour casser l'uniformité.
-    float patchD = smoothstep(0.66, 0.86, mac2.r * 0.7 + mac.a * 0.3) * 0.35 * wGrass;
+    float patchD = smoothstep(0.66, 0.86, mac2.r * 0.7 + mac.a * 0.3) * uDirtPatch * wGrass;
     wDirt += patchD; wGrass -= patchD;
     float w[5];
     w[0] = wGrass; w[1] = wDirt; w[2] = wRock; w[3] = wSand; w[4] = wGrav;
@@ -264,9 +275,15 @@ const FRAG_MAIN = /* glsl */ `
     // sol forestier assombri. Indispensable de loin, où la moyenne des textures domine.
     float moist = vEnv.x;
     float forestD = vEnv.y;
-    albs[0] *= mix(uGrassDry, uGrassLush, smoothstep(0.25, 0.8, moist + (mac.g - 0.5) * 0.35)) * mix(1.0, 0.94, far);
+    vec3 gTint = mix(uGrassDry, uGrassLush, smoothstep(0.25, 0.8, moist + (mac.g - 0.5) * 0.35));
+    // Palette vive : couleur absolue (texture = détail de luminance), plus sèche sur les pentes.
+    vec3 gAbs = mix(gTint, uGrassSlope, smoothstep(0.08, 0.3, slopeF)) * (dot(albs[0], vec3(0.2126, 0.7152, 0.0722)) / 0.238);
+    albs[0] = mix(albs[0] * gTint, gAbs, uGrassRemap) * mix(1.0, 0.94, far);
     float lr = dot(albs[2], vec3(0.299, 0.587, 0.114));
-    albs[2] = mix(albs[2], vec3(lr) * vec3(1.02, 0.99, 0.94), 0.78);
+    albs[2] = mix(albs[2], vec3(lr) * uRockTint, uRockDesat);
+    albs[1] *= uDirtTint;
+    albs[3] *= uSandTint;
+    albs[4] *= uGravelTint;
     // Sous-bois : mousse et végétation basse (vert sombre) plutôt que terre brune, pour que les massifs
     // forestiers se lisent comme une canopée continue vus de haut.
     albs[1] = mix(albs[1], albs[1] * vec3(0.52, 0.70, 0.40) + vec3(0.02, 0.05, 0.015), smoothstep(0.15, 0.7, forestD));
@@ -317,9 +334,34 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
     uGridFocus: { value: new THREE.Vector3(0, 0, 0) },
     uGrassDry: { value: new THREE.Color(0.9, 0.9, 0.64) },
     uGrassLush: { value: new THREE.Color(0.66, 0.88, 0.5) },
+    uGrassRemap: { value: 0 },
+    uGrassSlope: { value: new THREE.Color(0.9, 0.9, 0.64) },
+    uRockDesat: { value: 0.78 },
+    uRockTint: { value: new THREE.Color(1.02, 0.99, 0.94) },
+    uDirtTint: { value: new THREE.Color(1, 1, 1) },
+    uSandTint: { value: new THREE.Color(1, 1, 1) },
+    uGravelTint: { value: new THREE.Color(1, 1, 1) },
+    uDirtPatch: { value: 0.35 },
   };
+  // Couleurs de la palette courante (src/render/palette.ts), suivies quand l'option « Couleurs » change.
+  const applyPalette = (p: Palette): void => {
+    const t = p.terrain;
+    setRGB(uniforms.uGrassDry.value, t.grassDry);
+    setRGB(uniforms.uGrassLush.value, t.grassLush);
+    setRGB(uniforms.uGrassSlope.value, t.grassSlope);
+    uniforms.uGrassRemap.value = t.grassRemap;
+    uniforms.uRockDesat.value = t.rockDesat;
+    setRGB(uniforms.uRockTint.value, t.rockTint);
+    setRGB(uniforms.uDirtTint.value, t.dirtTint);
+    setRGB(uniforms.uSandTint.value, t.sandTint);
+    setRGB(uniforms.uGravelTint.value, t.gravelTint);
+    uniforms.uDirtPatch.value = t.dirtPatch;
+    uniforms.uMacroStrength.value = t.macroStrength;
+  };
+  applyPalette(palette());
+  onPaletteChange(applyPalette);
   const material = new THREE.MeshStandardMaterial({ name: 'terrain_pbr', roughness: 1, metalness: 0 });
-  material.customProgramCacheKey = (): string => `aube-terrain-v4-${ab.terrainOpt ? 1 : 0}`;
+  material.customProgramCacheKey = (): string => `aube-terrain-v5-${ab.terrainOpt ? 1 : 0}`;
   material.onBeforeCompile = (shader): void => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader

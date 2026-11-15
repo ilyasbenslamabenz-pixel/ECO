@@ -32,6 +32,8 @@ const overlap = (a, b) => !!a && !!b && a.left < b.right && a.right > b.left && 
 try {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1.5 });
   const page = await ctx.newPage();
+  // Rendu logiciel (SwiftShader) sur une machine partagée : délais larges.
+  page.setDefaultTimeout(240000);
   const errors = collectErrors(page);
   const render = (n = 2, dt = 1 / 30) => page.evaluate(([k, d]) => window.__aube.renderNow(k, d), [n, dt]);
   const shot = async (name) => {
@@ -74,8 +76,6 @@ try {
         if (bad) check(false, `étiquette du curseur sur la barre (curseur ${Math.round(x)}, ${Math.round(y)} : étiquette ${JSON.stringify(tag)})`);
       }
     }
-    const tagNow = await rect('#cursor-tag');
-    check(!!tagNow, `étiquette du curseur affichée près de la barre (${tagNow ? `${Math.round(tagNow.top)}–${Math.round(tagNow.bottom)}` : 'masquée'})`);
     check(!worst, 'l’étiquette ne chevauche jamais #tool-options ni #toolbar (12 positions juste au-dessus de la barre)');
     // Curseur juste au-dessus de la barre, au droit de « Terminer » : le bouton reste visible et au premier plan.
     const fin = await page.evaluate(() => { const b = [...document.querySelectorAll('#tool-actions button')].find((x) => x.textContent?.trim() === 'Terminer'); if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, top: r.top }; });
@@ -85,6 +85,7 @@ try {
       await page.waitForTimeout(250);
       await shot('curseur-barre');
       const tag = await rect('#cursor-tag');
+      check(!!tag, `étiquette du curseur affichée au droit de « Terminer » (${tag ? `${Math.round(tag.top)}–${Math.round(tag.bottom)} px` : 'masquée'})`);
       const finRect = { left: fin.x - fin.w / 2, right: fin.x + fin.w / 2, top: fin.y - fin.h / 2, bottom: fin.y + fin.h / 2 };
       check(!overlap(tag, finRect), `étiquette au-dessus de « Terminer » sans le recouvrir (étiquette bas ${tag ? Math.round(tag.bottom) : '—'} px, bouton haut ${Math.round(finRect.top)} px)`);
       const front = await page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return e?.closest('button')?.textContent?.trim() ?? e?.id ?? e?.tagName; }, [fin.x, fin.y]);

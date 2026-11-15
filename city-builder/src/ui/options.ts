@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three';
 import { deviceProfile } from '../render/device-profile';
+import { setColorMode } from '../render/palette';
 
 export interface GraphicsOptions {
   /** « auto » : mode allégé sur téléphone / faible mémoire (src/render/device-profile.ts), sinon moyenne. */
@@ -38,9 +39,11 @@ export interface GraphicsOptions {
   pointer: 'auto' | 'touchpad' | 'mouse';
   /** Navigation : glissement de la carte quand le curseur touche le bord de la fenêtre (désactivé par défaut). */
   edgeScroll: boolean;
+  /** Couleurs du rendu : vives (direction artistique actuelle, par défaut) ou naturelles (ancien rendu), src/render/palette.ts. */
+  colors: 'vives' | 'naturelles';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal', pointer: 'auto', edgeScroll: false };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal', pointer: 'auto', edgeScroll: false, colors: 'vives' };
 
 /** Applique le thème de l'interface (attribut lu par les feuilles de style). */
 export function applyTheme(t: GraphicsOptions['theme']): void {
@@ -63,6 +66,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     events: o?.events === 'normal' || o?.events === 'rares' || o?.events === 'off' ? o.events : DEFAULT_OPTIONS.events,
     pointer: o?.pointer === 'auto' || o?.pointer === 'touchpad' || o?.pointer === 'mouse' ? o.pointer : DEFAULT_OPTIONS.pointer,
     edgeScroll: typeof o?.edgeScroll === 'boolean' ? o.edgeScroll : DEFAULT_OPTIONS.edgeScroll,
+    colors: o?.colors === 'vives' || o?.colors === 'naturelles' ? o.colors : DEFAULT_OPTIONS.colors,
   };
 }
 
@@ -155,6 +159,7 @@ export function desktopDynamic(quality: GraphicsOptions['quality'], ratio: numbe
 
 export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): void {
   applyTheme(o.theme);
+  setColorMode(o.colors);
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const prof = deviceProfile(o.quality);
   // Basse : 1 pixel par point au plus (0,75 rendait l'image trop floue) ; la résolution adaptative remonte au-delà si l'appareil suit.

@@ -1199,3 +1199,5 @@ body[data-tuto-cat="waste"] #family-pop [data-family-cat="waste"] { box-shadow: 
 @media (pointer: coarse) { .notif-filters button, .notif-head .chip { min-height: 44px; } }
 #info-rows dt, #info-rows dd { min-width: 0; overflow-wrap: anywhere; }
 #info-why:empty { display: none; }
+/* Bureau : le menu Cartes s'ouvre à droite de la barre latérale (il passait dessous et ses boutons n'étaient plus cliquables). */
+@media (min-width: 761px) and (min-height: 501px) { #layers-pop { left: calc(max(10px, var(--safe-l)) + 106px); } }
