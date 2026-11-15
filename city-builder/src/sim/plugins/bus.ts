@@ -8,7 +8,8 @@
  *    `addStop`, `moveStop`, `removeStop`, `renameStop`, `stop` (fiche), `calque` (carte de couverture).
  * Sans ligne : aucun delta, aucune section de sauvegarde, aucun effet sur la simulation (seule l'aide de croissance
  * peut suggérer d'en tracer quand les routes saturent).
- * TypeScript pur : AUCUN import de three ni du DOM.
+ * TypeScript pur : AUCUN import { PALIERS_SERVICE, type PaliersService } from '../../shared/milestones';
+import de three ni du DOM.
  */
 import { PLUGIN_TRANSFER_KEY } from '../../shared/protocol';
 import { BUS_SAVE_VERSION, migrateBus } from '../save-sections/bus';
@@ -68,7 +69,12 @@ export function createBusPlugin(): SimPlugin & { readonly system: BusSystem } {
           const pts = Array.isArray(p.stops) ? (p.stops as unknown[]).filter((s): s is { x: number; z: number } => isObj(s) && num(s.x) !== undefined && num(s.z) !== undefined) : [];
           return out(sys.preview(ctx, pts));
         }
-        case 'createLine': return out(sys.createLine(ctx, p));
+        case 'createLine': {
+          // Déblocages progressifs (module `paliers`) : nombre de lignes autorisé selon les paliers franchis.
+          const lock = ctx.use<PaliersService>(PALIERS_SERVICE)?.busLineLock(sys.lineCount + 1);
+          if (lock && p['dryRun'] !== true) return { ok: false, code: 'INVALID_ARGS', message: lock };
+          return out(sys.createLine(ctx, p));
+        }
         case 'updateLine': return out(sys.updateLine(ctx, p));
         case 'deleteLine': return out(sys.deleteLine(ctx, num(p.id) ?? -1));
         case 'restoreLine': return out(sys.restoreLine(ctx, p.line));

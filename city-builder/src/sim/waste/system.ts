@@ -280,7 +280,10 @@ export class WasteSystem {
     const incs = [...this.facilities.values()].filter((f) => f.kind === 'incinerateur' && f.connected);
     const lands = [...this.facilities.values()].filter((f) => f.kind === 'decharge' && f.connected);
     const fleet = depots.reduce((s, f) => s + f.capacity, 0);
-    const active = activeTrucksFor(fleet, this.settings.funding);
+    // Grève des éboueurs (module `evenements`) : une part seulement des camions sort (au moins un, la tournée continue).
+    const strike = governanceModifiers((n) => ctx.use(n)).wasteCollectionFactor;
+    const funded = activeTrucksFor(fleet, this.settings.funding);
+    const active = strike < 1 && funded > 0 ? Math.max(1, Math.floor(funded * strike)) : funded;
     this.blocked = !this.facilities.size || !depots.length ? 'Aucun dépôt de camions-bennes relié à la route'
       : !incs.length && !lands.length ? 'Aucune filière de traitement (incinérateur ou décharge) reliée à la route'
         : active === 0 ? 'Financement insuffisant : aucun camion en service' : null;

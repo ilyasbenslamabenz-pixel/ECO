@@ -25,11 +25,22 @@ export interface Modifiers {
   waterDemandFactor: number;
   /** Bonus de demande par secteur de zonage (R, C, I, B). */
   demand: { R: number; C: number; I: number; B: number };
+  /** Événements (module `evenements`, docs/PROGRESSION.md) : risque de départ de feu (×). */
+  fireRiskFactor: number;
+  /** Événements : probabilité de tomber malade (×). */
+  sicknessFactor: number;
+  /** Événements : part des camions-bennes en service (×, grève des éboueurs). */
+  wasteCollectionFactor: number;
+  /** Événements : arrivées de nouveaux habitants (×). */
+  immigrationFactor: number;
+  /** Événements : capacité du raccordement électrique au réseau voisin (×, panne du réseau voisin). */
+  powerImportFactor: number;
 }
 
 export const NEUTRAL_MODIFIERS: Modifiers = {
   happiness: 0, pollutionFactor: 1, powerDemandFactor: 1, renewableFactor: 1, roadUpkeepFactor: 1, buildingUpkeepFactor: 1,
   recyclingFactor: 1, waterDemandFactor: 1, demand: { R: 0, C: 0, I: 0, B: 0 },
+  fireRiskFactor: 1, sicknessFactor: 1, wasteCollectionFactor: 1, immigrationFactor: 1, powerImportFactor: 1,
 };
 
 export type ModifierDelta = Partial<Omit<Modifiers, 'demand'>> & { demand?: Partial<Modifiers['demand']> };
@@ -76,12 +87,15 @@ export const RESEARCH: readonly ResearchDef[] = [
   { id: 'ville_numerique', nameFr: 'Ville numérique', descFr: 'Services en ligne et télétravail : demande de bureaux en hausse, +1 point de bonheur.', cost: 520, requires: ['urbanisme_durable', 'isolation'], effect: { demand: { B: 0.12 }, happiness: 1 } },
 ];
 
+const MULT_KEYS = ['pollutionFactor', 'powerDemandFactor', 'renewableFactor', 'roadUpkeepFactor', 'buildingUpkeepFactor', 'recyclingFactor', 'waterDemandFactor',
+  'fireRiskFactor', 'sicknessFactor', 'wasteCollectionFactor', 'immigrationFactor', 'powerImportFactor'] as const;
+
 /** Combine des effets (additifs pour bonheur et demande, multiplicatifs pour les facteurs). */
 export function combine(deltas: readonly ModifierDelta[]): Modifiers {
   const m: Modifiers = { ...NEUTRAL_MODIFIERS, demand: { ...NEUTRAL_MODIFIERS.demand } };
   for (const d of deltas) {
     if (d.happiness) m.happiness += d.happiness;
-    for (const k of ['pollutionFactor', 'powerDemandFactor', 'renewableFactor', 'roadUpkeepFactor', 'buildingUpkeepFactor', 'recyclingFactor', 'waterDemandFactor'] as const) if (d[k] !== undefined) m[k] *= d[k]!;
+    for (const k of MULT_KEYS) if (d[k] !== undefined) m[k] *= d[k]!;
     if (d.demand) for (const s of ['R', 'C', 'I', 'B'] as const) m.demand[s] += d.demand[s] ?? 0;
   }
   return m;
@@ -99,10 +113,12 @@ export const RESEARCH_BUDGETS = [0, 5000, 15000, 30000] as const;
 export interface GovernanceService { modifiers(): ModifierDelta }
 export const POLICY_SERVICE = 'politiques';
 export const RESEARCH_SERVICE = 'recherche';
+/** Effets temporaires des événements (canicule, épidémie, grève…), publiés par le module `evenements`. */
+export const EVENTS_SERVICE = 'evenements';
 
 /** Modificateurs combinés à partir des services publiés (absents = neutre). */
 export function governanceModifiers(use: <T>(name: string) => T | undefined): Modifiers {
   const deltas: ModifierDelta[] = [];
-  for (const id of [POLICY_SERVICE, RESEARCH_SERVICE]) { const s = use<GovernanceService>(id); if (s) deltas.push(s.modifiers()); }
+  for (const id of [POLICY_SERVICE, RESEARCH_SERVICE, EVENTS_SERVICE]) { const s = use<GovernanceService>(id); if (s) deltas.push(s.modifiers()); }
   return combine(deltas);
 }

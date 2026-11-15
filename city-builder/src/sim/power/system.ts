@@ -138,6 +138,8 @@ export class PowerSystem {
   private noService = new Set<number>();
   /** Multiplicateur de production éolienne / solaire (recherche) ; 1 = neutre. */
   private govRenew = 1;
+  /** Capacité du raccordement au réseau voisin (kW) à la dernière répartition (événement « panne » : réduite). */
+  private importCapKw: number = IMPORT_SPEC.capacityKw;
   private cutList: number[] = [];
   private summaryCache: ElectriciteSummary | undefined;
   private facilityViews: FacilityView[] = [];
@@ -621,6 +623,8 @@ export class PowerSystem {
     const gm = governanceModifiers((n) => ctx.use(n));
     this.govRenew = gm.renewableFactor;
     const govDemand = gm.powerDemandFactor;
+    // Panne du réseau voisin (module `evenements`) : capacité du raccordement réduite pendant l'événement.
+    this.importCapKw = IMPORT_SPEC.capacityKw * gm.powerImportFactor;
     const imp = this.importOn;
     // 1. Production disponible par installation.
     const avail = new Map<number, number>();
@@ -822,9 +826,9 @@ export class PowerSystem {
     if (imp) {
       impBus = net.addNode({ role: 'junction', ref: IMPORT_HUB });
       const D = net.addNode({ role: 'junction', ref: IMPORT_HUB });
-      net.addEdge(impBus, D, IMPORT_SPEC.capacityKw, 0.01);
-      impProd = net.addNode({ role: 'producer', capacity: IMPORT_SPEC.capacityKw, cost: IMPORT_SPEC.meritCost, ref: IMPORT_HUB });
-      net.addEdge(impProd, impBus, IMPORT_SPEC.capacityKw, IMPORT_SPEC.lossShare);
+      net.addEdge(impBus, D, this.importCapKw, 0.01);
+      impProd = net.addNode({ role: 'producer', capacity: this.importCapKw, cost: IMPORT_SPEC.meritCost, ref: IMPORT_HUB });
+      net.addEdge(impProd, impBus, this.importCapKw, IMPORT_SPEC.lossShare);
       for (const cls of CONSUMER_CLASSES) {
         const d = demandBy.get(`${IMPORT_HUB}|${cls}`) ?? 0;
         if (d <= 0) continue;
@@ -837,7 +841,7 @@ export class PowerSystem {
       const failed = this.facilityState(f.id).failedUntil > 0;
       const J = net.addNode({ role: 'junction', x: f.x, z: f.z, ref: f.id, enabled: !(f.kind === 'poste' && failed) });
       busOf.set(f.id, J);
-      if (imp && (this.facComp.get(f.id) ?? -1) >= 0) net.addEdge(impBus, J, IMPORT_SPEC.capacityKw, 0);
+      if (imp && (this.facComp.get(f.id) ?? -1) >= 0) net.addEdge(impBus, J, this.importCapKw, 0);
       const D = net.addNode({ role: 'junction', x: f.x, z: f.z, ref: f.id, enabled: !(f.kind === 'poste' && failed) });
       const trCap = f.kind === 'poste' ? f.nominalKw : Math.max(PLANT_DISTRIBUTION_MIN_KW, f.nominalKw);
       net.addEdge(J, D, trCap, 0.01);

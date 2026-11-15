@@ -4,6 +4,7 @@
  * Sans politique active : aucun delta, aucune section de sauvegarde, aucun effet.
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { PALIERS_SERVICE, type PaliersService } from '../../shared/milestones';
 import { POLICIES, POLICY_SERVICE, combine, type GovernanceService, type PolicyDef } from '../../shared/governance';
 import type { PluginCommandResult, SimPlugin } from './types';
 import { runMigrations } from '../save-sections/types';
@@ -82,6 +83,9 @@ export function createPolitiquesPlugin(): SimPlugin & { readonly state: () => Po
         const def = POLICIES.find((x) => x.id === p.id);
         if (!def) return { ok: false, code: 'INVALID_ARGS', message: 'Politique inconnue' };
         const on = typeof p.on === 'boolean' ? p.on : !s.active.includes(def.id);
+        // Déblocages progressifs (module `paliers`) : une politique verrouillée ne s'adopte pas (l'abandon reste libre).
+        const lock = on && !s.active.includes(def.id) ? ctx.use<PaliersService>(PALIERS_SERVICE)?.policyLock(def.id) : null;
+        if (lock) return { ok: false, code: 'INVALID_ARGS', message: lock };
         if (on && !s.active.includes(def.id)) { s.active.push(def.id); s.since[def.id] = ctx.clock.totalMinutes; ctx.notify('info', `Politique adoptée : ${def.nameFr}`); }
         if (!on && s.active.includes(def.id)) {
           // Part du mois en cours déjà consommée : facturée tout de suite (sinon adopter puis abandonner entre deux

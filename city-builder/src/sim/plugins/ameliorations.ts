@@ -4,6 +4,7 @@
  * travaux payés une fois (50 % du coût du bâtiment par niveau) et entretien mensuel +40 % par niveau.
  * Sans amélioration : aucun delta, aucune section, aucun effet. TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { PALIERS_SERVICE, type PaliersService } from '../../shared/milestones';
 import { runMigrations } from '../save-sections/types';
 import { isCoverageServiceTag } from '../demography';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
@@ -79,6 +80,9 @@ export function createAmeliorationsPlugin(): SimPlugin & { readonly state: () =>
         if (!serviceTag(ctx, id)) return { ok: false, code: 'INVALID_ARGS', message: 'Seuls les équipements de service couverts (éducation, santé, sécurité, incendie, loisirs) peuvent être améliorés' };
         const lv = levels.get(id) ?? 1;
         if (lv >= MAX_SERVICE_LEVEL) return { ok: false, code: 'INVALID_ARGS', message: 'Niveau maximal atteint' };
+        // Déblocages progressifs (module `paliers`) : niveaux 2 et 3 débloqués par palier.
+        const lock = ctx.use<PaliersService>(PALIERS_SERVICE)?.levelLock(lv + 1);
+        if (lock) return { ok: false, code: 'INVALID_ARGS', message: lock };
         const cost = costOf(ctx, id, lv);
         if (ctx.economy.bankrupt) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: 'Ville en faillite : travaux d\'amélioration suspendus jusqu\'au retour d\'une trésorerie positive' };
         if (ctx.economy.money < cost) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: `Fonds insuffisants (${cost} CHF requis)` };

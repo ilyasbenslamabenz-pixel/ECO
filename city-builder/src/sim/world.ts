@@ -60,6 +60,7 @@ import { CURRENT_SAVE_VERSION, SAVE_FORMAT_ID, validateSave, type SaveFileV2 } f
 import { buildCity } from './city-builder';
 import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimReport, TerrainEditResult } from './sim-protocol';
 import { NEUTRAL_MODIFIERS, governanceModifiers, type Modifiers } from '../shared/governance';
+import { PALIERS_SERVICE, type PaliersService } from '../shared/milestones';
 import { PluginHost, createSimPlugins, type PluginSaveField, type SimPlugin } from './plugins';
 
 /** Champ facultatif de la sauvegarde : éditions du terrain du joueur (src/sim/terrain/edits.ts), dans l'ordre. */
@@ -537,6 +538,11 @@ export class Simulation {
     const asset = this.getAsset(a.assetId);
     if (!asset) return fail('UNKNOWN_ASSET', `Modèle inconnu : ${a.assetId}`);
     if (!isBuildingCategory(asset.category)) return fail('INVALID_ARGS', `${asset.nameFr} n'est pas un bâtiment`);
+    // Déblocages progressifs (module `paliers`, parties neuves seulement) : la promotion privée n'est pas concernée.
+    if (!privateDev) {
+      const lock = this.plugins.service<PaliersService>(PALIERS_SERVICE)?.assetLock(asset.id);
+      if (lock) return fail('INVALID_ARGS', lock);
+    }
     // Angle libre (quarts de tour décimaux) et position libre au centimètre : un bâtiment peut
     // border une route en biais ou courbe ; seules les collisions exactes décident.
     const rot = normRot(a.rot);
@@ -1022,7 +1028,14 @@ export class Simulation {
     this.govMods = m;
     this.economy.roadUpkeepFactor = m.roadUpkeepFactor;
     this.economy.buildingUpkeepFactor = m.buildingUpkeepFactor;
-    if (this.demography) this.demography.pollutionFactor = m.pollutionFactor;
+    // Paliers : capacité d'emprunt supplémentaire ; événements : feux, maladies, arrivées (1 = aucun effet).
+    this.economy.loanBonus = this.plugins.service<PaliersService>(PALIERS_SERVICE)?.loanBonus() ?? 0;
+    if (this.demography) {
+      this.demography.pollutionFactor = m.pollutionFactor;
+      this.demography.immigrationFactor = m.immigrationFactor;
+      this.demography.services.eventFireFactor = m.fireRiskFactor;
+      this.demography.services.eventSickFactor = m.sicknessFactor;
+    }
     // Politiques locales des secteurs : la pollution subie est recalculée quand elles changent.
     const sv = (this.plugins.service<SecteursService>('secteurs')?.version() ?? 0) * 100_003 + (this.plugins.service<AmeliorationsService>('ameliorations')?.version() ?? 0);
     if (sv !== this.secteursVersion) { this.secteursVersion = sv; this.demography?.markCoverageDirty(); }

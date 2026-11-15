@@ -292,6 +292,8 @@ export class DemographySystem {
   tripsEmitted = 0;
 
   // Point focal (caméra) pour le LOD de simulation.
+  /** Événement « afflux de nouveaux habitants » (module `evenements`) : multiplicateur des arrivées (1 = aucun effet). */
+  immigrationFactor = 1;
   focusX = 0;
   focusZ = 0;
 
@@ -1139,7 +1141,7 @@ export class DemographySystem {
     if (free <= 0) return 0;
     // Proportionnel aux logements libres, avec un flux de base pour qu'une petite ville naissante (quelques
     // maisons desservies) se peuple en un ou deux jours de jeu au lieu d'une semaine (recette QA phase 1).
-    const expected = (free / 2.6) * this.attractiveness * 0.3 + Math.min(1, free / 4) * this.attractiveness * 0.6;
+    const expected = ((free / 2.6) * this.attractiveness * 0.3 + Math.min(1, free / 4) * this.attractiveness * 0.6) * this.immigrationFactor;
     let arrivals = Math.floor(expected) + (rng.next() < expected - Math.floor(expected) ? 1 : 0);
     arrivals = Math.min(arrivals, MAX_ARRIVALS_PER_WAVE);
     let placed = 0;

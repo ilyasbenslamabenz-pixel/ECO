@@ -13,6 +13,7 @@
  */
 import { ZONAGE_ID, ZONE_DEPTH_DEFAULT, isZoneType, zoneOf, type ZoneType } from '../../shared/protocol-ext/zonage';
 import { TILE_SIZE } from '../../shared/constants';
+import { PALIERS_SERVICE, type PaliersService } from '../../shared/milestones';
 // Chemin écrit depuis la racine de src/sim (garde-fou d'architecture sur « ../save… », voir chantiers).
 import { ZONAGE_SAVE_VERSION, migrateZonage } from '../../sim/save-sections/zonage';
 import { ZoningSystem } from '../zoning/system';
@@ -63,6 +64,9 @@ export function createZonagePlugin(): ZonagePlugin {
           }
           const zone = p.zone === null ? null : isZoneType(p.zone) ? (p.zone as ZoneType) : undefined;
           if (zone === undefined) return bad('zone : type de zone ou null (retirer) attendu');
+          // Déblocages progressifs (module `paliers`) : bureaux et résidentiel dense débloqués par palier (effacer reste libre).
+          const lock = zone ? ctx.use<PaliersService>(PALIERS_SERVICE)?.zoneLock(zone) : null;
+          if (lock) return bad(lock);
           const depth = num(p.depth) ?? ZONE_DEPTH_DEFAULT;
           const radius = num(p.radius) ?? (depth + 1) * TILE_SIZE;
           const changed = s.paint(ctx, pts as number[], zone, depth, radius);

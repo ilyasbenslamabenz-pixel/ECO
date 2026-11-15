@@ -122,6 +122,9 @@ const r1 = (v: number): number => Math.round(v * 10) / 10;
 
 export class CityServices {
   tuning: ServicesTuning = { ...DEFAULT_SERVICES_TUNING };
+  /** Événements (canicule, épidémie : module `evenements`) : multiplicateurs du risque de feu et de maladie (1 = aucun effet). */
+  eventFireFactor = 1;
+  eventSickFactor = 1;
   private assets: AssetInfo[] = [];
   private recs = new Map<number, Rec>();
   /** Bâtiments en feu / endommagés / en ruine (petits ensembles : parcours horaires bornés). */
@@ -344,7 +347,7 @@ export class CityServices {
       if (bi < 0) continue;
       const r = this.recs.get(b.id[bi]!);
       const health = r && r.health >= 0 ? r.health : 70;
-      if (hash01(c.id[i]!, day, SALT_SICK) < sicknessChance(t, health, h.ageOf(i, now), ramp)) {
+      if (hash01(c.id[i]!, day, SALT_SICK) < sicknessChance(t, health, h.ageOf(i, now), ramp) * this.eventSickFactor) {
         c.sick[i] = h.coverageQuality(SVC.Health, bi) > 0 ? t.maladieDureeSoins : t.maladieDureeSans;
         this.month.sickCases++;
         sick++;
@@ -385,7 +388,7 @@ export class CityServices {
     const b = this.host.ctx.buildings;
     if (ramp > 0) {
       // Départs de feu : bâtiments occupés, ni en feu ni en ruine (risque du dernier calcul quotidien).
-      const k = t.feuProbaHeure * ramp;
+      const k = t.feuProbaHeure * ramp * this.eventFireFactor;
       for (let bi = 0; bi < b.count; bi++) {
         if (b.residents[bi]! + b.workers[bi]! <= 0) continue;
         const id = b.id[bi]!;

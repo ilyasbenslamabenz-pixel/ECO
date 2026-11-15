@@ -92,6 +92,8 @@ const cleanName = (v: unknown, d: string): string => (typeof v === 'string' && v
 export class BusSystem {
   readonly tuning: BusTuning = { ...DEFAULT_BUS_TUNING };
   private lines: Line[] = [];
+  /** Nombre de lignes (verrou du nombre de lignes : module `paliers`). */
+  get lineCount(): number { return this.lines.length; }
   private nextLineId = 1;
   private nextStopId = 1;
   private readonly router = new LineRouter();

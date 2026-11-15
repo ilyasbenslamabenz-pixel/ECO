@@ -335,8 +335,11 @@ export class Economy {
     return s / last.length;
   }
 
+  /** Capacité d'emprunt supplémentaire des paliers franchis (module `paliers`, relue à chaque tick ; non sauvegardée). */
+  loanBonus = 0;
+
   loanCapacity(): number {
-    return Math.max(0, LOAN_BASE_CAPACITY + LOAN_CAPACITY_MONTHS_OF_INCOME * this.averageIncome() - this.debt());
+    return Math.max(0, LOAN_BASE_CAPACITY + this.loanBonus + LOAN_CAPACITY_MONTHS_OF_INCOME * this.averageIncome() - this.debt());
   }
 
   currentLoanRate(): number {
