@@ -1761,6 +1761,17 @@ export class DemographySystem {
       } : null,
       ...(economy ? { economy } : {}),
       ...(() => { const sf = this.services.inspect(id, now); return sf ? { safety: sf } : {}; })(),
+      diagnosis: {
+        factors: scored ? SATISFACTION_FACTORS.map(([key, label], f) => ({ key, label, delta: Math.round((fsum[f]! / scored) * 10) / 10 })) : [],
+        vacancy, power: this.powerState(id), water: this.waterState(id), ramp: Math.round(ramp * 100) / 100,
+        rentBurden: burdenN ? Math.round((burdenSum / burdenN) * 1000) / 1000 : null, sustainableShare: this.living.tuning.partSoutenable,
+        labor, unemployed, cityUnemployed: this.lastUnemployed, jobsOffered: m.jobCap > 0 && this.jobOpen(bi),
+        underqualified: under, requiredEducation: m.jobCap > 0 && m.reqEdu > 0 ? EDUCATION_NAMES_FR[m.reqEdu] ?? null : null,
+        customers: k >= 0 && cc.sector[k] === Sector.Commercial && cc.customers[k]! > 0 ? Math.round(cc.customers[k]! * 100) / 100 : null,
+        rentShare: k >= 0 && cc.revenue[k]! > 0 ? Math.round((cc.rent[k]! / cc.revenue[k]!) * 1000) / 1000 : null,
+        reasonKey: k >= 0 && cc.reason[k]! > 0 ? CLOSURE_REASONS[cc.reason[k]!]?.[0] ?? null : null,
+        transit: Math.round(this.transitSatisfaction(id) * 10) / 10,
+      },
       services: SERVICE_NAMES_FR.filter((_, s) => this.coverage[s]![bi] === 1),
       occupants, employees,
     };

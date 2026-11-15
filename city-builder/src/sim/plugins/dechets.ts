@@ -84,6 +84,8 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
       // détail de la satisfaction des habitants (src/sim/world.ts).
       ctx.provide('dechets', {
         binFull: (id: number): boolean => { const b = waste.bins.get(id); return !!b && b.cap > 0 && (b.over > 0 || b.rec + b.res >= b.cap); },
+        // Carte « couverture des déchets » (module cartes) : remplissage du bac (0..1, > 1 débordé), -1 sans bac.
+        binLevel: (id: number): number => { const b = waste.bins.get(id); return !b || b.cap <= 0 ? -1 : b.over > 0 ? 1.2 : (b.rec + b.res) / b.cap; },
         satisfactionCell: (k: number): number => waste.appliedSat?.[k] ?? 0,
       });
       muni = ctx.use<Municipal>(MUNICIPAL_SERVICE);
