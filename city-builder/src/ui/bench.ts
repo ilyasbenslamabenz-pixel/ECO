@@ -9,17 +9,21 @@
  * basse|auto` (src/ui/options.ts, non mémorisé) et `lots=0` (src/render/index.ts) pour comparer.
  */
 import * as THREE from 'three';
+import { abSummary } from '../render/ab';
 
 declare const __BUILD_COMMIT__: string | undefined;
 
-export interface BenchOptions { short: boolean }
+export interface BenchOptions { short: boolean; /** Étape du mode comparaison (A B A B), null hors comparaison. */ compareStep?: number | null }
 
 /** Lit `bench` dans la requête ou le fragment (#bench) de l'adresse ; null hors mode mesure. */
 export function benchMode(loc: { search: string; hash: string } | undefined = globalThis.location): BenchOptions | null {
   if (!loc) return null;
   for (const raw of [loc.search, loc.hash.replace(/^#/, '?')]) {
     const p = new URLSearchParams(raw);
-    if (p.has('bench')) return { short: p.get('bench') === 'court' || p.has('court') };
+    if (p.has('bench')) {
+      const step = p.has('comparer') && p.has('etape') ? Number(p.get('etape')) | 0 : null;
+      return { short: p.get('bench') === 'court' || p.has('court') || step !== null, compareStep: step };
+    }
   }
   return null;
 }
@@ -306,6 +310,37 @@ function gpuInfo(r: THREE.WebGLRenderer): { gpu: string; vendor: string; webgl: 
   return { gpu, vendor, webgl: typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext ? 'WebGL 2' : 'WebGL 1' };
 }
 
+/* ------------------------------ Mode comparaison (A B A B) ------------------------------ */
+
+/** A : tout à l'ancien (bascules de src/render/ab.ts) ; B : tout au nouveau. */
+const COMPARE_PLAN = ['A', 'B', 'A', 'B'] as const;
+const COMPARE_FLAGS: Record<'A' | 'B', Record<string, string | null>> = {
+  A: { ordre: '0', terrain: '0', aniso: '8', trace: '0' },
+  B: { ordre: null, terrain: null, aniso: null, trace: null },
+};
+const COMPARE_KEY = 'meknes:bench-comparaison';
+interface CompareRun { label: 'A' | 'B'; playableS: number; maxFirstMs: number; scenes: { id: string; label: string; fps: number; mean: number; p95: number; over33: number; cpu: number | null; gpuHint: number }[] }
+
+function compareUrl(step: number): string {
+  const u = new URL(location.href);
+  u.hash = '';
+  for (const [k, v] of Object.entries(COMPARE_FLAGS[COMPARE_PLAN[step]!])) { if (v === null) u.searchParams.delete(k); else u.searchParams.set(k, v); }
+  u.searchParams.set('comparer', '');
+  u.searchParams.set('etape', String(step));
+  return u.toString().replace(/([?&](?:bench|comparer))=(?=&|$)/g, '$1');
+}
+function compareLoad(): CompareRun[] { try { return JSON.parse(sessionStorage.getItem(COMPARE_KEY) ?? '[]') as CompareRun[]; } catch { return []; } }
+function compareSave(runs: CompareRun[] | null): void { try { if (runs) sessionStorage.setItem(COMPARE_KEY, JSON.stringify(runs)); else sessionStorage.removeItem(COMPARE_KEY); } catch { /* stockage refusé */ } }
+
+/** Au démarrage : `?bench&comparer` sans étape lance l'étape 0 (rien n'est chargé pour rien). */
+export function benchCompareStart(): boolean {
+  const p = new URLSearchParams(location.search);
+  if (!p.has('bench') || !p.has('comparer') || p.has('etape')) return false;
+  compareSave([]);
+  location.replace(compareUrl(0));
+  return true;
+}
+
 /* ------------------------------ Parcours ------------------------------ */
 
 /**
@@ -314,7 +349,8 @@ function gpuInfo(r: THREE.WebGLRenderer): { gpu: string; vendor: string; webgl: 
  */
 export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number): Promise<BenchResult> {
   const readyAt = revealAt > 0 && revealAt <= doneAt ? revealAt : doneAt;
-  const warmS = opts.short ? 1 : 5, preS = opts.short ? 0.5 : 3, measS = opts.short ? 2 : 15, cpuN = opts.short ? 3 : 20;
+  const cmp = opts.compareStep ?? null;
+  const warmS = cmp !== null ? 3 : opts.short ? 1 : 5, preS = cmp !== null ? 1 : opts.short ? 0.5 : 3, measS = cmp !== null ? 8 : opts.short ? 2 : 15, cpuN = cmp !== null ? 10 : opts.short ? 3 : 20;
   const badge = progressBadge(h.quality);
   const warnings: string[] = [];
   const firstEnd = readyAt + 3000;
@@ -361,7 +397,7 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     let cpu: { updateMs: number; renderMs: number } | null = null;
     try { cpu = h.cpuFrames(cpuN, sc.cpuYaw); } catch { cpu = null; }
     // Parcours court (tests, rendu logiciel très lent) : vue rue seule, calques principaux, une mesure par calque.
-    if (sc.id === 'rue' || (sc.id === 'aerien' && !opts.short)) {
+    if (cmp === null && (sc.id === 'rue' || (sc.id === 'aerien' && !opts.short))) {
       badge(`Mesure : ${i + 1}/${SCENES.length} — coût par calque (${sc.label})`);
       try { breakdown.push(await layerBreakdown(h, sc.label, opts.short ? 1 : 4, opts.short)); } catch (e) { warnings.push(`Coût par calque indisponible : ${String(e)}`); }
     }
@@ -405,6 +441,7 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       carteOmbre: h.renderer.shadowMap.enabled && h.shadowSize() > 0 ? `${h.shadowSize()} px` : 'désactivée',
       coeursProcesseur: navigator.hardwareConcurrency ?? 0,
       antialiasing: h.renderer.getContext().getContextAttributes()?.antialias ? `MSAA ×${(h.renderer.getContext().getParameter(h.renderer.getContext().SAMPLES) as number) || '?'}` : 'désactivé',
+      bascules: abSummary(),
       resolutionDynamique: (() => { const d = h.dynamicRange(); return d ? `activée (×${fmt(d.min)}–×${fmt(d.max)})` : 'désactivée'; })(),
     },
     load: {
@@ -416,8 +453,70 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     },
     scenes, breakdown, warnings,
   };
+  if (cmp !== null) { finishCompareStep(res, cmp); return res; }
   showResults(res);
   return res;
+}
+
+function finishCompareStep(res: BenchResult, step: number): void {
+  const runs = compareLoad().slice(0, step);
+  runs.push({
+    label: COMPARE_PLAN[step]!, playableS: res.load.playableS, maxFirstMs: res.load.maxFirstFramesMs,
+    scenes: res.scenes.map((s) => ({ id: s.id, label: s.label, fps: s.fpsMedian, mean: s.fpsMean, p95: s.p95, over33: s.over33, cpu: s.cpuUpdateMs !== null && s.cpuRenderMs !== null ? r2(s.cpuUpdateMs + s.cpuRenderMs) : null, gpuHint: 0 })),
+  });
+  compareSave(runs);
+  if (step + 1 < COMPARE_PLAN.length) {
+    const b = progressBadge('');
+    b(`Comparaison : étape ${step + 2}/${COMPARE_PLAN.length} (${COMPARE_PLAN[step + 1] === 'A' ? 'ancien rendu' : 'nouveau rendu'}), rechargement…`);
+    setTimeout(() => location.replace(compareUrl(step + 1)), 800);
+    return;
+  }
+  showComparison(runs, res);
+}
+
+/** Tableau de la comparaison : moyenne des passages A et B, écart B / A. */
+export function compareText(runs: CompareRun[], res: BenchResult): string {
+  const avg = (xs: (number | null)[]): number | null => { const v = xs.filter((x): x is number => x !== null); return v.length ? r1(v.reduce((a, b) => a + b, 0) / v.length) : null; };
+  const pct = (a: number | null, b: number | null): string => (a && b !== null ? `${b >= a ? '+' : ''}${Math.round((100 * (b - a)) / a)} %` : '—');
+  const A = runs.filter((r) => r.label === 'A'), B = runs.filter((r) => r.label === 'B');
+  const lines = [
+    `Meknes City — comparaison ancien (A) / nouveau (B) rendu, ${runs.length} passages ${runs.map((r) => r.label).join(' ')} — version ${res.version} — ${res.date}`,
+    `Carte graphique : ${res.env['carteGraphique']} · ${res.env['navigateur']} · fenêtre ${res.env['fenetre']} · densité ${res.env['densitePixels']} · qualité ${res.env['qualite']}`,
+    'A = ordre=0, terrain=0, aniso=8, trace=0 ; B = valeurs actuelles',
+    'Scène | img/s méd. A → B | écart | p95 ms A → B | > 33 ms A → B | CPU ms A → B',
+  ];
+  for (const sc of runs[0]?.scenes ?? []) {
+    const g = (rs: CompareRun[], k: 'fps' | 'p95' | 'over33' | 'cpu'): number | null => avg(rs.map((r) => r.scenes.find((x) => x.id === sc.id)?.[k] ?? null));
+    lines.push(`${sc.label} | ${fmt(g(A, 'fps'))} → ${fmt(g(B, 'fps'))} | ${pct(g(A, 'fps'), g(B, 'fps'))} | ${fmt(g(A, 'p95'))} → ${fmt(g(B, 'p95'))} | ${fmt(g(A, 'over33'))} % → ${fmt(g(B, 'over33'))} % | ${fmt(g(A, 'cpu'))} → ${fmt(g(B, 'cpu'))}`);
+  }
+  lines.push(`Jouable (s) : ${fmt(avg(A.map((r) => r.playableS)))} → ${fmt(avg(B.map((r) => r.playableS)))} · premières images max (ms) : ${fmt(avg(A.map((r) => r.maxFirstMs)))} → ${fmt(avg(B.map((r) => r.maxFirstMs)))}`);
+  lines.push('Détail par passage (img/s médianes) :');
+  for (const r of runs) lines.push(`  ${r.label} : ${r.scenes.map((x) => `${x.label} ${fmt(x.fps)}`).join(' · ')} · jouable ${fmt(r.playableS)} s`);
+  return lines.join('\n');
+}
+
+function showComparison(runs: CompareRun[], res: BenchResult): void {
+  const text = compareText(runs, res);
+  const box = document.createElement('div');
+  box.id = 'bench-results';
+  box.setAttribute('role', 'dialog');
+  box.style.cssText = 'position:fixed;inset:16px;z-index:10002;overflow:auto;box-sizing:border-box;padding:18px 20px;border-radius:12px;'
+    + 'background:rgba(12,17,24,.97);color:#e8eef5;font:14px/1.45 system-ui,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.5)';
+  const h = document.createElement('h2'); h.style.cssText = 'margin:0 0 10px;font-size:20px'; h.textContent = 'Meknes City — comparaison ancien / nouveau rendu';
+  const pre = document.createElement('pre'); pre.style.cssText = 'margin:0;white-space:pre-wrap;font:14px/1.5 ui-monospace,Consolas,monospace'; pre.textContent = text;
+  const bar = document.createElement('div'); bar.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:14px';
+  const mk = (label: string, fn: () => void): void => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.style.cssText = 'min-height:40px;padding:0 14px;border:0;border-radius:8px;font:600 14px system-ui,sans-serif;cursor:pointer;background:#2a3646;color:#e8eef5'; b.addEventListener('click', () => fn.call(b)); bar.appendChild(b); };
+  mk('Copier les résultats', function (this: unknown) {
+    const btn = bar.firstElementChild as HTMLButtonElement;
+    const done = (): void => { btn.textContent = 'Copié ✓'; };
+    const fallback = (): void => { const r = document.createRange(); r.selectNodeContents(pre); const sel = getSelection(); sel?.removeAllRanges(); sel?.addRange(r); btn.textContent = 'Texte sélectionné : Ctrl+C / ⌘C'; };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(`${text}\n\nJSON :\n${JSON.stringify(runs)}`).then(done, fallback); else fallback();
+  });
+  mk('Relancer la comparaison', () => { compareSave([]); location.replace(compareUrl(0)); });
+  mk('Fermer', () => box.remove());
+  box.append(h, pre, bar);
+  document.body.appendChild(box);
+  (window as unknown as { __benchCompare?: unknown }).__benchCompare = { runs, text };
 }
 
 /* ------------------------------ Affichage ------------------------------ */
@@ -445,6 +544,7 @@ export function resultsText(r: BenchResult): string {
     `Carte graphique : ${e['carteGraphique']} (${e['fabricant']}, ${e['webgl']}, multi_draw ${e['multiDraw'] ? 'oui' : 'non'})`,
     `Navigateur : ${e['navigateur']} sur ${e['systeme']} · ${e['coeursProcesseur']} cœurs`,
     `Écran ${e['ecran']} · fenêtre ${e['fenetre']} · densité ${e['densitePixels']} · qualité ${e['qualite']}${e['modeAllege'] ? ' (allégé)' : ''}${e['modeSur'] ? ' (mode sûr)' : ''} · lots par matériau ${e['lotsParMateriau'] ? 'oui' : 'non'} · ombres ${e['carteOmbre']} · résolution dynamique ${e['resolutionDynamique']} · antialiasing ${e['antialiasing']}`,
+    `Bascules A/B : ${e['bascules']}`,
     `Chargement : jouable en ${fmt(r.load.playableS)} s · plus longue image au chargement ${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms) · premières images ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms ; ${fmt(r.load.firstPrograms)} shaders / ${fmt(r.load.firstTextures)} textures / ${fmt(r.load.firstGeometries)} géométries)`,
     `Plus longue des premières images, processeur : ${r.load.firstDetail ?? '—'}`,
     '',
@@ -505,7 +605,7 @@ function showResults(r: BenchResult): void {
       ${kv('Carte graphique', e['carteGraphique'])}${kv('Fabricant', `${e['fabricant']} · ${e['webgl']} · multi_draw ${e['multiDraw'] ? 'oui' : 'non'}`)}
       ${kv('Navigateur', `${e['navigateur']} · ${e['systeme']} · ${e['coeursProcesseur']} cœurs`)}${kv('Écran / fenêtre', `${e['ecran']} / ${e['fenetre']} · densité ${fmt(e['densitePixels'] as number)}`)}
       ${kv('Qualité', `${e['qualite']}${e['modeAllege'] ? ' (allégé)' : ''}${e['modeSur'] ? ' (mode sûr)' : ''} · lots par matériau ${e['lotsParMateriau'] ? 'oui' : 'non'} · ombres ${e['carteOmbre']}`)}
-      ${kv('Résolution dynamique', e['resolutionDynamique'])}${kv('Antialiasing', e['antialiasing'])}
+      ${kv('Résolution dynamique', e['resolutionDynamique'])}${kv('Bascules A/B', e['bascules'])}${kv('Antialiasing', e['antialiasing'])}
       ${kv('Jouable après', `${fmt(r.load.playableS)} s`)}
       ${kv('Plus longue image au chargement', `${r.load.maxLoadFrameMs} ms (${r.load.framesOver100Load} > 100 ms)`)}
       ${kv('Premières images de jeu (3 s)', `max ${r.load.maxFirstFramesMs} ms (${r.load.firstFramesOver100} > 100 ms) · ${fmt(r.load.firstPrograms)} shaders / ${fmt(r.load.firstTextures)} tex. / ${fmt(r.load.firstGeometries)} géom.`)}
@@ -522,7 +622,7 @@ function showResults(r: BenchResult): void {
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
       <button type="button" id="bench-copy" ${btn.replace('#2a3646', '#4fd18b').replace('#e8eef5', '#0d1a12')}>Copier les résultats</button>
       ${link('Relancer', {})}${link('Relancer en Haute', { qualite: 'haute' })}${link('Relancer en Moyenne', { qualite: 'moyenne' })}${link('Relancer en Auto', { qualite: 'auto' })}
-      ${link('Relancer sans lots (?lots=0)', { lots: '0' })}${link('Lots activés', { lots: null })}${link('Résolution dynamique activée', { dyn: '1' })}${link('Résolution fixe', { dyn: '0' })}${link('Sans MSAA', { msaa: '0' })}${link('MSAA ×4', { msaa: '1' })}${link('Anticrénelage auto', { msaa: null })}${link('Ombres 1K', { ombres: 'low' })}${link('Sans ombres', { ombres: 'off' })}${link('Ombres du réglage', { ombres: null })}
+      ${link('Relancer sans lots (?lots=0)', { lots: '0' })}${link('Lots activés', { lots: null })}${link('Résolution dynamique activée', { dyn: '1' })}${link('Résolution fixe', { dyn: '0' })}${link('Sans MSAA', { msaa: '0' })}${link('MSAA ×4', { msaa: '1' })}${link('Anticrénelage auto', { msaa: null })}${link('Ombres 1K', { ombres: 'low' })}${link('Sans ombres', { ombres: 'off' })}${link('Ombres du réglage', { ombres: null })}${link('Comparer ancien / nouveau (A B A B)', { comparer: '', etape: null })}${link('Ancien rendu (A)', { ordre: '0', terrain: '0', aniso: '8', trace: '0' })}${link('Nouveau rendu (B)', { ordre: null, terrain: null, aniso: null, trace: null })}
       <button type="button" id="bench-close" ${btn}>Fermer</button>
     </div>
     <textarea id="bench-text" readonly style="display:none;width:100%;box-sizing:border-box;margin-top:10px;min-height:180px;background:#0b1016;color:#e8eef5;border:1px solid #2c3a4a;border-radius:8px;font:12px ui-monospace,monospace"></textarea>`;

@@ -13,6 +13,7 @@
  * - Nuit : vitrage des lanternes émissif + halos lumineux au sol (instanciés, additifs), via setNight().
  */
 import * as THREE from 'three';
+import { ab } from '../ab';
 import { WATER_LEVEL, CHUNK_SIZE } from '../../shared/constants';
 import type { IRoadRenderer, RoadEdgeRecord, RoadNodeRecord } from '../../shared/contracts';
 import { RoadNetwork, cubic, isRoadKind, type RoadEdgeRecordEx, type RoadKindId } from '../../sim/roads';
@@ -522,7 +523,7 @@ export class RoadNetworkRenderer implements IRoadRenderer {
       mesh.name = `roads_${layer}`;
       // Surfaces dessinées après les objets ordinaires (véhicules, arbres, décor : ordre 0) et avant le terrain (0,5) :
       // leurs pixels cachés sont rejetés par le test de profondeur au lieu d'être calculés puis recouverts.
-      mesh.renderOrder = 0.25;
+      if (ab.drawOrder) mesh.renderOrder = 0.25;
       mesh.receiveShadow = true;
       mesh.castShadow = layer === 'concrete' || layer === 'curb' || layer === 'metal';
       c.group.add(mesh);

@@ -16,6 +16,7 @@
  * Propriétaire : agent pipeline d'assets. Aucun état global : une instance par rendu.
  */
 import * as THREE from 'three';
+import { ab } from './ab';
 import { liteTextureUrl } from './image-cap';
 import { loadHdrTexture } from './gzip-assets';
 import type { AssetCatalog, TextureSet } from '../shared/catalog';
@@ -109,7 +110,7 @@ export class MaterialLibrary {
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     // Couleur : anisotropie complète ; normales, rugosité, occlusion : 4 au plus (chaussées et trottoirs, vus très
     // à plat en vue rue, payaient l'anisotropie maximale à chaque lecture de leurs trois textures).
-    tex.anisotropy = srgb ? this.anisotropy : Math.min(this.anisotropy, 4);
+    tex.anisotropy = srgb ? this.anisotropy : Math.min(this.anisotropy, ab.dataAniso);
     tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     // Mode allégé : versions réduites générées au build (routes, trottoirs, pavés : 512 px pour rester nets ;
     // autres matériaux : 256 px). Avant : images 1024 px envoyées telles quelles au GPU.

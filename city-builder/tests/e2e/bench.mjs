@@ -72,6 +72,19 @@ async function run(label, path) {
 try {
   await run('index', '/index.html?bench=court');
   await runArtifact('/__artifact_wrapped.html?bench=court&qualite=moyenne');
+  // Mode comparaison : la première page part tout de suite à l'étape A (ancien rendu) et lance le parcours.
+  {
+    const page = await browser.newPage({ viewport: { width: 640, height: 400 }, deviceScaleFactor: 0.5 });
+    const errors = collectErrors(page);
+    await page.goto(`${base}/index.html?bench&comparer`, { waitUntil: 'load' });
+    await page.waitForURL(/etape=0/, { timeout: 60000 });
+    const u = new URL(page.url());
+    check(u.searchParams.get('ordre') === '0' && u.searchParams.get('terrain') === '0' && u.searchParams.get('aniso') === '8' && u.searchParams.get('trace') === '0',
+      `[comparaison] étape A avec l'ancien rendu (${u.search})`);
+    await page.waitForSelector('#bench-progress', { timeout: 600000 });
+    check(errors.length === 0, `[comparaison] aucune erreur de page${errors.length ? ' :\n   ' + errors.join('\n   ') : ''}`);
+    await page.close();
+  }
 } catch (e) {
   console.error('ÉCHEC', e);
   failed = true;

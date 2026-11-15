@@ -12,6 +12,7 @@
  * Basé sur MeshStandardMaterial (onBeforeCompile) : ombres, brouillard, IBL et tone mapping de three conservés.
  */
 import * as THREE from 'three';
+import { ab } from '../ab';
 import { TILE_SIZE } from '../../shared/constants';
 import type { AssetCatalog, TextureSet } from '../../shared/catalog';
 
@@ -122,8 +123,8 @@ export async function loadTerrainTextures(catalog: AssetCatalog, base: URL, anis
   const albedo = arrayTexture(alb, size, true, anisotropy);
   // Normales et rugosité : anisotropie 4 (la couleur garde la valeur complète) ; c'est la vue rue, très rasante, qui
   // paie l'anisotropie, à chaque lecture.
-  const normal = arrayTexture(nor, size, false, Math.min(anisotropy, 4));
-  const armT = arrayTexture(arm, armSize, false, Math.min(anisotropy, 4));
+  const normal = arrayTexture(nor, size, false, Math.min(anisotropy, ab.dataAniso));
+  const armT = arrayTexture(arm, armSize, false, Math.min(anisotropy, ab.dataAniso));
   const macro = makeMacroTexture();
   return {
     albedo, normal, arm: armT, macro,
@@ -220,7 +221,11 @@ const FRAG_MAIN = /* glsl */ `
     // a toujours une contribution nulle (hb ≤ 1,35 w < 0,55 × 0,35 × wmax ≤ 0,55 hmax). Image identique, et
     // jusqu'à 4 lectures de texture de moins par couche ignorée (la vue rue en est couverte).
     float wmax = max(max(max(w[0], w[1]), max(w[2], w[3])), w[4]);
+#if AUBE_TERRAIN_OPT
     float wmin = max(0.004, 0.14 * wmax);
+#else
+    float wmin = 0.004;
+#endif
     for (int k = 0; k < 5; k++) {
       albs[k] = vec3(0.0); nrms[k] = vec3(0.0, 0.0, 1.0); arms[k] = vec3(1.0, 0.8, 0.0); hb[k] = 0.0;
       if (w[k] > wmin) {
@@ -230,8 +235,10 @@ const FRAG_MAIN = /* glsl */ `
           vec3 bw = pow(abs(Nw), vec3(4.0));
           bw /= (bw.x + bw.y + bw.z);
           // Projections de poids < 2 % ignorées (renormalisées) : 2 projections au lieu de 3 sur la plupart des pentes.
+#if AUBE_TERRAIN_OPT
           bw *= step(vec3(0.02), bw);
           bw /= max(bw.x + bw.y + bw.z, 1e-4);
+#endif
           vec3 sg = sign(Nw + 1e-5);
           vec3 aX = vec3(0.0), nX = vec3(0.0, 0.0, 1.0), rX = vec3(0.0), aY = vec3(0.0), nY = vec3(0.0, 0.0, 1.0), rY = vec3(0.0), aZ = vec3(0.0), nZ = vec3(0.0, 0.0, 1.0), rZ = vec3(0.0);
           vec2 uX = vec2(vTWorld.z * sg.x, vTWorld.y) * s;
@@ -315,14 +322,14 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
     uGrassLush: { value: new THREE.Color(0.66, 0.88, 0.5) },
   };
   const material = new THREE.MeshStandardMaterial({ name: 'terrain_pbr', roughness: 1, metalness: 0 });
-  material.customProgramCacheKey = (): string => 'aube-terrain-v3';
+  material.customProgramCacheKey = (): string => `aube-terrain-v3-${ab.terrainOpt ? 1 : 0}`;
   material.onBeforeCompile = (shader): void => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERT_DECL}`)
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\n${VERT_MAIN}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${FRAG_DECL}`)
+      .replace('#include <common>', `#include <common>\n#define AUBE_TERRAIN_OPT ${ab.terrainOpt ? 1 : 0}\n${FRAG_DECL}`)
       .replace('#include <common>', `#include <common>\nuniform float uGrid;`)
       .replace('#include <map_fragment>', `${FRAG_MAIN}
         if (uGrid > 0.001) {

@@ -5,6 +5,7 @@
  * Implémente IRenderTerrain (heightAt identique à la simulation : terrainHeightAt bilinéaire).
  */
 import * as THREE from 'three';
+import { ab } from '../ab';
 import { CHUNK_SIZE } from '../../shared/constants';
 import type { IRenderTerrain, TerrainData } from '../../shared/contracts';
 import type { AssetCatalog } from '../../shared/catalog';
@@ -196,7 +197,7 @@ export class TerrainSystem implements IRenderTerrain {
       // Dessiné APRÈS les autres objets opaques (ordre 0 ; eau : 1) : ses pixels recouverts par les routes, les
       // bâtiments ou les véhicules sont rejetés par le test de profondeur au lieu d'être calculés puis recouverts
       // (son shader est le plus coûteux ; le tri par programme, src/render/scene.ts, ne le plaçait pas en dernier).
-      c.mesh.renderOrder = 0.5;
+      if (ab.drawOrder) c.mesh.renderOrder = 0.5;
       this.group.add(c.mesh);
     }
     c.mesh.castShadow = lod <= 1 && !c.ring;

@@ -29,7 +29,8 @@ import { PropLayer } from './render/props';
 import { initConstruction, initInput } from './input';
 import { initUI } from './ui/hud';
 import { applyGraphicsOptions, applyTheme, loadOptions, urlQuality, wantMsaa } from './ui/options';
-import { benchMode, benchTrace, benchWatchRenderer, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
+import { ab } from './render/ab';
+import { benchCompareStart, benchMode, benchTrace, benchWatchRenderer, installBenchLink, runBench, startBenchRecorder } from './ui/bench';
 import { gameDateLabel, installCloudSaveBadge, installSaveFileUi, setSlotProvider, type SlotInfo as UiSlotInfo } from './ui/save-slots';
 import { Autosaver, SaveStore, attachCloudSaves, type CloudSaveStatus } from './save';
 import { autoPrefixFor } from './save/autosave';
@@ -139,6 +140,8 @@ async function boot(): Promise<void> {
   const params = new URLSearchParams(location.search);
   // Page de mesure : images enregistrées dès le démarrage (à-coups du chargement compris).
   const bench = benchMode();
+  // Mode comparaison (?bench&comparer) : la première page lance tout de suite l'étape A (rien n'est chargé ici).
+  if (bench && benchCompareStart()) return;
   if (bench) startBenchRecorder();
   const debug: DebugInfo = {
     ready: false, workerReady: false, snapshotReceived: false, deltas: 0, frames: () => 0, catalogAssets: 0, errors: [],
@@ -251,7 +254,7 @@ async function boot(): Promise<void> {
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const render = await initRender(canvas, lib, catalog, assetsBase, undefined, ui.currentOptions().quality,
     wantMsaa(ui.currentOptions(), window.devicePixelRatio || 1, bootProfile.lite, bootProfile.maxPixelRatio));
-  if (bench) { benchWatchRenderer(render.ctx.renderer); render.ctx.perf.trace = benchTrace; }
+  if (bench) { benchWatchRenderer(render.ctx.renderer); if (ab.trace) render.ctx.perf.trace = benchTrace; }
   debug.frames = () => render.ctx.frames;
   debug.renderStats = () => render.stats();
   debug.gpuMemory = () => estimateGpuMemory(render.ctx.scene, render.ctx.renderer);
