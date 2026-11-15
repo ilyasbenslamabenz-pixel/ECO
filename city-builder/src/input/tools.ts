@@ -19,7 +19,7 @@ import { CoverageRings, serviceOf, serviceRadius } from './coverage-rings';
 import type * as THREE from 'three';
 import type { IToolController, RoadKindId, ToolId } from '../shared/contracts';
 import { footprintGroundY } from '../client/tools/geometry';
-import { TOOL_PHASE, type ConstructionTools, type ToolPreview } from '../client/tools/machine';
+import { JUNCTION_LABELS, TOOL_PHASE, type ConstructionTools, type ToolPreview } from '../client/tools/machine';
 import { roadWidth, type PickResult } from '../client/tools/mirror';
 import type { CameraController, PointerToolSink } from './camera';
 import { COLORS, GhostPreview, GridPreview, RoadPreview, SelectionMarker, type ModelSource } from './previews';
@@ -165,7 +165,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.lastType = type;
     // Au doigt, l'aperçu est décalé au-dessus du point de contact pour rester visible.
     // (Outil Améliorer : on désigne la route sous le doigt, sans décalage.)
-    const lift = type === 'touch' && this.activeTool !== 'select' && !(this.activeTool === 'road' && (d.machine.roadSub === 'upgrade' || d.machine.roadSub === 'parallel')) ? TOUCH_LIFT_PX : 0;
+    const lift = type === 'touch' && this.activeTool !== 'select' && !(this.activeTool === 'road' && (d.machine.roadSub === 'upgrade' || d.machine.roadSub === 'parallel' || d.machine.roadSub === 'junction')) ? TOUCH_LIFT_PX : 0;
     this.lastScreen.x = sx; this.lastScreen.y = sy - lift;
     const ray = d.camera.screenRay(sx, sy - lift);
     const g = d.camera.groundAt(sx, sy - lift);
@@ -242,7 +242,7 @@ export class ToolController implements IToolController, PointerToolSink {
     this.pendingHover = null;
     this.feed(sx, sy, type);
     this.roadStartedThisGesture = false;
-    if (type !== 'touch' && d.machine.tool === 'road' && d.machine.roadSub !== 'upgrade' && d.machine.roadSub !== 'parallel' && !d.machine.drawing) {
+    if (type !== 'touch' && d.machine.tool === 'road' && d.machine.roadSub !== 'upgrade' && d.machine.roadSub !== 'parallel' && d.machine.roadSub !== 'junction' && !d.machine.drawing) {
       this.roadStartedThisGesture = true;
       void d.machine.primary();
     }
@@ -278,6 +278,7 @@ export class ToolController implements IToolController, PointerToolSink {
     }
     if (type === 'touch' && m.tool !== 'select') {
       // Route : les étapes intermédiaires se posent au relâcher ; l'action finale se confirme.
+      if (m.tool === 'road' && m.roadSub === 'junction') { void m.primary(); return; } // choisir le carrefour (réglages dans la barre)
       if (m.tool === 'road' && m.roadSub === 'parallel' && !(m.preview.kind === 'road' && m.preview.points)) return;
       if (m.tool === 'road' && m.roadSub !== 'upgrade' && m.roadSub !== 'parallel' && (!m.drawing || (m.roadSub === 'draw' && m.draft.mode === 'curve' && m.draft.phase === 'start'))) { void m.primary(); return; }
       if (m.tool === 'road' && m.roadSub === 'upgrade' && !(m.preview.kind === 'upgrade' && m.preview.target)) return;
@@ -293,7 +294,7 @@ export class ToolController implements IToolController, PointerToolSink {
       return;
     }
     if (m.tool === 'road' || ((m.tool === 'terraform' || (m.tool === 'bulldoze' && m.bulldozeArea)) && this.roadStartedThisGesture)) {
-      if (m.tool === 'road' && (m.roadSub === 'upgrade' || m.roadSub === 'parallel') && !tap) return; // Améliorer, parallèle : un clic franc, pas un glisser
+      if (m.tool === 'road' && (m.roadSub === 'upgrade' || m.roadSub === 'parallel' || m.roadSub === 'junction') && !tap) return; // Améliorer, parallèle : un clic franc, pas un glisser
       if (tap && this.roadStartedThisGesture) return; // simple clic de départ
       void m.primary();
       return;
@@ -448,7 +449,7 @@ export class ToolController implements IToolController, PointerToolSink {
     if (this.pendingTouchConfirm && (p.kind === 'road' || p.kind === 'grid' || p.kind === 'upgrade')) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
     if (p.kind !== 'select' && p.kind !== 'bulldoze') this.hoverMarker.hide();
     if (p.kind !== 'terrain') this.terrainPrev?.hide();
-    if (!(p.kind === 'bulldoze' && p.area)) this.areaMarker?.hide();
+    if (!(p.kind === 'bulldoze' && p.area) && p.kind !== 'junction') this.areaMarker?.hide();
     if (this.pendingTouchConfirm && p.kind === 'bulldoze' && p.area) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
     switch (p.kind) {
       case 'building': {
@@ -506,8 +507,17 @@ export class ToolController implements IToolController, PointerToolSink {
         else tag(`${what} · ${fmt(e.length)} m\n${p.validity === 'pending' ? '…' : p.cost > 0 ? `${fmt(p.cost)} ¢ (différence)` : p.refund > 0 ? `+${fmt(p.refund)} ¢ remboursés` : 'gratuit'}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
       }
+      case 'junction': {
+        // Carrefour choisi (cercle) ou survolé ; le réglage se fait dans la barre d'options.
+        const j = p.selected ?? p.hover;
+        if (j && this.areaMarker) { this.areaMarker.setColor(p.selected ? COLORS.select : COLORS.snap); this.areaMarker.showPoint(j.x, j.z, 16); } else this.areaMarker?.hide();
+        if (p.selected) tag(`Carrefour (${p.selected.legs} branches) : ${JUNCTION_LABELS[p.mode]}`, 'info');
+        else tag(p.hover ? `Carrefour (${p.hover.legs} branches) — touchez pour le régler` : 'Touchez un carrefour (3 branches ou plus)', 'info');
+        break;
+      }
       case 'bulldoze':
         if (d.machine.bulldozeArea) {
+          this.areaMarker?.setColor(COLORS.error);
           this.hoverMarker.hide();
           const a = p.area;
           if (a && this.areaMarker) {

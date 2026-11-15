@@ -10,7 +10,7 @@ import type { RoadKindId, ToolId } from '../shared/contracts';
 import { roadDef } from '../client/tools/mirror';
 import { ROAD_KINDS, ROAD_KIND_ORDER } from '../sim/roads/types';
 import type { ConstructionTools, RoadSubTool, UpgradeTarget } from '../client/tools/machine';
-import { PARALLEL_DISTANCES } from '../client/tools/machine';
+import { JUNCTION_LABELS, PARALLEL_DISTANCES } from '../client/tools/machine';
 import { GRID_BLOCK_SIZES } from '../client/tools/grid';
 import type { ToolController } from '../input/tools';
 import { $, el, fmt, money, phaseBadge } from './dom';
@@ -211,6 +211,7 @@ export class BuildBar {
   /** Bouton flottant « Terminer » (tracé enchaîné ou quadrillage en cours), bien visible au doigt. */
   private finishBtn = $<HTMLButtonElement>('road-finish');
   private wasDrawing = false;
+  private lastJunction = -2;
   private open: DrawerId | null = null;
   private tab: Record<string, string> = {};
 
@@ -413,7 +414,7 @@ export class BuildBar {
       mode.append(b);
     }
     const more = el('div', { cls: 'seg', attrs: { role: 'group', 'aria-label': 'Outils de voirie' } });
-    for (const [id, label, tip] of [['grid', 'Quadrillage', 'Quadrillage : tracez un rectangle, un îlot de rues est créé sur la grille de 8 m'], ['upgrade', 'Améliorer', 'Améliorer : touchez une route pour changer son type ou son sens sans la démolir'], ['parallel', 'Parallèle', 'Route parallèle : touchez à côté d’une route, sa copie décalée (32 à 96 m) est proposée de ce côté']] as const) {
+    for (const [id, label, tip] of [['grid', 'Quadrillage', 'Quadrillage : tracez un rectangle, un îlot de rues est créé sur la grille de 8 m'], ['upgrade', 'Améliorer', 'Améliorer : touchez une route pour changer son type ou son sens sans la démolir'], ['parallel', 'Parallèle', 'Route parallèle : touchez à côté d’une route, sa copie décalée (32 à 96 m) est proposée de ce côté'], ['junction', 'Carrefour', 'Carrefour : touchez un carrefour pour choisir automatique, feux, stop ou priorité']] as const) {
       const b = el('button', { cls: m.roadSub === id ? 'active' : '', text: label, attrs: { 'data-road-sub': id } });
       b.dataset['tip'] = tip;
       b.addEventListener('click', () => { this.d.tools.setTool('road'); m.setRoadSub(id); this.closeDrawer(); });
@@ -444,6 +445,7 @@ export class BuildBar {
     if (m.tool === 'road' && m.draft.mode === 'roundabout') return `${m.draft.roundaboutSize === 'large' ? 'Grand giratoire' : 'Giratoire'} — cliquez sur un carrefour ou sur une route`;
     if (m.tool === 'road') {
       if (m.roadSub === 'grid') return `Quadrillage · ${ROAD_KINDS[m.roadType].nameFr} · îlots de ${m.gridBlock} m — premier coin, puis coin opposé (coût affiché avant validation)`;
+      if (m.roadSub === 'junction') return m.junction ? `Carrefour (${m.junction.legs} branches) — choisissez son réglage ci-dessous (actuel : ${JUNCTION_LABELS[m.junctionModeOf(m.junction.id)]})` : 'Carrefour : touchez un carrefour (3 branches ou plus) pour choisir feux, stop ou priorité';
       if (m.roadSub === 'parallel') return `Route parallèle à ${m.parallelDist} m — touchez à côté d’une route, du côté voulu (type : ${ROAD_KINDS[m.roadType as RoadKindId]?.nameFr ?? m.roadType})`;
       if (m.roadSub === 'upgrade') return `Améliorer · ${UPGRADE_LABELS[m.upgradeTarget as keyof typeof UPGRADE_LABELS] ?? ROAD_KINDS[m.upgradeTarget as RoadKindId]?.nameFr ?? ''} — désignez une route (coût de la différence)`;
       const chain = m.draft.chained > 0 ? ` · ${m.draft.chained} tronçon${m.draft.chained > 1 ? 's' : ''} — le tracé continue, « Terminer » pour arrêter` : ' — le tracé continue depuis l’extrémité';
@@ -499,7 +501,14 @@ export class BuildBar {
       act('Courbe', 'Tracé courbe : départ, point de courbure, arrivée', () => m.setRoadMode('curve'), sub === 'draw' && m.draft.mode === 'curve');
       act('Quadrillage', 'Quadrillage : un rectangle devient un îlot de rues sur la grille de 8 m', () => m.setRoadSub(sub === 'grid' ? 'draw' : 'grid'), sub === 'grid');
       act('Améliorer', 'Améliorer : changer le type ou le sens d’une route sans la démolir', () => m.setRoadSub(sub === 'upgrade' ? 'draw' : 'upgrade'), sub === 'upgrade');
-      act('Parallèle', 'Route parallèle : touchez à côté d’une route existante, sa copie décalée est proposée de ce côté', () => m.setRoadSub(sub === 'parallel' ? 'draw' : 'parallel'), sub === 'parallel');
+      // Parallèle et Carrefour : ouverts depuis le tiroir Routes (barre compacte au doigt) ; affichés ici quand actifs.
+      if (sub === 'parallel') act('Parallèle', 'Route parallèle : touchez à côté d’une route existante, sa copie décalée est proposée de ce côté', () => m.setRoadSub('draw'), true);
+      if (sub === 'junction') act('Carrefour', 'Carrefour : touchez un carrefour pour choisir automatique, feux, stop ou priorité', () => m.setRoadSub('draw'), true);
+      if (sub === 'junction' && m.junction) {
+        this.actions.append(el('span', { cls: 'ta-break', attrs: { 'aria-hidden': 'true' } }));
+        const cur = m.junctionModeOf(m.junction.id);
+        for (const c of ['auto', 'signal', 'stop', 'priority'] as const) act(JUNCTION_LABELS[c], c === 'auto' ? 'Choix automatique selon les routes (feux, cédez-le-passage ou priorité)' : c === 'signal' ? 'Feux tricolores (phases par direction)' : c === 'stop' ? 'Toutes les branches cèdent le passage' : 'Passage libre, sans arrêt', () => { void m.setJunctionMode(c).then(() => this.sync()); }, cur === c);
+      }
       this.actions.append(el('span', { cls: 'ta-break', attrs: { 'aria-hidden': 'true' } }));
       if (sub === 'grid' || sub === 'draw') {
         for (const b of GRID_BLOCK_SIZES) act(`${b} m`, `Taille d’îlot ${b} m (quadrillage et lignes guides parallèles)`, () => m.setGridBlock(b), m.gridBlock === b);
@@ -542,6 +551,9 @@ export class BuildBar {
     const on = this.d.machine.drawing;
     this.finishBtn.classList.toggle('hidden', !on);
     if (this.d.machine.tool === 'terraform' || this.d.machine.tool === 'bulldoze') this.hint.textContent = this.hintText();
+    // Outil Carrefour : les boutons de réglage suivent le carrefour choisi.
+    const jid = this.d.machine.tool === 'road' && this.d.machine.roadSub === 'junction' ? (this.d.machine.junction?.id ?? -1) : -2;
+    if (jid !== this.lastJunction) { this.lastJunction = jid; if (jid !== -2) { this.sync(); return; } }
     document.body.classList.toggle('road-drawing', on);
     if (on !== this.wasDrawing) {
       this.wasDrawing = on;

@@ -75,7 +75,11 @@ export const DEMOLISH_REFUND_RATE = 0.25;
 export type Validity = 'pending' | 'ok' | 'error';
 
 /** Sous-outil de l'outil Routes. */
-export type RoadSubTool = 'draw' | 'grid' | 'upgrade' | 'parallel';
+export type RoadSubTool = 'draw' | 'grid' | 'upgrade' | 'parallel' | 'junction';
+/** Réglages d'un carrefour (outil Carrefour) ; « auto » = choix automatique de la circulation. */
+export type JunctionChoice = 'auto' | 'signal' | 'stop' | 'priority';
+export const JUNCTION_LABELS: Record<JunctionChoice, string> = { auto: 'Automatique', signal: 'Feux', stop: 'Stop (tous cèdent)', priority: 'Priorité' };
+export interface JunctionTarget { id: number; x: number; z: number; legs: number }
 /** Distances proposées (m, d'axe à axe) pour la route parallèle. */
 export const PARALLEL_DISTANCES = [32, 48, 64, 96] as const;
 /** Action de l'outil « Améliorer » : type suivant (rue → avenue → boulevard), type précis, ou inversion du sens. */
@@ -91,6 +95,7 @@ export type ToolPreview =
   | { kind: 'grid'; type: RoadKindId; start: { x: number; z: number } | null; hover: { x: number; z: number } | null; layout: GridLayout | null; validity: Validity; cost: number; message: string }
   | { kind: 'upgrade'; target: RoadEdgeView | null; toKind: RoadKindId | null; reverse: boolean; validity: Validity; cost: number; refund: number; message: string }
   | { kind: 'bulldoze'; target: PickResult | null; refund: number; area?: BulldozeArea | null; areaStart?: { x: number; z: number } | null }
+  | { kind: 'junction'; hover: JunctionTarget | null; selected: JunctionTarget | null; mode: JunctionChoice }
   | TerrainPreview;
 
 export type Notify = (text: string, kind: 'info' | 'error' | 'ok') => void;
@@ -219,6 +224,8 @@ export class ConstructionTools {
     this.draft.reset();
     this.gridStart = null;
     this.gridKey = ''; this.upgradeKey = '';
+    this.junction = null;
+    if (sub === 'junction') void this.loadJunctionModes();
     this.refresh();
   }
 
@@ -324,6 +331,12 @@ export class ConstructionTools {
         if (this.roadSub === 'grid') { if (this.refreshGrid(g)) return; break; }
         if (this.roadSub === 'upgrade') { if (this.refreshUpgrade(g)) return; break; }
         if (this.roadSub === 'parallel') { if (this.refreshParallel(g)) return; break; }
+        if (this.roadSub === 'junction') {
+          const hover = g ? this.junctionAt(g.x, g.z) : null;
+          const sel = this.junction;
+          this.preview = { kind: 'junction', hover, selected: sel, mode: sel ? this.junctionModeOf(sel.id) : 'auto' };
+          break;
+        }
         const d = this.draft;
         d.hover = g ? snapRoadPoint(this.mirror, g.x, g.z, { radius: this.snapRadius, angleSnap: this.angleSnap, magnet: this.magnet, grid: this.gridSnap && this.magnet, guideSpacing: this.guides ? this.gridBlock : 0 }, d.phase !== 'idle' ? (d.control ?? d.start ?? undefined) : undefined) : null;
         const points = d.points();
@@ -538,6 +551,46 @@ export class ConstructionTools {
 
   private parallelCmd: { points: number[]; control?: [number, number] } | null = null;
 
+  /** Outil Carrefour : carrefour choisi et réglages connus (relus auprès de la circulation). */
+  junction: JunctionTarget | null = null;
+  private junctionModes = new Map<number, JunctionChoice>();
+  junctionModeOf(id: number): JunctionChoice { return this.junctionModes.get(id) ?? 'auto'; }
+
+  /** Carrefour (3 branches ou plus) le plus proche d'un point, à moins de 28 m. */
+  junctionAt(x: number, z: number): JunctionTarget | null {
+    const deg = new Map<number, number>();
+    for (const e of this.mirror.edges.values()) for (const n of [e.a, e.b]) deg.set(n, (deg.get(n) ?? 0) + 1);
+    let best: JunctionTarget | null = null, bd = 28;
+    for (const n of this.mirror.nodes.values()) {
+      const legs = deg.get(n.id) ?? 0;
+      if (legs < 3) continue;
+      const d = Math.hypot(n.x - x, n.z - z);
+      if (d < bd) { bd = d; best = { id: n.id, x: n.x, z: n.z, legs }; }
+    }
+    return best;
+  }
+
+  private async loadJunctionModes(): Promise<void> {
+    try {
+      const r = await this.sim.send('pluginCommand', { plugin: 'circulation', name: 'carrefours' });
+      this.junctionModes = new Map(((r.data as { nodeId: number; mode: JunctionChoice }[] | undefined) ?? []).map((j) => [j.nodeId, j.mode]));
+    } catch { /* circulation absente : réglages inconnus */ }
+    this.refresh();
+  }
+
+  /** Règle le carrefour choisi (commande du module circulation). */
+  async setJunctionMode(mode: JunctionChoice): Promise<void> {
+    const j = this.junction;
+    if (!j) return;
+    try {
+      await this.sim.send('pluginCommand', { plugin: 'circulation', name: 'carrefour', payload: { nodeId: j.id, mode } });
+      if (mode === 'auto') this.junctionModes.delete(j.id); else this.junctionModes.set(j.id, mode);
+      this.applied++;
+      this.notify(`Carrefour (${j.legs} branches) : ${JUNCTION_LABELS[mode]}`, 'ok');
+    } catch (e) { this.notify(`Réglage refusé : ${errorOf(e).message}`, 'error'); }
+    this.refresh();
+  }
+
   private refreshParallel(g: { x: number; z: number } | null): boolean {
     const near = g ? this.mirror.nearestEdge(g.x, g.z, Math.max(this.parallelDist + 20, this.snapRadius)) : null;
     const base = { kind: 'road' as const, type: this.roadType, mode: 'straight' as RoadMode, start: null, control: null, hover: null, angle: '', chained: 0 };
@@ -720,6 +773,11 @@ export class ConstructionTools {
           if (this.roadSub === 'grid') await this.gridClick();
           else if (this.roadSub === 'upgrade') await this.upgradeClick();
           else if (this.roadSub === 'parallel') await this.parallelClick();
+          else if (this.roadSub === 'junction') {
+            const p = this.preview;
+            this.junction = p.kind === 'junction' ? p.hover : null;
+            if (this.junction) await this.loadJunctionModes(); else this.refresh();
+          }
           else await this.roadClick();
           break;
         case 'bulldoze': await this.bulldozeCurrent(); break;

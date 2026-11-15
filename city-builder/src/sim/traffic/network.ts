@@ -43,7 +43,11 @@ export interface TrafficEdgeInput {
   /** Demi-largeur de la chaussée traversée par le passage (m, bordure à bordure / 2). Absent : d'après les voies. */
   crossHalf?: number;
 }
-export interface TrafficNodeInput { id: number; x: number; y: number; z: number }
+/** `control` : réglage du joueur pour un carrefour (absent = automatique) — voir JUNCTION_MODES. */
+export interface TrafficNodeInput { id: number; x: number; y: number; z: number; control?: JunctionMode }
+/** Réglages de carrefour offerts au joueur : feux, stop (tout le monde cède), priorité (passage libre). */
+export type JunctionMode = 'signal' | 'stop' | 'priority';
+export const JUNCTION_MODES: readonly JunctionMode[] = ['signal', 'stop', 'priority'];
 export interface TrafficNetworkInput { nodes: TrafficNodeInput[]; edges: TrafficEdgeInput[] }
 
 export const enum Control { None = 0, Priority = 1, Yield = 2, Signal = 3, DeadEnd = 4 }
@@ -248,8 +252,14 @@ export class TrafficGraph {
         nodeArms.push({ arc: arcIn, angle: Math.atan2(dx, dz), rank: this.edgeRank[e]!, lanes: this.edgeLanes[arcIn]!, leg });
       });
       let control = Control.None;
+      const ov = nodes[n]!.control;
+      let allWay = false;
       if (d === 1) control = Control.DeadEnd;
-      else if (d >= 3) {
+      else if (d >= 3 && ov) {
+        // Réglage du joueur (outil Carrefour) : prioritaire sur le choix automatique.
+        control = ov === 'signal' ? Control.Signal : ov === 'stop' ? Control.Yield : Control.Priority;
+        allWay = ov === 'stop';
+      } else if (d >= 3) {
         const big = inc.filter((e) => Math.max(this.edgeLanes[e * 2]!, this.edgeLanes[e * 2 + 1]!) >= 2).length;
         const ranks = inc.map((e) => this.edgeRank[e]!);
         const maxR = Math.max(...ranks), minR = Math.min(...ranks);
@@ -285,7 +295,7 @@ export class TrafficGraph {
       nodeArms.forEach((a, i) => {
         this.legArm[a.leg] = arms.length; armLeg.push(a.leg);
         arms.push(a.arc); armPhase.push(Math.min(3, phaseOf[i]!)); armAngle.push(a.angle);
-        armPrio.push(control === Control.Yield && a.rank === maxRank ? 1 : 0);
+        armPrio.push(control === Control.Yield && !allWay && a.rank === maxRank ? 1 : 0);
       });
     }
     this.nodeArmStart[this.nodeCount] = arms.length;

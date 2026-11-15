@@ -32,6 +32,8 @@ export interface CirculationSaveV1 {
   reroute?: boolean;
   /** Carte de congestion affichée (défaut faux). */
   overlay?: boolean;
+  /** Réglages des carrefours par le joueur : [identifiant de nœud, mode] (ajout rétrocompatible, omis sans réglage). */
+  carrefours?: [number, string][];
 }
 export type CirculationSave = CirculationSaveV1;
 
@@ -41,6 +43,11 @@ export function emptyCirculationSave(): CirculationSave {
 
 /** Relit une section (quelle que soit sa provenance) en valeurs sûres : jamais d'exception sur un champ exotique. */
 export function readCirculationSave(d: CirculationSave): Required<CirculationSave> {
+  const carrefours: [number, string][] = [];
+  if (Array.isArray(d.carrefours)) for (const c of d.carrefours) {
+    if (!Array.isArray(c) || !Number.isFinite(Number(c[0])) || !['signal', 'stop', 'priority'].includes(String(c[1]))) continue;
+    carrefours.push([Number(c[0]) | 0, String(c[1])]);
+  }
   const raw = Array.isArray(d.feux) ? d.feux : [];
   const feux: SignalSave[] = [];
   for (const f of raw) {
@@ -50,7 +57,7 @@ export function readCirculationSave(d: CirculationSave): Required<CirculationSav
     if (!Number.isFinite(n) || !Number.isFinite(p) || !Number.isFinite(st) || !Number.isFinite(t)) continue;
     feux.push({ n: n | 0, p: Math.max(0, p | 0), st: Math.min(2, Math.max(0, st | 0)), t: Math.max(0, t) });
   }
-  return { feux, reroute: d.reroute !== false, overlay: d.overlay === true };
+  return { feux, reroute: d.reroute !== false, overlay: d.overlay === true, carrefours };
 }
 
 /** Étapes de migration : STEPS[v] transforme des données v en v+1. */

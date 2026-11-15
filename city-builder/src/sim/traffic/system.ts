@@ -22,7 +22,7 @@ import { SIGNAL_HEAD_STRIDE, type VehicleFrame } from '../../shared/protocol';
 import { congestionLevel, FEU_ORANGE, FEU_ROUGE, FEU_VERT, type CongestionFrame, type CongestionLayout, type CrossingState, type FeuArmState, type FeuJunctionState, type FeuxApi } from '../../shared/protocol-ext/circulation';
 import { FREE_GAP, IDM_BY_KIND, idmAccel } from './idm';
 import { MOBIL_DEFAULT, mandatoryBSafe, mobilGain, mobilSafe, type MobilParams } from './mobil';
-import { Control, EdgeGrid, TrafficGraph, Turn, type TrafficNetworkInput } from './network';
+import { Control, EdgeGrid, TrafficGraph, Turn, type JunctionMode, type TrafficNetworkInput } from './network';
 import { ArcRouter } from './router';
 import { setActiveTraffic } from './registry';
 
@@ -258,7 +258,19 @@ export class TrafficSystem {
   }
 
   /** Nouveau réseau (reconstruit au prochain pas ; les véhicules sont reportés sur le nouveau graphe). */
-  setNetwork(input: TrafficNetworkInput): void { this.networkInput = input; this.networkDirty = true; }
+  setNetwork(input: TrafficNetworkInput): void { this.networkInput = this.withJunctionModes(input); this.networkDirty = true; }
+
+  /** Réglages des carrefours par le joueur (identifiant de nœud du monde -> mode) ; conservés à chaque reconstruction. */
+  readonly junctionModes = new Map<number, JunctionMode>();
+  private withJunctionModes(input: TrafficNetworkInput): TrafficNetworkInput {
+    if (!this.junctionModes.size) return input;
+    return { ...input, nodes: input.nodes.map((n) => { const m = this.junctionModes.get(n.id); return m ? { ...n, control: m } : n; }) };
+  }
+  /** Fixe (ou retire avec null) le réglage d'un carrefour ; le réseau de circulation est reconstruit au pas suivant. */
+  setJunctionMode(nodeId: number, mode: JunctionMode | null): void {
+    if (mode) this.junctionModes.set(nodeId, mode); else this.junctionModes.delete(nodeId);
+    if (this.networkInput) { this.networkInput = this.withJunctionModes({ ...this.networkInput, nodes: this.networkInput.nodes.map(({ control: _c, ...n }) => n) }); this.networkDirty = true; }
+  }
   setBuildings(b: TrafficBuilding[]): void { this.buildings = b; this.buildingsDirty = true; }
 
   /* ------------------------------------------------------------------ */

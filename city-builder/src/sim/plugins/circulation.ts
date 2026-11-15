@@ -14,6 +14,7 @@
  * par le registre du module trafic (src/sim/traffic/registry.ts). Demande d'API au cœur : docs/requests/circulation.md.
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
+import { JUNCTION_MODES, type JunctionMode } from '../traffic/network';
 import {
   CIRCULATION_EXT_VERSION, FEUX_SERVICE,
   type CirculationDelta, type CirculationSnapshot, type CirculationStats, type FeuxApi,
@@ -140,6 +141,7 @@ export const circulationPlugin: SimPlugin = {
     const t = traffic();
     const feux = t ? t.signalSnapshot().map((s) => ({ n: s.nodeId, p: s.phase, st: s.stage, t: +s.timer.toFixed(2) })) : [];
     const data: CirculationSave = { feux, reroute: t ? t.rerouteEnabled : true, overlay: state.overlay };
+    if (t && t.junctionModes.size) data.carrefours = [...t.junctionModes].sort((a, b) => a[0] - b[0]);
     state.save = data;
     return data;
   },
@@ -152,6 +154,8 @@ export const circulationPlugin: SimPlugin = {
     const t = traffic();
     if (t) {
       t.rerouteEnabled = parsed.reroute;
+      t.junctionModes.clear();
+      for (const [n, m] of parsed.carrefours) t.setJunctionMode(n, m as JunctionMode);
       t.restoreSignals(parsed.feux.map((f) => ({ nodeId: f.n, phase: f.p, stage: f.st, timer: f.t })));
     }
     void ctx;
@@ -172,6 +176,16 @@ export const circulationPlugin: SimPlugin = {
         const x = Number(p['x']), z = Number(p['z']), r = Number(p['radius']);
         if (Number.isFinite(x) && Number.isFinite(z) && Number.isFinite(r)) return { ok: true, data: t.feuxApi().crossingsNear(x, z, r) };
         return { ok: true, data: t.crossings() };
+      }
+      case 'carrefours':
+        return { ok: true, data: [...t.junctionModes].map(([nodeId, mode]) => ({ nodeId, mode })) };
+      case 'carrefour': {
+        const id = Number(p['nodeId']), mode = p['mode'];
+        if (!Number.isInteger(id)) return { ok: false, code: 'INVALID_ARGS', message: 'Carrefour invalide' };
+        if (mode !== 'auto' && !(JUNCTION_MODES as readonly unknown[]).includes(mode)) return { ok: false, code: 'INVALID_ARGS', message: 'Réglage inconnu' };
+        t.setJunctionMode(id, mode === 'auto' ? null : mode as JunctionMode);
+        t.ensureNetwork();
+        return { ok: true, data: { nodeId: id, mode } };
       }
       case 'afficherCongestion': {
         state.overlay = p['on'] === true;
