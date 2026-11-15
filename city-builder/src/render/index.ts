@@ -113,8 +113,12 @@ export async function initRender(
   const roads = new RoadNetworkRenderer(ctx.scene, heightAt, { lib, treeImpostor: (id) => veg.impostorMaterial(id) });
   // Ordinateur : ombres des bâtiments en lots fusionnés (≈ 1 000 appels de rendu de moins dans la carte d'ombre
   // d'une grande ville) ; téléphone : inchangé (mémoire graphique comptée au plus juste).
-  const buildings = new InstancedBuildingRenderer(ctx.scene, lib, { lodBias: profile.buildingLodBias, shadowProxies: !profile.lite });
-  if (!profile.lite) enableShadowProxyLayer(ctx.sun);
+  // Ordinateur avec WEBGL_multi_draw : rendu principal en lots par matériau (≈ 1 appel par matériau au lieu
+  // d'un par sous-maillage et par modèle). Désactivable avec ?lots=0 (comparaison, diagnostic).
+  const lotsParam = new URLSearchParams(globalThis.location?.search ?? '').get('lots');
+  const batchByMaterial = !profile.lite && lotsParam !== '0' && ctx.renderer.extensions.has('WEBGL_multi_draw');
+  const buildings = new InstancedBuildingRenderer(ctx.scene, lib, { lodBias: profile.buildingLodBias, shadowProxies: !profile.lite && lotsParam !== '0', batchByMaterial });
+  if (!profile.lite && lotsParam !== '0') enableShadowProxyLayer(ctx.sun);
   buildings.attachCamera(ctx.camera);
   buildings.attachRenderer(ctx.renderer);
   const vehicles = new InstancedVehicleRenderer(ctx.scene, lib);

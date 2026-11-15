@@ -194,10 +194,10 @@ try {
   await page.click('#btn-fin-tax');
   await page.waitForTimeout(600);
   const slider = page.locator('#fin-tax-body input[type=range]').first();
-  await slider.evaluate((el) => { el.value = '14'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
+  await slider.evaluate((el) => { el.value = '11'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.waitForTimeout(1200);
   const rep = await send(page, 'getReport', {});
-  check(rep.ok && Math.abs(rep.r.economy.taxRates.residential - 0.14) < 1e-9, `impôt résidentiel réglé à 14 % dans la simulation (${rep.r?.economy.taxRates.residential})`);
+  check(rep.ok && Math.abs(rep.r.economy.taxRates.residential - 0.11) < 1e-9, `impôt résidentiel réglé à 11 % dans la simulation (${rep.r?.economy.taxRates.residential})`);
   const incomeTxt = await page.textContent('#fin-income');
   check(/\+/.test(incomeTxt ?? ''), `recettes fiscales affichées (« ${incomeTxt} »)`);
   await render(page, 1);

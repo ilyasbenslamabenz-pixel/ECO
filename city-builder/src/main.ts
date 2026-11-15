@@ -365,6 +365,26 @@ async function boot(): Promise<void> {
     if (input.camera.mode === 'street') input.camera.setMode('aerial');
     input.camera.setPose({ targetX: x, targetZ: z, targetY: render.terrain.heightAt(x, z), distance, ...(pitch !== undefined ? { pitch } : {}), ...(yaw !== undefined ? { yaw } : {}) });
   };
+  // Diagnostic (performance) : temps PROCESSEUR d'une image, carte graphique attendue avant (gl.finish) pour ne
+  // pas compter son travail : mises à jour JS (culling, LOD, instances…) puis rendu three (préparation et envoi des
+  // commandes). Boucle d'affichage à suspendre avant (pauseRender). Caméra tournée de `yawStep` entre deux images.
+  (debug as unknown as Record<string, unknown>).cpuFrames = (n = 30, yawStep = 0.02) => {
+    const ctx = render.ctx, gl = ctx.renderer.getContext();
+    const p = input.camera.getPose();
+    const upd: number[] = [], rnd: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (yawStep) input.camera.setPose({ yaw: p.yaw + yawStep * (i + 1) });
+      gl.finish();
+      const t0 = performance.now();
+      for (const f of ctx.onFrame) f(1 / 60);
+      const t1 = performance.now();
+      ctx.renderer.render(ctx.scene, ctx.camera);
+      const t2 = performance.now();
+      upd.push(t1 - t0); rnd.push(t2 - t1);
+    }
+    const med = (a: number[]): number => { const s = [...a].sort((x, y) => x - y); return Math.round(s[Math.floor(s.length / 2)]! * 100) / 100; };
+    return { updateMs: med(upd), renderMs: med(rnd), calls: ctx.renderer.info.render.calls, triangles: ctx.renderer.info.render.triangles };
+  };
   debug.benchFrame = () => {
     const r = render.ctx.renderer;
     const t0 = performance.now();

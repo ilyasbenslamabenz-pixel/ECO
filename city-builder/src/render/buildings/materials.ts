@@ -166,6 +166,9 @@ varying float vAubeHash;`)
   #ifdef USE_INSTANCING
     aubeT += instanceMatrix[3].xyz;
   #endif
+  #ifdef USE_BATCHING
+    aubeT += batchingMatrix[3].xyz;
+  #endif
   vAubeHash = fract( sin( dot( floor( aubeT.xz * 0.5 ), vec2( 12.9898, 78.233 ) ) ) * 43758.5453 );`);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
