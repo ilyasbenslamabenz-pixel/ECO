@@ -217,8 +217,8 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     measuring = false;
     const iv = intervals(t0, t1);
     const newPrograms = (info.programs?.length ?? 0) - prog0, newTextures = info.memory.textures - tex0, newGeometries = info.memory.geometries - geo0;
-    let maxAt = 0;
-    for (let k = 1; k < stamps.length; k++) { const t = stamps[k]!; if (t > t0 && t <= t1 && t - stamps[k - 1]! >= (iv.length ? Math.max(...iv) : Infinity)) { maxAt = t - t0; break; } }
+    let maxAt = 0, maxIv = -1;
+    for (let k = 1; k < stamps.length; k++) { const t = stamps[k]!; if (t > t0 && t <= t1 && t - stamps[k - 1]! > maxIv) { maxIv = t - stamps[k - 1]!; maxAt = t - t0; } }
     // Temps processeur : court échantillon séparé (attente de la carte graphique avant chaque image : gl.finish).
     let cpu: { updateMs: number; renderMs: number } | null = null;
     try { cpu = h.cpuFrames(cpuN, sc.cpuYaw); } catch { cpu = null; }
