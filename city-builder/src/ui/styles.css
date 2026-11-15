@@ -73,12 +73,12 @@
 }
 /* Thème clair : icônes colorées plus denses (contraste sur fond clair), boutons actifs bleus à texte blanc. */
 :root[data-theme="clair"] svg.ic { filter: saturate(1.25) brightness(.78); }
-:root[data-theme="clair"] #toolbar button.active svg.ic, :root[data-theme="clair"] .ptabs button.active svg.ic { filter: none; color: #fff; }
-:root[data-theme="clair"] #toolbar button.active, :root[data-theme="clair"] .ptabs button.active, :root[data-theme="clair"] .seg button.active,
-:root[data-theme="clair"] #sidebar button.active, :root[data-theme="clair"] .gov-chip.on, :root[data-theme="clair"] #layers-pop .layer-item.on {
-  background: var(--accent); border-color: var(--accent-strong); color: #fff; box-shadow: 0 2px 8px rgba(26, 140, 255, .28); }
+:root:is([data-theme="clair"], [data-theme="nuit"]) #toolbar button.active svg.ic, :root:is([data-theme="clair"], [data-theme="nuit"]) .ptabs button.active svg.ic { filter: none; color: #fff; }
+:root:is([data-theme="clair"], [data-theme="nuit"]) #toolbar button.active, :root:is([data-theme="clair"], [data-theme="nuit"]) .ptabs button.active, :root:is([data-theme="clair"], [data-theme="nuit"]) .seg button.active,
+:root:is([data-theme="clair"], [data-theme="nuit"]) #sidebar button.active, :root:is([data-theme="clair"], [data-theme="nuit"]) .gov-chip.on, :root:is([data-theme="clair"], [data-theme="nuit"]) #layers-pop .layer-item.on {
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong)); border-color: var(--accent-strong); color: #fff; box-shadow: 0 2px 10px rgba(var(--accent-rgb), .32); }
 :root[data-theme="clair"] #family-pop button span { color: var(--text); }
-:root[data-theme="clair"] .kicker { color: var(--accent-strong); }
+:root:is([data-theme="clair"], [data-theme="nuit"]) .kicker { color: var(--accent); letter-spacing: .09em; }
 :root[data-theme="clair"] #sidebar-scrim { background: rgba(18, 32, 52, .25) !important; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
@@ -829,3 +829,52 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 :root[data-theme="clair"] .toast { background: var(--glass-2); color: var(--text); }
 :root[data-theme="clair"] .overlay { background: radial-gradient(ellipse at 50% 30%, rgba(236, 242, 248, .55), rgba(206, 216, 228, .92)); }
 :root[data-theme="clair"] .card .thumb { background: radial-gradient(ellipse at 50% 30%, #f3f6fa, #d9e1ea); }
+
+
+/* ============ Thème « Nuit » (par défaut) : bleu nuit profond, verre teinté, accent bleu vif, reflets discrets ============ */
+:root[data-theme="nuit"] {
+  --bg: #070c14;
+  --glass: rgba(14, 22, 34, 0.80);
+  --glass-2: rgba(17, 26, 40, 0.93);
+  --panel: rgba(13, 21, 32, 0.91);
+  --panel-solid: #111b28;
+  --panel-2: rgba(170, 200, 240, 0.045);
+  --line: rgba(150, 180, 220, 0.14);
+  --line-2: rgba(150, 180, 220, 0.27);
+  --text: #e6edf6;
+  --text-strong: #ffffff;
+  --muted: #8b9cb3;
+  --accent: #3b9eff;
+  --accent-2: #6cb8ff;
+  --accent-strong: #1d84ee;
+  --accent-ink: #ffffff;
+  --accent-rgb: 59, 158, 255;
+  --accent-soft: rgba(59, 158, 255, 0.16);
+  --accent-glow: 0 0 0 1px rgba(59, 158, 255, 0.6), 0 4px 16px rgba(59, 158, 255, 0.28);
+  --danger: #ff6464;
+  --ok: #35d47c;
+  --warn: #ffc24d;
+  --radius: 11px;
+  --shadow: 0 14px 40px rgba(2, 8, 18, 0.55);
+  --blur: blur(18px) saturate(150%);
+  --ink: 190, 212, 245;
+  color-scheme: dark;
+}
+:root[data-theme="nuit"] #hud { background: linear-gradient(180deg, rgba(12, 19, 30, .94), rgba(14, 22, 34, .84)); border-bottom: 1px solid rgba(150, 180, 220, .12);
+  box-shadow: 0 6px 22px rgba(2, 8, 18, .45), inset 0 -1px 0 rgba(255, 255, 255, .03); }
+:root[data-theme="nuit"] #hud > .hud-stat, :root[data-theme="nuit"] .seg { background: rgba(170, 200, 240, .06); border: 1px solid rgba(150, 180, 220, .1); }
+/* Panneaux, barre d'outils, menus : reflet clair en haut (verre), ombre profonde. */
+:root[data-theme="nuit"] .panel, :root[data-theme="nuit"] #toolbar, :root[data-theme="nuit"] #minimap, :root[data-theme="nuit"] #sidebar,
+:root[data-theme="nuit"] #layers-pop, :root[data-theme="nuit"] #family-pop, :root[data-theme="nuit"] #tool-options, :root[data-theme="nuit"] #build-drawer {
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, .06); border-color: rgba(150, 180, 220, .14); }
+:root[data-theme="nuit"] .panel-head { border-bottom: 1px solid rgba(150, 180, 220, .1); }
+:root[data-theme="nuit"] .kpi, :root[data-theme="nuit"] .gov-card { background: linear-gradient(180deg, rgba(170, 200, 240, .07), rgba(170, 200, 240, .03)); border-color: rgba(150, 180, 220, .13); }
+:root[data-theme="nuit"] .gov-card.on { background: linear-gradient(180deg, rgba(59, 158, 255, .14), rgba(59, 158, 255, .05)); border-color: rgba(59, 158, 255, .5); }
+:root[data-theme="nuit"] .kpi b { color: #fff; }
+:root[data-theme="nuit"] button:hover:not(:disabled) { background: rgba(170, 200, 240, .1); }
+:root[data-theme="nuit"] #toasts .toast { background: rgba(17, 26, 40, .95); border-color: rgba(150, 180, 220, .16); box-shadow: var(--shadow); }
+:root[data-theme="nuit"] #cursor-tag { background: rgba(12, 19, 30, .95); border-color: rgba(150, 180, 220, .2); }
+:root[data-theme="nuit"] .overlay { background: radial-gradient(ellipse at 50% 30%, rgba(20, 40, 70, .55), rgba(5, 9, 16, .94)); }
+:root[data-theme="nuit"] .card .thumb { background: radial-gradient(ellipse at 50% 30%, #23344a, #101826); }
+:root[data-theme="nuit"] .form input, :root[data-theme="nuit"] .form select { background: rgba(5, 10, 18, .5); }
+:root[data-theme="nuit"] #toolbar button { color: #c9d6e6; }

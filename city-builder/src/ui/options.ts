@@ -15,11 +15,11 @@ export interface GraphicsOptions {
   viewDistance: number;
   /** Images par seconde maximales : « auto » = 60 sur téléphone, sans limite ailleurs. */
   fps: 'auto' | '30' | '60' | 'max';
-  /** Thème de l'interface : clair (verre dépoli, par défaut) ou sombre (thème d'origine). */
-  theme: 'clair' | 'sombre';
+  /** Thème de l'interface : nuit (bleu nuit, par défaut), clair (verre dépoli) ou sombre (thème d'origine). */
+  theme: 'nuit' | 'clair' | 'sombre';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'clair' };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit' };
 
 /** Applique le thème de l'interface (attribut lu par les feuilles de style). */
 export function applyTheme(t: GraphicsOptions['theme']): void {
@@ -36,7 +36,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     shadows: s === 'off' || s === 'low' || s === 'high' || s === 'ultra' ? s : DEFAULT_OPTIONS.shadows,
     viewDistance: Number.isFinite(d) ? Math.min(8000, Math.max(1500, d)) : DEFAULT_OPTIONS.viewDistance,
     fps: o?.fps === '30' || o?.fps === '60' || o?.fps === 'max' || o?.fps === 'auto' ? o.fps : DEFAULT_OPTIONS.fps,
-    theme: o?.theme === 'sombre' || o?.theme === 'clair' ? o.theme : DEFAULT_OPTIONS.theme,
+    theme: o?.theme === 'sombre' || o?.theme === 'clair' || o?.theme === 'nuit' ? o.theme : DEFAULT_OPTIONS.theme,
   };
 }
 
