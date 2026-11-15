@@ -220,3 +220,18 @@ test('delta : tronçon créé puis découpé entre deux deltas absent des deux l
   const live = new Set(s.roadRecords().edges.map((e) => e.id));
   assert.deepEqual(new Set(d.roadEdgesAdded.map((e) => e.id)), live, 'le delta décrit exactement le réseau final');
 });
+
+test('amélioration : la hauteur imposée (pont/tunnel) et le statut de giratoire sont conservés', () => {
+  const net = new RoadNetwork(flat);
+  // Tronçon surélevé (+8 m) marqué comme portion de giratoire.
+  const na = net.addNode(0, 0), nb = net.addNode(160, 0);
+  const id = net.addSegment(na, nb, 'street', undefined, undefined, 8);
+  net.setRing(id, [80, 30, 40]);
+  const up = planUpgrade(net, { segId: id, kind: 'avenue' });
+  assert.ok(up.ok, !up.ok ? up.error.message : '');
+  const mid = up.plan.profile.heights[Math.floor(up.plan.profile.count / 2)]!;
+  assert.ok(mid > 14, `profil du plan surélevé (${mid})`);
+  const { edgeId } = commitUpgrade(net, up.plan);
+  assert.equal(net.elevationOf(edgeId), 8, 'hauteur imposée conservée');
+  assert.deepEqual(net.ringOf(edgeId), [80, 30, 40], 'giratoire conservé');
+});

@@ -106,7 +106,13 @@ export const circulationPlugin: SimPlugin = {
   onNewGame(): void {
     state = freshState();
     const t = traffic();
-    if (t) t.rerouteEnabled = true;
+    if (t) {
+      t.rerouteEnabled = true;
+      // Les réglages de carrefour appartiennent à la partie précédente : on les oublie (le réseau est reconstruit).
+      if (t.junctionModes.size) {
+        for (const id of [...t.junctionModes.keys()]) t.setJunctionMode(id, null);
+      }
+    }
   },
 
   onTick(ctx: PluginContext, minutes: number): void {

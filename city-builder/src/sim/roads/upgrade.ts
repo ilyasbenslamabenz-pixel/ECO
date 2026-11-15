@@ -157,7 +157,8 @@ export function planUpgrade(net: RoadNetwork, req: UpgradeRequest, opts: Upgrade
 
   // Profil en long avec les règles du nouveau type (pente, ponts).
   const ya = net.nodePos(reverse ? b : a).y, yb = net.nodePos(reverse ? a : b).y;
-  const profile = computeProfile(curve, arc, ya, yb, kind.maxGrade, net.env);
+  // La hauteur imposée (pont/viaduc surélevé, tunnel) est conservée : sans elle, l'ouvrage redeviendrait une route au sol.
+  const profile = computeProfile(curve, arc, ya, yb, kind.maxGrade, net.env, net.elevationOf(req.segId));
   if (profile.maxGrade > kind.maxGrade * 1.05) return err('TOO_STEEP', `Pente trop forte pour ce type : ${Math.round(profile.maxGrade * 100)} % (maximum ${Math.round(kind.maxGrade * 100)} %)`);
   if (profile.longestBridge > MAX_BRIDGE_LENGTH) return err('UNDER_WATER', `Pont trop long pour ce type (${Math.round(profile.longestBridge)} m, maximum ${MAX_BRIDGE_LENGTH} m)`);
   if (profile.wet) return err('UNDER_WATER', 'Le tracé passerait sous le niveau de l\'eau avec ce type');
@@ -175,11 +176,17 @@ export function planUpgrade(net: RoadNetwork, req: UpgradeRequest, opts: Upgrade
 export function commitUpgrade(net: RoadNetwork, plan: UpgradePlan): { edgeId: number } {
   if (plan.networkVersion !== net.version) throw new Error('Plan de modification périmé : le réseau a changé');
   const [a, b] = net.endpoints(plan.segId);
+  // Attributs du tronçon d'origine à conserver : hauteur imposée (pont/tunnel) et appartenance à un giratoire.
+  const elevation = net.elevationOf(plan.segId);
+  const ring = net.ringOf(plan.segId);
   // Les deux nœuds gardent leurs autres tronçons : on empêche leur suppression pendant le remplacement.
   const ia = net.nodeIndex(a), ib = net.nodeIndex(b);
   net.nodeDegree[ia]!++; net.nodeDegree[ib]!++;
   net.removeSegment(plan.segId);
   net.nodeDegree[net.nodeIndex(a)]!--; net.nodeDegree[net.nodeIndex(b)]!--;
-  const edgeId = plan.reverse ? net.addSegment(b, a, plan.kind, plan.curve) : net.addSegment(a, b, plan.kind, plan.curve);
+  const edgeId = plan.reverse
+    ? net.addSegment(b, a, plan.kind, plan.curve, undefined, elevation)
+    : net.addSegment(a, b, plan.kind, plan.curve, undefined, elevation);
+  if (ring) net.setRing(edgeId, ring);
   return { edgeId };
 }

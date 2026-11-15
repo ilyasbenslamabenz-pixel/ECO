@@ -1612,8 +1612,10 @@ export class TrafficSystem {
     return out;
   }
 
+  /** Remise à zéro pour une nouvelle partie : véhicules retirés ET réglages de carrefour du joueur oubliés. */
   clear(): void {
     while (this.actCount) this.despawn(this.act[0]!);
     this.arenaUsed = 0; this.arenaLive = 0;
+    this.junctionModes.clear();
   }
 }

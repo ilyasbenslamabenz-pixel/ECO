@@ -44,3 +44,17 @@ test('carrefour : feux forcés puis retour automatique ; refus d’un réglage i
   s.tick(2);
   assert.ok(!signals(s).includes(node!), 'retour en automatique');
 });
+
+test('nouvelle partie : les réglages de carrefour de la partie précédente sont oubliés', () => {
+  const s = newTownSim(); buildTown(s);
+  s.tick(2);
+  const roads = s.roadRecords();
+  const node = roads.edges[0]?.a;
+  assert.ok(node !== undefined, 'au moins un tronçon');
+  assert.ok(cmd(s, 'carrefour', { nodeId: node, mode: 'stop' }).ok);
+  assert.deepEqual(cmd(s, 'carrefours').data, [{ nodeId: node, mode: 'stop' }]);
+  s.newGame({ seed: 99, mapChunks: 4, startMoney: 1_000_000, cityName: 'Neuve', terrain: { hydrology: 'aucune', rivers: 0 } });
+  s.tick(1);
+  assert.deepEqual(cmd(s, 'carrefours').data, [], 'aucun réglage hérité');
+  assert.equal((s.toSave() as unknown as { plugins?: Record<string, { data?: { carrefours?: unknown } }> }).plugins?.['circulation']?.data?.carrefours, undefined);
+});
