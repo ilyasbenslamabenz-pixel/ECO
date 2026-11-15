@@ -734,7 +734,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   #toolbar button[data-cat="energy"], #toolbar button[data-cat="water"], #toolbar button[data-cat="waste"],
   #toolbar button[data-cat="transport"], #toolbar button[data-cat="environment"], #toolbar button[data-cat="terrain"] { display: none !important; }
   #toolbar [data-family] { display: inline-flex; }
-  #toolbar { display: flex !important; flex-wrap: nowrap !important; overflow: hidden; }
+  #toolbar { display: flex !important; flex-wrap: nowrap !important; overflow: hidden; gap: 0 !important; padding: 3px 2px !important; }
   #toolbar .tb-sep { display: none; }
   #toolbar button { flex: 1 1 0; min-width: 0 !important; width: auto !important; padding: 4px 1px; font-size: 10px; }
   #toolbar button .tl { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }

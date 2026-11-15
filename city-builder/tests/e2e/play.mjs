@@ -246,7 +246,7 @@ try {
   const tb = await p2.evaluate(() => {
     const t = document.querySelector('#toolbar');
     const r = t.getBoundingClientRect();
-    const btns = [...t.querySelectorAll('button')].map((b) => b.getBoundingClientRect());
+    const btns = [...t.querySelectorAll('button')].filter((b) => b.offsetParent !== null).map((b) => b.getBoundingClientRect()); // boutons visibles (familles sur téléphone)
     return { left: r.left, right: r.right, scrollW: t.scrollWidth, clientW: t.clientWidth, docW: document.documentElement.scrollWidth,
       allInside: btns.every((b) => b.left >= 0 && b.right <= innerWidth), minBtn: Math.min(...btns.map((b) => Math.min(b.width, b.height))) };
   });
