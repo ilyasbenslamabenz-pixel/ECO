@@ -123,6 +123,27 @@ export interface LineView {
   failedUntil: number;
 }
 
+/**
+ * Câble souterrain : relie une installation (`a`) à une autre installation (`b` > 0) ou à une route (`b` = 0,
+ * extrémité `bx`, `bz` sur la chaussée). Sans pylône ; dessiné en tirets dans le calque Électricité seulement.
+ */
+export interface CableView {
+  id: number;
+  a: number;
+  /** Installation d'arrivée ; 0 = route (point `bx`, `bz`). */
+  b: number;
+  ax: number; az: number; bx: number; bz: number;
+  lengthM: number;
+  capacityKw: number;
+  /** Charge (0..1) à la dernière répartition (câble entre installations ; 0 vers une route). */
+  load: number;
+  /** Faux si l'extrémité « route » ne touche plus aucune route (route démolie). */
+  active: boolean;
+}
+
+/** Extrémité d'un câble souterrain : installation (`id`) ou point d'une route (`x`, `z`). */
+export interface CableEnd { id?: number; x?: number; z?: number }
+
 /** Bilan par source (kW). */
 export interface SourceBalance {
   source: SourceId;
@@ -266,6 +287,8 @@ export interface ElectriciteDelta {
   summary?: ElectriciteSummary;
   facilities?: FacilityView[];
   lines?: LineView[];
+  /** Câbles souterrains (absent tant qu'aucun câble n'a été posé). */
+  cables?: CableView[];
   settings?: ElectriciteSettings;
   budget?: ElectriciteBudget;
   events?: ElectriciteEvent[];
@@ -291,6 +314,10 @@ export interface ElectriciteCommands {
   removeLine: { payload: { id: number }; result: { removed: boolean } };
   /** Relie une installation à l'installation alimentée la plus proche (ligne au plus court). */
   autoConnect: { payload: { id: number }; result: { line: LineView; cost: number } };
+  /** Câble souterrain : devis, construction, démolition (extrémités : installation ou point de route). */
+  quoteCable: { payload: { a: CableEnd; b: CableEnd }; result: { lengthM: number; cost: number; upkeepPerMonth: number } };
+  buildCable: { payload: { a: CableEnd; b: CableEnd }; result: { cable: CableView; cost: number } };
+  removeCable: { payload: { id: number }; result: { removed: boolean } };
   /** Devis d'une ligne (sans la construire). */
   quoteLine: { payload: { a: number; b: number }; result: { lengthM: number; cost: number; upkeepPerMonth: number } };
   /** Financement de l'entretien (0,25..1,5). */

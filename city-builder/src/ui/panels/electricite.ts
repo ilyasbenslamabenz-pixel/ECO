@@ -204,7 +204,12 @@ function renderNetwork(st: ElectriciteDelta): string {
       <td class="${l.failedUntil > 0 ? 'warn' : l.load > 0.9 ? 'warn' : ''}">${l.failedUntil > 0 ? 'panne' : `${Math.round(l.load * 100)} %`}</td>
       <td><button data-act="rm-line" data-id="${l.id}">Démolir</button></td></tr>`).join('');
   const opts = facs.map((f) => `<option value="${f.id}">${esc(KIND_FR[f.kind])} n° ${f.id}</option>`).join('');
-  return `<h4>Installations</h4><table>${fRows}</table>
+  const cables = st.cables ?? [];
+  const cRows = cables.map((c) => `<tr><td>Câble n° ${c.id} <span class="muted">(${c.a} – ${c.b > 0 ? c.b : 'route'})</span></td><td>${nf0.format(c.lengthM)} m</td>
+      <td class="${c.active ? '' : 'warn'}">${c.active ? (c.b > 0 ? `${Math.round(c.load * 100)} %` : 'raccordé') : 'route démolie'}</td>
+      <td><button data-act="rm-cable" data-id="${c.id}" title="Retirer le câble souterrain">Démolir</button></td></tr>`).join('');
+  const cableBlock = cables.length ? `<h4>Câbles souterrains</h4><table>${cRows}</table>` : '';
+  return `<h4>Installations</h4><table>${fRows}</table>${cableBlock}
   <h4>Lignes haute tension <span class="muted">(facultatives)</span></h4>
   ${lines.length ? `<table>${lRows}</table>` : '<p class="muted">Aucune ligne : le courant suit les routes ; une ligne haute tension relie une installation à un réseau routier séparé (centrale éloignée, hameau).</p>'}
   <div class="row"><select id="elec-a">${opts}</select><select id="elec-b">${opts}</select></div>
@@ -261,6 +266,7 @@ function mountPanel(root: HTMLElement, api: UiPanelApi): () => void {
     }
     if (act === 'auto') { void run('autoConnect', { id: Number(b.dataset['id']) }).then((r) => { if (r) api.toast('Ligne HT construite', 'ok'); return refresh(); }); return; }
     if (act === 'rm-line') { void run('removeLine', { id: Number(b.dataset['id']) }).then(refresh); return; }
+    if (act === 'rm-cable') { void run('removeCable', { id: Number(b.dataset['id']) }).then(refresh); return; }
     if (act === 'quote' || act === 'build') {
       const a = sel('elec-a'), bb = sel('elec-b');
       if (act === 'quote') {

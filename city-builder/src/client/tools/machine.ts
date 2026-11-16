@@ -85,11 +85,19 @@ export const PARALLEL_DISTANCES = [32, 48, 64, 96] as const;
 /** Action de l'outil « Améliorer » : type suivant (rue → avenue → boulevard), type précis, ou inversion du sens. */
 export type UpgradeTarget = 'next' | 'prev' | 'reverse' | RoadKindId;
 
+/** Sous-outil de l'outil Énergie (ToolId `powerline`) : ligne haute tension ou câble souterrain. */
+export type PowerSubTool = 'ht' | 'cable';
+/** Extrémité d'une ligne / d'un câble : installation (`id`) ou point de route (`road`, `id` = 0). */
+export interface PowerEnd { id: number; x: number; z: number; name: string; road?: true }
+/** Aimantation de l'extrémité « route » d'un câble (m) — sous la tolérance de la simulation (CABLE_SPEC.roadSnapM = 16 m). */
+const CABLE_ROAD_SNAP_M = 14;
+
 export type ToolPreview =
   | { kind: 'none' }
   | { kind: 'select'; hover: PickResult | null }
   /** Ligne haute tension : installation de départ, installation visée, segment, devis de la simulation. */
-  | { kind: 'powerline'; a: { id: number; x: number; z: number; name: string } | null; b: { id: number; x: number; z: number; name: string } | null; points: number[] | null; validity: Validity; cost: number; length: number; message: string }
+  /** `cable` : câble souterrain (extrémités : installation ou point de route, `road`). */
+  | { kind: 'powerline'; cable?: true; a: PowerEnd | null; b: PowerEnd | null; points: number[] | null; validity: Validity; cost: number; length: number; message: string }
   | { kind: 'building'; asset: CatalogAsset; proposal: PlacementProposal; variant: number; validity: Validity; cost: number; message: string }
   | { kind: 'road'; type: RoadKindId; mode: RoadMode; points: number[] | null; start: SnapPoint | null; control: SnapPoint | null; hover: SnapPoint | null; validity: Validity; cost: number; length: number; message: string; angle: string; chained: number; elevation?: number; path?: number[] }
   | { kind: 'grid'; type: RoadKindId; start: { x: number; z: number } | null; hover: { x: number; z: number } | null; layout: GridLayout | null; validity: Validity; cost: number; message: string }
@@ -434,47 +442,74 @@ export class ConstructionTools {
 
   /* ------------------------------ Ligne haute tension ------------------------------ */
 
-  private lineA: { id: number; x: number; z: number; name: string } | null = null;
+  private lineA: PowerEnd | null = null;
   private lineKey = '';
+  /** Sous-outil de l'outil Énergie : ligne haute tension (pylônes) ou câble souterrain. */
+  powerSub: PowerSubTool = 'ht';
+
+  /** Change de sous-outil (Ligne HT / Câble souterrain) ; le tracé en cours est abandonné. */
+  setPowerSub(sub: PowerSubTool): void {
+    if (this.powerSub === sub) return;
+    this.powerSub = sub;
+    this.lineA = null;
+    this.lineKey = '';
+    this.refresh();
+  }
 
   /** Installation électrique (centrale, éolienne, poste…) sous le curseur, ou null. */
-  private facilityAt(g: { x: number; z: number } | null): { id: number; x: number; z: number; name: string } | null {
+  private facilityAt(g: { x: number; z: number } | null): PowerEnd | null {
     const hit = this.lastRay ? this.mirror.pick(this.lastRay, g) : null;
     if (hit?.kind === 'building' && hit.asset && hit.asset.id.startsWith('elec_')) return { id: hit.id, x: hit.record.x, z: hit.record.z, name: hit.asset.nameFr };
     return null;
   }
 
+  /** Câble souterrain : point de la route la plus proche du curseur (aimanté sur l'axe), ou null. */
+  private roadPointAt(g: { x: number; z: number } | null): PowerEnd | null {
+    if (!g) return null;
+    const e = this.mirror.nearestEdge(g.x, g.z, Math.min(CABLE_ROAD_SNAP_M, Math.max(10, this.snapRadius)));
+    return e ? { id: 0, x: e.px, z: e.pz, name: 'route', road: true } : null;
+  }
+
+  private static endPayload(e: PowerEnd): { id: number } | { x: number; z: number } { return e.road ? { x: e.x, z: e.z } : { id: e.id }; }
+
   private refreshPowerLine(g: { x: number; z: number } | null): void {
-    const b = this.facilityAt(g);
+    const cable = this.powerSub === 'cable';
+    const tag = cable ? { cable: true as const } : {};
+    const b = this.facilityAt(g) ?? (cable ? this.roadPointAt(g) : null);
     const a = this.lineA;
     if (!a) {
       this.lineKey = '';
-      this.preview = { kind: 'powerline', a: null, b, points: null, validity: b ? 'ok' : 'ok', cost: 0, length: 0, message: b ? `Départ : ${b.name}` : 'Touchez une centrale ou un poste de départ' };
+      const idle = cable ? 'Touchez une éolienne, une centrale ou un poste (ou une route) de départ' : 'Touchez une centrale ou un poste de départ';
+      this.preview = { kind: 'powerline', ...tag, a: null, b, points: null, validity: 'ok', cost: 0, length: 0, message: b ? `Départ : ${b.road ? 'route' : b.name}` : idle };
       this.emit();
       return;
     }
-    if (!b || b.id === a.id) {
+    const same = b && !b.road && !a.road && b.id === a.id;
+    if (!b || same || (cable && a.road && b.road)) {
       this.lineKey = '';
       const pts = g ? [a.x, a.z, g.x, g.z] : null;
-      this.preview = { kind: 'powerline', a, b: null, points: pts, validity: 'ok', cost: 0, length: pts ? Math.hypot(pts[2]! - a.x, pts[3]! - a.z) : 0, message: 'Touchez l\'installation d\'arrivée (poste de transformation dans un quartier)' };
+      const msg = cable ? (a.road ? 'Touchez l’installation à raccorder (éolienne, centrale, poste)' : 'Touchez une route alimentée ou une autre installation') : 'Touchez l\'installation d\'arrivée (poste de transformation dans un quartier)';
+      this.preview = { kind: 'powerline', ...tag, a, b: null, points: pts, validity: 'ok', cost: 0, length: pts ? Math.hypot(pts[2]! - a.x, pts[3]! - a.z) : 0, message: msg };
       this.emit();
       return;
     }
-    const key = `${a.id}-${b.id}-${this.mirror.version}`;
+    const key = `${cable ? 'c' : 'l'}|${a.id}:${a.x.toFixed(1)},${a.z.toFixed(1)}-${b.id}:${b.x.toFixed(1)},${b.z.toFixed(1)}-${this.mirror.version}`;
     if (key === this.lineKey && this.preview.kind === 'powerline') { this.emit(); return; }
     this.lineKey = key;
-    this.preview = { kind: 'powerline', a, b, points: [a.x, a.z, b.x, b.z], validity: 'pending', cost: 0, length: Math.hypot(b.x - a.x, b.z - a.z), message: '' };
+    this.preview = { kind: 'powerline', ...tag, a, b, points: [a.x, a.z, b.x, b.z], validity: 'pending', cost: 0, length: Math.hypot(b.x - a.x, b.z - a.z), message: '' };
     this.emit();
     const seq = ++this.previewSeq;
     this.dry.run(async () => {
       if (seq !== this.previewSeq) return;
       let validity: Validity = 'ok', cost = 0, length = 0, message = '';
       try {
-        const r = await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'quoteLine', payload: { a: a.id, b: b.id } });
+        const r = cable
+          ? await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'quoteCable', payload: { a: ConstructionTools.endPayload(a), b: ConstructionTools.endPayload(b) } })
+          : await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'quoteLine', payload: { a: a.id, b: b.id } });
         const d = r.data as { lengthM: number; cost: number; upkeepPerMonth: number };
         // Le module électricité chiffre en centimes ; la trésorerie (et l'affichage ¢ → CHF) en francs.
         cost = d.cost / 100; length = d.lengthM;
-        message = `${fmt(length)} m · entretien ${fmt(d.upkeepPerMonth / 100)} ¢/mois`;
+        message = `${fmt(length)} m · entretien ${fmt(d.upkeepPerMonth / 100)} ¢/mois${cable ? ' · sous terre, sans pylône' : ''}`;
       } catch (e) { validity = 'error'; message = errorOf(e).message; }
       const cur = this.preview;
       if (cur.kind === 'powerline' && this.lineKey === key) { this.preview = { ...cur, validity, cost, length: length || cur.length, message }; this.emit(); }
@@ -484,19 +519,27 @@ export class ConstructionTools {
   private async powerLineClick(): Promise<void> {
     const p = this.preview;
     if (p.kind !== 'powerline') return;
-    if (!this.lineA) { if (p.b) { this.lineA = p.b; this.refresh(); } else this.notify('Touchez une centrale, une éolienne ou un poste', 'info'); return; }
-    if (!p.b || p.validity === 'error') { if (p.validity === 'error') this.notify(`Ligne refusée : ${p.message}`, 'error'); return; }
+    const cable = p.cable === true;
+    const what = cable ? 'Câble souterrain' : 'Ligne haute tension';
+    if (!this.lineA) { if (p.b) { this.lineA = p.b; this.refresh(); } else this.notify(cable ? 'Touchez une éolienne, une centrale, un poste ou une route' : 'Touchez une centrale, une éolienne ou un poste', 'info'); return; }
+    if (!p.b || p.validity === 'error') { if (p.validity === 'error') this.notify(`${cable ? 'Câble refusé' : 'Ligne refusée'} : ${p.message}`, 'error'); return; }
+    const a = this.lineA, b = p.b;
+    const label = `${what} ${a.road ? 'route' : a.name} → ${b.road ? 'route' : b.name}`;
     try {
-      const r = await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'buildLine', payload: { a: this.lineA.id, b: p.b.id } });
-      const d = r.data as { line?: { id: number }; cost?: number } | undefined;
+      const r = cable
+        ? await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'buildCable', payload: { a: ConstructionTools.endPayload(a), b: ConstructionTools.endPayload(b) } })
+        : await this.sim.send('pluginCommand', { plugin: 'electricite', name: 'buildLine', payload: { a: a.id, b: b.id } });
+      const d = r.data as { line?: { id: number }; cable?: { id: number }; cost?: number } | undefined;
       const cost = typeof d?.cost === 'number' ? d.cost / 100 : p.cost;
       this.applied++;
-      if (d?.line && typeof d.line.id === 'number') {
-        this.undo.push({ label: `Ligne haute tension ${this.lineA.name} → ${p.b.name}`, steps: [{ kind: 'plugin', plugin: 'electricite', name: 'removeLine', payload: { id: d.line.id } }] });
-      } else this.undo.push({ label: 'Ligne haute tension', steps: [], irreversible: true });
-      this.notify(`Ligne haute tension construite : ${this.lineA.name} → ${p.b.name} (−${fmt(cost)} ¢)`, 'ok');
-      this.lineA = p.b; // enchaîner depuis l'arrivée
-    } catch (e) { this.notify(`Ligne refusée : ${errorOf(e).message}`, 'error'); }
+      const made = cable ? d?.cable : d?.line;
+      if (made && typeof made.id === 'number') {
+        this.undo.push({ label, steps: [{ kind: 'plugin', plugin: 'electricite', name: cable ? 'removeCable' : 'removeLine', payload: { id: made.id } }] });
+      } else this.undo.push({ label: what, steps: [], irreversible: true });
+      this.notify(`${cable ? 'Câble souterrain posé' : 'Ligne haute tension construite'} : ${label.slice(what.length + 1)} (−${fmt(cost)} ¢)`, 'ok');
+      // Enchaîner depuis l'arrivée (un câble arrivé sur une route s'arrête : la route distribue le courant).
+      this.lineA = cable && b.road ? null : b;
+    } catch (e) { this.notify(`${cable ? 'Câble refusé' : 'Ligne refusée'} : ${errorOf(e).message}`, 'error'); }
     this.lineKey = '';
     this.refresh();
   }

@@ -86,6 +86,31 @@ export const LINE_SPEC = {
   pylonSpacingM: 140,
 };
 
+/**
+ * Câbles souterrains (16/11, demande joueur « raccorder les éoliennes avec des câbles sous terre ») : tracé point à
+ * point entre une installation et une route (ou une autre installation), sans pylône, invisible hors du calque
+ * Électricité. Plus cher au mètre que la ligne HT, capacité large (un parc éolien entier), pas de panne, passe sous
+ * les routes, les bâtiments et l'eau (aucune collision).
+ */
+export const CABLE_SPEC = {
+  /** Capacité de transport (kW) : non bloquante en pratique (un parc éolien, une centrale thermique). */
+  capacityKw: 400_000,
+  /** Pertes par km. */
+  lossPerKm: 0.004,
+  /** Coût de construction par mètre (¢, le double de la ligne HT) et entretien mensuel par km (¢). */
+  costPerM: 900,
+  upkeepPerKmMonth: 1_000,
+  /** Longueur minimale et maximale d'un câble (m). */
+  minLengthM: 8,
+  maxLengthM: 3_000,
+  /** Distance maximale entre l'extrémité « route » d'un câble et l'axe d'une route (m). */
+  roadSnapM: 16,
+};
+
+export function cableCost(m: number): { cost: number; upkeepPerMonth: number } {
+  return { cost: Math.round(m * CABLE_SPEC.costPerM), upkeepPerMonth: Math.round((m / 1000) * CABLE_SPEC.upkeepPerKmMonth) };
+}
+
 /** Toitures solaires : puissance crête par logement équipé (kW), coût d'installation (¢), logements équipés par jour. */
 export const ROOFTOP_SPEC = { peakKwPerBuilding: 4, costPerBuilding: 9_000, installsPerDay: 6 };
 

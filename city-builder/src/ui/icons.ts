@@ -95,6 +95,8 @@ const P: Record<string, string> = {
   solar: '<path class="f" d="M3 18l3-9h14l-3 9z"/><path d="M4.5 13.5h14M9 9l-1.5 9M14.5 9l-1.5 9M11 18v3M8 21h6"/><path d="M17 2.5v2M20.5 4l-1.4 1.4M13.5 4l1.4 1.4"/>',
   dam: '<path class="f" d="M3 6h6l2 15H3z"/><path d="M11 9c2 0 2-1.5 4-1.5S17 9 19 9s2-1.5 3-1.5M11 13c2 0 2-1.5 4-1.5S17 13 19 13s2-1.5 3-1.5M3 6h6l2 15H3z"/>',
   pylon: '<path class="f" d="M9 21l2-15h2l2 15z"/><path d="M9 21l2-15h2l2 15M6 8h12M7.5 12h9M10.4 12l3.6 6M13.6 12L10 18M12 3v3"/>',
+  /* Câble souterrain : sol (trait) et câble en tirets dessous, entre deux bornes. */
+  cable: '<path d="M2.5 9.5h19"/><circle class="f" cx="5" cy="16" r="2"/><circle class="f" cx="19" cy="16" r="2"/><path d="M5 9.5V14M19 9.5V14M8 16h1.6M11.2 16h1.6M14.4 16h1.6"/>',
   pump: '<rect class="f" x="4" y="9" width="10" height="11" rx="1.5"/><path d="M14 13h4.5a1.5 1.5 0 011.5 1.5V17M9 9V5.5h-3M3 20.5h12"/><path d="M20 19.5c.8 0 1.2-.7 1.2-1.2 0-.6-.6-1.3-1.2-2.1-.6.8-1.2 1.5-1.2 2.1 0 .5.4 1.2 1.2 1.2z"/>',
   watertower: '<path class="f" d="M5.5 4.5h13v6c0 1.7-2.9 3-6.5 3s-6.5-1.3-6.5-3z"/><path d="M8 13l-2 8M16 13l2 8M7.2 17h9.6M12 13.5V21"/>',
   treatment: '<ellipse class="f" cx="12" cy="13" rx="9" ry="4.5"/><path d="M3 13v3c0 2.5 4 4.5 9 4.5s9-2 9-4.5v-3M8 12.5c1.3.8 2.6.8 4 0s2.7-.8 4 0M12 3v5.5"/>',

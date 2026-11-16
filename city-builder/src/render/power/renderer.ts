@@ -5,7 +5,8 @@
  *  - lignes haute tension : pylônes treillis instanciés (`elec_pylone`, 3 LOD) tous les ~140 m, câbles tendus en
  *    chaînette (4 conducteurs + câble de garde) ;
  *  - calque « réseau électrique » : cellules colorées (alimenté / partiel / coupé / non raccordé), repères des
- *    installations, charge des lignes, routes alimentées (vert) / non alimentées (rouge).
+ *    installations, charge des lignes, routes alimentées (vert) / non alimentées (rouge), câbles souterrains en
+ *    tirets (aucun objet en vue normale : ils sont enterrés).
  * Le rendu ne modifie jamais l'état du jeu.
  */
 import * as THREE from 'three';
@@ -95,6 +96,9 @@ export class PowerRenderer {
   /** Calque : routes alimentées (vert) / non alimentées (rouge) — réseau intégré aux routes. */
   private roadLines: THREE.LineSegments | null = null;
   private roadsVersion = -1;
+  /** Calque : câbles souterrains en tirets (invisibles hors du calque : enterrés, aucun objet en vue normale). */
+  private cableLines: THREE.LineSegments | null = null;
+  private cablesKey = '';
   private turbines: { f: FacilityView; angle: number; speed: number; hub: THREE.Vector3; yaw: number }[] = [];
   private pylonMats: THREE.Matrix4[] = [];
   private pylonPos: THREE.Vector3[] = [];
@@ -108,7 +112,7 @@ export class PowerRenderer {
   private readonly one = new THREE.Vector3(1, 1, 1);
   private unsub: (() => void) | null = null;
   /** Diagnostic (e2e). */
-  stats = { turbines: 0, pylons: 0, cableSegments: 0, overlayCells: 0, lines: 0, roadSegments: 0 };
+  stats = { turbines: 0, pylons: 0, cableSegments: 0, overlayCells: 0, lines: 0, roadSegments: 0, undergroundCables: 0 };
 
   async init(ctx: RenderPluginContext): Promise<void> {
     this.ctx = ctx;
@@ -128,7 +132,46 @@ export class PowerRenderer {
     this.rebuildLines(false);
     if (state.coverage && state.coverage.version !== this.coverageVersion) this.rebuildOverlay();
     if (state.roads && state.roads.version !== this.roadsVersion) this.rebuildRoadLines();
+    this.rebuildCableLines();
     this.applyOverlayVisibility();
+  }
+
+  /**
+   * Câbles souterrains : tracé droit échantillonné tous les ≈ 20 m, 2,5 m au-dessus du sol, en tirets cyan (gris-orangé
+   * si l'extrémité « route » n'a plus de route). Affichés seulement avec le calque Électricité.
+   */
+  private rebuildCableLines(): void {
+    const cables = powerView.state.cables ?? [];
+    const key = cables.map((c) => `${c.id}:${c.ax}:${c.az}:${c.bx}:${c.bz}:${c.active ? 1 : 0}`).join('|');
+    if (key === this.cablesKey) return;
+    this.cablesKey = key;
+    if (this.cableLines) { this.group.remove(this.cableLines); this.cableLines.geometry.dispose(); (this.cableLines.material as THREE.Material).dispose(); this.cableLines = null; }
+    this.stats.undergroundCables = cables.length;
+    if (!cables.length) return;
+    const pos: number[] = [], col: number[] = [];
+    const on = new THREE.Color(0x35d0ff), off = new THREE.Color(0xff9a3a);
+    const h = (x: number, z: number): number => { const v = this.ctx.heightAt(x, z); return (Number.isFinite(v) ? v : 0) + 2.5; };
+    for (const c of cables) {
+      const L = Math.hypot(c.bx - c.ax, c.bz - c.az);
+      const n = Math.max(1, Math.ceil(L / 20));
+      const k = c.active ? on : off;
+      for (let i = 0; i < n; i++) {
+        const u0 = i / n, u1 = (i + 1) / n;
+        const x0 = c.ax + (c.bx - c.ax) * u0, z0 = c.az + (c.bz - c.az) * u0, x1 = c.ax + (c.bx - c.ax) * u1, z1 = c.az + (c.bz - c.az) * u1;
+        pos.push(x0, h(x0, z0), z0, x1, h(x1, z1), z1);
+        col.push(k.r, k.g, k.b, k.r, k.g, k.b);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    this.cableLines = new THREE.LineSegments(g, new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 5, gapSize: 3.5, depthTest: false, transparent: true, opacity: 0.95 }));
+    this.cableLines.computeLineDistances();
+    this.cableLines.name = 'elec_cables_souterrains';
+    this.cableLines.renderOrder = 12;
+    this.cableLines.frustumCulled = false;
+    this.cableLines.visible = powerView.overlay;
+    this.group.add(this.cableLines);
   }
 
   /** Routes du calque : chaque tronçon tracé 3 m au-dessus de la chaussée, vert s'il est alimenté, rouge sinon. */
@@ -376,6 +419,7 @@ export class PowerRenderer {
     if (this.rings) this.rings.visible = v;
     if (this.loadLines) this.loadLines.visible = v;
     if (this.roadLines) this.roadLines.visible = v;
+    if (this.cableLines) this.cableLines.visible = v;
   }
 
   /* ----------------------------------- Image ----------------------------------- */

@@ -7,4 +7,5 @@
 export type {
   ElectriciteCommands, ElectriciteDelta, ElectriciteSnapshot, ElectriciteSummary, ElectriciteSettings, ElectriciteBudget,
   ElectriciteCoverage, ElectriciteRoads, ElectriciteEvent, ElectriciteService, FacilityView, LineView, SourceBalance, ClassBalance,
+  CableView, CableEnd,
 } from '../power/types';

@@ -352,6 +352,7 @@ export class ToolController implements IToolController, PointerToolSink {
       const head = m.terrain.mode === 'source' && m.terrain.sourceRemove ? 'Retirer la source' : terrainLabel(m.terrain.mode);
       return p.kind === 'terrain' && p.validity === 'error' ? `${head} refusé` : p.kind === 'terrain' && p.validity === 'ok' && p.cost > 0 ? `${head} · ${fmt(p.cost)} CHF` : head;
     }
+    if (p.kind === 'powerline' && p.cable) return !p.a ? 'Choisir le départ' : p.validity === 'error' ? 'Câble refusé' : !p.b ? 'Choisir l’arrivée' : p.validity === 'pending' ? 'Câble · calcul du coût…' : `Poser le câble · ${fmt(p.cost)} ¢`;
     if (p.kind === 'powerline') return !p.a ? 'Choisir le départ' : p.validity === 'error' ? 'Ligne refusée' : !p.b ? 'Choisir l’arrivée' : p.validity === 'pending' ? 'Ligne · calcul du coût…' : `Construire la ligne · ${fmt(p.cost)} ¢`;
     if (p.kind === 'road' && p.mode === 'roundabout') return p.validity === 'error' ? 'Giratoire refusé' : p.validity === 'pending' ? 'Giratoire · calcul du coût…' : `Construire le giratoire · ${fmt(p.cost)} ¢`;
     if (p.kind === 'grid') return p.validity === 'error' ? 'Îlot refusé' : `Construire l’îlot · ${fmt(p.cost)} ¢`;
@@ -594,7 +595,16 @@ export class ToolController implements IToolController, PointerToolSink {
         } else tag(null, 'info');
         break;
       case 'powerline': {
-        this.road?.show({ points: p.points, width: 1.6, validity: p.points ? (p.b ? p.validity : 'pending') : 'ok', start: p.a, control: null, hover: p.b ? { x: p.b.x, z: p.b.z, snap: 'node' } : null });
+        this.road?.show({ points: p.points, width: p.cable ? 0.9 : 1.6, validity: p.points ? (p.b ? p.validity : 'pending') : 'ok', start: p.a, control: null, hover: p.b ? { x: p.b.x, z: p.b.z, snap: p.b.road ? 'edge' : 'node' } : null });
+        if (p.cable) {
+          // Câble souterrain : extrémités « route » ou installation ; infobulle en français.
+          const nm = (e: { name: string; road?: true } | null): string => (e ? (e.road ? 'route' : e.name) : '');
+          if (!p.points) tag(p.b ? `Câble souterrain\n${p.message}` : p.message, 'info');
+          else if (!p.b) tag(`Câble souterrain\n${p.message}`, 'info');
+          else if (p.validity === 'error') tag(`Câble ${nm(p.a)} → ${nm(p.b)}\n${p.message}`, 'error');
+          else tag(`Câble ${nm(p.a)} → ${nm(p.b)}\n${p.validity === 'ok' ? `${fmt(p.cost)} ¢ · ${p.message}` : 'Calcul du coût…'}`, p.validity === 'ok' ? 'ok' : 'pending');
+          break;
+        }
         if (!p.points) tag(p.message, 'info');
         else if (!p.b) tag(`Ligne haute tension\n${p.message}`, 'info');
         else if (p.validity === 'error') tag(`Ligne ${p.a?.name ?? ''} → ${p.b.name}\n${p.message}`, 'error');
