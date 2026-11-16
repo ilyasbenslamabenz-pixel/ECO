@@ -58,7 +58,15 @@ export type TerrainEdit =
   /** Source d'eau : débit `q` (m³/s) ; `t` minute de jeu de la pose (fixée par la simulation). */
   | { k: 'source'; x: number; z: number; q: number; t?: number }
   /** Retire la source la plus proche de (x, z) (la simulation vérifie qu'il y en a une). */
-  | { k: 'unsource'; x: number; z: number };
+  | { k: 'unsource'; x: number; z: number }
+  /**
+   * Digue (posée par l'outil Routes, ouvrage « Digue » sur une retenue) : remblai le long de la polyligne `pts`
+   * (axe de la route), crête de largeur `w` à la cote `h`, rampes de pente `g` depuis les cotes `ah` / `bh` des
+   * extrémités, talus latéraux à 1/2. Ne fait que remblayer. `lk` : buses sous la digue (x1, z1, x2, z2 par buse, pieds
+   * de talus de part et d'autre) qui relient les deux côtés pour l'eau (même niveau de part et d'autre, pas de lac
+   * perché derrière la route). Tous les champs sont fixés par la simulation.
+   */
+  | { k: 'levee'; pts: number[]; w: number; h: number; ah: number; bh: number; g: number; lk?: number[] };
 
 export type TerrainEditKind = TerrainEdit['k'];
 
@@ -95,6 +103,12 @@ export const EDIT_LIMITS = {
   /** Source : débit (m³/s). */
   minSourceFlow: 2,
   maxSourceFlow: 200,
+  /** Digue : points de l'axe, longueur (m), remblai maximal sous la crête (m), largeur de crête (m). */
+  maxLeveePoints: 256,
+  maxLeveeLength: 1600,
+  maxLeveeFill: 30,
+  minLeveeWidth: 8,
+  maxLeveeWidth: 64,
 } as const;
 
 /** Coûts (CHF). */
@@ -112,7 +126,13 @@ export const EDIT_COSTS = {
   /** Source d'eau : forfait + par m³/s de débit. */
   sourceBase: 2000,
   sourcePerM3s: 150,
+  /** Digue routière : par m³ de remblai compacté, protégé par des enrochements (plus cher que la terre nue). */
+  leveePerM3: 4,
 } as const;
+
+/** Digue : revanche de la crête au-dessus de l'eau (m), pente des talus latéraux (m de haut par m). */
+export const LEVEE_FREEBOARD = 1.5;
+export const LEVEE_SIDE_SLOPE = 0.5;
 
 /** Barrage : épaisseur moyenne comptée pour le béton (m), demi-épaisseur des parements rendus (m). */
 export const DAM_THICKNESS = 10;
@@ -182,6 +202,7 @@ export function editShapeError(e: unknown): string | null {
   if (o.k === 'dam') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) && optF(o.hh) && optF(o.h) && (o.up === undefined || o.up === 1 || o.up === -1) && optF(o.q) && optF(o.t) ? null : 'Tracé de barrage invalide';
   if (o.k === 'source') return fin(o.x) && fin(o.z) && fin(o.q) && optF(o.t) ? null : 'Source d\'eau invalide';
   if (o.k === 'unsource') return fin(o.x) && fin(o.z) ? null : 'Retrait de source invalide';
+  if (o.k === 'levee') return Array.isArray(o.pts) && o.pts.length >= 4 && o.pts.length % 2 === 0 && o.pts.length <= EDIT_LIMITS.maxLeveePoints * 2 && o.pts.every(fin) && fin(o.w) && fin(o.h) && fin(o.ah) && fin(o.bh) && fin(o.g) && o.g > 0 && (o.lk === undefined || (Array.isArray(o.lk) && o.lk.length % 4 === 0 && o.lk.length <= EDIT_LIMITS.maxLeveePoints * 4 && o.lk.every(fin))) ? null : 'Tracé de digue invalide';
   if (o.k === 'river') return Array.isArray(o.pts) && o.pts.length >= 4 && o.pts.length % 2 === 0 && o.pts.length <= EDIT_LIMITS.maxRiverPoints * 2 && o.pts.every(fin) && fin(o.w) ? null : 'Tracé de rivière invalide';
   return 'Type d\'édition du terrain inconnu';
 }
@@ -227,6 +248,11 @@ export function normalizeEdit(e: TerrainEdit): TerrainEdit {
       return o;
     }
     case 'unsource': return { k: 'unsource', x: r2(e.x), z: r2(e.z) };
+    case 'levee': {
+      const o: Extract<TerrainEdit, { k: 'levee' }> = { k: 'levee', pts: e.pts.slice(0, L.maxLeveePoints * 2).map(r2), w: r2(clamp(e.w, L.minLeveeWidth, L.maxLeveeWidth)), h: r2(e.h), ah: r2(e.ah), bh: r2(e.bh), g: Math.round(clamp(e.g, 0.01, 0.5) * 1000) / 1000 };
+      if (e.lk !== undefined) o.lk = e.lk.slice(0, L.maxLeveePoints * 4).map(r2);
+      return o;
+    }
     case 'river': return { k: 'river', pts: e.pts.slice(0, L.maxRiverPoints * 2).map(r2), w: r2(clamp(e.w, L.minRiverWidth, L.maxRiverWidth)) };
     case 'flatten': {
       const o: Extract<TerrainEdit, { k: 'flatten' }> = { k: 'flatten', x: r2(e.x), z: r2(e.z), r: r2(clamp(e.r, L.minClearRadius, L.maxClearRadius)) };
@@ -353,7 +379,7 @@ function finish(t: EditableTerrain, edit: TerrainEdit, c: Changes, forestOnly: n
     n++;
   }
   const C = EDIT_COSTS;
-  const earth = volume * C.earthPerM3 + wallLength * C.wallPerM;
+  const earth = volume * (edit.k === 'levee' ? C.leveePerM3 : C.earthPerM3) + wallLength * C.wallPerM;
   const cost = Math.round(edit.k === 'clear' ? Math.max(C.clearMin, forestM2 * C.clearPerM2) : earth + forestM2 * C.clearPerM2);
   return { edit, rect: { i0, j0, i1, j1 }, idx, h, ws, volume: Math.round(volume), forestM2: Math.round(forestM2), walls, wallLength: Math.round(wallLength), cost, outline };
 }
@@ -447,6 +473,7 @@ export function planEdit(t: EditableTerrain, raw: TerrainEdit): PlanOutcome {
   if (e.k === 'dam') return planDam(t, e, c);
 
   if (e.k === 'river') return planRiver(t, e, c);
+  if (e.k === 'levee') return planLevee(t, e, c);
 
   const L = Math.hypot(e.bx - e.ax, e.bz - e.az);
   if (L < EDIT_LIMITS.minLength) return bad(`Tracé trop court (${EDIT_LIMITS.minLength} m minimum)`);
@@ -738,6 +765,88 @@ function planSlope(t: EditableTerrain, e: Extract<TerrainEdit, { k: 'slope' }>, 
   const outline = [e.ax + nx, e.az + nz, e.bx + nx, e.bz + nz, e.bx - nx, e.bz - nz, e.ax - nx, e.az - nz, e.ax + nx, e.az + nz];
   const p = finish(t, edit, c, [], [], 0, outline);
   return p ? { ok: true, plan: p } : bad('Le terrain suit déjà cette pente');
+}
+
+/**
+ * Digue : remblai sous l'axe d'une route. Crête plate (largeur `w`) à min(h, ah + g·s, bh + g·(L − s)) (s : abscisse
+ * le long de l'axe), talus à LEVEE_SIDE_SLOPE de part et d'autre ; seuls les échantillons plus bas que le profil
+ * sont relevés. Une case remblayée au-dessus de l'eau de base devient terre (l'eau dynamique est recalculée ensuite).
+ */
+function planLevee(t: EditableTerrain, e: Extract<TerrainEdit, { k: 'levee' }>, c: Changes): PlanOutcome {
+  const bad = (message: string): PlanOutcome => ({ ok: false, message });
+  const P = e.pts, m = P.length / 2;
+  const cum = new Float64Array(m);
+  for (let i = 1; i < m; i++) cum[i] = cum[i - 1]! + Math.hypot(P[2 * i]! - P[2 * i - 2]!, P[2 * i + 1]! - P[2 * i - 1]!);
+  const L = cum[m - 1]!;
+  if (L < EDIT_LIMITS.minLength) return bad(`Digue trop courte (${EDIT_LIMITS.minLength} m minimum)`);
+  if (L > EDIT_LIMITS.maxLeveeLength) return bad(`Digue trop longue (${EDIT_LIMITS.maxLeveeLength} m maximum)`);
+  const hw = e.w / 2;
+  const reach = hw + EDIT_LIMITS.maxLeveeFill / LEVEE_SIDE_SLOPE;
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < m; i++) { x0 = Math.min(x0, P[2 * i]!); x1 = Math.max(x1, P[2 * i]!); z0 = Math.min(z0, P[2 * i + 1]!); z1 = Math.max(z1, P[2 * i + 1]!); }
+  const rect = rectFor(t, x0 - reach, z0 - reach, x1 + reach, z1 + reach);
+  if (!rect) return bad('Zone hors de la carte');
+  const W = t.samplesX, sp = t.spacing;
+  let maxFill = 0;
+  for (let j = rect.j0; j <= rect.j1; j++) for (let i = rect.i0; i <= rect.i1; i++) {
+    const x = t.originX + i * sp, z = t.originZ + j * sp;
+    // Point le plus proche de l'axe : distance d et abscisse s.
+    // Au-delà des extrémités (projection hors de l'axe) : rien (pas de cône de remblai derrière les culées).
+    let d = Infinity, s = 0, beyond = false;
+    for (let q = 0; q + 1 < m; q++) {
+      const ax = P[2 * q]!, az = P[2 * q + 1]!, dx = P[2 * q + 2]! - ax, dz = P[2 * q + 3]! - az;
+      const l2 = dx * dx + dz * dz;
+      const raw = l2 > 0 ? ((x - ax) * dx + (z - az) * dz) / l2 : 0;
+      const u = clamp(raw, 0, 1);
+      const dd = Math.hypot(x - ax - dx * u, z - az - dz * u);
+      if (dd < d) { d = dd; s = cum[q]! + (cum[q + 1]! - cum[q]!) * u; beyond = (q === 0 && raw < 0) || (q === m - 2 && raw > 1); }
+    }
+    if (d > reach || beyond) continue;
+    const crest = Math.min(e.h, e.ah + e.g * s, e.bh + e.g * (L - s));
+    const target = d <= hw ? crest : crest - (d - hw) * LEVEE_SIDE_SLOPE;
+    const k = j * W + i;
+    const h0 = t.heights[k]!;
+    if (target < h0 + 0.01) continue;
+    maxFill = Math.max(maxFill, target - h0);
+    const h = Math.round(target * 100) / 100;
+    const ws0 = t.waterSurface[k]!;
+    c.set(k, h, ws0 !== NO_WATER && ws0 > h + 0.05 ? ws0 : NO_WATER);
+  }
+  if (maxFill > EDIT_LIMITS.maxLeveeFill + 0.01) return bad(`Retenue trop profonde pour une digue (${Math.round(maxFill)} m de remblai, ${EDIT_LIMITS.maxLeveeFill} m au plus) : choisissez Pont, Viaduc ou Tunnel`);
+  // Buses (fixées à la pose, rejouées telles quelles) : tous les 3 points de l'axe remblayés, d'un pied de talus à
+  // l'autre (première case non remblayée de chaque côté, plus une case), sur le relief d'AVANT la digue.
+  let edit: TerrainEdit = e;
+  if (e.lk === undefined) {
+    const lk: number[] = [];
+    for (let i = 1; i < m - 1; i += 3) {
+      const px = P[2 * i]!, pz = P[2 * i + 1]!;
+      const crest = Math.min(e.h, e.ah + e.g * cum[i]!, e.bh + e.g * (L - cum[i]!));
+      if (crest < heightNear(t, px, pz) + 0.5) continue;
+      const dx = P[2 * i + 2]! - P[2 * i - 2]!, dz = P[2 * i + 3]! - P[2 * i - 1]!, l = Math.hypot(dx, dz) || 1;
+      const nx = -dz / l, nz = dx / l;
+      const toe = (side: 1 | -1): number => {
+        for (let d = hw; d <= reach; d += sp / 2) {
+          if (crest - (d - hw) * LEVEE_SIDE_SLOPE < heightNear(t, px + side * nx * d, pz + side * nz * d) + 0.01) return d + sp;
+        }
+        return reach + sp;
+      };
+      const a = toe(1), b = toe(-1);
+      lk.push(px + nx * a, pz + nz * a, px - nx * b, pz - nz * b);
+    }
+    edit = { ...e, lk: lk.map((v) => Math.round(v * 100) / 100) };
+  }
+  // Contour : axe décalé de la demi-largeur de crête de chaque côté.
+  const left: number[] = [], right: number[] = [];
+  for (let i = 0; i < m; i++) {
+    const a = Math.max(0, i - 1), b = Math.min(m - 1, i + 1);
+    const dx = P[2 * b]! - P[2 * a]!, dz = P[2 * b + 1]! - P[2 * a + 1]!, l = Math.hypot(dx, dz) || 1;
+    const nx = (-dz / l) * hw, nz = (dx / l) * hw;
+    left.push(P[2 * i]! + nx, P[2 * i + 1]! + nz);
+    right.unshift(P[2 * i]! - nx, P[2 * i + 1]! - nz); // côté droit parcouru en sens inverse (contour fermé)
+  }
+  const outline = [...left, ...right, left[0]!, left[1]!];
+  const p = finish(t, edit, c, [], [], 0, outline);
+  return p ? { ok: true, plan: p } : bad('Le terrain est déjà assez haut : pas de remblai à faire');
 }
 
 /** Géométrie d'un barrage (partagée par le plan et le module d'eau). */

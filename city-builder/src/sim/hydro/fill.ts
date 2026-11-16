@@ -41,6 +41,11 @@ export interface HydroGrid {
   dugMask: Uint8Array | null;
   /** Repères (> 0) des cases à signaler quand une alimentation les mouille (faces amont des barrages) ; null : aucun. */
   touchMask?: Int32Array | null;
+  /**
+   * Buses sous les digues : case reliée + 1 (0 : aucune). Une cuvette qui atteint une extrémité se prolonge par
+   * l'autre (vases communicants) ; null : aucune.
+   */
+  culvert?: Int32Array | null;
 }
 
 export interface HydroFeed {
@@ -191,6 +196,7 @@ export class HydroSolver {
   private cascade(g: HydroGrid, f: HydroFeed): FeedResult {
     const W = g.samplesX, H = g.samplesZ;
     const E = this.E, water = this.water, mark = this.mark, bar = g.barrier;
+    const cul = g.culvert ?? null;
     const A = g.spacing * g.spacing;
     const res: FeedResult = { status: 'none', level: NaN, area: 0, stored: 0, outlet: '', touched: [] };
     const tm = g.touchMask ?? null;
@@ -231,6 +237,7 @@ export class HydroSolver {
         if (i < W - 1 && mark[c + 1] !== st && !(bar && bar[c + 1])) { mark[c + 1] = st; heap.push(E[c + 1]!, c + 1); }
         if (j > 0 && mark[c - W] !== st && !(bar && bar[c - W])) { mark[c - W] = st; heap.push(E[c - W]!, c - W); }
         if (j < H - 1 && mark[c + W] !== st && !(bar && bar[c + W])) { mark[c + W] = st; heap.push(E[c + W]!, c + W); }
+        if (cul && cul[c]) { const o = cul[c]! - 1; if (mark[o] !== st && !(bar && bar[o])) { mark[o] = st; heap.push(E[o]!, o); } }
       }
       if (!ended && cells.length) {
         // Cuvette entièrement fermée (barrières) : le volume restant la remplit (plafonné à +50 m).

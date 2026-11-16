@@ -26,6 +26,13 @@ import {
 /* Commandes main -> worker (chacune reçoit une réponse ok / erreur)    */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Ouvrage quand un tracé au sol traverse une retenue ou un lac créé en jeu : pont (3 m au-dessus de l'eau), viaduc
+ * (12 m), tunnel (sous le fond) ou digue (remblai jusqu'au niveau de la route, qui coupe la retenue).
+ */
+export type WaterCrossing = 'pont' | 'viaduc' | 'tunnel' | 'digue';
+export const WATER_CROSSINGS: readonly WaterCrossing[] = ['pont', 'viaduc', 'tunnel', 'digue'];
+
 export interface CommandMap {
   init: { args: { protocolVersion: number; catalog: AssetCatalog }; result: { protocolVersion: number } };
   newGame: { args: NewGameParams; result: { seed: number } };
@@ -46,9 +53,11 @@ export interface CommandMap {
       elevation?: number;
       /**
        * Ouvrage choisi quand le tracé (sans hauteur imposée) traverse une retenue ou un lac créé en jeu :
-       * 'pont' (défaut, 3 m au-dessus de l'eau), 'viaduc' (12 m au-dessus), 'tunnel' (sous le fond du lac).
+       * 'pont' (défaut, 3 m au-dessus de l'eau), 'viaduc' (12 m au-dessus), 'tunnel' (sous le fond du lac),
+       * 'digue' (remblai sous la route jusqu'à son niveau : la retenue est coupée, l'eau dynamique recalculée ; coût
+       * proportionnel au volume de remblai, compris dans `cost`).
        */
-      waterCrossing?: 'pont' | 'viaduc' | 'tunnel';
+      waterCrossing?: WaterCrossing;
       /**
        * Annulation d'une suppression (Ctrl+Z) : jeton `restoreToken` renvoyé par `removeRoad`. Valable une fois, pour
        * le même type de route : la reconstruction coûte exactement le remboursement perçu (annulation neutre).
@@ -294,7 +303,7 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
         if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum) || p.length !== 4) return bad('Point de contrôle de courbe invalide');
       }
       if (a.elevation !== undefined && (!isNum(a.elevation) || Math.abs(a.elevation) > 40)) return bad('Hauteur de route invalide (±40 m)');
-      if (a.waterCrossing !== undefined && a.waterCrossing !== 'pont' && a.waterCrossing !== 'viaduc' && a.waterCrossing !== 'tunnel') return bad('Ouvrage sur l\'eau invalide');
+      if (a.waterCrossing !== undefined && !WATER_CROSSINGS.includes(a.waterCrossing as WaterCrossing)) return bad('Ouvrage sur l\'eau invalide');
       if (a.restoreToken !== undefined && !isNum(a.restoreToken)) return bad('Jeton d\'annulation invalide');
       return null;
     }

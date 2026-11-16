@@ -10,6 +10,8 @@ import { Simulation } from '../../src/sim/world';
 import { HydroSolver, type HydroGrid } from '../../src/sim/hydro/fill';
 import { NO_WATER, planEdit, type TerrainEdit } from '../../src/sim/terrain/index';
 import { brushWeight } from '../../src/sim/terrain/edits';
+import { validateCommandMessage } from '../../src/shared/protocol';
+import { EDIT_COSTS } from '../../src/sim/terrain/edits';
 import { hydroDamKw, hydroShare, HYDRO_MAX_FACTOR } from '../../src/shared/power/model';
 import { townCatalog } from '../sim/fixtures';
 import { powerTown } from '../electricite/fixtures';
@@ -339,4 +341,100 @@ test('barrage en travers d\'une rivière de la carte : la rivière remplit la re
   assert.ok(Math.abs(m.level - d.data.crest!) < 0.3, `retenue ${m.level} ≈ crête ${d.data.crest}`);
   assert.ok(m.headM > 3, `chute ${m.headM} m`);
   assert.equal(t.waterSurface[downK], downBefore, 'rivière aval inchangée');
+});
+
+test('ouvrage « Digue » : la route passe sur un remblai qui coupe la retenue ; coût selon le volume ; sauvegarde identique', () => {
+  // Validation du protocole : 'digue' accepté, valeur inconnue refusée.
+  const msg = (waterCrossing: unknown): unknown => ({ kind: 'cmd', reqId: 1, name: 'buildRoad', args: { type: 'street', points: [0, 0, 50, 0], waterCrossing } });
+  assert.equal(validateCommandMessage(msg('digue')), null);
+  assert.equal(validateCommandMessage(msg('barrage'))?.code, 'INVALID_ARGS');
+
+  const s = sim();
+  const cx = 500, cz = -500;
+  carveValley(s, cx, cz);
+  assert.ok(s.terrainEdit({ edit: { k: 'dam', ax: cx, az: cz - 90, bx: cx, bz: cz + 90, hh: 15 } }).ok);
+  assert.ok(s.terrainEdit({ edit: { k: 'source', x: cx - 120, z: cz, q: 60 } }).ok);
+  assert.ok(untilSteady(s, 200) > 0, 'retenue pleine');
+  const xr = cx - 50;
+  const level = ws(s, xr, cz);
+  assert.ok(level !== NO_WATER && level - nat(s, xr, cz) > 5, 'retenue profonde sous le tracé');
+  assert.ok(ws(s, cx - 20, cz) > nat(s, cx - 20, cz), 'eau entre le tracé et le barrage');
+  // Une digue ne se pose pas avec l'outil Terrain (seulement par l'ouvrage « Digue » de l'outil Routes).
+  assert.ok(!s.terrainEdit({ edit: { k: 'levee', pts: [xr, cz - 50, xr, cz + 50], w: 16, h: level + 1, ah: level, bh: level, g: 0.05 } }).ok);
+
+  // Extrémités sur les rives, un peu au-dessus de l'eau (versants à 50 %).
+  const pts = [xr, cz - 44, xr, cz + 44];
+  const pont = s.buildRoad({ type: 'street', points: pts, dryRun: true });
+  const natBefore = nat(s, xr, cz);
+  const dry = s.buildRoad({ type: 'street', points: pts, dryRun: true, waterCrossing: 'digue' });
+  assert.ok(pont.ok && dry.ok, [pont, dry].map((r) => (r.ok ? 'ok' : r.error.message)).join(' | '));
+  if (!pont.ok || !dry.ok) return;
+  assert.ok(dry.data.path && dry.data.path.length > 0, 'aperçu 3D du tracé sur la digue');
+  assert.equal(nat(s, xr, cz), natBefore, 'la validation à blanc ne modifie pas le relief');
+  const editsBefore = s.terrainEditList.length;
+  const money0 = s.economy.money;
+  const built = s.buildRoad({ type: 'street', points: pts, waterCrossing: 'digue' });
+  assert.ok(built.ok, built.ok ? '' : built.error.message);
+  if (!built.ok) return;
+  assert.equal(built.data.cost, dry.data.cost, 'coût construit = coût annoncé');
+  assert.ok(Math.abs(money0 - s.economy.money - built.data.cost) < 1, 'coût débité');
+  // Remblai : édition 'levee' enregistrée, crête au-dessus de l'eau, terrain relevé sous la route.
+  assert.equal(s.terrainEditList.length, editsBefore + 1);
+  const lv = s.terrainEditList[editsBefore]!;
+  assert.equal(lv.k, 'levee');
+  if (lv.k !== 'levee') return;
+  assert.ok(lv.h >= level + 1.4, `crête ${lv.h} au-dessus de l'eau ${level}`);
+  assert.ok(nat(s, xr, cz) >= level + 1, 'terrain relevé sous la route jusqu\'à son niveau');
+  const rec = s.roadRecords().edges.find((e) => e.id === built.data.edgeIds[0]);
+  assert.ok(rec && rec.profile, 'profil en long');
+  if (!rec?.profile) return;
+  const mid = rec.profile[Math.floor(rec.profile.length / 2)]!;
+  assert.ok(Math.abs(mid - lv.h) < 1.5, `chaussée au niveau de la digue (${mid} ≈ ${lv.h})`);
+  const runs = rec.bridgeRuns ?? [];
+  for (let q = 0; q + 1 < runs.length; q += 2) assert.ok(!(runs[q]! <= rec.length / 2 && runs[q + 1]! > rec.length / 2), 'pas de pont au milieu : la route est au sol sur la digue');
+  for (let i = 0; i < 12; i++) s.tick(10);
+  // L'eau dynamique se recalcule : la retenue est coupée (plus d'eau sous la route) ; les buses relient les deux
+  // côtés : même niveau de part et d'autre, pas de lac perché derrière la route.
+  assert.ok((lv.lk?.length ?? 0) >= 4, 'buses posées sous la digue');
+  for (const dz of [-24, -8, 0, 8, 24]) assert.ok(!(ws(s, xr, cz + dz) > nat(s, xr, cz + dz)), `pas d'eau sur la digue (dz ${dz})`);
+  const up = ws(s, cx - 100, cz), down = ws(s, cx - 20, cz);
+  assert.ok(up > nat(s, cx - 100, cz) && down > nat(s, cx - 20, cz), 'eau des deux côtés de la digue');
+  assert.ok(Math.abs(up - down) < 0.05 && Math.abs(up - level) < 0.5, `même niveau de part et d'autre (${up} / ${down}, avant ${level})`);
+  assert.ok(lv.h > up, 'la crête de la digue reste au-dessus de l\'eau');
+
+  // Sauvegarde : la digue est rejouée avant les routes, relief et eau identiques après rechargement.
+  const save = JSON.parse(JSON.stringify(s.toSave()));
+  assert.equal(save.terrainEdits[editsBefore].k, 'levee');
+  const s2 = new Simulation();
+  s2.setCatalog(townCatalog());
+  const orig = (s2 as unknown as { replayEdit(e: TerrainEdit): void }).replayEdit.bind(s2);
+  let carved = false;
+  (s2 as unknown as { replayEdit(e: TerrainEdit): void }).replayEdit = (e) => { if (!carved) { carveValley(s2, cx, cz); carved = true; } orig(e); };
+  assert.equal(s2.fromSave(save), null);
+  let dh = 0, dw = 0;
+  for (let k = 0; k < s.terrain!.heights.length; k++) {
+    if (s.terrain!.heights[k] !== s2.terrain!.heights[k]) dh++;
+    if (s.terrain!.waterSurface[k] !== s2.terrain!.waterSurface[k]) dw++;
+  }
+  assert.equal(dh, 0, 'même relief nivelé');
+  assert.equal(dw, 0, 'même eau');
+});
+
+test('digue (plan pur) : coût proportionnel au volume de remblai, ne fait que remblayer, profondeur bornée', () => {
+  const s = sim();
+  const cx = 500, cz = -500;
+  carveValley(s, cx, cz);
+  const ed = (s as unknown as { editable(): Parameters<typeof planEdit>[0] }).editable();
+  const mk = (h: number): TerrainEdit => ({ k: 'levee', pts: [cx - 50, cz - 100, cx - 50, cz + 100], w: 16, h, ah: nat(s, cx - 50, cz - 100), bh: nat(s, cx - 50, cz + 100), g: 0.06 });
+  const floor = nat(s, cx - 50, cz);
+  const a = planEdit(ed, mk(floor + 6)), b = planEdit(ed, mk(floor + 12));
+  assert.ok(a.ok && b.ok);
+  if (!a.ok || !b.ok) return;
+  for (const p of [a.plan, b.plan]) {
+    const expected = p.volume * EDIT_COSTS.leveePerM3 + p.forestM2 * EDIT_COSTS.clearPerM2;
+    assert.ok(Math.abs(p.cost - expected) <= 2, `coût ${p.cost} ≈ volume ${p.volume} m³ × ${EDIT_COSTS.leveePerM3}`);
+    for (let n = 0; n < p.idx.length; n++) assert.ok(p.h[n]! >= ed.heights[p.idx[n]!]! - 1e-3, 'remblai seulement');
+  }
+  assert.ok(b.plan.volume > a.plan.volume * 2, 'deux fois plus haut : bien plus de remblai');
+  assert.ok(!planEdit(ed, mk(floor + 40)).ok, 'remblai > 30 m refusé');
 });

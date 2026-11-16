@@ -120,6 +120,9 @@ export class HydroSystem {
   private readonly solver = new HydroSolver();
   private readonly previewSolver = new HydroSolver();
   private touchMask: Int32Array | null = null;
+  /** Buses des digues : paires de cases (a, b) dans l'ordre des éditions, et table case -> case reliée + 1. */
+  private culverts: number[] = [];
+  private culvertMask: Int32Array | null = null;
   private metrics = new Map<number, DamMetrics>();
   private ver = 0;
   /** Durée du dernier calcul (ms) et nombre de calculs (mesures). */
@@ -153,6 +156,8 @@ export class HydroSystem {
     this.steady = true;
     this.lastQuantum = -1;
     this.touchMask = null;
+    this.culverts = [];
+    this.culvertMask = null;
     this.metrics.clear();
     this.ver++;
   }
@@ -190,6 +195,18 @@ export class HydroSystem {
       const geom = damGeometry(t, e.ax, e.az, e.bx, e.bz, up);
       this.dams.push({ id: index, ax: e.ax, az: e.az, bx: e.bx, bz: e.bz, crest: e.h, up, q: Math.min(DAM_FLOW_MAX, e.q ?? 0), t: e.t ?? 0, geom, seed: -1 });
       this.touchMask = null;
+    } else if (e.k === 'levee' && e.lk) {
+      const W = t.samplesX, H = t.samplesZ;
+      const cell = (x: number, z: number): number => {
+        const i = Math.round((x - t.originX) / t.spacing), j = Math.round((z - t.originZ) / t.spacing);
+        return i < 0 || j < 0 || i >= W || j >= H ? -1 : j * W + i;
+      };
+      for (let q = 0; q + 3 < e.lk.length; q += 4) {
+        const a = cell(e.lk[q]!, e.lk[q + 1]!), b = cell(e.lk[q + 2]!, e.lk[q + 3]!);
+        if (a >= 0 && b >= 0 && a !== b) this.culverts.push(a, b);
+      }
+      this.culvertMask = null;
+      if (!this.active) return;
     } else if (!this.active) return;
     this.dirty = true;
   }
@@ -199,7 +216,9 @@ export class HydroSystem {
     this.sources = [];
     this.dams = [];
     this.touchMask = null;
-    edits.forEach((e, i) => { if (e.k === 'source' || e.k === 'unsource' || e.k === 'dam') this.onEdit(e, i, t); });
+    this.culverts = [];
+    this.culvertMask = null;
+    edits.forEach((e, i) => { if (e.k === 'source' || e.k === 'unsource' || e.k === 'dam' || e.k === 'levee') this.onEdit(e, i, t); });
     this.dirty = true;
   }
 
@@ -234,7 +253,12 @@ export class HydroSystem {
       this.touchMask = new Int32Array(n);
       this.dams.forEach((d, i) => { for (const k of d.geom.upFace) this.touchMask![k] = i + 1; });
     }
-    return { samplesX: t.samplesX, samplesZ: t.samplesZ, spacing: t.spacing, ground, base, barrier: this.barrier, dug: this.dug.length ? this.dug : null, dugMask: this.dugMask, touchMask: this.touchMask };
+    if (this.culverts.length && (!this.culvertMask || this.culvertMask.length !== n)) {
+      // Dernière buse posée gagnante pour une case partagée (ordre des éditions : déterministe).
+      this.culvertMask = new Int32Array(n);
+      for (let q = 0; q + 1 < this.culverts.length; q += 2) { const a = this.culverts[q]!, b = this.culverts[q + 1]!; this.culvertMask[a] = b + 1; this.culvertMask[b] = a + 1; }
+    }
+    return { samplesX: t.samplesX, samplesZ: t.samplesZ, spacing: t.spacing, ground, base, barrier: this.barrier, dug: this.dug.length ? this.dug : null, dugMask: this.dugMask, touchMask: this.touchMask, culvert: this.culverts.length ? this.culvertMask : null };
   }
 
   /** Arrivée de la rivière barrée : échantillon amont en eau (base) le plus bas, hors barrières. */

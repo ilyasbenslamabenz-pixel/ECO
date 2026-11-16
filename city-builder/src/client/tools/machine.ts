@@ -23,7 +23,7 @@ import type { CatalogAsset } from '../../shared/catalog';
 import { isBuildingCategory } from '../../shared/catalog';
 import type { BuildingRecord, CommandError, RoadEdgeRecord, RoadKindId, ToolId } from '../../shared/contracts';
 import { legacyRoadType } from '../../sim/roads/index';
-import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage } from '../../shared/protocol';
+import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage, WaterCrossing } from '../../shared/protocol';
 import type { Ray } from './geometry';
 import { roadDef, type PickResult, type WorldMirror } from './mirror';
 import { RoadDraft, angleLabel, snapRoadPoint, type RoadMode, type SnapPoint } from './road-draft';
@@ -277,7 +277,7 @@ export class ConstructionTools {
   }
   /** ▲ / ▼ de l'outil Routes : hauteur imposée du tracé par pas de 4 m (aperçu 3D renvoyé par la simulation). */
   setRoadElevation(dir: 1 | -1): void { this.draft.raise(dir); this.refresh(); }
-  setWaterCrossing(c: 'pont' | 'viaduc' | 'tunnel'): void { this.draft.waterCrossing = c; this.refresh(); }
+  setWaterCrossing(c: WaterCrossing): void { this.draft.waterCrossing = c; this.refresh(); }
   setRoundaboutSize(size: 'small' | 'large'): void { this.draft.roundaboutSize = size; this.setRoadMode('roundabout'); }
 
   rotate(dir = 1): void {
