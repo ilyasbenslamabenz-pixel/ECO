@@ -7,11 +7,13 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GridField, sameLines, worldLines, type FieldRoad, type ObbQuery } from '../../src/shared/grid-field';
+import { GridField, ObbBuckets, sameLines, worldLines, type FieldRoad, type ObbQuery } from '../../src/shared/grid-field';
+import { distSegmentObb, footprintObb, type Obb } from '../../src/shared/footprint';
 import { FACADE_GAP, lineGap } from '../../src/shared/road-grid';
 import { ROAD_KINDS, halfWidth } from '../../src/sim/roads/types';
 import type { RoadKindId } from '../../src/shared/contracts';
 import { alignTrace } from '../../src/client/tools/road-align';
+import { zoningTown } from '../zonage/fixtures';
 
 const none: ObbQuery = (_a, _b, _c, _d, out) => { out.length = 0; return out; };
 const field = (roads: FieldRoad[]): GridField => new GridField(roads, none);
@@ -80,6 +82,61 @@ test('perpendiculaire depuis un tronçon : le départ glisse le long du tronçon
   assert.ok(Math.abs(r.end.x - r.start.x) < 1e-9, 'tracé perpendiculaire');
   assert.ok(Math.min(lineGap(r.start.x + half + FACADE_GAP - L.pu), lineGap(r.start.x - half - FACADE_GAP - L.pu)) < 1e-9);
   assert.ok(lineGap(r.end.z) < 1e-9, 'arrivée sur une ligne transversale');
+});
+
+test('rangée d\'immeubles sur la trame avec un trou de 2 cases : la rue perpendiculaire tracée dans le trou passe sans toucher (street, oneway)', () => {
+  // Rue existante d'axe z = 0 ; immeubles 2 × 2 cases (16 m) côté nord, façade sur la ligne des façades, côtés sur les
+  // lignes x ≡ 0 (mod 8), de −80 à 96, sauf le trou [0, 16].
+  const old: FieldRoad = { id: 1, poly: [-200, 0, 200, 0], half: 6.2 };
+  const zc = 6.2 + FACADE_GAP + 8;
+  const obbs: Obb[] = [];
+  for (let x = -72; x <= 88; x += 16) if (x !== 8) obbs.push(footprintObb(2, 2, x, zc, 2));
+  const field = new GridField([old], new ObbBuckets(obbs).query);
+  const gap = (a: { x: number; z: number }, b: { x: number; z: number }): number => Math.min(...obbs.map((o) => distSegmentObb(a.x, a.z, b.x, b.z, o)));
+  for (const kind of ['street', 'oneway'] as const) {
+    const half = halfWidth(kind);
+    const collides = (a: { x: number; z: number }, b: { x: number; z: number }): boolean => gap(a, b) < half;
+    let before = 0, after = 0, n = 0;
+    // Curseur n'importe où dans le trou (départ accroché à la rue, glissant le long d'elle).
+    for (let x0 = 0.5; x0 < 16; x0 += 0.5) {
+      const start = { x: x0, z: 0, slide: { tx: 1, tz: 0 } }, end = { x: x0 + 1.3, z: 60 };
+      const L = field.linesAt(x0, 8); // lignes affichées du côté du tracé (comme alignDraft)
+      const raw = alignTrace(start, end, half, L)!;
+      const r = alignTrace(start, end, half, L, undefined, undefined, collides)!;
+      assert.ok(raw && r, `${kind} x0=${x0}`);
+      n++;
+      if (collides(raw.start, raw.end)) before++;
+      if (collides(r.start, r.end)) after++;
+      assert.ok(gap(r.start, r.end) >= half, `${kind} x0=${x0} : ${(half - gap(r.start, r.end)).toFixed(2)} m de trop (axe x=${r.start.x})`);
+      // Toujours calé : façade d'un côté sur une ligne, perpendiculaire, départ sur l'axe de la rue.
+      assert.ok(Math.abs(r.end.x - r.start.x) < 1e-9 && Math.abs(r.start.z) < 1e-9);
+      assert.ok(Math.min(lineGap(r.start.x + half + FACADE_GAP), lineGap(r.start.x - half - FACADE_GAP)) < 1e-9);
+    }
+    assert.equal(after, 0, `${kind} : ${after}/${n} tracés en collision`);
+    assert.ok(before > 0, `${kind} : le calage seul touchait un immeuble dans ${before}/${n} cas`);
+  }
+});
+
+test('simulation : la rue calée dans le trou de 2 cases est acceptée (aucun « traverse un bâtiment »)', () => {
+  for (const kind of ['street', 'oneway'] as const) {
+    const t = zoningTown();
+    assert.ok(t.sim.buildRoad({ type: 'street', points: [-200, 0, 200, 0] }).ok);
+    const zc = 6.2 + FACADE_GAP + 8;
+    const obbs: Obb[] = [];
+    for (let x = -72; x <= 88; x += 16) {
+      if (x === 8) continue;
+      assert.ok(t.sim.placeBuilding({ assetId: 'collectif', x, z: zc, rot: 2 }).ok, `immeuble ${x}`);
+      obbs.push(footprintObb(2, 2, x, zc, 2));
+    }
+    const half = halfWidth(kind);
+    const field = new GridField([{ id: 1, poly: [-200, 0, 200, 0], half: 6.2 }], new ObbBuckets(obbs).query);
+    const collides = (a: { x: number; z: number }, b: { x: number; z: number }): boolean => obbs.some((o) => distSegmentObb(a.x, a.z, b.x, b.z, o) < half);
+    for (const x0 of [2, 4, 7.5, 12]) {
+      const r = alignTrace({ x: x0, z: 0, slide: { tx: 1, tz: 0 } }, { x: x0, z: 60 }, half, field.linesAt(x0, 8), undefined, undefined, collides)!;
+      const res = t.sim.buildRoad({ type: 'street', kind, points: [r.start.x, r.start.z, r.end.x, r.end.z], dryRun: true } as Parameters<typeof t.sim.buildRoad>[0]);
+      assert.ok(res.ok, `${kind} x0=${x0} : ${JSON.stringify(res)}`);
+    }
+  }
 });
 
 test('priorités : nœud fixe (pas de décalage), deux accroches (rien), trop en biais (rien)', () => {

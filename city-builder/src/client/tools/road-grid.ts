@@ -6,9 +6,9 @@
  */
 import { FIELD_FADE, FIELD_ROAD_REACH, GridField, ObbBuckets, type FieldRoad, type ObbQuery } from '../../shared/grid-field';
 import { pickPhase, roadGridFrame, type RoadGridFrame } from '../../shared/road-grid';
-import type { Obb } from '../../shared/footprint';
+import { distSegmentObb, type Obb } from '../../shared/footprint';
 import { roadWidth, type NearestEdge, type WorldMirror } from './mirror';
-import { alignTrace, type AlignEnd, type AlignResult } from './road-align';
+import { alignTrace, type AlignEnd, type AlignResult, type TraceCollides } from './road-align';
 
 /** Au-delà de cette distance (m) au BORD de la route, le quadrillage ne suit plus la route (champ : bâtiment voisin ou monde). */
 export const ROAD_GRID_REACH = FIELD_ROAD_REACH;
@@ -119,6 +119,19 @@ export function localRoadGrid(m: WorldMirror, x: number, z: number, reach = ROAD
   return { frame: frameForEdge(m, near, x, z), edgeId: near.edge.id };
 }
 
+/**
+ * Collision d'un tracé droit de demi-largeur `half` avec les empreintes du miroir : même règle que la simulation
+ * (src/sim/world.ts roadBlocked : distance de l'axe à l'empreinte inférieure à la demi-largeur), sans tolérance.
+ */
+export function traceCollides(m: WorldMirror, half: number): TraceCollides {
+  const query = fieldEntry(m).query, out: Obb[] = [];
+  return (a, b) => {
+    query(Math.min(a.x, b.x) - half, Math.min(a.z, b.z) - half, Math.max(a.x, b.x) + half, Math.max(a.z, b.z) + half, out);
+    for (const o of out) if (distSegmentObb(a.x, a.z, b.x, b.z, o) < half) return true;
+    return false;
+  };
+}
+
 /** Extrémité de tracé vue par l'aimantation au quadrillage (src/client/tools/road-align.ts). */
 interface DraftEnd { x: number; z: number; snap: string; edgeId?: number; guide?: { label: string } }
 
@@ -141,8 +154,9 @@ export function alignDraft<T extends DraftEnd>(m: WorldMirror, start: T, end: T,
   const k = Math.min(len / 2, 8) / len;
   const L = fieldFor(m).linesAt(start.x + (end.x - start.x) * k, start.z + (end.z - start.z) * k);
   const ends = [toEnd(start), toEnd(end)] as const;
+  const collides = traceCollides(m, half);
   for (let attempt = 0; attempt < 2; attempt++) {
-    const r = alignTrace(ends[0], ends[1], half, L);
+    const r = alignTrace(ends[0], ends[1], half, L, undefined, undefined, collides);
     if (!r) return null;
     // Un point accroché à un tronçon doit y rester après glissement ; sinon il ne glisse pas.
     let ok = true;
