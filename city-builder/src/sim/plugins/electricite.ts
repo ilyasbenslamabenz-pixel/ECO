@@ -16,7 +16,7 @@ import { createMunicipalPlugin, MUNICIPAL_SAVE_VERSION, MUNICIPAL_SERVICE, type 
 import { PowerSystem } from '../power/system';
 import { ELECTRICITE_SAVE_VERSION, migrateElectricite, type ElectriciteSave } from '../power/save';
 import {
-  CONSUMER_CLASSES, type ConsumerClass, ELECTRICITE_ID, ELECTRICITE_SERVICE, type ElectriciteService, type FacilityKind,
+  type CableEnd, CONSUMER_CLASSES, type ConsumerClass, ELECTRICITE_ID, ELECTRICITE_SERVICE, type ElectriciteService, type FacilityKind,
 } from '../../shared/power/types';
 import { FACILITY_SPECS, hydroDamSiteCheck, hydroSiteCheck } from '../../shared/power/model';
 import { TILE_SIZE } from '../../shared/constants';
@@ -25,6 +25,14 @@ import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 const bad = (message: string): PluginCommandResult => ({ ok: false, code: 'INVALID_ARGS', message });
+/** Extrémité de câble souterrain : `{ id }` (installation) ou `{ x, z }` (point de route) ; undefined si illisible. */
+const cableEnd = (v: unknown): CableEnd | undefined => {
+  if (!isObj(v)) return undefined;
+  const id = num(v.id), x = num(v.x), z = num(v.z);
+  if (id !== undefined) return { id };
+  if (x !== undefined && z !== undefined) return { x, z };
+  return undefined;
+};
 
 export type ElectricitePlugin = SimPlugin & { readonly system: PowerSystem; municipal(): Municipal | undefined };
 
@@ -128,6 +136,23 @@ export function createElectricitePlugin(): ElectricitePlugin {
           const id = num(p.id);
           if (id === undefined) return bad('id (ligne) attendu');
           return { ok: true, data: { removed: system.removeLine(ctx, id) } };
+        }
+        case 'quoteCable':
+        case 'buildCable': {
+          const a = cableEnd(p.a), b = cableEnd(p.b);
+          if (!a || !b) return bad('a et b attendus : { id } (installation) ou { x, z } (point de route)');
+          if (name === 'quoteCable') {
+            const q = system.quoteCable(ctx, a, b);
+            return q.ok ? { ok: true, data: { lengthM: q.lengthM, cost: q.cost, upkeepPerMonth: q.upkeepPerMonth } } : q;
+          }
+          activate();
+          const r = system.buildCable(ctx, a, b);
+          return r.ok ? { ok: true, data: { cable: r.cable, cost: r.cost } } : r;
+        }
+        case 'removeCable': {
+          const id = num(p.id);
+          if (id === undefined) return bad('id (câble) attendu');
+          return { ok: true, data: { removed: system.removeCable(ctx, id) } };
         }
         case 'setFunding': {
           const f = num(p.funding);

@@ -60,6 +60,13 @@ export function checkPowerState(raw: unknown): PowerState {
   if (!Array.isArray(s.lines) || !s.lines.every((l) => isObj(l) && fin(l.id) && fin(l.a) && fin(l.b) && fin(l.lengthM) && fin(l.failedUntil))) {
     throw new Error('electricite : lignes illisibles');
   }
+  // Câbles souterrains (champ facultatif ajouté le 16/11 : section v1 inchangée, absent des anciennes parties).
+  if (s.cables !== undefined) {
+    if (!Array.isArray(s.cables) || !s.cables.every((c) => isObj(c) && fin(c.id) && fin(c.a) && fin(c.b) && fin(c.lengthM) && (c.b !== 0 || (fin(c.bx) && fin(c.bz))))) {
+      throw new Error('electricite : câbles souterrains illisibles');
+    }
+    if (!fin(s.nextCableId)) s.nextCableId = s.cables.reduce((mx, c) => Math.max(mx, c.id), 0) + 1;
+  }
   if (!isObj(s.facilities) || !Array.isArray(s.rooftopIds) || !Array.isArray(s.events)) throw new Error('electricite : état illisible');
   s.settings = { funding: s.settings.funding, priorities: [...pr], rooftops: !!s.settings.rooftops, ...(s.settings.raccordement === true ? { raccordement: true } : {}) };
   s.month = { ...base.month, ...(isObj(s.month) ? s.month : {}) };

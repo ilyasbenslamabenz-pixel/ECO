@@ -145,6 +145,47 @@ pylônes enchevêtrés). Mécanique type city-builder récent, sans rien copier 
   modifié. Les tests posent désormais leurs éoliennes à 88 m (`buildFacilityStreet`, `tests/electricite/fixtures.ts`).
 - Tests : `tests/electricite/routes.test.ts` (6 tests). Preuves (2026-11-16) : `npx tsc --noEmit -p tsconfig.json` ✓ ; `npm test` 689/689.
 
+## 1 sexies. Câbles souterrains (16/11)
+
+Demande joueur : « pour les éoliennes je dois pouvoir les raccorder avec des câbles sous terre ».
+
+- **Outil** : barre de construction › Énergie › puce **« Câble souterrain »** (à côté de « Ligne haute tension » ;
+  même ToolId `powerline`, sous-outil `ConstructionTools.powerSub = 'cable'`, `setPowerSub`). Tracé point à point :
+  on touche une installation (éolienne, centrale, poste, batteries) puis une route ou une autre installation (ou
+  l'inverse : route puis installation). L'extrémité « route » est aimantée sur l'axe de la route la plus proche
+  (≤ 14 m côté client, tolérance de la simulation `CABLE_SPEC.roadSnapM` = 16 m). Devis par `dryRun`
+  (`quoteCable`), infobulles en français (« Câble <installation> → route », coût, longueur, entretien, « sous terre, sans pylône »),
+  enchaînement depuis une installation d'arrivée, arrêt après une route. Échap abandonne le départ.
+- **Simulation** (`PowerSystem.quoteCable / buildCable / removeCable`, commandes `quoteCable {a,b}`,
+  `buildCable {a,b}`, `removeCable {id}` ; extrémités `{ id }` ou `{ x, z }`, type `CableEnd`) :
+  - câble **installation → route** : l'installation rejoint le réseau routier du point d'arrivée (`facComp`), comme
+    si elle était au bord de la route ; si elle touche déjà une autre route ou a plusieurs câbles, les réseaux routiers
+    concernés sont fusionnés (union-find des composantes, `applyCables`, `canonComp`). Distribution non bloquante
+    (`ROAD_GRID_KW`), routes du calque alimentées, installation plus « isolée » ;
+  - câble **installation → installation** : arête du graphe municipal de capacité `CABLE_SPEC.capacityKw` = 400 MW
+    (un parc éolien entier ; non bloquant en pratique), pertes 0,4 %/km, sans panne ; compté dans les îlots
+    (isolement, recharge des batteries, installations alimentées).
+- **Refus** : deux routes (« pas deux routes »), point sans route à 16 m (« Aucune route à cet endroit »), bâtiment
+  non électrique ou inconnu, même installation aux deux bouts, moins de 8 m, plus de 3 km (`maxLengthM`), doublon
+  (même paire d'installations, ou même installation et même réseau routier), fonds insuffisants. **Aucune
+  collision** : le câble passe sous les routes, les bâtiments et l'eau.
+- **Coût** : 900 ¢/m (le double de la ligne HT, 450 ¢/m), débité à la pose (`investissement:cables_souterrains`),
+  entretien 1 000 ¢/km/mois inclus dans `entretien:reseau_electrique` ; ni déchets ni véhicule d'entretien.
+- **Démolition / annulation** : Ctrl+Z (étape `removeCable`), bouton « Démolir » de la section « Câbles souterrains »
+  du panneau Énergie ; démolir l'installation retire ses câbles. Un câble dont la route a été démolie reste, inactif
+  (`CableView.active = false`, « route démolie »).
+- **Rendu** : aucun objet en vue normale (enterré, pas de pylône). Calque Électricité : tirets cyan 2,5 m au-dessus du
+  sol (orange si inactif), `elec_cables_souterrains` (`PowerRenderer.rebuildCableLines`). Le calque s'affiche
+  automatiquement pendant l'outil (même ToolId que la ligne HT).
+- **Protocole** : `delta.ext.electricite.cables` (`CableView[]`, présent dès qu'un câble a été posé).
+- **Sauvegarde** : `power.cables` (`CableState { id, a, b, bx?, bz?, lengthM, builtAt }`, `b` = 0 pour une route) et
+  `power.nextCableId`, champs **facultatifs** : section v1 inchangée, une ancienne partie se charge sans câble ;
+  `checkPowerState` lève si les câbles sont illisibles.
+- Tests : `tests/electricite/cables.test.ts` (4 tests : parc éolien loin de toute route relié par câble -> la ville
+  est alimentée, sans ligne ni pylône ; démolition par commande et par démolition de l'éolienne -> coupure ; câble
+  entre installations, sauvegarde / rechargement identiques, ancienne partie sans câble ; refus des tracés
+  invalides). Preuves (2026-11-16) : `npx tsc --noEmit -p tsconfig.json` ✓ ; `npm test` 698/698.
+
 ## 2. Réseau et répartition (chaque heure de jeu)
 
 1. **Pannes** (PRNG propre au module) : probabilité horaire par installation (`failurePerHour`) et par km de ligne,
@@ -191,7 +232,8 @@ emplois / habitants sans courant), `facilities`, `lines`, `settings`, `budget`, 
 seulement quand il change), `cutIds`, `municipal` (mode). `snapshot.ext.electricite` : idem complet.
 
 Commandes `pluginCommand { plugin: 'electricite', name, payload }` : `state`, `refresh`, `quoteLine {a,b}`,
-`buildLine {a,b}`, `autoConnect {id}`, `removeLine {id}`, `setFunding {funding}`, `setPriorities {order}`,
+`buildLine {a,b}`, `autoConnect {id}`, `removeLine {id}`, `quoteCable {a,b}`, `buildCable {a,b}`, `removeCable {id}`
+(câbles souterrains, §1 sexies), `setFunding {funding}`, `setPriorities {order}`,
 `setRooftops {enabled}`, `forceWind {ms|null}`, `checkSite {kind,x,z}`, `effects {limit}`, `raccordement {on}`
 (réseau voisin : 60 000 CHF une fois, 3 MW, 4,5 ct/kWh).
 

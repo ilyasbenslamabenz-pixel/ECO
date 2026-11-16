@@ -375,8 +375,13 @@ export class BuildBar {
       if (id === 'energy') {
         const ln = el('button', { cls: 'chip-tab', attrs: { type: 'button', 'data-powerline': '1' } }, iconEl('pylon'), el('span', { text: 'Ligne haute tension' }));
         ln.dataset['tip'] = 'Facultatif — le courant suit déjà les routes. Pour relier une centrale éloignée (ou un hameau) sans route : touchez une installation, puis une autre ; coût affiché avant de construire';
-        ln.addEventListener('click', () => { this.closeDrawer(); this.d.tools.setTool('powerline'); });
+        ln.addEventListener('click', () => { this.closeDrawer(); this.d.machine.setPowerSub('ht'); this.d.tools.setTool('powerline'); });
         this.tabsEl.append(ln);
+        // Câble souterrain : même tracé point à point, sans pylône, invisible hors du calque Électricité.
+        const cb = el('button', { cls: 'chip-tab', attrs: { type: 'button', 'data-cable': '1' } }, iconEl('cable'), el('span', { text: 'Câble souterrain' }));
+        cb.dataset['tip'] = 'Relier une éolienne ou un parc éloigné à une route (ou à une autre installation) par un câble enterré : sans pylône, passe sous les routes, les bâtiments et l’eau ; plus cher au mètre qu’une ligne HT. Visible en tirets dans le calque Électricité';
+        cb.addEventListener('click', () => { this.closeDrawer(); this.d.machine.setPowerSub('cable'); this.d.tools.setTool('powerline'); });
+        this.tabsEl.append(cb);
       }
       for (const a of assetsForTab(this.d.catalog, current)) this.body.append(this.card(a, current.placeable, current.color));
     }
@@ -514,6 +519,7 @@ export class BuildBar {
       const v = m.variant >= 0 ? m.asset.variants[m.variant] : undefined;
       return `${m.asset.nameFr}${v ? ` · ${v.nameFr}` : ''} — ${money(m.asset.cost)} · ${m.asset.footprint.tilesX * TILE_SIZE}×${m.asset.footprint.tilesZ * TILE_SIZE} m\nAstuce : un bâtiment collé à la route empêchera plus tard de l’élargir (laissez une marge)`;
     }
+    if (m.tool === 'powerline' && m.powerSub === 'cable') return 'Câble souterrain — touchez une éolienne, une centrale ou un poste, puis une route (ou une autre installation) ; coût affiché, sans pylône\nAstuce : le câble est invisible en vue normale, en tirets dans le calque Électricité';
     if (m.tool === 'powerline') return 'Ligne haute tension — touchez une centrale ou un poste, puis l’installation d’arrivée (coût affiché) ; le courant suit ensuite les routes';
     if (m.tool === 'road' && m.draft.mode === 'roundabout') return `${m.draft.roundaboutSize === 'large' ? 'Grand giratoire' : 'Giratoire'} — cliquez sur un carrefour ou sur une route`;
     if (m.tool === 'road') {

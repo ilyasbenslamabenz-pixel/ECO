@@ -23,12 +23,12 @@ import { governanceModifiers } from '../../shared/governance';
 import {
   BATTERY_ONE_WAY, BATTERY_SPEC, batteryStep, capacityKwhOf,
   baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hourlyFactor, hydroShare,
-  hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
+  hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, CABLE_SPEC, cableCost, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
   TARIFF_CENTS_PER_KWH, windPowerShare, windProfile,
 } from '../../shared/power/model';
 import {
   type ClassBalance, CONSUMER_CLASSES, type ConsumerClass, COVER_CUT, COVER_NONE, COVER_OK, COVER_PARTIAL, COVER_UNLINKED,
-  DEFAULT_PRIORITY_ORDER, type ElectriciteBudget, type ElectriciteCoverage, type ElectriciteDelta, type ElectriciteEvent,
+  type CableEnd, type CableView, DEFAULT_PRIORITY_ORDER, type ElectriciteBudget, type ElectriciteCoverage, type ElectriciteDelta, type ElectriciteEvent,
   type ElectriciteRoads, type ElectriciteSettings, type ElectriciteSummary, ELECTRICITE_NETWORK, type FacilityKind, type FacilityView, FUNDING_MAX,
   FUNDING_MIN, type LineView, type PlantType, SOURCE_IDS, type SourceBalance, type SourceId, type StorageBalance, WEATHER_SERVICE,
   type WeatherLike,
@@ -41,6 +41,11 @@ import type { PluginContext } from '../plugins/types';
 /* ------------------------------- État sauvegardé ------------------------------- */
 
 export interface LineState { id: number; a: number; b: number; lengthM: number; failedUntil: number; builtAt: number }
+/**
+ * Câble souterrain : installation `a` -> installation `b` (> 0) ou route (`b` = 0, point `bx`, `bz` sur la chaussée,
+ * aimanté à la pose). Sans pylône, sans panne.
+ */
+export interface CableState { id: number; a: number; b: number; bx?: number; bz?: number; lengthM: number; builtAt: number }
 /** `storedKwh` : énergie stockée (batteries de stockage seulement ; absent des autres installations et des anciennes parties). */
 export interface FacilityState { failedUntil: number; failures: number; storedKwh?: number }
 
@@ -65,6 +70,9 @@ export interface PowerState {
   settings: ElectriciteSettings;
   lines: LineState[];
   nextLineId: number;
+  /** Câbles souterrains (champ facultatif : absent des anciennes parties et tant qu'aucun câble n'a été posé). */
+  cables?: CableState[];
+  nextCableId?: number;
   /** État par installation (clé = identifiant de bâtiment). */
   facilities: Record<string, FacilityState>;
   /** Logements équipés de panneaux en toiture. */
@@ -190,6 +198,8 @@ export class PowerSystem {
   private summaryCache: ElectriciteSummary | undefined;
   private facilityViews: FacilityView[] = [];
   private lineViews: LineView[] = [];
+  private cableViews: CableView[] = [];
+  private cableLoad = new Map<number, number>();
   private coverage: ElectriciteCoverage | undefined;
   private penaltyGrid: Float32Array | null = null;
   private rooftopSet = new Set<number>();
@@ -214,6 +224,7 @@ export class PowerSystem {
     this.summaryCache = undefined;
     this.facilityViews = [];
     this.lineViews = [];
+    this.cableViews = [];
     this.coverage = undefined;
     this.penaltyGrid = null;
     this.rooftopSet = new Set();
@@ -249,7 +260,7 @@ export class PowerSystem {
 
   /** Vrai si la partie n'a ni installation, ni ligne, ni réglage modifié (aucune section, aucun delta). */
   isIdle(ctx: PluginContext): boolean {
-    if (this.state.lines.length || this.state.events.length || this.rooftopSet.size) return false;
+    if (this.state.lines.length || this.state.cables?.length || this.state.events.length || this.rooftopSet.size) return false;
     const s = this.state.settings;
     if (s.funding !== 1 || s.rooftops || s.raccordement || s.priorities.join() !== DEFAULT_PRIORITY_ORDER.join()) return false;
     return this.scanFacilities(ctx).size === 0;
@@ -348,6 +359,12 @@ export class PowerSystem {
     const before = this.state.lines.length;
     this.state.lines = this.state.lines.filter((l) => next.has(l.a) && next.has(l.b));
     if (this.state.lines.length !== before) this.version++;
+    // Câbles souterrains : retirés avec l'installation démolie (extrémité « route » : conservés, inactifs sans route).
+    if (this.state.cables?.length) {
+      const nc = this.state.cables.length;
+      this.state.cables = this.state.cables.filter((c) => next.has(c.a) && (c.b === 0 || next.has(c.b)));
+      if (this.state.cables.length !== nc) this.version++;
+    }
     this.facilities = next;
   }
 
@@ -384,12 +401,65 @@ export class PowerSystem {
     for (const id of parent.keys()) this.nodeComp.set(id, find(id));
   }
 
-  /** Composante routière d'un point (tronçon le plus proche dans `reach` m), -1 sinon. */
-  private compAt(ctx: PluginContext, x: number, z: number, reach: number): number {
+  /** Composante routière BRUTE d'un point (tronçon le plus proche dans `reach` m), -1 sinon. */
+  private rawCompAt(ctx: PluginContext, x: number, z: number, reach: number): number {
     const s = ctx.roads.segmentNear(x, z, reach);
     if (!s) return -1;
     const [a] = ctx.roads.endpoints(s.segId);
     return this.nodeComp.get(a) ?? -1;
+  }
+
+  /** Composante routière d'un point, après fusion des réseaux routiers reliés par des câbles souterrains. */
+  private compAt(ctx: PluginContext, x: number, z: number, reach: number): number {
+    return this.canonComp(this.rawCompAt(ctx, x, z, reach));
+  }
+
+  /**
+   * Câbles souterrains vers une route : l'installation rejoint le réseau routier de l'extrémité du câble. Si elle
+   * touche déjà une autre route (ou a plusieurs câbles), les réseaux routiers concernés sont fusionnés (le courant
+   * passe par l'installation). Union-find sur les composantes ; `cableAnchor` = composante de rattachement d'une
+   * installation à plus de 80 m de toute route.
+   */
+  private compAlias = new Map<number, number>();
+  private cableAnchor = new Map<number, number>();
+  /** Composante brute de l'extrémité « route » de chaque câble (-1 : plus de route). */
+  private cableRoadComp = new Map<number, number>();
+
+  private canonComp(c: number): number {
+    if (c < 0) return c;
+    let r = c;
+    while (this.compAlias.has(r) && this.compAlias.get(r) !== r) r = this.compAlias.get(r)!;
+    if (r !== c) this.compAlias.set(c, r);
+    return r;
+  }
+
+  private applyCables(ctx: PluginContext, facs: Facility[]): void {
+    this.compAlias.clear();
+    this.cableAnchor.clear();
+    this.cableRoadComp.clear();
+    const cables = this.state.cables ?? [];
+    if (!cables.length) return;
+    const raw = new Map<number, number>();
+    for (const f of facs) raw.set(f.id, this.rawCompAt(ctx, f.x, f.z, ROAD_ATTACH_M));
+    const union = (a: number, b: number): void => {
+      const ra = this.canonComp(a), rb = this.canonComp(b);
+      if (ra !== rb) this.compAlias.set(Math.max(ra, rb), Math.min(ra, rb));
+    };
+    for (const c of cables) {
+      if (c.b !== 0 || c.bx === undefined || c.bz === undefined) continue;
+      const rc = this.rawCompAt(ctx, c.bx, c.bz, CABLE_SPEC.roadSnapM);
+      this.cableRoadComp.set(c.id, rc);
+      if (rc < 0 || !raw.has(c.a)) continue;
+      const own = raw.get(c.a)!;
+      const anchor = own >= 0 ? own : this.cableAnchor.get(c.a) ?? -1;
+      if (anchor >= 0) union(anchor, rc);
+      else this.cableAnchor.set(c.a, rc);
+    }
+  }
+
+  /** Câbles souterrains entre deux installations existantes. */
+  private facilityCables(): CableState[] {
+    return (this.state.cables ?? []).filter((c) => c.b > 0 && this.facilities.has(c.a) && this.facilities.has(c.b));
   }
 
   /**
@@ -421,6 +491,7 @@ export class PowerSystem {
     const find = (a: number): number => { let r = a; while (parent.get(r)! !== r) r = parent.get(r)!; parent.set(a, r); return r; };
     const join = (a: number, b: number): void => { if (!parent.has(a) || !parent.has(b)) return; const ra = find(a), rb = find(b); if (ra !== rb) parent.set(Math.max(ra, rb), Math.min(ra, rb)); };
     for (const l of this.state.lines) join(l.a, l.b);
+    for (const c of this.facilityCables()) join(c.a, c.b);
     for (const [a, b] of this.localLinks()) join(a, b);
     const linked = new Set<number>();
     for (const f of this.facilities.values()) if ((this.facComp.get(f.id) ?? -1) >= 0) linked.add(find(f.id));
@@ -480,6 +551,100 @@ export class PowerSystem {
     this.event(ctx, 'ligne', `Ligne HT n° ${id} démolie`, id);
     this.allocate(ctx, false);
     return true;
+  }
+
+  /* ------------------------------ Câbles souterrains ------------------------------ */
+
+  /**
+   * Résout et valide un tracé de câble : chaque extrémité est une installation (`id`) ou un point de route (`x`, `z`,
+   * aimanté sur l'axe à moins de `CABLE_SPEC.roadSnapM`). Au moins une installation ; aucune collision (le câble
+   * passe sous les routes, les bâtiments et l'eau).
+   */
+  private resolveCable(ctx: PluginContext, ea: CableEnd, eb: CableEnd):
+    { ok: true; a: Facility; b: Facility | null; bx: number; bz: number; lengthM: number } | { ok: false; code: string; message: string } {
+    this.syncFacilities(ctx);
+    const end = (e: CableEnd): { f: Facility } | { x: number; z: number } | { error: { code: string; message: string } } => {
+      if (e && typeof e.id === 'number') {
+        const f = this.facilities.get(e.id);
+        return f ? { f } : { error: { code: 'NOT_FOUND', message: 'Un câble part d’une installation électrique (centrale, éolienne, poste, batteries) ou d’une route' } };
+      }
+      if (e && typeof e.x === 'number' && typeof e.z === 'number' && Number.isFinite(e.x) && Number.isFinite(e.z)) {
+        const s = ctx.roads.segmentNear(e.x, e.z, CABLE_SPEC.roadSnapM);
+        return s ? { x: s.x, z: s.z } : { error: { code: 'NOT_FOUND', message: 'Aucune route à cet endroit : touchez une route ou une installation électrique' } };
+      }
+      return { error: { code: 'INVALID_ARGS', message: 'Extrémité du câble invalide' } };
+    };
+    let A = end(ea), B = end(eb);
+    if ('error' in A) return { ok: false, ...A.error };
+    if ('error' in B) return { ok: false, ...B.error };
+    if (!('f' in A)) { if (!('f' in B)) return { ok: false, code: 'INVALID_ARGS', message: 'Un câble souterrain relie une installation électrique à une route ou à une autre installation (pas deux routes)' }; [A, B] = [B, A]; }
+    const fa = (A as { f: Facility }).f;
+    const fb = 'f' in B ? B.f : null;
+    if (fb && fb.id === fa.id) return { ok: false, code: 'INVALID_ARGS', message: 'Un câble relie deux extrémités différentes' };
+    const bx = fb ? fb.x : (B as { x: number }).x, bz = fb ? fb.z : (B as { z: number }).z;
+    const L = Math.hypot(bx - fa.x, bz - fa.z);
+    if (L < CABLE_SPEC.minLengthM) return { ok: false, code: 'INVALID_ARGS', message: `Câble trop court (${Math.round(L)} m < ${CABLE_SPEC.minLengthM} m)` };
+    if (L > CABLE_SPEC.maxLengthM) return { ok: false, code: 'OUT_OF_BOUNDS', message: `Câble trop long (${Math.round(L)} m > ${CABLE_SPEC.maxLengthM} m) : rapprochez-vous d’une route ou posez un relais` };
+    const cables = this.state.cables ?? [];
+    if (fb) {
+      if (cables.some((c) => (c.a === fa.id && c.b === fb.id) || (c.a === fb.id && c.b === fa.id))) return { ok: false, code: 'COLLISION', message: 'Ces installations sont déjà reliées par un câble' };
+    } else {
+      this.refreshRoadComponents(ctx);
+      const rc = this.rawCompAt(ctx, bx, bz, CABLE_SPEC.roadSnapM);
+      const dup = cables.some((c) => c.a === fa.id && c.b === 0 && c.bx !== undefined && c.bz !== undefined && this.rawCompAt(ctx, c.bx, c.bz, CABLE_SPEC.roadSnapM) === rc);
+      if (dup) return { ok: false, code: 'COLLISION', message: 'Cette installation est déjà reliée à ce réseau routier par un câble' };
+    }
+    return { ok: true, a: fa, b: fb, bx, bz, lengthM: L };
+  }
+
+  quoteCable(ctx: PluginContext, a: CableEnd, b: CableEnd): { ok: true; lengthM: number; cost: number; upkeepPerMonth: number } | { ok: false; code: string; message: string } {
+    const r = this.resolveCable(ctx, a, b);
+    if (!r.ok) return r;
+    const c = cableCost(r.lengthM);
+    if (ctx.economy.bankrupt || ctx.economy.money < centsToChf(c.cost)) return { ok: false, code: 'INSUFFICIENT_FUNDS', message: `Fonds insuffisants (${Math.round(c.cost / 100).toLocaleString('fr-FR')} CHF)` };
+    return { ok: true, lengthM: r.lengthM, ...c };
+  }
+
+  buildCable(ctx: PluginContext, a: CableEnd, b: CableEnd): { ok: true; cable: CableView; cost: number } | { ok: false; code: string; message: string } {
+    const q = this.quoteCable(ctx, a, b);
+    if (!q.ok) return q;
+    const r = this.resolveCable(ctx, a, b);
+    if (!r.ok) return r;
+    const id = this.state.nextCableId ?? 1;
+    this.state.nextCableId = id + 1;
+    const cable: CableState = { id, a: r.a.id, b: r.b ? r.b.id : 0, lengthM: Math.round(r.lengthM * 10) / 10, builtAt: ctx.clock.totalMinutes };
+    if (!r.b) { cable.bx = Math.round(r.bx * 100) / 100; cable.bz = Math.round(r.bz * 100) / 100; }
+    (this.state.cables ??= []).push(cable);
+    this.state.investments += q.cost;
+    const m = this.getMunicipal();
+    const label = `Câble souterrain ${r.a.nameFr} – ${r.b ? r.b.nameFr : 'route'}`;
+    const mx = (r.a.x + r.bx) / 2, mz = (r.a.z + r.bz) / 2;
+    if (m) {
+      m.budget.post('expense', 'investissement:cables_souterrains', centsToChf(q.cost), 'electricite');
+      const cause = m.effects.cause({ kind: 'electricite:ligne', label, source: 'joueur', at: ctx.clock.totalMinutes, x: mx, z: mz, ref: id });
+      m.effects.record(cause, 'budget:investissement', -centsToChf(q.cost), 'CHF', ctx.clock.totalMinutes, { x: mx, z: mz });
+    } else ctx.economy.applyService(-centsToChf(q.cost), true);
+    this.event(ctx, 'ligne', `${label} posé (${Math.round(q.lengthM)} m, ${Math.round(q.cost / 100).toLocaleString('fr-FR')} CHF)`, id);
+    this.allocate(ctx, false);
+    return { ok: true, cable: this.cableViews.find((c) => c.id === id) ?? this.cableView(cable), cost: q.cost };
+  }
+
+  removeCable(ctx: PluginContext, id: number): boolean {
+    const list = this.state.cables;
+    if (!list) return false;
+    const n = list.length;
+    this.state.cables = list.filter((c) => c.id !== id);
+    if (this.state.cables.length === n) return false;
+    this.event(ctx, 'ligne', `Câble souterrain n° ${id} retiré`, id);
+    this.allocate(ctx, false);
+    return true;
+  }
+
+  private cableView(c: CableState): CableView {
+    const fa = this.facilities.get(c.a), fb = c.b > 0 ? this.facilities.get(c.b) : undefined;
+    const bx = fb ? fb.x : c.bx ?? 0, bz = fb ? fb.z : c.bz ?? 0;
+    const active = c.b > 0 ? !!fb : (this.cableRoadComp.get(c.id) ?? -1) >= 0;
+    return { id: c.id, a: c.a, b: c.b, ax: fa?.x ?? bx, az: fa?.z ?? bz, bx, bz, lengthM: c.lengthM, capacityKw: CABLE_SPEC.capacityKw, load: this.cableLoad.get(c.id) ?? 0, active };
   }
 
   /** Relie l'installation `id` à l'installation alimentée (ou centrale) la plus proche non encore reliée. */
@@ -688,6 +853,7 @@ export class PowerSystem {
     const find = (a: number): number => { let r = a; while (parent.get(r)! !== r) r = parent.get(r)!; parent.set(a, r); return r; };
     const join = (a: number, b: number): void => { if (!parent.has(a) || !parent.has(b)) return; const ra = find(a), rb = find(b); if (ra !== rb) parent.set(Math.max(ra, rb), Math.min(ra, rb)); };
     for (const l of this.state.lines) if (l.failedUntil === 0) join(l.a, l.b);
+    for (const c of this.facilityCables()) join(c.a, c.b);
     for (const [a, b] of this.localLinks()) join(a, b);
     const surplus = new Map<number, number>();
     for (const f of facs) {
@@ -732,6 +898,10 @@ export class PowerSystem {
       if (!this.facilities.has(l.a) || !this.facilities.has(l.b)) continue;
       (adj.get(l.a) ?? adj.set(l.a, []).get(l.a)!).push(l.b);
       (adj.get(l.b) ?? adj.set(l.b, []).get(l.b)!).push(l.a);
+    }
+    for (const c of this.facilityCables()) {
+      (adj.get(c.a) ?? adj.set(c.a, []).get(c.a)!).push(c.b);
+      (adj.get(c.b) ?? adj.set(c.b, []).get(c.b)!).push(c.a);
     }
     for (const [a, b] of this.localLinks()) {
       (adj.get(a) ?? adj.set(a, []).get(a)!).push(b);
@@ -791,8 +961,13 @@ export class PowerSystem {
     //    (réseau de distribution le long des routes) ; repli : installation à moins de 80 m (sans route).
     const facs = [...this.facilities.values()].sort((a, b) => a.id - b.id);
     this.refreshRoadComponents(ctx);
+    this.applyCables(ctx, facs);
     this.facComp.clear();
-    for (const f of facs) this.facComp.set(f.id, this.compAt(ctx, f.x, f.z, ROAD_ATTACH_M));
+    for (const f of facs) {
+      const c = this.compAt(ctx, f.x, f.z, ROAD_ATTACH_M);
+      // Installation loin des routes reliée par un câble souterrain : elle rejoint le réseau routier du câble.
+      this.facComp.set(f.id, c >= 0 ? c : this.canonComp(this.cableAnchor.get(f.id) ?? -1));
+    }
     // Installations reliées à une centrale (topologie, pannes comprises) : un poste isolé plus proche ne doit pas
     // « capter » un bâtiment qu'un poste ou une centrale alimenté(e) peut desservir.
     const fed = this.energizedSet();
@@ -991,6 +1166,7 @@ export class PowerSystem {
       const fa = this.facilities.get(l.a)!, fb = this.facilities.get(l.b)!;
       return { id: l.id, a: l.a, b: l.b, ax: fa.x, az: fa.z, bx: fb.x, bz: fb.z, lengthM: l.lengthM, capacityKw: LINE_SPEC.capacityKw, load: report.lineLoad.get(l.id) ?? 0, failedUntil: l.failedUntil };
     });
+    this.cableViews = (this.state.cables ?? []).map((c) => this.cableView(c));
     this.updateCoverage(m, consumers);
 
     // 8. Effets de l'heure (énergie, pollution, satisfaction, registre).
@@ -1012,6 +1188,7 @@ export class PowerSystem {
     const deliveredBy = new Map<string, number>();
     const outputOf = new Map<number, number>();
     const lineLoad = new Map<number, number>();
+    this.cableLoad.clear();
     const res = { deliveredBy, outputOf, lineLoad, rooftopOut: 0, produced: 0, delivered: 0, losses: 0, imported: 0 };
     if (!m) return res;
     m.networks.remove(ELECTRICITE_NETWORK);
@@ -1075,6 +1252,12 @@ export class PowerSystem {
       if (l.failedUntil > 0) net.setEdgeEnabled(e, false);
       lineEdge.set(e, l.id);
     }
+    const cableEdge = new Map<number, number>();
+    for (const c of this.facilityCables()) {
+      const a = busOf.get(c.a), b = busOf.get(c.b);
+      if (a === undefined || b === undefined) continue;
+      cableEdge.set(net.addEdge(a, b, CABLE_SPEC.capacityKw, Math.min(0.5, CABLE_SPEC.lossPerKm * (c.lengthM / 1000))), c.id);
+    }
     for (const [a, b, d, sameRoad] of this.localLinks()) net.addEdge(busOf.get(a)!, busOf.get(b)!, sameRoad ? ROAD_GRID_KW : LOCAL_LINK_KW, Math.min(0.5, LOCAL_LINK_LOSS_PER_KM * (d / 1000)));
     const r = m.networks.allocate(ELECTRICITE_NETWORK);
     for (const c of r.consumers) { const k = consumerKey.get(c.node); if (k) deliveredBy.set(k, c.delivered); }
@@ -1084,7 +1267,10 @@ export class PowerSystem {
       const f = prodOf.get(p.node);
       if (f !== undefined) outputOf.set(f, (outputOf.get(f) ?? 0) + p.output);
     }
-    for (const e of r.edges) { const l = lineEdge.get(e.edge); if (l !== undefined) lineLoad.set(l, e.load); }
+    for (const e of r.edges) {
+      const l = lineEdge.get(e.edge); if (l !== undefined) lineLoad.set(l, e.load);
+      const c = cableEdge.get(e.edge); if (c !== undefined) this.cableLoad.set(c, e.load);
+    }
     res.produced = r.produced; res.delivered = r.delivered; res.losses = r.losses;
     return res;
   }
@@ -1131,12 +1317,12 @@ export class PowerSystem {
     const live = new Set<number>();
     for (const f of this.facilities.values()) {
       const c = this.facComp.get(f.id) ?? -1;
-      if (c >= 0 && fed.has(f.id) && !(f.kind === 'poste' && this.facilityState(f.id).failedUntil > 0)) live.add(c);
+      if (c >= 0 && fed.has(f.id) && !(f.kind === 'poste' && this.facilityState(f.id).failedUntil > 0)) live.add(this.canonComp(c));
     }
     const n = this.roadIds.length;
     const powered = new Uint8Array(n);
     let on = 0;
-    for (let i = 0; i < n; i++) if (imp || live.has(this.roadComp[i]!)) { powered[i] = 1; on++; }
+    for (let i = 0; i < n; i++) if (imp || live.has(this.canonComp(this.roadComp[i]!))) { powered[i] = 1; on++; }
     if (n) { summary.roadsPowered = on; summary.roadsUnpowered = n - on; }
     const prev = this.roadLayer;
     if (prev && prev.powered.length === n && prev.powered.every((v, k) => v === powered[k])) return;
@@ -1280,6 +1466,7 @@ export class PowerSystem {
   upkeepNominal(): number {
     let s = 0;
     for (const l of this.state.lines) s += lineCost(l.lengthM).upkeepPerMonth;
+    for (const c of this.state.cables ?? []) s += cableCost(c.lengthM).upkeepPerMonth;
     // Entretien du réseau de distribution : 1 500 ¢ par installation et par mois.
     s += this.facilities.size * 1_500;
     return s;
@@ -1322,7 +1509,7 @@ export class PowerSystem {
 
   full(): ElectriciteDelta {
     const d: ElectriciteDelta = {
-      facilities: this.facilityViews, lines: this.lineViews, settings: { ...this.state.settings, priorities: [...this.state.settings.priorities] },
+      facilities: this.facilityViews, lines: this.lineViews, ...(this.state.cables ? { cables: this.cableViews } : {}), settings: { ...this.state.settings, priorities: [...this.state.settings.priorities] },
       budget: this.budget(), events: this.state.events.slice(-20), cutIds: [...this.cutList], municipal: this.municipalMode,
     };
     if (this.summaryCache) d.summary = this.summaryCache;
@@ -1335,7 +1522,7 @@ export class PowerSystem {
     if (this.version === this.sentVersion) return undefined;
     this.sentVersion = this.version;
     const d: ElectriciteDelta = {
-      facilities: this.facilityViews, lines: this.lineViews, settings: { ...this.state.settings, priorities: [...this.state.settings.priorities] },
+      facilities: this.facilityViews, lines: this.lineViews, ...(this.state.cables ? { cables: this.cableViews } : {}), settings: { ...this.state.settings, priorities: [...this.state.settings.priorities] },
       budget: this.budget(), cutIds: [...this.cutList], municipal: this.municipalMode,
     };
     if (this.summaryCache) d.summary = this.summaryCache;
