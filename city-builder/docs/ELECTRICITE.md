@@ -95,6 +95,44 @@ stockage » : charge en %, énergie, charge / décharge en cours, autonomie esti
 Rappel : la centrale thermique n'est débloquée qu'au palier « Bourg » (1 500 habitants) et le barrage au palier
 « Ville » : en début de partie, le raccordement (3 MW) et les batteries sont les seules sources pilotables.
 
+## 1 ter bis. Vente d'électricité aux villes voisines (16/11)
+
+Demande joueur (mécanique façon Cities Skylines 2) : gagner de l'argent avec le surplus. `PowerSystem.exportStep`
+(src/sim/power/system.ts), constantes `EXPORT_SPEC` (src/shared/power/model.ts).
+
+- **Lien avec l'extérieur (règle retenue)** : la ville vend si le **raccordement au réseau voisin** est actif, **ou**
+  si au moins une **connexion extérieure par route** est reliée (module `connexions`, docs/CONNEXIONS.md : impasse au
+  bord de la carte dont le réseau dessert un bâtiment). Règle commune avec l'eau : `linkedToNeighbours`
+  (src/sim/connexions/lien.ts). Pas besoin de payer le raccordement pour vendre : une route vers l'extérieur suffit
+  (comme dans CS2, où l'export passe par les connexions extérieures).
+- **Surplus vendable** (chaque vraie heure de jeu) : capacité disponible non appelée des éoliennes, fermes solaires
+  et barrages **en service et reliés** (non isolés, non en panne) + toitures solaires, calculée **après** la
+  répartition **et après la recharge des batteries** (la recharge est déjà ajoutée à la production appelée par
+  `chargeBatteries`). Éolien / solaire suivent donc le vent et le soleil de l'heure : la nuit sans vent, rien à vendre.
+  Les **centrales thermiques ne vendent pas** leur capacité inutilisée : pilotables, elles ne brûlent que le gaz
+  appelé (pas de « production fantôme »). Les batteries ne revendent pas leur stock.
+- **Vendu** = min(surplus, **10 MW**) ; plafond réduit comme le raccordement pendant une panne du réseau voisin
+  (`powerImportFactor`). Rien n'est vendu une heure où la ville achète au voisin (`importedKw > 0`).
+- **Prix : 1,5 ct/kWh** (< 2 ct/kWh tarif local < **4,5 ct/kWh** achat au voisin : acheter pour revendre fait
+  toujours perdre). Ordre de grandeur : une ferme solaire (6 MW, facteur de charge ≈ 25 %) dont tout part à l'export
+  rapporte ≈ 16 000 CHF/mois ; plafond = 150 CHF/h.
+- **Recette** versée chaque heure à la trésorerie par `economy.applyService(chf, false, 'vente_electricite_exterieure')`
+  (poste détaillé : `MonthRecord.serviceLines`, `EconomyReport.serviceLinesMonth`), cumulée dans
+  `state.month.exportedKwh / exportIncome` (¢). À la clôture : ligne `vente:electricite_exterieure` inscrite au
+  grand livre municipal par `budget.record` (déjà payée : pas de double versement), `lastMonth.exportIncome`.
+- **Option** : réglage `settings.vente` (`false` = désactivé ; absent = activé, y compris pour les anciennes
+  parties), commande `vente {on}`, case « Vendre le surplus aux villes voisines » du panneau.
+- **Notification unique** à la première vente (`PowerState.exportNotified`, aussi au journal du panneau).
+- **Affichage** : panneau Énergie, ligne « Vente d'électricité » (kW vendus cette heure, recette du mois, ou ce qui
+  manque : aucune ville voisine reliée / désactivée / aucun surplus) et ligne « Vente d'électricité (aux villes
+  voisines) » du budget du service (`budget.monthExportIncome`, `monthExportedKwh`, `lastExportIncome`) ; panneau
+  Finances, onglet Budget : « dont Vente d'électricité (villes voisines) » dans le dernier mois clos, et le cumul du
+  mois en cours. `summary.exportedKw` / `sellableKw` (absents sans lien avec l'extérieur).
+- **Sauvegarde** : champs facultatifs (`settings.vente`, `exportNotified`, `month.exportedKwh`, `month.exportIncome`,
+  `lastMonth.exportIncome`) ; section v1 inchangée, anciennes parties lisibles.
+- Tests : tests/electricite/vente.test.ts (vente → trésorerie + recette exacte ; sans lien → rien ; sans surplus →
+  rien ; option désactivée → rien ; batteries rechargées avant la vente ; connexion par route ; sauvegarde).
+
 ## 1 quater. Profil de vent (vérification du 15/11)
 
 `windProfile` (moyenne 7,0 m/s) et la courbe cubique 3 → 12 m/s donnent, sur une année de jeu (360 jours, pas
@@ -235,7 +273,7 @@ Commandes `pluginCommand { plugin: 'electricite', name, payload }` : `state`, `r
 `buildLine {a,b}`, `autoConnect {id}`, `removeLine {id}`, `quoteCable {a,b}`, `buildCable {a,b}`, `removeCable {id}`
 (câbles souterrains, §1 sexies), `setFunding {funding}`, `setPriorities {order}`,
 `setRooftops {enabled}`, `forceWind {ms|null}`, `checkSite {kind,x,z}`, `effects {limit}`, `raccordement {on}`
-(réseau voisin : 60 000 CHF une fois, 3 MW, 4,5 ct/kWh).
+(réseau voisin : 60 000 CHF une fois, 3 MW, 4,5 ct/kWh), `vente {on}` (vente du surplus aux voisins, §1 ter bis).
 
 Service inter-modules `electricite` (`ElectriciteService`) : `powerFactor(id)`, `isPowered(id)`, `exportableKw()`,
 `summary()`. Météo lue via `ctx.use('weather')` (`{ wind, cloud }`), sinon profil déterministe (`windProfile`).

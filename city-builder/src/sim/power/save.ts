@@ -68,7 +68,9 @@ export function checkPowerState(raw: unknown): PowerState {
     if (!fin(s.nextCableId)) s.nextCableId = s.cables.reduce((mx, c) => Math.max(mx, c.id), 0) + 1;
   }
   if (!isObj(s.facilities) || !Array.isArray(s.rooftopIds) || !Array.isArray(s.events)) throw new Error('electricite : état illisible');
-  s.settings = { funding: s.settings.funding, priorities: [...pr], rooftops: !!s.settings.rooftops, ...(s.settings.raccordement === true ? { raccordement: true } : {}) };
+  s.settings = { funding: s.settings.funding, priorities: [...pr], rooftops: !!s.settings.rooftops, ...(s.settings.raccordement === true ? { raccordement: true } : {}), ...(s.settings.vente === false ? { vente: false } : {}) };
+  // Vente aux voisins (champs facultatifs ajoutés le 16/11 : section v1 inchangée).
+  if (s.exportNotified !== undefined && s.exportNotified !== true) delete s.exportNotified;
   s.month = { ...base.month, ...(isObj(s.month) ? s.month : {}) };
   s.lastMonth = { ...base.lastMonth, ...(isObj(s.lastMonth) ? s.lastMonth : {}) };
   return s;

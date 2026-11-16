@@ -60,6 +60,8 @@ export interface WaterSettings {
    * appelé en dernier, facturé au m³. Absent des anciennes sauvegardes = non raccordé.
    */
   raccordement?: boolean;
+  /** Vente du surplus d'eau potable aux villes voisines : `false` = désactivée ; absent = activée. */
+  vente?: boolean;
 }
 
 /**
@@ -69,6 +71,15 @@ export interface WaterSettings {
  * raccordement uniques (CHF).
  */
 export const WATER_IMPORT = { capacity: 40, pricePerM3: 1.2, sewagePricePerM3: 0.5, connectionChf: 40_000 } as const;
+
+/**
+ * Vente du surplus d'eau potable aux villes voisines (docs/EAU.md) : chaque heure, la capacité des usines de
+ * potabilisation ni livrée ni stockée (châteaux d'eau remplis d'abord) est vendue, plafonnée à `capacity` (m³/h),
+ * si la ville est reliée à l'extérieur (raccordement d'eau OU connexion extérieure par route reliée). Prix bas
+ * (CHF/m³) : au-dessus du coût de production (pompage + potabilisation ≈ 0,26 CHF/m³, payé sur le volume vendu),
+ * nettement sous le prix d'achat au voisin (`WATER_IMPORT.pricePerM3`).
+ */
+export const WATER_EXPORT = { capacity: 60, pricePerM3: 0.5 } as const;
 
 export const DEFAULT_WATER_SETTINGS: Readonly<WaterSettings> = { fundingWater: 1, fundingSewer: 1, tariff: 2, restrictions: false };
 export const SETTINGS_BOUNDS = { funding: [0, 1.5], tariff: [0, 6] } as const;
@@ -139,6 +150,12 @@ export interface WaterBalance {
   /** Indice moyen / maximal de `pollution_eau` sur les cellules en eau. */
   riverPollutionMean: number;
   riverPollutionMax: number;
+  /**
+   * Vente d'eau potable aux villes voisines (`WATER_EXPORT`) : volume vendu (m³/h) et surplus vendable (capacité
+   * potable non livrée ni stockée dans les châteaux, m³/h). Absents quand la ville n'est reliée à aucun voisin.
+   */
+  exported?: number;
+  sellable?: number;
 }
 
 /** Ligne budgétaire du service (mois en cours ou dernier mois clos). */

@@ -32,6 +32,18 @@ const EDU_LEVELS_FR = ['Sans diplôme', 'Primaire', 'Brevet / CAP', 'Baccalauré
 const SECTOR_FR: Record<Sector, string> = { residential: 'Résidentiel', commercial: 'Commerces', industrial: 'Industrie', office: 'Bureaux' };
 const INCOME_FR: Record<Sector, string> = { residential: 'Impôts résidentiels', commercial: 'Impôts commerciaux', industrial: 'Impôts industriels', office: 'Impôts des bureaux' };
 const INCOME_ICON: Record<Sector, string> = { residential: 'house', commercial: 'shop', industrial: 'factory', office: 'office' };
+/** Libellés des postes détaillés des services (`MonthRecord.serviceLines`). */
+const SERVICE_LINE_FR: Record<string, string> = {
+  vente_electricite_exterieure: 'Vente d’électricité (villes voisines)',
+  vente_eau_exterieure: 'Vente d’eau (villes voisines)',
+};
+/** Lignes « poste : montant » d'un bilan détaillé des services (vide sans poste). */
+function serviceLineRows(lines: Record<string, number> | undefined, prefix: string): HTMLElement[] {
+  if (!lines) return [];
+  return Object.entries(lines).flatMap(([k, v]) => [
+    el('dt', { text: `${prefix}${SERVICE_LINE_FR[k] ?? k}` }), el('dd', { cls: v < 0 ? 'neg' : 'pos', text: signedMoney(v) }),
+  ]);
+}
 const EXPENSES: readonly { key: 'buildings' | 'roads' | 'salaries' | 'loanInterest' | 'loanPrincipal'; label: string; icon: string }[] = [
   { key: 'buildings', label: 'Entretien des bâtiments', icon: 'building' },
   { key: 'roads', label: 'Entretien des routes', icon: 'road' },
@@ -281,8 +293,11 @@ export class CityPanels {
         el('dt', { text: 'Remboursements de démolition' }), el('dd', { text: signedMoney(last.refunds) }),
         el('dt', { text: 'Emprunts reçus' }), el('dd', { text: signedMoney(last.loansTaken) }),
         el('dt', { text: 'Services (électricité, eau, déchets, port)' }), el('dd', { cls: ((last as { services?: number }).services ?? 0) < 0 ? 'neg' : 'pos', text: signedMoney((last as { services?: number }).services ?? 0) }),
+        ...serviceLineRows(last.serviceLines, 'dont '),
         el('dt', { text: 'Trésorerie en fin de mois' }), el('dd', { text: money(last.moneyEnd) })));
     } else lm.replaceChildren(el('p', { cls: 'muted small', text: 'Aucun mois clos pour l’instant : le bilan détaillé apparaît le 1er du mois suivant.' }));
+    const cur = serviceLineRows(r.economy.serviceLinesMonth, 'Ce mois : ');
+    if (cur.length) lm.append(el('dl', { cls: 'rows' }, ...cur));
     const d = r.date;
     drawChart($<HTMLCanvasElement>('fin-proj-chart'), {
       labels: f.projection.map((_, i) => MONTHS_SHORT[(d.month - 1 + i) % 12] ?? ''),

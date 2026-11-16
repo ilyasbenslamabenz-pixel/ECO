@@ -23,7 +23,7 @@ import { governanceModifiers } from '../../shared/governance';
 import {
   BATTERY_ONE_WAY, BATTERY_SPEC, batteryStep, capacityKwhOf,
   baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hourlyFactor, hydroShare,
-  hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, CABLE_SPEC, cableCost, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
+  hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, CABLE_SPEC, cableCost, EXPORT_SPEC, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
   TARIFF_CENTS_PER_KWH, windPowerShare, windProfile,
 } from '../../shared/power/model';
 import {
@@ -37,6 +37,7 @@ import { TILE_SIZE } from '../../shared/constants';
 import type { Municipal } from '../municipal/municipal';
 import { decodeFloat32, encodeFloat32 } from '../municipal/codec';
 import type { PluginContext } from '../plugins/types';
+import { linkedToNeighbours } from '../connexions/lien';
 
 /* ------------------------------- État sauvegardé ------------------------------- */
 
@@ -86,8 +87,10 @@ export interface PowerState {
   penalty: string;
   penaltyCells: number;
   events: ElectriciteEvent[];
-  month: { producedKwh: number; deliveredKwh: number; shedKwh: number; failures: number; importedKwh?: number };
-  lastMonth: { income: number; expense: number; failures: number; importCost?: number };
+  month: { producedKwh: number; deliveredKwh: number; shedKwh: number; failures: number; importedKwh?: number; exportedKwh?: number; exportIncome?: number };
+  lastMonth: { income: number; expense: number; failures: number; importCost?: number; exportIncome?: number };
+  /** Notification « première vente d'électricité aux villes voisines » déjà envoyée (champ facultatif). */
+  exportNotified?: boolean;
   investments: number;
   /** Dernière heure traitée (minutes de jeu). */
   lastHourAt: number;
@@ -262,7 +265,7 @@ export class PowerSystem {
   isIdle(ctx: PluginContext): boolean {
     if (this.state.lines.length || this.state.cables?.length || this.state.events.length || this.rooftopSet.size) return false;
     const s = this.state.settings;
-    if (s.funding !== 1 || s.rooftops || s.raccordement || s.priorities.join() !== DEFAULT_PRIORITY_ORDER.join()) return false;
+    if (s.funding !== 1 || s.rooftops || s.raccordement || s.vente === false || s.priorities.join() !== DEFAULT_PRIORITY_ORDER.join()) return false;
     return this.scanFacilities(ctx).size === 0;
   }
 
@@ -278,6 +281,8 @@ export class PowerSystem {
   satisfactionCell(k: number): number { return -(this.penaltyGrid?.[k] ?? 0); }
   /** Raccordement au réseau extérieur actif. */
   get importOn(): boolean { return this.state.settings.raccordement === true; }
+  /** Vente du surplus aux villes voisines autorisée par le joueur (absent = oui). */
+  get exportOn(): boolean { return this.state.settings.vente !== false; }
   /** Installations connues (état sauvegardé : identique avant et après un rechargement). */
   facilityCount(): number { return Math.max(this.facilities.size, Object.keys(this.state.facilities).length); }
   summary(): ElectriciteSummary | undefined { return this.summaryCache; }
@@ -726,6 +731,17 @@ export class PowerSystem {
     return { ok: true };
   }
 
+  /** Vente du surplus aux villes voisines : activée (par défaut) ou désactivée par le joueur. */
+  setVente(ctx: PluginContext, on: boolean): void {
+    if (on === this.exportOn) return;
+    const next: ElectriciteSettings = { ...this.state.settings };
+    if (on) delete next.vente; else next.vente = false;
+    this.state.settings = next;
+    this.event(ctx, 'reglage', on ? 'Vente du surplus d\'électricité aux villes voisines activée' : 'Vente du surplus d\'électricité aux villes voisines désactivée');
+    this.version++;
+    this.allocate(ctx, false);
+  }
+
   setRooftops(ctx: PluginContext, enabled: boolean): void {
     if (this.state.settings.rooftops === enabled) return;
     this.state.settings.rooftops = enabled;
@@ -1151,6 +1167,9 @@ export class PowerSystem {
     const isolated = this.isolatedSet();
     this.reportIsolated(ctx, isolated);
     if (isolated.size) summary.isolatedFacilities = isolated.size;
+    // Vente aux villes voisines : surplus éolien / solaire / hydro / toitures réellement disponible, ni consommé ni
+    // stocké (la recharge des batteries est déjà comptée dans `outputOf`), installations reliées seulement.
+    const exportKw = this.exportStep(ctx, facs, avail, report.outputOf, isolated, rooftopKw - report.rooftopOut, importedKw, gm.powerImportFactor, summary);
     this.updateRoads(ctx, fed, imp, summary);
     this.facilityViews = facs.map((f) => ({
       id: f.id, kind: f.kind, nameFr: f.nameFr, x: f.x, y: f.y, z: f.z, rot: f.rot,
@@ -1175,10 +1194,47 @@ export class PowerSystem {
       this.state.month.deliveredKwh += deliveredKw;
       this.state.month.shedKwh += summary.shortfallKw;
       if (importedKw > 0) this.state.month.importedKwh = (this.state.month.importedKwh ?? 0) + importedKw;
+      if (exportKw > 0) this.sellExport(ctx, exportKw);
       if (m) this.hourlyEffects(ctx, m, summary, consumers);
     }
     this.version++;
     return summary;
+  }
+
+  /**
+   * Surplus vendable et puissance vendue cette heure (kW). Vendable : capacité disponible non appelée des centrales
+   * éoliennes, solaires et hydroélectriques en service et reliées (non isolées), plus les toitures, APRÈS la recharge
+   * des batteries. Vendu : ce surplus plafonné à `EXPORT_SPEC.capacityKw` (réduit comme le raccordement pendant une
+   * panne du réseau voisin), seulement si la vente est activée, que la ville est reliée aux voisins (raccordement ou
+   * connexion extérieure par route) et qu'elle n'achète rien cette heure-ci.
+   */
+  private exportStep(ctx: PluginContext, facs: Facility[], avail: Map<number, number>, outputOf: Map<number, number>, isolated: Set<number>, rooftopSpare: number, importedKw: number, capFactor: number, summary: ElectriciteSummary): number {
+    let spare = Math.max(0, rooftopSpare);
+    for (const f of facs) {
+      if (f.kind !== 'eolien' && f.kind !== 'solaire' && f.kind !== 'hydro') continue;
+      if (isolated.has(f.id) || this.facilityState(f.id).failedUntil > 0) continue;
+      spare += Math.max(0, (avail.get(f.id) ?? 0) - (outputOf.get(f.id) ?? 0));
+    }
+    if (!linkedToNeighbours(ctx, this.importOn)) return 0;
+    const sold = this.exportOn && importedKw <= 1e-6 ? Math.min(spare, EXPORT_SPEC.capacityKw * Math.max(0, capFactor)) : 0;
+    summary.sellableKw = Math.round(spare * 10) / 10;
+    summary.exportedKw = Math.round(sold * 10) / 10;
+    return sold > 1e-6 ? sold : 0;
+  }
+
+  /** Vente de l'heure : recette versée tout de suite à la trésorerie (poste détaillé du bilan), cumuls du mois. */
+  private sellExport(ctx: PluginContext, kw: number): void {
+    const cents = kw * EXPORT_SPEC.priceCentsPerKwh;
+    const mo = this.state.month;
+    mo.exportedKwh = (mo.exportedKwh ?? 0) + kw;
+    mo.exportIncome = (mo.exportIncome ?? 0) + cents;
+    ctx.economy.applyService(cents / 100, false, 'vente_electricite_exterieure');
+    if (!this.state.exportNotified) {
+      this.state.exportNotified = true;
+      const msg = `Première vente d'électricité aux villes voisines : ${Math.round(kw).toLocaleString('fr-FR')} kW de surplus vendus à ${EXPORT_SPEC.priceCentsPerKwh.toLocaleString('fr-FR')} ct/kWh.`;
+      ctx.notify('info', msg);
+      this.event(ctx, 'reglage', msg);
+    }
   }
 
   /** Construit le réseau municipal et répartit ; renvoie les quantités utiles (indépendantes des ids de nœuds). */
@@ -1478,14 +1534,18 @@ export class PowerSystem {
     const expense = Math.round(this.upkeepNominal() * this.state.settings.funding);
     const income = Math.round(this.state.month.deliveredKwh * TARIFF_CENTS_PER_KWH);
     const importCost = Math.round((this.state.month.importedKwh ?? 0) * IMPORT_SPEC.priceCentsPerKwh);
+    const exportIncome = Math.round(this.state.month.exportIncome ?? 0);
     if (m) {
       // Montants du module en centimes ; trésorerie et grand livre en CHF (comme l'affichage du panneau).
       if (expense > 0) m.budget.post('expense', 'entretien:reseau_electrique', centsToChf(expense), 'electricite');
       if (importCost > 0) m.budget.post('expense', 'achat:electricite_exterieure', centsToChf(importCost), 'electricite');
       if (income > 0) m.budget.post('income', 'vente:electricite', centsToChf(income), 'electricite');
+      // Vente aux voisins : déjà versée heure par heure à la trésorerie, inscrite au grand livre seulement.
+      if (exportIncome > 0) m.budget.record('income', 'vente:electricite_exterieure', centsToChf(exportIncome), 'electricite');
     }
     this.state.lastMonth = { income, expense, failures: this.state.month.failures };
     if (importCost > 0 || this.importOn) this.state.lastMonth.importCost = importCost;
+    if (exportIncome > 0 || this.state.exportNotified) this.state.lastMonth.exportIncome = exportIncome;
     this.state.month = { producedKwh: 0, deliveredKwh: 0, shedKwh: 0, failures: 0 };
     void ctx;
     this.version++;
@@ -1502,6 +1562,10 @@ export class PowerSystem {
       monthProducedKwh: Math.round(this.state.month.producedKwh), monthDeliveredKwh: Math.round(this.state.month.deliveredKwh),
       monthShedKwh: Math.round(this.state.month.shedKwh), monthFailures: this.state.month.failures, lastMonthFailures: this.state.lastMonth.failures,
       ...(this.importOn || this.state.lastMonth.importCost !== undefined ? { monthImportedKwh: Math.round(this.state.month.importedKwh ?? 0), lastImportCost: this.state.lastMonth.importCost ?? 0 } : {}),
+      ...(this.state.exportNotified ? {
+        monthExportedKwh: Math.round(this.state.month.exportedKwh ?? 0), monthExportIncome: Math.round(this.state.month.exportIncome ?? 0),
+        lastExportIncome: this.state.lastMonth.exportIncome ?? 0,
+      } : {}),
     };
   }
 

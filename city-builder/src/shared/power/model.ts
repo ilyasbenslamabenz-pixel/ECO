@@ -127,6 +127,16 @@ export const TARIFF_CENTS_PER_KWH = 2;
 export const IMPORT_SPEC = { capacityKw: 3_000, priceCentsPerKwh: 4.5, connectionChf: 60_000, meritCost: 90, lossShare: 0.02 } as const;
 
 /**
+ * Vente du surplus aux villes voisines (docs/ELECTRICITE.md, « Vente d'électricité ») : chaque heure, la production
+ * éolienne, solaire, hydraulique et des toitures réellement disponible mais ni consommée ni stockée (batteries
+ * chargées d'abord) est vendue, dans la limite de `capacityKw`, si la ville est reliée à l'extérieur (raccordement
+ * au réseau voisin OU connexion extérieure par route reliée). Prix de vente (¢/kWh) inférieur au prix d'achat
+ * (`IMPORT_SPEC.priceCentsPerKwh`) et au tarif de revente local : acheter puis revendre fait toujours perdre.
+ * Les centrales thermiques ne vendent pas leur capacité inutilisée (pilotables : elles ne brûlent que le gaz appelé).
+ */
+export const EXPORT_SPEC = { capacityKw: 10_000, priceCentsPerKwh: 1.5 } as const;
+
+/**
  * Conversion centimes (unité des montants du module électricité : tarifs, coûts, entretien) -> CHF (unité de la
  * trésorerie et du grand livre municipal). Arrondi au centime. Toute écriture budgétaire du module passe par ici :
  * le panneau Énergie affiche `centimes / 100`, la trésorerie doit recevoir le même montant.

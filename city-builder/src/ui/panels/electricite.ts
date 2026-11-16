@@ -13,7 +13,7 @@ import {
   SOURCE_LABELS_FR, type FacilityView,
 } from '../../shared/power/types';
 import { powerView } from '../../shared/power/view';
-import { IMPORT_SPEC } from '../../shared/power/model';
+import { EXPORT_SPEC, IMPORT_SPEC } from '../../shared/power/model';
 import type { UiPanel, UiPanelApi } from './types';
 
 /* --------------------------------- Formats --------------------------------- */
@@ -90,6 +90,7 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
     <div class="kpi"><span>Coupures</span><b data-k="coupures" class="${s.cut + s.unlinked ? 'warn' : 'ok'}">${s.cut} coupés · ${s.unlinked} non raccordés</b><span>${s.powered} / ${s.buildings} bâtiments alimentés</span></div>
   </div>
   ${renderStorage(s)}
+  ${renderExport(s, st)}
   <p class="muted" style="margin:6px 0">Relevé ${hhmm(s.at)} · vent ${nf1.format(s.windMs)} m/s (${s.windSource === 'meteo' ? 'météo' : s.windSource === 'force' ? 'forcé' : 'profil'}) · soleil ${(s.sun * 100).toFixed(0)} %
     · sans courant : ${nf0.format(s.jobsWithoutPower)} emplois, ${nf0.format(s.residentsWithoutPower)} habitants</p>
   <h4>Part par source</h4>
@@ -102,6 +103,7 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
     <tr><td>Entretien du réseau (mois)</td><td>${fmtChf(bud.upkeepActual)} <span class="muted">/ ${fmtChf(bud.upkeepNominal)} nominal</span></td></tr>
     <tr><td>Entretien des installations (catalogue)</td><td>${fmtChf(bud.facilitiesUpkeep)}</td></tr>
     <tr><td>Mois passé : recettes / dépenses</td><td>${fmtChf(bud.lastIncome)} / ${fmtChf(bud.lastExpense)}</td></tr>
+    ${bud.monthExportIncome !== undefined ? `<tr><td>Vente d'électricité (aux villes voisines)</td><td data-k="vente-budget" class="ok">ce mois ${fmtChf(bud.monthExportIncome)} <span class="muted">(${fmtEnergy(bud.monthExportedKwh ?? 0)}) · mois passé ${fmtChf(bud.lastExportIncome ?? 0)}</span></td></tr>` : ''}
     <tr><td>Investissements (lignes, toitures)</td><td>${fmtChf(bud.investments)}</td></tr>
     <tr><td>Ce mois : produit / livré / délesté</td><td>${fmtEnergy(bud.monthProducedKwh)} / ${fmtEnergy(bud.monthDeliveredKwh)} / ${fmtEnergy(bud.monthShedKwh)}</td></tr>
     <tr><td>Pannes : ce mois / mois passé</td><td>${bud.monthFailures} / ${bud.lastMonthFailures}</td></tr>
@@ -164,6 +166,22 @@ function renderStorage(s: ElectriciteSummary): string {
   <p class="muted" style="margin:2px 0 6px">${fmtEnergy(b.storedKwh)} / ${fmtEnergy(b.capacityKwh)} · ${flow} (max ${fmtPower(b.powerKw)}) · autonomie ≈ ${b.autonomyH > 0 ? `${nf1.format(b.autonomyH)} h` : '—'} · rendement ${Math.round(b.roundTrip * 100)} %. Chargées par le surplus des centrales, elles prennent le relais la nuit ou sans vent.</p>`;
 }
 
+/**
+ * Vente du surplus aux villes voisines : puissance vendue cette heure et recette du mois, ou ce qui manque (lien avec
+ * l'extérieur, vente désactivée, aucun surplus).
+ */
+function renderExport(s: ElectriciteSummary, st: ElectriciteDelta): string {
+  const on = st.settings?.vente !== false;
+  const month = st.budget?.monthExportIncome;
+  const income = month !== undefined ? ` · ce mois ${fmtChf(month)}` : '';
+  let text: string;
+  if (s.exportedKw === undefined) text = 'aucune ville voisine reliée : activez le raccordement au réseau voisin ou reliez une route au bord de la carte.';
+  else if (!on) text = `désactivée (surplus vendable ${fmtPower(s.sellableKw ?? 0)}).`;
+  else if (s.exportedKw > 0) text = `<b class="ok">${fmtPower(s.exportedKw)}</b> vendus cette heure (${EXPORT_SPEC.priceCentsPerKwh.toLocaleString('fr-FR')} ct/kWh)${income}.`;
+  else text = `aucun surplus à vendre en ce moment${income}.`;
+  return `<p style="margin:6px 0" data-k="vente">Vente d'électricité : ${text}</p>`;
+}
+
 /** Interrupteur du raccordement au réseau électrique voisin (frais uniques, plafond, prix du kWh). */
 function renderRaccordement(st: ElectriciteDelta): string {
   const on = st.settings?.raccordement === true;
@@ -180,6 +198,8 @@ function renderSettings(st: ElectriciteDelta): string {
       <button data-act="prio-down" data-i="${i}" ${i === set.priorities.length - 1 ? 'disabled' : ''} aria-label="Descendre">▼</button></li>`).join('');
   return `<h4>Réglages</h4>
   ${renderRaccordement(st)}
+  <div class="row"><label><input id="elec-vente" type="checkbox" ${set.vente !== false ? 'checked' : ''}> <b>Vendre le surplus aux villes voisines</b></label></div>
+  <p class="muted" style="margin:2px 0 6px">Chaque heure, le surplus éolien, solaire, hydraulique et des toitures (après recharge des batteries) est vendu ${EXPORT_SPEC.priceCentsPerKwh.toLocaleString('fr-FR')} ct/kWh, jusqu'à ${fmtPower(EXPORT_SPEC.capacityKw)}, si la ville est raccordée au réseau voisin ou reliée par une route au bord de la carte.</p>
   <div class="row"><label for="elec-fund">Financement de l'entretien</label><b data-k="financement">${Math.round(set.funding * 100)} %</b></div>
   <div class="row"><input id="elec-fund" type="range" min="${FUNDING_MIN * 100}" max="${FUNDING_MAX * 100}" step="5" value="${Math.round(set.funding * 100)}"></div>
   <p class="muted" style="margin:2px 0 6px">Sous-financer augmente les pannes (×4 à 50 %) et allonge les réparations.</p>
@@ -281,6 +301,7 @@ function mountPanel(root: HTMLElement, api: UiPanelApi): () => void {
   const onChange = (ev: Event): void => {
     const t = ev.target as HTMLInputElement;
     if (t.id === 'elec-fund') void run('setFunding', { funding: Number(t.value) / 100 }).then(refresh);
+    if (t.id === 'elec-vente') void run('vente', { on: t.checked }).then(refresh);
     if (t.id === 'elec-roof') void run('setRooftops', { enabled: t.checked }).then(refresh);
     if (t.id === 'elec-racc') {
       const on = t.checked;

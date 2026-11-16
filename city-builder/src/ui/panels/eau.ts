@@ -5,7 +5,7 @@
  * N'affiche QUE des valeurs reçues de la simulation (`delta.ext.eau` / `snapshot.ext.eau` / commande `state`).
  */
 import type { EauDelta, EauSnapshot } from '../../shared/protocol-ext/eau';
-import { WATER_FACILITIES, WATER_IMPORT, type WaterSettings } from '../../shared/water-network/types';
+import { WATER_EXPORT, WATER_FACILITIES, WATER_IMPORT, type WaterSettings } from '../../shared/water-network/types';
 import { waterView, WATER_LEGEND, WATER_VIEW_MODES } from '../../render/water-network/view';
 import { el, fmt, money } from '../dom';
 import type { UiPanel, UiPanelApi } from './types';
@@ -107,6 +107,12 @@ function mount(root: HTMLElement, api: UiPanelApi): () => void {
     parts.push(row('Livré', m3h(b.delivered)));
     parts.push(gauge(b.demand > 0 ? b.delivered / b.demand : 0, 'blue'));
     parts.push(row('Eau pompée / traitée', `${m3h(b.pumped)} / ${m3h(b.treated)}`));
+    const venteOn = s.settings.vente !== false;
+    const venteMonth = s.budget.current.lines['vente:eau_exterieure'] ?? 0;
+    parts.push(row('Vente d’eau (villes voisines)',
+      b.exported === undefined ? 'aucune ville voisine reliée' : !venteOn ? 'désactivée' : `${m3h(b.exported)} · ce mois ${money(venteMonth)}`,
+      `Surplus des usines de potabilisation (après remplissage des châteaux d’eau) vendu ${dec(WATER_EXPORT.pricePerM3, 1)} CHF/m³, jusqu’à ${fmt(WATER_EXPORT.capacity)} m³/h, si la ville est raccordée au réseau d’eau voisin ou reliée par une route au bord de la carte${b.sellable !== undefined ? ` (vendable : ${m3h(b.sellable)})` : ''}`,
+      b.exported !== undefined && b.exported > 0 && venteOn ? 'ok' : ''));
     parts.push(row('Réserve des châteaux d\'eau', b.storage > 0 ? `${fmt(b.stock)} / ${fmt(b.storage)} m³` : 'aucun château'));
     if (b.storage > 0) parts.push(gauge(b.stock / b.storage, 'blue'));
     parts.push(row('Qualité de l\'eau livrée', b.delivered > 0 ? pct(b.quality) : '—', 'Mélange des sources : pollution de l\'eau captée, abattement des usines', b.delivered > 0 && b.quality < 0.7 ? 'bad' : ''));
@@ -138,6 +144,10 @@ function mount(root: HTMLElement, api: UiPanelApi): () => void {
     chk.checked = s.settings.restrictions;
     chk.addEventListener('change', () => sendSettings({ restrictions: chk.checked }));
     parts.push(el('label', { cls: 'eau-check' }, chk, 'Restrictions d\'usage (−20 % de demande, léger mécontentement)'));
+    const vchk = el('input', { attrs: { type: 'checkbox', 'data-eau': 'vente' } });
+    vchk.checked = s.settings.vente !== false;
+    vchk.addEventListener('change', () => sendSettings({ vente: vchk.checked }));
+    parts.push(el('label', { cls: 'eau-check' }, vchk, `Vendre le surplus d’eau potable aux villes voisines (${dec(WATER_EXPORT.pricePerM3, 1)} CHF/m³)`));
     if (sending) parts.push(el('p', { cls: 'muted small', text: 'Envoi…' }));
     // Installations.
     parts.push(el('h4', { text: `Installations (${s.facilities.length})` }));

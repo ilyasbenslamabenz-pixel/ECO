@@ -34,7 +34,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 export function createEauPlugin(): SimPlugin & { readonly system: WaterSystem; municipalOf(): Municipal | null } {
   const system = new WaterSystem();
   let ctxRef: PluginContext | null = null;
-  system.onMoney = (v) => ctxRef?.economy?.applyService?.(v);
+  system.onMoney = (v, line) => ctxRef?.economy?.applyService?.(v, false, line);
   /** Contrat privé (module `municipal` absent). */
   let own: Municipal | null = null;
   let shared: Municipal | null = null;

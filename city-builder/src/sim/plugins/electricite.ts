@@ -177,6 +177,12 @@ export function createElectricitePlugin(): ElectricitePlugin {
           activate();
           return { ok: true, data: system.state.settings };
         }
+        case 'vente': {
+          if (typeof p.on !== 'boolean') return bad('on (booléen) attendu');
+          activate();
+          system.setVente(ctx, p.on);
+          return { ok: true, data: system.state.settings };
+        }
         case 'setRooftops':
           if (typeof p.enabled !== 'boolean') return bad('enabled (booléen) attendu');
           activate();

@@ -1549,6 +1549,7 @@ export class Simulation {
     const e = this.economy;
     const ts = this.traffic.stats;
     const demography = this.demo.report(now, e.taxRates.residential);
+    const svcLines = e.currentServiceLines();
     return {
       date, season: this.clock.season, weekday: this.clock.weekday, dateFr: formatDateFr(date),
       economy: {
@@ -1558,6 +1559,7 @@ export class Simulation {
         debt: Math.round(e.debt()), loanCapacity: Math.floor(e.loanCapacity()), currentLoanRate: e.currentLoanRate(),
         monthsInDeficit: e.monthsInDeficit, bankrupt: e.bankrupt,
         history: (fullHistory ? e.history : e.history.slice(-24)).map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } })),
+        ...(Object.keys(svcLines).length ? { serviceLinesMonth: svcLines } : {}),
       },
       demography,
       traffic: { vehicles: this.traffic.actCount, meanSpeedKmh: ts.meanSpeedKmh, arrived: ts.arrived, connectedBuildings: ts.connectedBuildings, tripsFromCitizens: this.tripsToTraffic, tripsCapped: this.tripsCapped },

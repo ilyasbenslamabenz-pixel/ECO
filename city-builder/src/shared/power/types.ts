@@ -197,6 +197,13 @@ export interface ElectriciteSummary {
   residentsWithoutPower: number;
   /** Puissance achetée au réseau extérieur cette heure (kW, raccordement) ; absent = non raccordé. */
   importedKw?: number;
+  /**
+   * Vente du surplus aux villes voisines (`EXPORT_SPEC`) : puissance vendue cette heure (kW) ; absent quand la ville
+   * n'est reliée à aucun voisin (ni raccordement, ni connexion extérieure par route).
+   */
+  exportedKw?: number;
+  /** Surplus vendable (éolien, solaire, hydro, toitures non consommés ni stockés), avant plafond (kW). */
+  sellableKw?: number;
   /** Batteries de stockage (absent sans batterie). */
   storage?: StorageBalance;
   /**
@@ -224,6 +231,11 @@ export interface ElectriciteSettings {
    * dernier (après toutes les centrales), facturé au kWh. Absent des anciennes sauvegardes = non raccordé.
    */
   raccordement?: boolean;
+  /**
+   * Vente du surplus aux villes voisines : `false` = désactivée par le joueur ; absent (anciennes sauvegardes compris)
+   * = activée.
+   */
+  vente?: boolean;
 }
 
 /** Bilan budgétaire mensuel du service (¢). */
@@ -248,6 +260,13 @@ export interface ElectriciteBudget {
   /** Énergie achetée au réseau extérieur ce mois-ci (kWh) et facture du mois passé (¢) ; absents = jamais raccordé. */
   monthImportedKwh?: number;
   lastImportCost?: number;
+  /**
+   * Vente d'électricité aux villes voisines : énergie vendue (kWh) et recette (¢) du mois en cours, recette du mois
+   * passé (¢) ; absents tant que rien n'a jamais été vendu.
+   */
+  monthExportedKwh?: number;
+  monthExportIncome?: number;
+  lastExportIncome?: number;
 }
 
 /** Panne ou événement récent (journal du panneau). */

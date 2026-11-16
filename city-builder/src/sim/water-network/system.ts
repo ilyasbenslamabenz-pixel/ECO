@@ -30,7 +30,7 @@
 import { governanceModifiers } from '../../shared/governance';
 import type { IndicatorId } from '../../shared/municipal/types';
 import {
-  DEFAULT_WATER_SETTINGS, facilityKindOf, SETTINGS_BOUNDS, WATER_FACILITIES, WATER_IMPORT,
+  DEFAULT_WATER_SETTINGS, facilityKindOf, SETTINGS_BOUNDS, WATER_EXPORT, WATER_FACILITIES, WATER_IMPORT,
   type IntakeMode, type PipeGeometry, type RiverLayer, type WaterBalance, type WaterBudget, type WaterFacilityKind,
   type WaterFacilityState, type WaterLayerState, type WaterSettings,
 } from '../../shared/water-network/types';
@@ -38,6 +38,7 @@ import type { EauDelta, EauSnapshot } from '../../shared/protocol-ext/eau';
 import { decodeFloat32, encodeFloat32 } from '../municipal/codec';
 import type { Municipal } from '../municipal/municipal';
 import type { PluginContext } from '../plugins/types';
+import { linkedToNeighbours } from '../connexions/lien';
 import {
   aquiferYield, BOREHOLE_FACTOR, buildingDemand, epurationEfficiency, fundingCapacity, headLoss, healthRisk,
   PIPE_CAPACITY, PIPE_LOSS, PIPE_UPKEEP_PER_KM, potabilisationEfficiency, pressureBar, pressureFactor, PUMP_HEAD,
@@ -111,6 +112,8 @@ export interface WaterSaveV1 {
   pending: { cause: number; at: number; grids: { id: string; before: string }[] }[];
   /** Bâtiments sans aucune ressource dans leur composante au dernier pas (absent = aucun). */
   noSource?: number[];
+  /** Notification « première vente d'eau aux villes voisines » déjà envoyée (champ facultatif). */
+  exportNotified?: boolean;
 }
 
 const emptyBudget = (): WaterBudget => ({ income: 0, expenses: 0, lines: {} });
@@ -124,6 +127,7 @@ export function normalizeSettings(cur: WaterSettings, p: Partial<WaterSettings>)
     tariff: n(p.tariff, cur.tariff, SETTINGS_BOUNDS.tariff),
     restrictions: typeof p.restrictions === 'boolean' ? p.restrictions : cur.restrictions,
     ...((typeof p.raccordement === 'boolean' ? p.raccordement : cur.raccordement) ? { raccordement: true } : {}),
+    ...((typeof p.vente === 'boolean' ? p.vente : cur.vente) === false ? { vente: false } : {}),
   };
 }
 
@@ -206,6 +210,10 @@ export class WaterSystem {
   private noSource = new Set<number>();
   /** Eau achetée au réseau extérieur au dernier pas (m³/h). */
   importedM3h = 0;
+  /** Eau potable vendue aux villes voisines au dernier pas (m³/h). */
+  exportedM3h = 0;
+  /** Notification de la première vente déjà envoyée. */
+  private exportNotified = false;
   /** Exutoires « réseau extérieur » par composante (nœud du réseau `egouts`) et eaux usées confiées au voisin (m³/h). */
   private sewerImportNode: number[] = [];
   importedSewage = 0;
@@ -245,6 +253,8 @@ export class WaterSystem {
     this.sewerImportNode = [];
     this.noSource.clear();
     this.importedM3h = 0;
+    this.exportedM3h = 0;
+    this.exportNotified = false;
     this.importedSewage = 0;
   }
 
@@ -669,6 +679,14 @@ export class WaterSystem {
       else { untreatedOut += f.output; f.output += raw[c]! > 0 ? filledC[c]! * (f.capacity / raw[c]!) : 0; }
     }
     treated += filledTreated;
+    // Vente aux villes voisines : capacité potable restante (usines, après remplissage des châteaux), plafonnée ;
+    // le volume vendu est pompé et traité (coûts d'exploitation comptés comme pour l'eau livrée).
+    let sellable = 0;
+    for (let c = 0; c < C; c++) if (plantCap[c]! > 0) sellable += Math.max(0, spare[c]! - filledC[c]!);
+    const exportLink = linkedToNeighbours(ctx, s.raccordement === true);
+    const exported = exportLink && s.vente !== false && imported <= 1e-6 && s.fundingWater > 0 ? Math.min(sellable, WATER_EXPORT.capacity) : 0;
+    this.exportedM3h = exported > 1e-6 ? exported : 0;
+    treated += this.exportedM3h;
     pumped = treated + untreatedOut + filledRaw;
     for (let c = 0; c < C; c++) compQ[c] = compOut[c]! > 0 ? compQ[c]! / compOut[c]! : 1;
 
@@ -810,11 +828,16 @@ export class WaterSystem {
       sewerCoverage: sewage > 0 ? (sewageTreated + sewageRaw) / sewage : 0,
       pollutionLoad: load,
       riverPollutionMean: river.wetCount ? pSumR / river.wetCount : 0, riverPollutionMax: pMax,
+      ...(exportLink ? { exported: this.exportedM3h, sellable } : {}),
     };
     this.balance = bal;
     this.history.push(bal);
     if (this.history.length > HISTORY) this.history.splice(0, this.history.length - HISTORY);
     this.accountHour(bal, fac);
+    if (this.exportedM3h > 0 && !this.exportNotified) {
+      this.exportNotified = true;
+      ctx.notify('info', `Première vente d'eau aux villes voisines : ${Math.round(this.exportedM3h)} m³/h de surplus vendus à ${WATER_EXPORT.pricePerM3.toLocaleString('fr-FR')} CHF/m³.`);
+    }
     this.updateAlerts(bal, fac);
     this.reportIsolated(ctx, fac);
     this.traceEffects(ctx, bal, at);
@@ -923,17 +946,18 @@ export class WaterSystem {
   }
 
   /** Trésorerie de la ville (branchée par le plugin) : + recette, − dépense, à chaque heure. */
-  onMoney: ((signed: number) => void) | null = null;
+  onMoney: ((signed: number, line?: string) => void) | null = null;
 
   private accountHour(b: WaterBalance, fac: Facility[]): void {
     const s = this.settings, m = this.month;
-    const add = (k: string, v: number, side: 'income' | 'expense'): void => {
+    const add = (k: string, v: number, side: 'income' | 'expense', line?: string): void => {
       if (!(v > 0)) return;
-      this.onMoney?.(side === 'income' ? v : -v);
+      this.onMoney?.(side === 'income' ? v : -v, line);
       m.lines[k] = (m.lines[k] ?? 0) + v;
       if (side === 'income') m.income += v; else m.expenses += v;
     };
     add('vente:eau', b.delivered * s.tariff, 'income');
+    add('vente:eau_exterieure', this.exportedM3h * WATER_EXPORT.pricePerM3, 'income', 'vente_eau_exterieure');
     add('exploitation:pompage', b.pumped * WATER_FACILITIES.pompage.costPerM3 * s.fundingWater, 'expense');
     add('exploitation:potabilisation', b.treated * WATER_FACILITIES.potabilisation.costPerM3 * s.fundingWater, 'expense');
     add('exploitation:epuration', (b.sewageTreated - this.importedSewage) * WATER_FACILITIES.epuration.costPerM3 * s.fundingSewer, 'expense');
@@ -1227,6 +1251,7 @@ export class WaterSystem {
       causes: { shortage: this.shortageCause, discharge: this.dischargeCause },
       pending: this.pending.map((p) => ({ cause: p.cause, at: p.at, grids: p.grids.map((g) => ({ id: g.id, before: encodeFloat32(g.before) })) })),
       ...(this.noSource.size ? { noSource: [...this.noSource].sort((a, b) => a - b) } : {}),
+      ...(this.exportNotified ? { exportNotified: true } : {}),
     };
   }
 
@@ -1254,6 +1279,8 @@ export class WaterSystem {
     this.pending = d.pending.map((p) => ({ cause: p.cause, at: p.at, grids: p.grids.map((g) => ({ id: g.id, before: decodeFloat32(g.before, n) })) }));
     this.topoKey = '';
     this.noSource = new Set(Array.isArray(d.noSource) ? d.noSource.filter((v) => typeof v === 'number') : []);
+    this.exportNotified = d.exportNotified === true;
+    this.exportedM3h = this.balance?.exported ?? 0;
     if (this.active) this.ensureGrids();
   }
 }

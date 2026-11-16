@@ -125,8 +125,9 @@ export interface PluginEconomy {
   /**
    * Recette (+) ou dépense (−) d'un service municipal, appliquée tout de suite à la trésorerie. `oneOff` = montant
    * ponctuel (investissement, prime, travaux) : compté au bilan du mois mais pas dans le solde prévu / horaire.
+   * `line` (facultatif) : poste détaillé au bilan mensuel (`MonthRecord.serviceLines`, ex. vente aux villes voisines).
    */
-  applyService(amount: number, oneOff?: boolean): void;
+  applyService(amount: number, oneOff?: boolean, line?: string): void;
 }
 
 /** Résultat d'une écriture de promotion privée (`PluginDevelopment`). */

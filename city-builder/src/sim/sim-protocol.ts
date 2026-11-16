@@ -91,6 +91,8 @@ export interface EconomyReport {
   bankrupt: boolean;
   /** Derniers mois clos (24 dans le rapport périodique, tout l'historique via getReport). */
   history: MonthRecord[];
+  /** Postes détaillés des services du mois en cours (`MonthRecord.serviceLines`) ; absent s'il n'y en a aucun. */
+  serviceLinesMonth?: Record<string, number>;
 }
 
 export interface TrafficReport {

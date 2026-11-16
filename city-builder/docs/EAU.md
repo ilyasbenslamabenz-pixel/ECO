@@ -94,6 +94,20 @@ Réglages (`pluginCommand { plugin: 'eau', name: 'settings', payload }`) : `fund
 `exploitation:{pompage,potabilisation,epuration,chateaux}`, `entretien:canalisations` (180 ¢/km/mois). Non
 appliquées à la trésorerie tant que docs/requests/municipal.md §3.2 n'est pas fait.
 
+**Vente d'eau aux villes voisines (16/11)** — chaque heure, la capacité **potable** restante des usines de
+potabilisation (composantes avec usine : ni livrée, ni stockée — les **châteaux d'eau sont remplis d'abord**) est
+vendue, plafonnée à **60 m³/h**, au prix de **0,5 CHF/m³** (`WATER_EXPORT`, src/shared/water-network/types.ts) :
+au-dessus du coût de production (pompage 0,08 + potabilisation 0,18 CHF/m³, payé sur le volume vendu, qui compte
+comme pompé et traité), bien sous le prix d'achat au voisin (1,2 CHF/m³). Conditions : ville reliée à l'extérieur
+— **raccordement au réseau d'eau voisin actif, ou connexion extérieure par route reliée** (même règle que
+l'électricité, `linkedToNeighbours`, src/sim/connexions/lien.ts) —, aucune eau achetée cette heure-ci, financement
+de l'eau > 0, réglage `vente` non désactivé (`settings { vente: false }` ; absent = activé). Recette versée chaque
+heure à la trésorerie (`applyService(…, 'vente_eau_exterieure')`, poste détaillé du bilan financier), ligne
+`vente:eau_exterieure` du budget du service (inscrite au grand livre à la clôture). Bilan horaire : `exported`,
+`sellable` (m³/h, absents sans lien avec l'extérieur). Notification unique à la première vente
+(`exportNotified`, champ facultatif de la sauvegarde, comme `settings.vente`). Panneau Eau : ligne « Vente d'eau
+(villes voisines) » et case « Vendre le surplus d'eau potable aux villes voisines ». Tests : tests/eau/vente.test.ts.
+
 Commandes : `settings`, `state`, `building { id }`, `history`. `delta.ext.eau` après chaque pas horaire (géométrie
 des canalisations seulement quand la voirie change) ; `snapshot.ext.eau` complet (canalisations, cellules en eau).
 

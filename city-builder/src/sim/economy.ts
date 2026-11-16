@@ -92,6 +92,11 @@ export interface MonthRecord {
   happiness: number;
   /** Solde des services municipaux du mois (électricité, eau, déchets, port… : + recettes, − dépenses). */
   services?: number;
+  /**
+   * Postes détaillés des services du mois (CHF, signés), compris dans `services` : ex. `vente_electricite_exterieure`,
+   * `vente_eau_exterieure` (vente aux villes voisines). Absent quand aucun poste détaillé n'a été versé.
+   */
+  serviceLines?: Record<string, number>;
 }
 
 export interface Forecast {
@@ -140,7 +145,7 @@ export interface EconomyJSON {
   history: MonthRecord[];
   monthsInDeficit: number;
   bankrupt: boolean;
-  month: { construction: number; refunds: number; loansTaken: number; operating?: number; hours?: number; acc?: { income: Record<TaxSector, number>; buildings: number; roads: number; salaries: number }; services?: number; lastServices?: number; servicesRecurring?: number; lastServicesRecurring?: number | null };
+  month: { construction: number; refunds: number; loansTaken: number; operating?: number; hours?: number; acc?: { income: Record<TaxSector, number>; buildings: number; roads: number; salaries: number }; services?: number; lastServices?: number; servicesRecurring?: number; lastServicesRecurring?: number | null; serviceLines?: Record<string, number> };
   /**
    * Assiettes fiscales et effectif des services en vigueur (fixés chaque jour / mois par la démographie). Absents des
    * anciennes sauvegardes : recalculés depuis la population au chargement (partie alors légèrement différente).
@@ -190,6 +195,8 @@ export class Economy {
   /** Part RÉCURRENTE de ces soldes (hors investissements, primes, travaux ponctuels) : base des prévisions. */
   private monthServicesRecurring = 0;
   private lastServicesRecurring: number | null = null;
+  /** Postes détaillés des services du mois en cours (`applyService(…, line)`). */
+  private monthServiceLines: Record<string, number> = {};
   private monthLoans = 0;
   /** Solde d'exploitation déjà versé heure par heure ce mois-ci (recettes − entretien − salaires). */
   private monthOperating = 0;
@@ -217,6 +224,7 @@ export class Economy {
     this.monthServices = 0;
     this.monthServicesRecurring = 0;
     this.lastServicesRecurring = null;
+    this.monthServiceLines = {};
     this.monthLoans = 0;
     this.monthOperating = 0;
     this.monthHours = 0;
@@ -259,12 +267,18 @@ export class Economy {
    * Recette (+) ou dépense (−) d'un service municipal (modules électricité, eau, déchets, port/aéroport),
    * appliquée tout de suite à la trésorerie et cumulée dans le bilan du mois (`services`).
    */
-  applyService(amount: number, oneOff = false): void {
+  applyService(amount: number, oneOff = false, line?: string): void {
     if (!Number.isFinite(amount) || amount === 0) return;
     this.money += amount;
     this.monthServices += amount;
+    if (line) this.monthServiceLines[line] = (this.monthServiceLines[line] ?? 0) + amount;
     // Montant ponctuel (investissement, prime, travaux) : compté dans le bilan, pas dans les prévisions.
     if (!oneOff) this.monthServicesRecurring += amount;
+  }
+
+  /** Postes détaillés des services versés ce mois-ci (copie, CHF signés). */
+  currentServiceLines(): Record<string, number> {
+    return Object.fromEntries(Object.keys(this.monthServiceLines).sort().map((k) => [k, r2(this.monthServiceLines[k]!)]));
   }
 
   addUpkeep(v: number, kind: 'buildings' | 'roads' = 'buildings'): void {
@@ -533,6 +547,9 @@ export class Economy {
       unemploymentRate: ctx?.unemploymentRate ?? 0, happiness: Math.round((ctx?.happiness ?? 0) * 1e4) / 1e4,
       services: r2(this.monthServices),
     };
+    const lines = Object.keys(this.monthServiceLines).sort();
+    if (lines.length) rec.serviceLines = Object.fromEntries(lines.map((k) => [k, r2(this.monthServiceLines[k]!)]));
+    this.monthServiceLines = {};
     this.history.push(rec);
     if (this.history.length > HISTORY_MAX_MONTHS) this.history.splice(0, this.history.length - HISTORY_MAX_MONTHS);
     this.monthConstruction = 0;
@@ -548,9 +565,9 @@ export class Economy {
   toJSON(): EconomyJSON {
     return {
       money: this.money, taxRates: { ...this.taxRates }, loans: this.loans.map((l) => ({ ...l })), nextLoanId: this.nextLoanId,
-      history: this.history.map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } })),
+      history: this.history.map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses }, ...(h.serviceLines ? { serviceLines: { ...h.serviceLines } } : {}) })),
       monthsInDeficit: this.monthsInDeficit, bankrupt: this.bankrupt,
-      month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans, operating: this.monthOperating, hours: this.monthHours, acc: { ...this.acc, income: { ...this.acc.income } }, services: this.monthServices, lastServices: this.lastServices, servicesRecurring: this.monthServicesRecurring, lastServicesRecurring: this.lastServicesRecurring },
+      month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans, operating: this.monthOperating, hours: this.monthHours, acc: { ...this.acc, income: { ...this.acc.income } }, services: this.monthServices, lastServices: this.lastServices, servicesRecurring: this.monthServicesRecurring, lastServicesRecurring: this.lastServicesRecurring, ...(Object.keys(this.monthServiceLines).length ? { serviceLines: { ...this.monthServiceLines } } : {}) },
       taxBase: { ...this.taxBase }, serviceWorkers: this.serviceWorkers,
       eduTaxRates: [...this.eduTaxRates], resBaseByEdu: [...this.resBaseByEdu],
     };
@@ -562,7 +579,7 @@ export class Economy {
     for (const s of TAX_SECTORS) this.setTaxRate(s, j.taxRates[s] ?? DEFAULT_TAX_RATE);
     this.loans = j.loans.map((l) => ({ ...l }));
     this.nextLoanId = j.nextLoanId;
-    this.history = j.history.map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } }));
+    this.history = j.history.map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses }, ...(h.serviceLines ? { serviceLines: { ...h.serviceLines } } : {}) }));
     this.monthsInDeficit = j.monthsInDeficit;
     this.bankrupt = j.bankrupt;
     this.monthConstruction = j.month.construction;
@@ -572,6 +589,11 @@ export class Economy {
     this.monthHours = j.month.hours ?? 0;
     this.monthServices = j.month.services ?? 0;
     this.lastServices = j.month.lastServices ?? 0;
+    // Postes détaillés (champ facultatif : absent des anciennes sauvegardes).
+    this.monthServiceLines = {};
+    if (j.month.serviceLines && typeof j.month.serviceLines === 'object') {
+      for (const [k, v] of Object.entries(j.month.serviceLines)) if (typeof v === 'number' && Number.isFinite(v)) this.monthServiceLines[k] = v;
+    }
     // Anciennes sauvegardes : pas de distinction récurrent / ponctuel, le dernier solde des services fait foi.
     this.monthServicesRecurring = j.month.servicesRecurring ?? this.monthServices;
     this.lastServicesRecurring = j.month.lastServicesRecurring !== undefined ? j.month.lastServicesRecurring
