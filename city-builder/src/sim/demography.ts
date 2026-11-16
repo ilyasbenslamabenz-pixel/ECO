@@ -330,6 +330,13 @@ export class DemographySystem {
   // Point focal (caméra) pour le LOD de simulation.
   /** Événement « afflux de nouveaux habitants » (module `evenements`) : multiplicateur des arrivées (1 = aucun effet). */
   immigrationFactor = 1;
+  /**
+   * Connexions extérieures (module « connexions ») — crochets neutres par défaut : multiplicateur des arrivées quand la
+   * ville est reliée au reste du pays, et avis de chaque ménage arrivé (logement, personnes) pour l'acheminer par une
+   * connexion (comptes, camion de déménagement). Le crochet ne consomme jamais le PRNG de la démographie.
+   */
+  externalImmigrationFactor = 1;
+  onImmigrantHousehold: (homeId: number, persons: number) => void = () => undefined;
   focusX = 0;
   focusZ = 0;
 
@@ -1232,7 +1239,7 @@ export class DemographySystem {
     if (free <= 0) return 0;
     // Proportionnel aux logements libres, avec un flux de base pour qu'une petite ville naissante (quelques
     // maisons desservies) se peuple en un ou deux jours de jeu au lieu d'une semaine (recette QA phase 1).
-    const expected = ((free / 2.6) * this.attractiveness * 0.3 + Math.min(1, free / 4) * this.attractiveness * 0.6) * this.immigrationFactor;
+    const expected = ((free / 2.6) * this.attractiveness * 0.3 + Math.min(1, free / 4) * this.attractiveness * 0.6) * this.immigrationFactor * this.externalImmigrationFactor;
     let arrivals = Math.floor(expected) + (rng.next() < expected - Math.floor(expected) ? 1 : 0);
     arrivals = Math.min(arrivals, MAX_ARRIVALS_PER_WAVE);
     let placed = 0;
@@ -1263,7 +1270,9 @@ export class DemographySystem {
         this.addMember(hid);
       }
       this.month.immigrants += adults + kids;
+      this.onImmigrantHousehold(target, adults + kids);
       placed++;
+
     }
     return placed;
   }

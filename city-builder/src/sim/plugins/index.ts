@@ -28,6 +28,7 @@ import { createObjectifsPlugin, objectifsPlugin } from './objectifs';
 import { createEvenementsPlugin, evenementsPlugin } from './evenements';
 import { cartesPlugin, createCartesPlugin } from './cartes';
 import { createHistoriquePlugin, historiquePlugin } from './historique';
+import { connexionsPlugin, createConnexionsPlugin } from './connexions';
 import type { SimPlugin } from './types';
 
 export type { PluginCommandResult, PluginContext, PluginSaveField, PluginSaveSection, SimPlugin } from './types';
@@ -57,6 +58,7 @@ export const SIM_PLUGINS: readonly SimPlugin[] = [
   evenementsPlugin,
   cartesPlugin,
   historiquePlugin,
+  connexionsPlugin,
 ];
 
 /**
@@ -70,6 +72,7 @@ export function createSimPlugins(): SimPlugin[] {
     batimentsPlugin, circulationPlugin, createPietonsPlugin(), chantiersPlugin, createWeatherPlugin(),
     createMunicipalPlugin(), createElectricitePlugin(), createDechetsPlugin(), createHubsPlugin(), createEauPlugin(),
     createZonagePlugin(), createPolitiquesPlugin(), createRecherchePlugin(), createPaliersPlugin(), createSecteursPlugin(), createAmeliorationsPlugin(), createServicesPlugin(), createAlertesPlugin(), createBusPlugin(),
-    createObjectifsPlugin(), createEvenementsPlugin(), createCartesPlugin(), createHistoriquePlugin(),
+    createObjectifsPlugin(), createEvenementsPlugin(), createCartesPlugin(), createHistoriquePlugin(), createConnexionsPlugin(),
   ];
+
 }

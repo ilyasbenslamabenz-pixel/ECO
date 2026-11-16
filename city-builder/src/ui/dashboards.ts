@@ -42,7 +42,7 @@ const META: Record<DashId, { title: string; icon: string; cls: string; kicker: s
 };
 
 /** Tableau de bord hôte de chaque module de phase 2. */
-const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', bus: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research', paliers: 'progression', objectifs: 'progression', evenements: 'progression', secteurs: 'policy', electricite: 'energy', eau: 'water', dechets: 'waste' };
+const MODULE_DASH: Record<string, DashId> = { circulation: 'transport', pietons: 'transport', bus: 'transport', connexions: 'transport', batiments: 'city', chantiers: 'city', politiques: 'policy', recherche: 'research', paliers: 'progression', objectifs: 'progression', evenements: 'progression', secteurs: 'policy', electricite: 'energy', eau: 'water', dechets: 'waste' };
 
 /** Ferme les anciens panneaux flottants des modules (Énergie, Eau, Déchets) : un seul panneau à la fois. */
 export function closeFloatingModulePanels(): void {

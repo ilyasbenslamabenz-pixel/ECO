@@ -17,6 +17,7 @@ import { secteursRenderPlugin } from './secteurs';
 import { servicesRenderPlugin } from './services';
 import { busRenderPlugin } from './bus';
 import { cartesRenderPlugin } from './cartes';
+import { connexionsRenderPlugin } from './connexions';
 import type { RenderPlugin, RenderPluginContext } from './types';
 
 export type { RenderPlugin, RenderPluginContext } from './types';
@@ -37,7 +38,9 @@ export const RENDER_PLUGINS: readonly RenderPlugin[] = [
   servicesRenderPlugin,
   busRenderPlugin,
   cartesRenderPlugin,
+  connexionsRenderPlugin,
 ];
+
 
 /** Distribution protégée des crochets de rendu (exceptions journalisées une fois par module et crochet). */
 export class RenderPluginHost {

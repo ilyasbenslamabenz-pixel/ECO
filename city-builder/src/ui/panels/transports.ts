@@ -8,6 +8,7 @@
 import type { HubSummary } from '../../shared/hubs/types';
 import type { HubsCommands } from '../../shared/protocol-ext/hubs';
 import type { BusState } from '../../shared/protocol-ext/bus';
+import type { ConnexionsState } from '../../shared/protocol-ext/connexions';
 import type { UiPanel } from './types';
 
 export type TransportsSummary = HubsCommands['summary']['result'];
@@ -147,7 +148,82 @@ export function busLinesView(s: BusState): TransportsSection[] {
   return out;
 }
 
+/* ------------------------------------------------------------------------------------------------------------------ */
+/* Connexions extérieures (module « connexions », docs/CONNEXIONS.md) : panneau du tableau de bord Transports.        */
+/* ------------------------------------------------------------------------------------------------------------------ */
+
+/** Lignes du panneau des connexions extérieures (pure, testée). */
+export function connexionsView(s: ConnexionsState): TransportsSection[] {
+  const m = s.summary;
+  if (!m.connexions) {
+    return [{ title: 'Aucune connexion extérieure', rows: [['Relier la ville', 'prolongez une route ou une autoroute jusqu’au bord de la carte']] }];
+  }
+  const out: TransportsSection[] = [{
+    title: 'Connexions extérieures',
+    rows: [
+      ['Connexions (reliées à la ville)', `${nf(m.connexions)} (${nf(m.linked)})`],
+      ['Véhicules entrés / sortis hier', `${nf(m.vehiclesInDay)} / ${nf(m.vehiclesOutDay)} (dont ${nf(m.trucksDay)} poids lourds)`],
+      ['Part des trajets par l’extérieur', pctOf(m.tripShare)],
+      ['Marchandises : production / consommation (t/j)', `${nf(m.productionT, 1)} / ${nf(m.consumptionT, 1)}`],
+      ['Échangées en ville (t/j)', nf(m.localT, 1)],
+      ['Export / import (t/j)', `${nf(m.exportT, 1)} / ${nf(m.importT, 1)}`],
+      ['Invendu / manque (t/j)', `${nf(m.unsoldT, 1)} / ${nf(m.shortageT, 1)}`],
+      ['Balance commerciale (jour)', chf(m.tradeBalanceDay)],
+      ['Droits perçus : jour / mois', `${chf(m.dutiesDay)} / ${chf(m.dutiesMonth)}`],
+      ['Migrants arrivés (mois)', nf(m.migrantsMonth)],
+      ['Immigration favorisée', `+${pctOf(m.immigrationBonus)}`],
+      ['Mois dernier : migrants, droits', `${nf(m.migrantsLastMonth)}, ${chf(m.dutiesLastMonth)}`],
+    ],
+  }];
+  for (const c of s.connexions) {
+    out.push({
+      title: c.name,
+      rows: [
+        ['État', c.linked ? 'reliée à la ville' : 'non reliée : aucun bâtiment desservi par ce réseau'],
+        ['Véhicules entrés / sortis hier', `${nf(c.inDay)} / ${nf(c.outDay)}`],
+        ['Export / import (t/j)', `${nf(c.exportT, 1)} / ${nf(c.importT, 1)}`],
+        ['Migrants hier', nf(c.migrantsDay)],
+      ],
+    });
+  }
+  return out;
+}
+
+export const connexionsPanel: UiPanel = {
+  id: 'connexions',
+  title: 'Connexions extérieures',
+  phase: '2C',
+  mount(root, api) {
+    const doc = root.ownerDocument;
+    let alive = true;
+    const render = (s: ConnexionsState): void => {
+      root.replaceChildren();
+      for (const sec of connexionsView(s)) {
+        const box = doc.createElement('section');
+        box.className = 'panel-section';
+        const h = doc.createElement('h3');
+        h.textContent = sec.title;
+        const dl = doc.createElement('dl');
+        for (const [k, v] of sec.rows) {
+          const dt = doc.createElement('dt'); dt.textContent = k;
+          const dd = doc.createElement('dd'); dd.textContent = v;
+          dl.append(dt, dd);
+        }
+        box.append(h, dl);
+        root.append(box);
+      }
+    };
+    const refresh = (): void => {
+      api.command('state').then((r) => { if (alive) render(r as ConnexionsState); }).catch((e: unknown) => api.toast(`Connexions : ${String(e)}`, 'error'));
+    };
+    refresh();
+    const timer = setInterval(refresh, 2000);
+    return () => { alive = false; clearInterval(timer); };
+  },
+};
+
 export const busPanel: UiPanel = {
+
   id: 'bus',
   title: 'Bus',
   phase: '2C',

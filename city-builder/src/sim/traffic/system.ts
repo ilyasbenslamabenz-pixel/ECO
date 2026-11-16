@@ -46,7 +46,11 @@ export interface TrafficBuilding {
   z: number;
 }
 
+/** Connexion extérieure : tronçon du monde qui touche le bord de la carte et extrémité au bord (a ou b). */
+export interface TrafficGate { segId: number; atA: boolean; x: number; z: number }
+
 export interface TrafficOptions {
+
   seed?: number;
   /** Plafond de véhicules simultanés. */
   maxVehicles?: number;
@@ -129,6 +133,21 @@ export class TrafficSystem {
    * multiplie la demande automobile. 1 = aucun effet (valeur par défaut, aucune ligne).
    */
   carFactor = 1;
+  /**
+   * Connexions extérieures (module « connexions », docs/CONNEXIONS.md) : part des trajets générés qui entrent dans la
+   * ville ou en sortent par un point d'entrée en bord de carte, et part de poids lourds parmi eux (import / export).
+   * 0 / aucune connexion = aucun effet (le tirage aléatoire du trafic est alors inchangé).
+   */
+  externalShare = 0;
+  externalFreightShare = 0;
+  /** Compteurs cumulés : véhicules entrés, sortis (dont poids lourds) par les connexions. */
+  externalIn = 0;
+  externalOut = 0;
+  externalFreight = 0;
+  private gates: readonly TrafficGate[] = [];
+  /** Index d'accès des connexions : entrée (voie vers la ville) et sortie (voie vers le bord), par connexion. */
+  private gateIn: number[] = [];
+  private gateOut: number[] = [];
   demandEnabled: boolean;
   private readonly spawnPerStep: number;
   private readonly accessDistance: number;
@@ -281,6 +300,15 @@ export class TrafficSystem {
     if (this.networkInput) { this.networkInput = this.withJunctionModes({ ...this.networkInput, nodes: this.networkInput.nodes.map(({ control: _c, ...n }) => n) }); this.networkDirty = true; }
   }
   setBuildings(b: TrafficBuilding[]): void { this.buildings = b; this.buildingsDirty = true; }
+  /** Points d'entrée en bord de carte (module « connexions ») ; liste vide = aucun. */
+  setGates(g: readonly TrafficGate[]): void {
+    const same = g.length === this.gates.length && g.every((x, i) => x.segId === this.gates[i]!.segId && x.atA === this.gates[i]!.atA);
+    if (same) return;
+    this.gates = g.map((x) => ({ ...x }));
+    this.buildingsDirty = true;
+  }
+  /** Connexions reliées au graphe de circulation (accès d'entrée valides). */
+  get gateCount(): number { return this.gateIn.length; }
 
   /* ------------------------------------------------------------------ */
   /* Allocation                                                           */
@@ -451,7 +479,64 @@ export class TrafficSystem {
       if (id.includes('gare')) this.depots.gare.push(k);
     }
     this.stats.connectedBuildings = this.access.length;
+    this.rebuildGates();
     this.buildingsDirty = false;
+  }
+
+  /** Accès des connexions extérieures : voie entrante près du bord (départ) et voie sortante (arrivée). */
+  private rebuildGates(): void {
+    this.gateIn = []; this.gateOut = [];
+    const g = this.graph;
+    if (!g || !this.gates.length) return;
+    for (const gate of this.gates) {
+      let e = -1;
+      for (let i = 0; i < g.edgeCount; i++) if (g.edgeId[i] === gate.segId) { e = i; break; }
+      if (e < 0) continue;
+      // Arc 2e : a -> b ; 2e + 1 : b -> a. Entrée = arc qui quitte l'extrémité au bord.
+      const inArc = gate.atA ? e * 2 : e * 2 + 1, outArc = inArc ^ 1;
+      if (g.arcFirstLane[inArc]! < 0 || g.arcFirstLane[outArc]! < 0) continue;
+      const laneIn = g.arcFirstLane[inArc]! + g.arcLaneCount[inArc]! - 1;
+      const laneOut = g.arcFirstLane[outArc]! + g.arcLaneCount[outArc]! - 1;
+      const b: TrafficBuilding = { id: -1 - this.gateIn.length, assetId: 'connexion_exterieure', category: 'connexion', residents: 0, jobs: 0, x: gate.x, z: gate.z };
+      this.gateIn.push(this.access.length);
+      this.access.push({ b, arc: inArc, sLane: Math.max(1, Math.min(g.linkLen[laneIn]! - 1, 6)), edge: e });
+      this.gateOut.push(this.access.length);
+      this.access.push({ b, arc: outArc, sLane: Math.max(1, g.linkLen[laneOut]! - 6), edge: e });
+    }
+  }
+
+  /** Trajet entrant ou sortant par une connexion extérieure ; vrai si un véhicule a été créé. */
+  private spawnExternalTrip(h: number): boolean {
+    const freight = this.rand() < this.externalFreightShare;
+    const k = Math.floor(this.rand() * this.gateIn.length);
+    const morning = h >= 5 && h < 11, evening = h >= 15 && h < 21;
+    // Navetteurs extérieurs : vers les emplois le matin, retour le soir ; poids lourds : livraisons et enlèvements.
+    const inbound = freight ? this.rand() < 0.5 : morning ? this.rand() < 0.75 : evening ? this.rand() < 0.25 : this.rand() < 0.5;
+    let other: number;
+    if (freight) other = this.depots.industrie.length && (this.rand() < 0.5 || !this.shops.length) ? this.pick(this.depots.industrie) : this.pick(this.shops);
+    else other = this.rand() < 0.7 || !this.shops.length ? this.pick(this.works) : this.pick(this.shops);
+    if (other < 0) other = this.pickHome();
+    if (other < 0) return false;
+    const usage: Usage = freight ? 'fret' : 'prive';
+    const v = inbound ? this.spawnTrip(this.gateIn[k]!, other, usage) : this.spawnTrip(other, this.gateOut[k]!, usage);
+    if (v < 0) return false;
+    if (inbound) this.externalIn++; else this.externalOut++;
+    if (freight) this.externalFreight++;
+    return true;
+  }
+
+  /**
+   * Véhicule venu de l'extérieur jusqu'au bâtiment `buildingId` (camion de déménagement d'un ménage qui s'installe) ;
+   * vrai si créé (connexion reliée, bâtiment relié à la route, place sur la voie).
+   */
+  spawnFromOutside(buildingId: number, pick01: number): boolean {
+    if (!this.gateIn.length) return false;
+    const to = this.accessIndexOf(buildingId);
+    if (to < 0) return false;
+    const k = Math.min(this.gateIn.length - 1, Math.floor(pick01 * this.gateIn.length));
+    if (this.spawnTrip(this.gateIn[k]!, to, 'livraison') < 0) return false;
+    this.externalIn++;
+    return true;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1305,6 +1390,11 @@ export class TrafficSystem {
     let tries = budget * 3;
     while (this.actCount < target && budget > 0 && tries-- > 0) {
       const h = ((hour % 24) + 24) % 24;
+      // Connexions extérieures : tirage supplémentaire SEULEMENT quand il en existe (sinon séquence aléatoire inchangée).
+      if (this.gateIn.length && this.externalShare > 0 && this.rand() < this.externalShare) {
+        if (this.spawnExternalTrip(h)) budget--;
+        continue;
+      }
       const morning = h >= 5 && h < 11, evening = h >= 15 && h < 21;
       const r = this.rand();
       let from = -1, to = -1;
