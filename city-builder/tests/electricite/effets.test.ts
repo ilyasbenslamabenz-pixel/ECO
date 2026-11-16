@@ -69,7 +69,7 @@ test('effet : pénurie électrique -> coupures des moins prioritaires (industrie
   assert.ok(m.effects.query({ cause: causes[0]!.cause.id }).some((e) => e.target === 'electricite:retablissement'));
 });
 
-test('effet : entretien réduit -> pannes plus fréquentes (même graine), tracées dans le registre', () => {
+test('pas de panne aléatoire des centrales (choix du joueur, comme Cities: Skylines II), même à financement réduit', () => {
   const run = (funding: number): { failures: number; registry: number } => {
     const { sim, elec } = powerTown({ seed: 77 });
     // 10 éoliennes en deux rangées (espacement minimal des rotors : elles ne tiennent plus sur une seule rue).
@@ -85,9 +85,9 @@ test('effet : entretien réduit -> pannes plus fréquentes (même graine), trac�
   };
   const nominal = run(1);
   const reduit = run(0.4);
-  assert.ok(nominal.failures > 0, `pannes à 100 % : ${nominal.failures}`);
-  assert.ok(reduit.failures > nominal.failures * 2.5, `pannes à 40 % (${reduit.failures}) >> à 100 % (${nominal.failures})`);
-  assert.ok(reduit.registry >= reduit.failures, 'chaque panne est une cause du registre');
+  assert.equal(nominal.failures, 0, `pannes à 100 % : ${nominal.failures}`);
+  assert.equal(reduit.failures, 0, `pannes à 40 % : ${reduit.failures}`);
+  assert.equal(reduit.registry, 0);
 });
 
 test('effet : éolien sans vent -> production éolienne nulle, coupures (météo publiée par un autre module)', () => {

@@ -107,6 +107,10 @@ export interface PowerState {
 }
 
 /** Conseil affiché quand un réseau uniquement éolien / solaire coupe faute de vent ou de soleil. */
+/** Pannes aléatoires des centrales et postes (choix du joueur, comme Cities: Skylines II) : désactivées ; les coupures
+ *  ne viennent que d'un manque de production. Les lignes HT gardent leurs pannes. */
+export const PLANT_RANDOM_FAILURES = false as boolean;
+
 export const INTERMITTENT_ADVICE = 'La nuit sans vent, vos éoliennes et panneaux solaires ne produisent rien. Raccordez-vous au réseau voisin, construisez une centrale thermique ou des batteries.';
 
 /** Consigne affichée pour une installation isolée (notification, panneau). */
@@ -810,7 +814,9 @@ export class PowerSystem {
       }
       const spec = FACILITY_SPECS[f.kind];
       const draw = ctx.rng.next();
-      if (fs.failedUntil === 0 && draw < spec.failurePerHour * mult) {
+      // Comme Cities: Skylines II (choix du joueur) : plus de panne aléatoire des installations. Le tirage est
+      // conservé pour que la suite du générateur (lignes HT) reste identique.
+      if (PLANT_RANDOM_FAILURES && fs.failedUntil === 0 && draw < spec.failurePerHour * mult) {
         const hours = Math.max(1, Math.round(spec.repairHours * rep * (0.6 + 0.8 * ctx.rng.next())));
         fs.failedUntil = now + hours * 60;
         fs.failures++;
