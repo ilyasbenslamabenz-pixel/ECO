@@ -84,7 +84,9 @@ export const PLANNED: Record<PlannedDrawer | 'transport', { label: string; icon:
     { label: 'Commercial', icon: 'shop', color: '#4aa8ff', phase: '2B', tip: 'Zone commerciale' },
     { label: 'Industriel', icon: 'factory', color: '#ffc531', phase: '2B', tip: 'Zone industrielle' },
     { label: 'Bureaux', icon: 'office', color: '#a77bff', phase: '2B', tip: 'Zone de bureaux' },
-    { label: 'Agricole', icon: 'wheat', color: '#9bd84a', phase: '2B', tip: 'Zone agricole (5e secteur fiscal)' },
+    { label: 'Forêt', icon: 'tree', color: '#2f8f7a', phase: '2B', tip: 'Exploitation forestière sur la forêt naturelle (bois)' },
+    { label: 'Agricole', icon: 'wheat', color: '#d8a24a', phase: '2B', tip: 'Zone agricole sur sol fertile et plat (nourriture)' },
+    { label: 'Mixte', icon: 'building', color: '#3fd0d4', phase: '2B', tip: 'Commerces au rez-de-chaussée, logements au-dessus' },
     { label: 'Spécial', icon: 'star', color: '#ffd23f', phase: '2B', tip: 'Zones spéciales (quartiers à thème)' },
   ],
   terrain: [
@@ -243,7 +245,7 @@ export class BuildBar {
       services: 'Services publics : mairie, école, hôpital, pompiers, police…', environment: 'Nature : parcs ; arbres, végétation, mobilier (bientôt)',
       transport: 'Transports : lignes de bus et dépôts, gare de voyageurs, port et aéroport ; tramway (bientôt)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
-      zones: 'Zones : résidentiel, commercial, industriel, bureaux', energy: 'Énergie : centrales, éoliennes, solaire, barrage, postes ; lignes haute tension depuis le tableau de bord',
+      zones: 'Zones : résidentiel, commercial, industriel, bureaux, forêt exploitée, agricole, mixte', energy: 'Énergie : centrales, éoliennes, solaire, barrage, postes ; lignes haute tension depuis le tableau de bord',
       water: 'Eau et égouts : pompage, potabilisation, château d’eau, épuration (canalisations le long des routes)', waste: 'Déchets : dépôt de camions-bennes, centre de tri, incinérateur, décharge', terrain: 'Terrain : défricher, quais et remblais, bassins et canaux',
     };
     for (const b of Array.from(this.toolbar.querySelectorAll<HTMLButtonElement>('button[data-tool], button[data-cat]'))) {

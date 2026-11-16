@@ -12,6 +12,7 @@ import { dechetsRenderPlugin } from './dechets';
 import { hubsRenderPlugin } from './hubs';
 import { eauRenderPlugin } from './eau';
 import { zonageRenderPlugin } from './zonage';
+import { ressourcesRenderPlugin } from './ressources';
 import { alertesRenderPlugin } from './alertes';
 import { secteursRenderPlugin } from './secteurs';
 import { servicesRenderPlugin } from './services';
@@ -32,6 +33,7 @@ export const RENDER_PLUGINS: readonly RenderPlugin[] = [
   hubsRenderPlugin,
   eauRenderPlugin,
   zonageRenderPlugin,
+  ressourcesRenderPlugin,
   alertesRenderPlugin,
   secteursRenderPlugin,
   servicesRenderPlugin,

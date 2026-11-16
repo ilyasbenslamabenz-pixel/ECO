@@ -1,7 +1,7 @@
 /**
  * Zonage — grille des zones : une case de 8 m (TILE_SIZE) par octet, alignée sur l'origine de la carte.
  *
- *  - `zone[i]`  : code de zone 0..6 (0 = non zoné) — seule donnée sauvegardée ;
+ *  - `zone[i]`  : code de zone 0..9 (0 = non zoné) — seule donnée sauvegardée ;
  *  - `edge[i]`  : distance du centre de la case au bord de la route desservante la plus proche, par pas de
  *                 0,5 m (255 = aucune route à portée) — recalculée quand le réseau change ;
  *  - `seg[i]`   : identifiant du tronçon le plus proche (0 = aucun).
@@ -31,6 +31,8 @@ export class ZoneGrid {
   readonly counts = new Array<number>(ZONE_COUNT + 1).fill(0);
   /** Cases dont le code transmis au rendu a changé depuis le dernier delta. */
   readonly changed = new Set<number>();
+  /** Compteur de modifications des zones (peinture, chargement) : invalidation des caches des autres modules. */
+  version = 0;
   /** Listes de cases par code (reconstruites à la demande après une modification). */
   private lists: number[][] | null = null;
 
@@ -39,6 +41,7 @@ export class ZoneGrid {
     this.changed.clear();
     this.lists = null;
     this.counts.fill(0);
+    this.version++;
     if (!bounds) { this.info = null; this.zone = new Uint8Array(0); this.edge = new Uint8Array(0); this.seg = new Uint32Array(0); return; }
     const w = Math.max(1, Math.round((bounds.maxX - bounds.minX) / TILE_SIZE));
     const h = Math.max(1, Math.round((bounds.maxZ - bounds.minZ) / TILE_SIZE));
@@ -77,6 +80,7 @@ export class ZoneGrid {
     this.zone[idx] = code;
     this.changed.add(idx);
     this.lists = null;
+    this.version++;
     return true;
   }
 
@@ -103,8 +107,12 @@ export class ZoneGrid {
   /**
    * Peint `code` (0 = efface) le long du tracé `points` [x0, z0, x1, z1, …].
    * Zonage : bande de `depth` cases depuis le bord des routes desservantes ; jamais sur la chaussée ni sur l'eau.
+   * `allow` (facultatif) : condition supplémentaire sur le centre de la case (zones spécialisées : forêt, terre fertile).
    */
-  paint(points: readonly number[], code: ZoneCode, depth: number, radius: number, roads: RoadGeometry, isWet: (x: number, z: number) => boolean): number {
+  paint(
+    points: readonly number[], code: ZoneCode, depth: number, radius: number, roads: RoadGeometry, isWet: (x: number, z: number) => boolean,
+    allow?: (x: number, z: number) => boolean,
+  ): number {
     const g = this.info;
     if (!g || points.length < 2) return 0;
     const dep = Math.max(ZONE_DEPTH_MIN, Math.min(ZONE_DEPTH_MAX, Math.round(depth)));
@@ -136,6 +144,7 @@ export class ZoneGrid {
             if (!hit) continue;
             const edge = hit.d - hit.half;
             if (edge < MIN_EDGE_M || edge > maxEdge || isWet(cx, cz)) continue;
+            if (allow && !allow(cx, cz)) continue;
             if (this.set(idx, code)) changed++;
             this.refreshCell(idx, roads);
           }
@@ -185,6 +194,7 @@ export class ZoneGrid {
     this.counts.fill(0);
     for (let i = 0; i < this.zone.length; i++) this.counts[this.zone[i]!]!++;
     this.lists = null;
+    this.version++;
     this.changed.clear();
   }
 }

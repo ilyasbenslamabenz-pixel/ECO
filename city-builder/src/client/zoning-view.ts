@@ -15,6 +15,8 @@ export class ZoningView {
   /** Codes transmis (zone | CELL_CONNECTED) par case. */
   codes: Uint8Array = new Uint8Array(0);
   demand: ZonageDemand | null = null;
+  /** Demande des zones spécialisées (forêt, agricole, mixte). */
+  special: { foret: number; agricole: number; mixte: number } | null = null;
   inputs: ZonageDemandInputs | null = null;
   stats: ZonageStats | null = null;
   settings: ZonageSettings | null = null;
@@ -40,7 +42,7 @@ export class ZoningView {
       try { this.codes = rleDecode(p.rle, new Uint8Array(p.grid.w * p.grid.h)); } catch (e) { console.error('[zonage] grille illisible :', e); this.codes = new Uint8Array(p.grid.w * p.grid.h); }
     }
     if (p) this.mergeInfo(p);
-    else { this.demand = null; this.inputs = null; this.settings = null; }
+    else { this.demand = null; this.special = null; this.inputs = null; this.settings = null; }
     this.emit({ kind: 'all' });
   }
 
@@ -57,6 +59,7 @@ export class ZoningView {
   private mergeInfo(p: ZonageDelta): boolean {
     let any = false;
     if (p.demand) { this.demand = { ...p.demand }; any = true; }
+    if (p.special) { this.special = { ...p.special }; any = true; }
     if (p.inputs) { this.inputs = p.inputs; any = true; }
     if (p.stats) { this.stats = p.stats; any = true; }
     if (p.settings) { this.settings = { ...p.settings }; any = true; }

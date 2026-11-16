@@ -13,6 +13,7 @@ import { dechetsSaveSection } from './dechets';
 import { hubsSaveSection } from './hubs';
 import { eauSaveSection } from './eau';
 import { zonageSaveSection } from './zonage';
+import { ressourcesSaveSection } from './ressources';
 import { politiquesSaveSection } from './politiques';
 import { rechercheSaveSection } from './recherche';
 import { paliersSaveSection } from './paliers';
@@ -38,6 +39,7 @@ export const SAVE_SECTIONS: readonly SaveSectionSpec<unknown>[] = [
   hubsSaveSection,
   eauSaveSection,
   zonageSaveSection,
+  ressourcesSaveSection,
   politiquesSaveSection,
   rechercheSaveSection,
   paliersSaveSection,

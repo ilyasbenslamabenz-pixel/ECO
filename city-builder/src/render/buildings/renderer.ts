@@ -174,6 +174,8 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   private readonly batches = new Map<string, Batch>();
   private readonly batchList: Batch[] = [];
   private readonly idToBatch = new Map<number, Batch>();
+  /** Teintes multiplicatives imposées par un module (zones spécialisées), appliquées par-dessus la patine. */
+  private readonly tintOverride = new Map<number, readonly [number, number, number]>();
   private readonly assets: Map<string, CatalogAsset>;
   private camera: THREE.Camera | null = null;
   /** Rendu WebGL : les textures d'un LOD reçu lui sont envoyées par petites tranches avant son affichage. */
@@ -368,15 +370,38 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       b.spheres[i * 4 + 1] = r.y + h / 2;
       b.spheres[i * 4 + 2] = r.z + _off.z;
       b.spheres[i * 4 + 3] = 0.5 * Math.hypot(d.width, d.depth, h);
-      const k = hash01(r.id);
-      const k2 = hash01(r.id * 31 + 7);
-      const bright = 0.9 + 0.16 * k;
-      b.tints[i * 3] = bright * (0.985 + 0.03 * k2);
-      b.tints[i * 3 + 1] = bright;
-      b.tints[i * 3 + 2] = bright * (1.015 - 0.03 * k2);
+      this.writeTint(b, i, r.id);
       b.dirty = true;
       this.idToBatch.set(r.id, b);
     }
+    this.forceUpdate = true;
+  }
+
+  /** Patine propre au bâtiment (stable par identifiant), multipliée par la teinte imposée s'il y en a une. */
+  private writeTint(b: Batch, i: number, id: number): void {
+    const k = hash01(id);
+    const k2 = hash01(id * 31 + 7);
+    const bright = 0.9 + 0.16 * k;
+    const o = this.tintOverride.get(id);
+    b.tints[i * 3] = bright * (0.985 + 0.03 * k2) * (o ? o[0] : 1);
+    b.tints[i * 3 + 1] = bright * (o ? o[1] : 1);
+    b.tints[i * 3 + 2] = bright * (1.015 - 0.03 * k2) * (o ? o[2] : 1);
+  }
+
+  /**
+   * Teinte multiplicative d'un bâtiment (null : patine d'origine). Utilisée par le module « ressources » pour
+   * distinguer les bâtiments des zones spécialisées (mêmes modèles). Peut précéder l'ajout du bâtiment.
+   */
+  setBuildingTint(id: number, rgb: readonly [number, number, number] | null): void {
+    if (rgb) this.tintOverride.set(id, rgb); else this.tintOverride.delete(id);
+    const b = this.idToBatch.get(id);
+    if (!b) return;
+    const i = b.ids.indexOf(id);
+    if (i < 0) return;
+    this.writeTint(b, i, id);
+    // Lots par matériau : la couleur est lue à la création des instances, qui sont donc recréées.
+    if (this.pool) this.dropBatched(b, i);
+    b.dirty = true;
     this.forceUpdate = true;
   }
 

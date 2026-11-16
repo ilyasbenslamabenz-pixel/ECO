@@ -26,7 +26,7 @@ import type { CatalogAsset } from '../../shared/catalog';
 import { TILE_SIZE } from '../../shared/constants';
 import { angleToRot, buildingGap, footprintObb, obbAabb, obbOverlap, obbToLocal, obbToWorld } from '../../shared/footprint';
 import {
-  ZONE_COUNT, ZONE_SECTOR, ZONE_TYPES, zoneOf,
+  ZONE_COUNT, ZONE_TYPES, zoneOf,
   type DemandSector, type ZonageDelta, type ZonageDemand, type ZonageDemandInputs, type ZonageSnapshot, type ZonageStats, type ZoneCode, type ZoneType,
 } from '../../shared/protocol-ext/zonage';
 import type { PluginContext } from '../plugins/types';
@@ -38,6 +38,7 @@ import {
 import { MIN_EDGE_M, ZoneGrid } from './grid';
 import { RoadGeometry, type RoadHit } from './roads';
 import type { ZonageSave } from './save';
+import { DEFAULT_RESSOURCES_TUNING } from '../ressources/model';
 
 /** Réglages de la croissance et de la densification (avec ceux de la demande : commande `tuning`). */
 export interface GrowthTuning {
@@ -90,6 +91,37 @@ const MINUTES_PER_DAY = 1440;
 
 interface Owned { zone: ZoneCode; level: number; born: number }
 
+/**
+ * Service facultatif publié par le module « ressources » : demande brute (−1..1) des zones forêt et agricole à
+ * partir de la demande industrielle lissée ; null = repli sur la demande industrielle.
+ */
+export interface SpecialDemandProvider {
+  demand(zone: 'foret' | 'agricole', industryDemand: number): number | null;
+}
+export const SPECIAL_DEMAND_SERVICE = 'ressources:demande';
+
+/** Service publié par le zonage (lecture seule) pour les modules qui exploitent les zones (ressources). */
+export interface ZonageEtat {
+  readonly active: boolean;
+  /** Change à chaque modification des zones (peinture, chargement, nouvelle partie). */
+  readonly version: number;
+  /** Côté d'une case (m). */
+  readonly cell: number;
+  cellsOf(zone: ZoneType): readonly number[];
+  zoneAt(idx: number): ZoneType | null;
+  index(x: number, z: number): number;
+  centerX(idx: number): number;
+  centerZ(idx: number): number;
+  /** Identifiants des bâtiments nés du zonage dans une zone. */
+  buildingsOf(zone: ZoneType): number[];
+  /** Demande lissée d'une zone (zones spécialisées comprises). */
+  demandOf(zone: ZoneType): number;
+}
+export const ZONAGE_ETAT_SERVICE = 'zonage:etat';
+
+const RES_ZONES: readonly ZoneType[] = ['res_faible', 'res_moyen', 'res_dense'];
+const INDUSTRY_ZONES: readonly ZoneType[] = ['industrie', 'foret', 'agricole'];
+
 /** Service « chantiers » (facultatif) : nombre de chantiers en cours, bâtiment en chantier. */
 interface ChantiersLike { readonly nombre: number; enChantier(id: number): boolean }
 
@@ -122,6 +154,8 @@ export class ZoningSystem {
   zcat: ZoneCatalog = buildZoneCatalog(null);
   readonly owned = new Map<number, Owned>();
   demand: ZonageDemand = zeroDemand();
+  /** Demande lissée des zones forêt et agricole (service « ressources », sinon demande industrielle). */
+  special = { foret: 0, agricole: 0 };
   inputs: ZonageDemandInputs | null = null;
   growth = true;
   tuning: ZonageTuning = { ...DEFAULT_TUNING };
@@ -147,6 +181,7 @@ export class ZoningSystem {
     this.roads.invalidate();
     this.owned.clear();
     this.demand = zeroDemand();
+    this.special = { foret: 0, agricole: 0 };
     this.inputs = null;
     this.growth = true;
     this.tuning = { ...DEFAULT_TUNING };
@@ -260,6 +295,15 @@ export class ZoningSystem {
       raw = { R: cl(raw.R + gd.R), C: cl(raw.C + gd.C), I: cl(raw.I + gd.I), B: cl(raw.B + gd.B) };
     }
     smoothDemand(this.demand, raw, this.tuning.lissage);
+    // Zones spécialisées : demande fournie par le module « ressources » (manque de bois / de nourriture), lissée.
+    const sp = ctx.use<SpecialDemandProvider>(SPECIAL_DEMAND_SERVICE);
+    const a = Math.max(0, Math.min(1, this.tuning.lissage));
+    for (const z of ['foret', 'agricole'] as const) {
+      let v: number | null = null;
+      try { v = sp?.demand(z, this.demand.I) ?? null; } catch { v = null; }
+      const target = v === null || !Number.isFinite(v) ? this.demand.I : Math.max(-1, Math.min(1, v));
+      this.special[z] = Math.max(-1, Math.min(1, this.special[z] + (target - this.special[z]) * a));
+    }
     this.inputs = {
       population: inp.population, workforce: Math.round(inp.workforce), jobs: inp.jobsBySector.R + inp.jobsBySector.C + inp.jobsBySector.B + inp.jobsBySector.I + inp.jobsBySector.public,
       jobsBySector: { ...inp.jobsBySector }, housingCapacity: inp.housingCapacity, housingFree: inp.housingFree, source,
@@ -267,13 +311,45 @@ export class ZoningSystem {
     this.demandDirty = true;
   }
 
+  /**
+   * Demande d'une zone : celle de son secteur ; zone mixte = moyenne des parts positives de R et C (elle pousse si
+   * l'un des deux secteurs est demandé) ; forêt et agricole = demande spécialisée.
+   */
+  zoneDemand(zone: ZoneType): number {
+    switch (zone) {
+      case 'res_faible': case 'res_moyen': case 'res_dense': return this.demand.R;
+      case 'commerce': return this.demand.C;
+      case 'bureaux': return this.demand.B;
+      case 'industrie': return this.demand.I;
+      case 'foret': return this.special.foret;
+      case 'agricole': return this.special.agricole;
+      case 'mixte': {
+        const r = this.demand.R, c = this.demand.C;
+        return r > 0 || c > 0 ? 0.5 * (Math.max(0, r) + Math.max(0, c)) : Math.max(r, c);
+      }
+    }
+  }
+
   /* ------------------------------- Peinture ------------------------------- */
+
+  /**
+   * Condition de terrain des zones spécialisées : forêt naturelle (densité ≥ `foretMin`) pour l'exploitation
+   * forestière ; sol fertile et plat (fertilité ≥ `fertiliteMin`) pour l'agricole. Sans accès au terrain (façade de
+   * test), aucune condition.
+   */
+  terrainRule(ctx: PluginContext, zone: ZoneType | null): ((x: number, z: number) => boolean) | undefined {
+    const t = ctx.terrain;
+    const forestAt = t.forestAt, fertilityAt = t.fertilityAt;
+    if (zone === 'foret' && forestAt) return (x, z) => forestAt(x, z) >= DEFAULT_RESSOURCES_TUNING.foretMin;
+    if (zone === 'agricole' && fertilityAt) return (x, z) => fertilityAt(x, z) >= DEFAULT_RESSOURCES_TUNING.fertiliteMin;
+    return undefined;
+  }
 
   paint(ctx: PluginContext, points: readonly number[], zone: ZoneType | null, depth: number, radius: number): number {
     if (!this.grid.info) this.grid.reset(ctx.terrain.bounds());
     this.syncRoads(ctx);
     const code = (zone ? ZONE_TYPES.indexOf(zone) + 1 : 0) as ZoneCode;
-    const n = this.grid.paint(points, code, depth, radius, this.roads, (x, z) => ctx.terrain.isWet(x, z));
+    const n = this.grid.paint(points, code, depth, radius, this.roads, (x, z) => ctx.terrain.isWet(x, z), this.terrainRule(ctx, zone));
     if (n > 0 || code !== 0) this.activate();
     if (n > 0) this.statsDirty = true;
     if (this.active && !this.inputs) this.updateDemand(ctx);
@@ -292,11 +368,12 @@ export class ZoningSystem {
     let grown = 0;
     for (let code = 1; code <= ZONE_COUNT; code++) {
       if (this.grid.counts[code] === 0) continue;
-      const d = this.demand[ZONE_SECTOR[zoneOf(code)!]];
+      const zone = zoneOf(code)!;
+      const d = this.zoneDemand(zone);
       if (d < this.tuning.demandeMin) continue;
       const expected = d * this.tuning.naissancesParHeure;
       const n = Math.min(this.tuning.maxParHeure, Math.floor(expected + ctx.rng.next()));
-      const residential = ZONE_SECTOR[zoneOf(code)!] === 'R';
+      const residential = RES_ZONES.includes(zone);
       for (let k = 0; k < n; k++) {
         const ok = this.tryGrow(ctx, code as ZoneCode);
         if (ok) grown++;
@@ -463,8 +540,8 @@ export class ZoningSystem {
     }
     const code = this.owned.get(id)?.zone ?? 0;
     const zone = zoneOf(code);
-    const sectorDemand = zone ? Math.max(0, this.demand[ZONE_SECTOR[zone]]) : 0;
-    const nuisance = zone && zone !== 'industrie' ? 0.3 * Math.min(1, industry / 2) : 0;
+    const sectorDemand = zone ? Math.max(0, this.zoneDemand(zone)) : 0;
+    const nuisance = zone && !INDUSTRY_ZONES.includes(zone) ? 0.3 * Math.min(1, industry / 2) : 0;
     const v = 0.2 + 0.25 * occ + 0.2 * Math.min(1, services / 3) + 0.2 * Math.min(1, neighbors / 8) + 0.15 * sectorDemand - nuisance;
     return Math.max(0, Math.min(1, v));
   }
@@ -480,7 +557,7 @@ export class ZoningSystem {
       if (!zone) continue;
       if (o.level >= maxLevelOf(this.zcat[zone])) continue;
       if (now - o.born < t.ageMinJours * MINUTES_PER_DAY) continue;
-      if (this.demand[ZONE_SECTOR[zone]] < t.demandeMinDensification) continue;
+      if (this.zoneDemand(zone) < t.demandeMinDensification) continue;
       try { if (chantiers?.enChantier(id)) continue; } catch { /* service facultatif */ }
       const i = ctx.buildings.indexOf(id);
       if (i < 0) continue;
@@ -591,7 +668,7 @@ export class ZoningSystem {
     const d: ZonageDelta = {};
     const cells = this.grid.takeChanged();
     if (cells) d.cells = cells;
-    if (this.demandDirty) { d.demand = { ...this.demand }; if (this.inputs) d.inputs = this.inputs; this.demandDirty = false; }
+    if (this.demandDirty) { d.demand = { ...this.demand }; d.special = this.specialDemand(); if (this.inputs) d.inputs = this.inputs; this.demandDirty = false; }
     if (this.statsDirty) { d.stats = this.stats(ctx); this.statsDirty = false; }
     if (this.settingsDirty) { d.settings = { growth: this.growth }; this.settingsDirty = false; }
     return Object.keys(d).length > 0 ? d : undefined;
@@ -602,11 +679,40 @@ export class ZoningSystem {
     this.grid.changed.clear();
     const g = this.grid.info ?? { originX: 0, originZ: 0, cell: TILE_SIZE, w: 0, h: 0 };
     const snap: ZonageSnapshot = {
-      grid: { ...g }, rle: g.w > 0 ? this.grid.wireRle() : [], demand: { ...this.demand }, stats: this.stats(ctx), settings: { growth: this.growth },
+      grid: { ...g }, rle: g.w > 0 ? this.grid.wireRle() : [], demand: { ...this.demand }, special: this.specialDemand(), stats: this.stats(ctx), settings: { growth: this.growth },
     };
     if (this.inputs) snap.inputs = this.inputs;
     this.demandDirty = this.statsDirty = this.settingsDirty = false;
     return snap;
+  }
+
+  /** Demande des zones spécialisées (jauge de l'interface). */
+  specialDemand(): { foret: number; agricole: number; mixte: number } {
+    return { foret: this.special.foret, agricole: this.special.agricole, mixte: this.zoneDemand('mixte') };
+  }
+
+  /** Vue en lecture seule publiée sous `ZONAGE_ETAT_SERVICE`. */
+  etat(): ZonageEtat {
+    const grid = this.grid, owned = this.owned;
+    const isActive = (): boolean => this.active;
+    const demandOf = (zone: ZoneType): number => this.zoneDemand(zone);
+    return {
+      get active() { return isActive(); },
+      get version() { return grid.version; },
+      get cell() { return grid.info?.cell ?? TILE_SIZE; },
+      cellsOf: (zone) => grid.cellsOf(ZONE_TYPES.indexOf(zone) + 1),
+      zoneAt: (idx) => (idx >= 0 && idx < grid.size ? zoneOf(grid.zone[idx]!) : null),
+      index: (x, z) => grid.index(x, z),
+      centerX: (idx) => grid.centerX(idx),
+      centerZ: (idx) => grid.centerZ(idx),
+      buildingsOf: (zone) => {
+        const code = ZONE_TYPES.indexOf(zone) + 1;
+        const out: number[] = [];
+        for (const [id, o] of owned) if (o.zone === code) out.push(id);
+        return out;
+      },
+      demandOf,
+    };
   }
 
   setGrowth(enabled: boolean): void { this.growth = enabled; this.settingsDirty = true; this.activate(); }
@@ -633,6 +739,7 @@ export class ZoningSystem {
       settings: { growth: this.growth },
       tuning,
       counters: { grown: this.grown, densified: this.densified },
+      ...(this.special.foret !== 0 || this.special.agricole !== 0 ? { special: { ...this.special } } : {}),
     };
   }
 
@@ -644,6 +751,7 @@ export class ZoningSystem {
       if (ctx.buildings.indexOf(id) >= 0) this.owned.set(id, { zone: zone as ZoneCode, level, born });
     }
     this.demand = { ...s.demand };
+    this.special = s.special ? { ...s.special } : { foret: 0, agricole: 0 };
     this.growth = s.settings.growth;
     this.tuning = { ...DEFAULT_TUNING };
     this.setTuning(s.tuning);

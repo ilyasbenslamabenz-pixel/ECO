@@ -33,7 +33,11 @@ export interface RenderPluginContext {
   /** Végétation du terrain : dégagement d'une emprise (rectangle orienté, angle en radians). Facultatif. */
   vegetation?: { removeInFootprint(cx: number, cz: number, halfW: number, halfD: number, angle: number, margin?: number): number };
   /** Bâtiments du rendu de base : masquage pendant un chantier (instances et ombres). Facultatif. */
-  buildings?: { setBuildingsVisible(ids: readonly number[], visible: boolean): void };
+  buildings?: {
+    setBuildingsVisible(ids: readonly number[], visible: boolean): void;
+    /** Teinte multiplicative d'un bâtiment (null : patine d'origine). Facultatif. */
+    setBuildingTint?(id: number, rgb: readonly [number, number, number] | null): void;
+  };
 }
 
 export interface RenderPlugin {

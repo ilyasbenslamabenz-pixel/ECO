@@ -13,6 +13,7 @@ import type { DechetsCommands, DechetsDelta, DechetsSnapshot } from './dechets';
 import type { HubsCommands, HubsDelta, HubsSnapshot } from './hubs';
 import type { EauCommands, EauDelta, EauSnapshot } from './eau';
 export type * from './zonage';
+export type * from './ressources';
 
 export type * from './batiments';
 export type * from './circulation';

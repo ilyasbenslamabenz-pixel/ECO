@@ -8,7 +8,7 @@
  * visible qu'avec l'outil Zones ; les hauteurs sont relues à chaque ouverture de l'outil (terrassement).
  */
 import * as THREE from 'three';
-import { CELL_CONNECTED, ZONE_COLORS, zoneOf } from '../../shared/protocol-ext/zonage';
+import { CELL_CONNECTED, ZONE_COLORS, ZONE_COUNT, zoneOf } from '../../shared/protocol-ext/zonage';
 import type { ZoningChange, ZoningView } from '../../client/zoning-view';
 
 const LIFT = 0.18;
@@ -83,7 +83,7 @@ export class ZoningOverlay {
     this.mesh.visible = false;
     this.mesh.castShadow = false;
     this.mesh.receiveShadow = false;
-    for (let c = 1; c <= 6; c++) this.colors.set(c, new THREE.Color(ZONE_COLORS[zoneOf(c)!]));
+    for (let c = 1; c <= ZONE_COUNT; c++) this.colors.set(c, new THREE.Color(ZONE_COLORS[zoneOf(c)!]));
     scene.add(this.mesh);
     const ringGeo = new THREE.BufferGeometry();
     ringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(48 * 3), 3));

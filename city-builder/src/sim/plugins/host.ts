@@ -8,6 +8,8 @@
  */
 import type { CommandError, CommandErrorCode } from '../../shared/contracts';
 import { terrainBounds } from '../../shared/terrain-gen';
+import { fertilityValue } from '../ressources/model';
+import { RESOURCE } from '../terrain/types';
 import { Rng } from '../rng';
 import type { Simulation } from '../world';
 import type {
@@ -86,10 +88,25 @@ export class PluginHost {
       get season() { return sim.clock.season; },
       get weekday() { return sim.clock.weekday; },
     };
+    /** Échantillon du terrain le plus proche de (x, z), -1 hors carte. */
+    const sampleAt = (x: number, z: number): number => {
+      const t = sim.terrain;
+      if (!t) return -1;
+      const i = Math.round((x - t.originX) / t.spacing), j = Math.round((z - t.originZ) / t.spacing);
+      return i < 0 || j < 0 || i >= t.samplesX || j >= t.samplesZ ? -1 : j * t.samplesX + i;
+    };
     const terrain: PluginTerrain = {
       heightAt: (x, z) => sim.groundHeight(x, z),
       isWet: (x, z) => sim.isWet(x, z),
       bounds: () => (sim.terrain ? terrainBounds(sim.terrain) : null),
+      forestAt: (x, z) => { const k = sampleAt(x, z); return k < 0 ? 0 : (sim.terrain!.forest[k] ?? 0) / 255; },
+      fertilityAt: (x, z) => {
+        const k = sampleAt(x, z), t = sim.terrain;
+        if (k < 0 || !t) return 0;
+        const d = t.spacing;
+        const slope = Math.max(Math.abs(sim.groundHeight(x + d, z) - sim.groundHeight(x - d, z)), Math.abs(sim.groundHeight(x, z + d) - sim.groundHeight(x, z - d))) / (2 * d);
+        return fertilityValue(t.resources[k] === RESOURCE.TERRE_FERTILE, (t.moisture[k] ?? 0) / 255, Number.isFinite(slope) ? slope : 1, sim.isWet(x, z));
+      },
     };
     const roads: PluginRoads = {
       get version() { return sim.net.version; },

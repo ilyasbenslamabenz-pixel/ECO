@@ -18,13 +18,15 @@ modernes (zones peintes sur une grille, jauge de demande, niveaux de bâtiments)
 | `src/render/zoning/overlay.ts`, `src/render/plugins/zonage.ts` | superposition colorée (instanciation + shader), cercle du pinceau |
 | `src/ui/panels/zonage.ts` | tiroir « Zones » de la barre de construction, jauge R/C/B/I, panneau du tableau de bord |
 | `tests/zonage/*.test.ts`, `tests/zonage/e2e.mjs` | tests unitaires, sauvegarde/migration, parcours e2e avec captures (`docs/captures-zonage/`) |
+| `src/sim/ressources/*`, `src/sim/plugins/ressources.ts`, `src/shared/protocol-ext/ressources.ts` | zones spécialisées (§8) : forêt, agricole, mixte — production, économie, section `ressources` |
+| `src/render/plugins/ressources.ts`, `src/ui/panels/ressources.ts` | teinte des bâtiments spécialisés, arbres retirés des cases déboisées ; panneau « Ressources » |
 
 ## 1. Outil Zones
 
 Onglet **Zones** de la barre d'outils (le badge « 2B » disparaît : l'outil est actif). Le tiroir propose :
-résidentiel faible / moyen / dense, commerces, bureaux, industrie, **Retirer**, la **profondeur** des bandes
-(1 à 4 cases de 8 m, 3 par défaut), **Croissance : oui / pause**, et la jauge de demande R / C / B / I dans
-l'en-tête. Les zones « Agricole » et « Spécial » restent affichées comme prévues (grisées).
+résidentiel faible / moyen / dense, commerces, bureaux, industrie, **Forêt**, **Agricole**, **Mixte** (zones
+spécialisées, §8), **Retirer**, la **profondeur** des bandes (1 à 4 cases de 8 m, 3 par défaut), **Croissance : oui /
+pause**, et la jauge de demande R / C / B / I dans l'en-tête. La zone « Spécial » reste affichée comme prévue (grisée).
 
 - **Peindre** : souris (clic-glisser) ou un doigt. Le pinceau est un cercle de rayon `(profondeur + 1) × 8 m` ; en
   suivant l'axe d'une rue on zone les deux côtés sur toute la profondeur. Seules les cases dont le centre est à
@@ -134,4 +136,44 @@ Les écarts aux valeurs par défaut sont sauvegardés avec la partie.
   reste vide derrière de petites maisons (lots arrière : à faire).
 - La valeur de quartier est calculée par le module ; elle n'utilise pas encore la grille `valeur_fonciere` du contrat municipal.
 - Pas d'abandon de bâtiments (logements vides durablement, pollution) ni de dé-densification.
-- Zones agricole et spéciales : non implémentées (tuiles grisées).
+- Zones spéciales (quartiers à thème) : non implémentées (tuile grisée).
+
+## 8. Zones spécialisées : forêt, agricole, mixte
+
+Codes de zone 7 à 9 ajoutés EN FIN de `ZONE_TYPES` (codes existants inchangés : les sauvegardes restent lisibles).
+Bâtiments : modèles EXISTANTS du catalogue (`specialZonesForAsset`, un modèle garde aussi sa zone ordinaire) ; le
+rendu les distingue par une teinte légère (`SPECIAL_TINTS`, `InstancedBuildingRenderer.setBuildingTint`).
+
+| Zone | Terrain admis (peinture) | Modèles | Croissance (demande) |
+|---|---|---|---|
+| **Forêt** (exploitation forestière) | forêt naturelle ≥ `foretMin` (0,25) | industrie `bois` / `artisanat`, entrepôts non logistiques, sans pollution | demande « forêt » (service `ressources:demande`) |
+| **Agricole** | fertilité ≥ `fertiliteMin` (0,35) : terre fertile du générateur ou humidité, × planéité (pente ≤ 0,12) | industrie `agriculture`, `service:stockage_agricole`, ateliers (hangars) | demande « agricole » |
+| **Mixte** | comme le résidentiel | immeubles et commerces AVEC logements ET emplois (hors bureaux) | ½ (R⁺ + C⁺) ; négative si R et C le sont |
+
+Façade de terrain : `PluginTerrain.forestAt` / `fertilityAt` (facultatifs, `src/sim/plugins/host.ts`). Les zones
+spécialisées ne subissent pas la nuisance industrielle dans la valeur de quartier ; la mixte, si.
+
+**Module « ressources »** (`SimPlugin` après le zonage ; lit le service `zonage:etat`, publie `ressources:demande`) :
+
+- **Forêt** : chaque case forestière a un stock (capacité = densité de forêt naturelle au zonage). Chaque jour : repousse
+  logistique (`repousse` 3 %/j + semis 0,2 %/j de la capacité) ; chaque exploitation reliée à la route coupe
+  `coupeParEmploye` × employés (en cases pleines) dans un rayon de 72 m, cases les plus fournies d'abord, au plus 6 % de
+  la capacité par case et par jour ; bois = 25 m³ par case pleine. Case sous 15 % : **déboisée** (le rendu retire ses
+  arbres) ; au-dessus de 60 % : **repoussée** (visible au rechargement : la végétation n'a pas d'ajout en direct).
+- **Agricole** : nourriture (t/j) = employés × 0,35 × fertilité moyenne des cases agricoles à 56 m × min(1, champs libres
+  / 12) × saison (printemps 0,8, été 1,2, automne 1, hiver 0,3).
+- **Économie** : consommation de bois = 0,02 m³/j par emploi industriel (hors spécialisés) + 0,002 par habitant ;
+  nourriture = 0,0015 t/j par habitant. L'excédent est exporté ; la ville perçoit chaque jour
+  `valeur exportée × taux industriel × 2,5` (bois 70 CHF/m³, nourriture 420 CHF/t) par `economy.applyService`.
+  Demande des zones forêt / agricole = `0,15 + 0,4 · I + 0,6 · (consommation − production) / max(1, consommation,
+  production / 2)`, bornée et lissée par le zonage. Les emplois des exploitations et fermes comptent dans l'industrie,
+  ceux de la zone mixte dans le commerce, ses logements dans l'offre résidentielle (demande R).
+- **Protocole** : `delta.ext.ressources` / `snapshot.ext.ressources` (bilans, teintes `[id, code]`, centres des cases
+  déboisées / repoussées) ; commandes `state`, `simulate { days }` ; `delta.ext.zonage.special` (demandes forêt,
+  agricole, mixte). Panneau « Ressources » (tableau de bord Ville) ; demande des zones spécialisées dans le panneau Zonage.
+- **Sauvegarde** : section facultative `save.plugins.ressources` v1 (stocks des cases, cases déboisées, bilans, recettes) ;
+  champ facultatif `special` dans la section zonage. Sans zone spécialisée : aucune section, aucun delta, aucune recette.
+  Une ancienne sauvegarde se charge telle quelle (stocks relus sur le terrain au premier jour).
+- Limites : pas de transport physique des marchandises (camions) ni de stock tampon ; la repousse n'est pas animée en
+  direct ; le bois et la nourriture n'entrent pas dans les comptes des entreprises de l'économie vivante (seulement
+  la recette municipale et la demande).
