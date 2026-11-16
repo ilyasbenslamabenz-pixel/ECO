@@ -150,7 +150,7 @@ function mount(root: HTMLElement, api: UiPanelApi): () => void {
       if (f.kind === 'epuration') detail += ` · rendement ${pct(f.efficiency ?? 0)}`;
       if (f.kind === 'emissaire') detail = `rejet ${m3h(f.output)}`;
       if ((f.kind === 'epuration' || f.kind === 'emissaire') && f.outfall === null) detail += ' · loin de l\'eau (rejet au sol)';
-      if (!f.connected) detail = 'non raccordée (aucune route à 80 m)';
+      if (!f.connected) detail = 'isolée : reliez-la à une route (les canalisations suivent les routes)';
       list.append(el('li', {}, el('b', { text: spec.nameFr }), el('span', { text: detail })));
     }
     parts.push(list);

@@ -8,6 +8,7 @@ import { isBuildingCategory, type CatalogAsset } from '../../shared/catalog';
 import type { ElectriciteService } from '../../shared/power/types';
 import { ALERT_BITS, ALERT_KINDS, type AlertesPayload, type AlertKind } from '../../shared/protocol-ext/alertes';
 import { facilityKindOfTags } from '../../shared/waste/types';
+import { isUnstaffedUtility } from '../../shared/utility-buildings';
 import { ROAD_KINDS } from '../roads/types';
 import { ATTACH_RADIUS } from '../waste/graph';
 import type { PluginContext, SimPlugin } from './types';
@@ -18,20 +19,12 @@ interface ServicesLike { burning(id: number): boolean; ruined(id: number): boole
 
 const emptyCounts = (): Record<AlertKind, number> => ({ road: 0, power: 0, water: 0, waste: 0, isolated: 0, fire: 0, ruin: 0, crime: 0 });
 
-/** Services techniques (énergie, déchets, eau) : ouvrages sans personnel permanent, sans besoin d'eau. */
-const TECH_SERVICES = ['service:electricite', 'service:dechets', 'service:eau', 'service:assainissement'];
-/** Effectif au-delà duquel un ouvrage technique est considéré comme occupé (sanitaires, process). */
-const TECH_STAFF_WATER = 10;
-
 /**
  * Le bâtiment a-t-il besoin d'eau ? Non pour les bâtiments sans occupants possibles ni pour les petits ouvrages
  * techniques (éolienne, ferme solaire, poste électrique, décharge, château d'eau…).
  */
 export function needsWater(a: CatalogAsset): boolean {
-  const res = a.capacity?.residents ?? 0, jobs = a.capacity?.jobs ?? 0;
-  if (res <= 0 && jobs <= 0) return false;
-  if (res <= 0 && jobs <= TECH_STAFF_WATER && a.tags.some((t) => TECH_SERVICES.includes(t))) return false;
-  return true;
+  return !isUnstaffedUtility(a);
 }
 
 /**
@@ -98,6 +91,9 @@ export function computeAlerts(ctx: PluginContext): AlertesPayload {
   const assets = ctx.catalog?.assets ?? [];
   const items: number[] = [];
   const counts = emptyCounts();
+  // Sans aucun dépôt de camions-bennes : pas d'icône sur chaque bâtiment (toute la ville clignoterait), mais une
+  // alerte globale « aucune collecte » dès que des bacs sont pleins (`noCollection`).
+  let noCollection = 0;
   // Bacs pleins : signalés seulement si un service de collecte existe (sinon le joueur n'y peut rien de précis
   // et toute la ville clignoterait). Installations isolées : seulement quand il y a des installations.
   let wasteService = false;
@@ -114,7 +110,10 @@ export function computeAlerts(ctx: PluginContext): AlertesPayload {
     if (!st.roadAccess[i] && !power?.isConnectedFacility?.(id)) m |= ALERT_BITS.road;
     if (powerOn && !power!.isPowered(id)) m |= ALERT_BITS.power;
     if (eau && needsWater(a) && !eau.growthAllowed(id)) m |= ALERT_BITS.water;
-    if (wasteService && dechets?.binFull(id)) m |= ALERT_BITS.waste;
+    // Ouvrages techniques sans occupants (éoliennes, pylônes, pompes, postes…) : aucun déchet, aucune icône.
+    if (dechets && !isUnstaffedUtility(a) && dechets.binFull(id)) {
+      if (wasteService) m |= ALERT_BITS.waste; else noCollection++;
+    }
     if (isolated.has(id)) m |= ALERT_BITS.isolated;
     if (services) {
       if (services.burning(id)) m |= ALERT_BITS.fire;
@@ -125,13 +124,13 @@ export function computeAlerts(ctx: PluginContext): AlertesPayload {
     for (const k of ALERT_KINDS) if (m & ALERT_BITS[k]) counts[k]++;
     items.push(id, m, Math.round(st.x[i]! * 10) / 10, Math.round((st.y[i]! + (a.dimensions?.height ?? 10)) * 10) / 10, Math.round(st.z[i]! * 10) / 10);
   }
-  return { items, counts };
+  return noCollection > 0 ? { items, counts, noCollection } : { items, counts };
 }
 
 export function createAlertesPlugin(): SimPlugin {
   let last: AlertesPayload = { items: [], counts: emptyCounts() };
   let key = '', sentKey = '', acc = 60;
-  const refresh = (ctx: PluginContext): void => { last = computeAlerts(ctx); key = last.items.join(','); };
+  const refresh = (ctx: PluginContext): void => { last = computeAlerts(ctx); key = last.items.join(',') + (last.noCollection ? `|${last.noCollection}` : ''); };
   return {
     id: 'alertes',
     onNewGame() { last = { items: [], counts: emptyCounts() }; key = ''; sentKey = ''; acc = 60; },
@@ -147,7 +146,7 @@ export function createAlertesPlugin(): SimPlugin {
       return last;
     },
     // Aucune alerte : rien d'émis (module inerte, simulation identique avec ou sans lui).
-    snapshot(ctx) { refresh(ctx); sentKey = key; return last.items.length ? last : undefined; },
+    snapshot(ctx) { refresh(ctx); sentKey = key; return last.items.length || last.noCollection ? last : undefined; },
     command(ctx, name) {
       if (name === 'state') { refresh(ctx); return { ok: true, data: last }; }
       return { ok: false, code: 'INVALID_ARGS', message: `Commande inconnue : ${name}` };

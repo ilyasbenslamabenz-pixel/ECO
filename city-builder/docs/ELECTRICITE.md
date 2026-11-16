@@ -26,6 +26,11 @@ plus proche reliée à lui par le réseau routier (bâtiment et installation à 
 installations du même réseau routier sont reliées sans ligne. Les lignes HT relient des réseaux routiers séparés
 (centrale éloignée, hameau). Les rayons du tableau ne servent plus à la desserte.
 
+**Réseau intégré aux routes (16/11, retour joueur « raccordements compliqués »)** — voir §1 quinquies : une centrale
+au bord d'une route alimente tout le réseau routier connecté, sans plafond bloquant ; les bâtiments au bord d'une
+route alimentée sont raccordés sans rien poser ; lignes HT facultatives ; centrale isolée signalée ; calque des
+routes alimentées ; espacement minimal des éoliennes.
+
 Les centrales et postes sont des **bâtiments du catalogue** (onglet Industrie de la barre de construction), reconnus
 par leurs étiquettes : `elec:centrale:thermique|eolien|solaire|hydro`, `elec:poste`, puissance facultative
 `elec:kw:N`. Coût de construction, entretien mensuel et emplois sont ceux du catalogue (appliqués par la simulation de
@@ -106,6 +111,40 @@ commande `checkSite` permet de vérifier avant de construire. **Au pied d'un bar
 `docs/TERRAFORMATION.md` §3) : site validé par la retenue, production = nominale × saison × (débit / 60 m³/s) ×
 (chute / 10 m), plafonnée à 4 × nominale (`hydroDamKw`) ; ailleurs, règle ci-dessus inchangée.
 
+## 1 quinquies. Réseau intégré aux routes (16/11)
+
+Retour joueur : « je trouve compliqué les raccordements électricité, eau et déchets » (capture : parc éolien avec
+pylônes enchevêtrés). Mécanique type city-builder récent, sans rien copier :
+
+- **Routes = réseau basse / moyenne tension.** Chaque composante connexe de la voirie est un réseau. Une installation
+  à moins de 80 m d'une route (`FacilityView.roadLinked`) alimente toute sa composante ; un bâtiment à moins de
+  80 m d'une route alimentée est raccordé automatiquement. Aucune pose de câble.
+- **Non bloquant.** Dans un même réseau routier, les liaisons entre installations et le transformateur de
+  distribution des installations reliées à la route ont une capacité `ROAD_GRID_KW` (10 GW) : la puissance d'un
+  poste (45 MW) ou l'ancien raccordement moyenne tension (20 MW) ne plafonnent plus la ville. Restent limités : la
+  production, les lignes HT (150 MW) et les raccordements hors route (20 MW).
+- **Parc éolien d'un seul tenant.** Deux installations à moins de `FACILITY_LINK_M` = 130 m l'une de l'autre sont
+  reliées automatiquement même sans route (les mâts sont espacés d'au moins 88 m, voir ci-dessous) : une seule
+  éolienne du parc près d'une route suffit.
+- **Lignes HT facultatives** : outil « Ligne haute tension » et bouton « Relier » conservés, pour une centrale
+  éloignée ou un hameau sans route commune. Les anciennes parties gardent leurs lignes : réseau manuel (lignes) et
+  réseau routier sont fusionnés dans le même graphe (test « sauvegarde : une ancienne partie avec ligne HT… »).
+- **Centrale isolée** (`FacilityView.isolated`, `summary.isolatedFacilities`) : son îlot (lignes, voisines à
+  < 130 m) ne touche aucune route. Notification unique (« … isolée : reliez la centrale à une route… »), réarmée si
+  elle est reliée puis isolée de nouveau (`PowerState.isolatedNotified`, champ facultatif : sauvegarde v1
+  inchangée) ; panneau Énergie : bandeau « Reliez la centrale à une route », état « isolée (pas de route) ».
+- **Routes alimentées** (`delta.ext.electricite.roads`, `ElectriciteRoads` : tracé échantillonné de chaque tronçon +
+  `powered`, envoyé seulement quand il change ; `summary.roadsPowered / roadsUnpowered` ; `PowerSystem.roadPowered(seg)`).
+  Un tronçon est alimenté si sa composante touche une installation reliée à une centrale en service (pannes
+  comprises, indépendamment du vent de l'heure) ou si le raccordement au réseau voisin est actif. Calque
+  Électricité : routes vertes (alimentées) / rouges (non alimentées), en plus des cases et des repères.
+- **Éoliennes : espacement minimal** `WIND_MIN_SPACING_M` = ⌈2 × (rayon du rotor 37 m + avancée du moyeu 4,6 m) + 4⌉ =
+  **88 m** entre deux mâts (`src/shared/power/render-spec.ts`). Contrôle de `placeBuilding` (donc aperçu rouge via
+  `dryRun` et refus, code `COLLISION`, « Trop près d'une autre éolienne (… m) : les rotors se chevaucheraient… ») ;
+  pas de contrôle au chargement ni pour l'annulation d'une démolition (anciennes parties conservées). Aucun asset
+  modifié. Les tests posent désormais leurs éoliennes à 88 m (`buildFacilityStreet`, `tests/electricite/fixtures.ts`).
+- Tests : `tests/electricite/routes.test.ts` (6 tests). Preuves (2026-11-16) : `npx tsc --noEmit -p tsconfig.json` ✓ ; `npm test` 689/689.
+
 ## 2. Réseau et répartition (chaque heure de jeu)
 
 1. **Pannes** (PRNG propre au module) : probabilité horaire par installation (`failurePerHour`) et par km de ligne,
@@ -116,8 +155,8 @@ commande `checkSite` permet de vérifier avant de construire. **Au pied d'un bar
    Chaque bâtiment est rattaché à l'installation la plus proche dont il est à portée ; hors portée = « non raccordé ».
 4. **Graphe municipal** reconstruit (`m.networks`, réseau `electricite`) : centrale -> jeu de barres -> transformateur ->
    nœud de distribution -> un consommateur par classe (priorité = rang dans l'ordre réglé). Lignes HT : arêtes de
-   150 MW, pertes 0,8 %/km. Installations proches (distance < plus petit des deux rayons) : raccordement moyenne
-   tension automatique (20 MW, 1,5 %/km).
+   150 MW, pertes 0,8 %/km. Installations du même réseau routier : liaison automatique non bloquante (§1 quinquies) ;
+   installations à moins de 130 m sans route commune : raccordement moyenne tension automatique (20 MW, 1,5 %/km).
 5. **Répartition** `Networks.allocate` : ordre de mérite (solaire, éolien, hydro, thermique, batteries, réseau voisin), délestage des classes les
    moins prioritaires d'abord. Dans une classe partiellement servie, les bâtiments sont alimentés dans un **ordre
    tournant** (hachage identifiant × heure : délestage tournant) ; l'énergie inutilisable (bâtiment trop gros pour le

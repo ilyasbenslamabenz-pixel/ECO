@@ -72,7 +72,8 @@ function scene(opts: { battery?: boolean } = {}): Scene {
   const weather = { wind: 8, cloud: 0 };
   const meteo: SimPlugin = { id: 'weather', init(ctx) { ctx.provide('weather', weather); } };
   const t = powerTown({ days: 2, plugins: (e) => [meteo, e] });
-  placeFacilities(t.sim, 160, -200, 200, Array<string>(7).fill('eolienne'));
+  // Rue prolongée jusqu'à x = 400 : 7 éoliennes espacées de WIND_MIN_SPACING_M (rotors sans chevauchement).
+  placeFacilities(t.sim, 160, -200, 400, Array<string>(7).fill('eolienne'));
   const row = placeFacilities(t.sim, 230, -200, 200, ['ferme_solaire', 'ferme_solaire', 'ferme_solaire', ...(opts.battery ? ['batteries'] : [])]);
   return { ...t, weather, ...(opts.battery ? { battery: row[3]! } : {}) };
 }

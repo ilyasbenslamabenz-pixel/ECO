@@ -33,6 +33,17 @@ carrossable passe à moins de 70 m.
 Décor : `dechets_tumulus` (relief de la décharge, mis à l'échelle par le rendu), `dechets_conteneurs_tri`
 (points d'apport au bord des rues, un groupe par îlot de 96 m habité, quand la part de tri est > 0).
 
+### Pas de raccordement (16/11)
+
+Aucun branchement : la collecte se fait par les camions des dépôts, le long des routes (capacité = flotte ×
+temps de service). **Ouvrages techniques sans occupants** (`isUnstaffedUtility`, `src/shared/utility-buildings.ts` :
+aucun habitant et au plus 10 emplois avec une étiquette de service technique — éoliennes, fermes solaires, postes,
+batteries, pompes, châteaux d'eau, émissaires, décharges) : **aucun déchet**, aucune icône « bacs pleins » ; un bac
+hérité d'une ancienne partie est retiré à l'heure suivante. **Sans aucun dépôt** : pas d'icône sur chaque bâtiment,
+mais une alerte globale « Aucune collecte des déchets : N bâtiments ont leurs bacs pleins… » (fenêtre des
+problèmes, `AlertesPayload.noCollection`). Avec un dépôt, les bâtiments hors d'atteinte des camions gardent leur
+icône et le diagnostic du panneau. Tests : `tests/dechets/utilitaires.test.ts`.
+
 ## 2. Modèle
 
 - **Production** (tâche horaire) : `habitants × 1,2 kg/j + emplois × kg/j par catégorie` (commerce 1,0 ; industrie

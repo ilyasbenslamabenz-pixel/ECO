@@ -60,8 +60,13 @@ const kShort = (v: number): string => {
 };
 
 /** Liste des problèmes (pure, testable) : alertes, finances, chômage, couverture, trafic signalé. */
-export function collectProblems(counts: Partial<Record<AlertKind, number>> | null, report: ReportLike | null, money: number | null, trafficAlert: boolean): Problem[] {
+export function collectProblems(counts: Partial<Record<AlertKind, number>> | null, report: ReportLike | null, money: number | null, trafficAlert: boolean, noCollection = 0): Problem[] {
   const out: Problem[] = [];
+  // Aucun dépôt de camions-bennes : un seul message clair (pas d'icône sur chaque bâtiment).
+  if (noCollection > 0) {
+    out.push({ id: 'collecte', severity: 'important', text: `Aucune collecte des déchets : ${noCollection} bâtiment${noCollection > 1 ? 's ont leurs' : ' a ses'} bacs pleins. Construisez un dépôt de camions-bennes et une décharge reliés aux rues (aucun branchement : les camions passent par les routes).`,
+      short: 'Aucune collecte des déchets', count: nf.format(noCollection), weight: noCollection, icon: 'waste', open: '#sidebar [data-dash="waste"]' });
+  }
   for (const a of ALERT_PROBLEMS) {
     const n = counts?.[a.kind] ?? 0;
     if (n > 0) out.push({ id: a.kind, severity: a.severity, text: a.text(n), short: a.short, count: nf.format(n), weight: n, icon: a.icon, open: a.open, alert: a.kind });
@@ -140,7 +145,7 @@ export function initProblems(): void {
     const dbg = (window as unknown as { __aube?: DebugLike }).__aube;
     const stats = dbg?.lastStats as { money?: number } | null | undefined;
     const traffic = journal.entries.some((e) => e.key === 'r:trafic' && e.unread);
-    const all = collectProblems(lastAlertes()?.counts ?? null, (dbg?.lastReport as ReportLike | undefined) ?? null, stats?.money ?? null, traffic);
+    const all = collectProblems(lastAlertes()?.counts ?? null, (dbg?.lastReport as ReportLike | undefined) ?? null, stats?.money ?? null, traffic, lastAlertes()?.noCollection ?? 0);
     current = all.slice(0, 3);
     const s = current.map((p) => `${p.id}|${p.text}|${p.severity}`).join(';') + `#${all.length}`;
     if (s === sig) return;

@@ -4,8 +4,8 @@
  *    l'éolienne (arrêtée en panne ou sans vent) ; les mâts / nacelles sont des bâtiments du catalogue ;
  *  - lignes haute tension : pylônes treillis instanciés (`elec_pylone`, 3 LOD) tous les ~140 m, câbles tendus en
  *    chaînette (4 conducteurs + câble de garde) ;
- *  - calque « réseau électrique » : cellules colorées (alimenté / partiel / coupé / non raccordé), rayons de
- *    distribution des installations, charge des lignes.
+ *  - calque « réseau électrique » : cellules colorées (alimenté / partiel / coupé / non raccordé), repères des
+ *    installations, charge des lignes, routes alimentées (vert) / non alimentées (rouge).
  * Le rendu ne modifie jamais l'état du jeu.
  */
 import * as THREE from 'three';
@@ -92,6 +92,9 @@ export class PowerRenderer {
   private overlayMesh: THREE.Mesh | null = null;
   private rings: THREE.LineSegments | null = null;
   private loadLines: THREE.LineSegments | null = null;
+  /** Calque : routes alimentées (vert) / non alimentées (rouge) — réseau intégré aux routes. */
+  private roadLines: THREE.LineSegments | null = null;
+  private roadsVersion = -1;
   private turbines: { f: FacilityView; angle: number; speed: number; hub: THREE.Vector3; yaw: number }[] = [];
   private pylonMats: THREE.Matrix4[] = [];
   private pylonPos: THREE.Vector3[] = [];
@@ -105,7 +108,7 @@ export class PowerRenderer {
   private readonly one = new THREE.Vector3(1, 1, 1);
   private unsub: (() => void) | null = null;
   /** Diagnostic (e2e). */
-  stats = { turbines: 0, pylons: 0, cableSegments: 0, overlayCells: 0, lines: 0 };
+  stats = { turbines: 0, pylons: 0, cableSegments: 0, overlayCells: 0, lines: 0, roadSegments: 0 };
 
   async init(ctx: RenderPluginContext): Promise<void> {
     this.ctx = ctx;
@@ -124,7 +127,38 @@ export class PowerRenderer {
     this.rebuildTurbines(false);
     this.rebuildLines(false);
     if (state.coverage && state.coverage.version !== this.coverageVersion) this.rebuildOverlay();
+    if (state.roads && state.roads.version !== this.roadsVersion) this.rebuildRoadLines();
     this.applyOverlayVisibility();
+  }
+
+  /** Routes du calque : chaque tronçon tracé 3 m au-dessus de la chaussée, vert s'il est alimenté, rouge sinon. */
+  private rebuildRoadLines(): void {
+    const r = powerView.state.roads;
+    if (this.roadLines) { this.group.remove(this.roadLines); this.roadLines.geometry.dispose(); (this.roadLines.material as THREE.Material).dispose(); this.roadLines = null; }
+    if (!r) return;
+    this.roadsVersion = r.version;
+    const pos: number[] = [], col: number[] = [];
+    const on = new THREE.Color(0x2fd06a), off = new THREE.Color(0xff2a2a);
+    const h = (x: number, z: number): number => { const v = this.ctx.heightAt(x, z); return (Number.isFinite(v) ? v : 0) + 3; };
+    for (let i = 0; i < r.ids.length; i++) {
+      const c = r.powered[i] ? on : off;
+      for (let k = r.offsets[i]!; k + 1 < r.offsets[i + 1]!; k++) {
+        const x0 = r.points[2 * k]!, z0 = r.points[2 * k + 1]!, x1 = r.points[2 * k + 2]!, z1 = r.points[2 * k + 3]!;
+        pos.push(x0, h(x0, z0), z0, x1, h(x1, z1), z1);
+        col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+      }
+    }
+    this.stats.roadSegments = r.ids.length;
+    if (!pos.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    this.roadLines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true, opacity: 0.95 }));
+    this.roadLines.name = 'elec_routes';
+    this.roadLines.renderOrder = 11;
+    this.roadLines.frustumCulled = false;
+    this.roadLines.visible = powerView.overlay;
+    this.group.add(this.roadLines);
   }
 
   private facilities(): FacilityView[] { return powerView.state.facilities ?? []; }
@@ -341,6 +375,7 @@ export class PowerRenderer {
     if (this.overlayMesh) this.overlayMesh.visible = v;
     if (this.rings) this.rings.visible = v;
     if (this.loadLines) this.loadLines.visible = v;
+    if (this.roadLines) this.roadLines.visible = v;
   }
 
   /* ----------------------------------- Image ----------------------------------- */

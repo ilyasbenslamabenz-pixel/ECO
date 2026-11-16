@@ -23,4 +23,9 @@ export interface AlertesPayload {
   items: number[];
   /** Nombre de bâtiments par problème. */
   counts: Record<AlertKind, number>;
+  /**
+   * Aucun dépôt de camions-bennes : nombre de bâtiments (avec occupants) dont les bacs sont pleins. Alerte globale
+   * « Aucune collecte des déchets » (pas d'icône par bâtiment). Absent quand la collecte existe ou que rien ne déborde.
+   */
+  noCollection?: number;
 }

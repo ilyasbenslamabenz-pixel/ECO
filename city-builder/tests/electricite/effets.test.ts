@@ -72,8 +72,10 @@ test('effet : pénurie électrique -> coupures des moins prioritaires (industrie
 test('effet : entretien réduit -> pannes plus fréquentes (même graine), tracées dans le registre', () => {
   const run = (funding: number): { failures: number; registry: number } => {
     const { sim, elec } = powerTown({ seed: 77 });
-    placeFacilities(sim, 160, -220, 220, ['eolienne', 'eolienne', 'eolienne', 'eolienne', 'eolienne', 'eolienne', 'eolienne', 'eolienne', 'eolienne', 'eolienne', 'poste', 'poste', 'poste']);
+    // 10 éoliennes en deux rangées (espacement minimal des rotors : elles ne tiennent plus sur une seule rue).
+    placeFacilities(sim, 160, -220, 400, ['eolienne', 'eolienne', 'eolienne', 'eolienne', 'eolienne', 'poste', 'poste', 'poste']);
     placeFacilities(sim, 230, -220, 220, ['centrale_gaz', 'centrale_gaz', 'ferme_solaire', 'ferme_solaire']);
+    placeFacilities(sim, -120, -220, 400, ['eolienne', 'eolienne', 'eolienne', 'eolienne', 'eolienne'], false);
     const r = sim.plugins.command('electricite', 'setFunding', { funding });
     assert.ok(r.ok);
     advanceHours(sim, 24 * 40, 30);

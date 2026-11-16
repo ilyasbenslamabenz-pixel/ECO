@@ -29,6 +29,12 @@ export const POWER_ELEMENT_FILES: Record<'rotor' | 'pylone', readonly string[]> 
 /** Éolienne : hauteur du moyeu, avancée du moyeu devant l'axe du mât, rayon du rotor (m). */
 export const TURBINE = { hubHeight: 55, hubForward: 4.6, rotorRadius: 37, towerBaseRadius: 1.9, towerTopRadius: 1.25 };
 
+/**
+ * Espacement minimal entre deux mâts d'éoliennes (m) : deux rotors (rayon + avancée du moyeu, orientation
+ * quelconque) ne se chevauchent jamais, + 4 m de marge. Contrôlé à la pose (src/sim/world.ts), aperçu rouge.
+ */
+export const WIND_MIN_SPACING_M = Math.ceil(2 * (TURBINE.rotorRadius + TURBINE.hubForward) + 4);
+
 /** Pylône treillis : hauteur totale et points d'accrochage des conducteurs (bas des chaînes d'isolateurs). */
 export const PYLON = {
   height: 36,

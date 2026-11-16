@@ -245,8 +245,8 @@ export class BuildBar {
       services: 'Services publics : mairie, école, hôpital, pompiers, police…', environment: 'Nature : parcs ; arbres, végétation, mobilier (bientôt)',
       transport: 'Transports : lignes de bus et dépôts, gare de voyageurs, port et aéroport ; tramway (bientôt)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
-      zones: 'Zones : résidentiel, commercial, industriel, bureaux, forêt exploitée, agricole, mixte', energy: 'Énergie : centrales, éoliennes, solaire, barrage, postes ; lignes haute tension depuis le tableau de bord',
-      water: 'Eau et égouts : pompage, potabilisation, château d’eau, épuration (canalisations le long des routes)', waste: 'Déchets : dépôt de camions-bennes, centre de tri, incinérateur, décharge', terrain: 'Terrain : défricher, quais et remblais, bassins et canaux',
+      zones: 'Zones : résidentiel, commercial, industriel, bureaux, forêt exploitée, agricole, mixte', energy: 'Énergie : posez la centrale au bord d’une route, le courant suit les routes jusqu’aux bâtiments ; lignes haute tension facultatives (site éloigné)',
+      water: 'Eau et égouts : pompage, potabilisation, château d’eau, épuration (canalisations le long des routes)', waste: 'Déchets : dépôt de camions-bennes, centre de tri, incinérateur, décharge (aucun branchement : les camions collectent par les routes)', terrain: 'Terrain : défricher, quais et remblais, bassins et canaux',
     };
     for (const b of Array.from(this.toolbar.querySelectorAll<HTMLButtonElement>('button[data-tool], button[data-cat]'))) {
       const tool = b.dataset['tool'] as ToolId | undefined;
@@ -374,7 +374,7 @@ export class BuildBar {
       if (id === 'energy' || id === 'water' || id === 'waste') this.tabsEl.append(this.dashboardChip(id));
       if (id === 'energy') {
         const ln = el('button', { cls: 'chip-tab', attrs: { type: 'button', 'data-powerline': '1' } }, iconEl('pylon'), el('span', { text: 'Ligne haute tension' }));
-        ln.dataset['tip'] = 'Relier une centrale éloignée (ou un hameau) au réseau de la ville : touchez une installation, puis une autre ; coût affiché avant de construire';
+        ln.dataset['tip'] = 'Facultatif — le courant suit déjà les routes. Pour relier une centrale éloignée (ou un hameau) sans route : touchez une installation, puis une autre ; coût affiché avant de construire';
         ln.addEventListener('click', () => { this.closeDrawer(); this.d.tools.setTool('powerline'); });
         this.tabsEl.append(ln);
       }

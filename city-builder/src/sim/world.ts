@@ -38,6 +38,8 @@ import {
 } from '../shared/contracts';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SignalFrame, SnapshotMessage } from '../shared/protocol';
 import { dist2 } from '../shared/math';
+import { facilityKindOf } from '../shared/power/model';
+import { WIND_MIN_SPACING_M } from '../shared/power/render-spec';
 import { buildingGap, distSegmentObb, footprintObb, HOUSE_GAP, makeObb, normRot, obbAabb, obbOverlap, obbToWorld, pointInObb, type Obb } from '../shared/footprint';
 import { terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
 import { GameClock, MINUTES_PER_DAY, MINUTES_PER_MONTH, MINUTES_PER_YEAR, formatDateFr } from './clock';
@@ -557,6 +559,20 @@ export class Simulation {
     return 0;
   }
 
+  /** Distance à l'éolienne la plus proche à moins de `r` m du point (0 si aucune). */
+  private windTurbineWithin(x: number, z: number, r: number): number {
+    this.buildingIndex.query(x - r, z - r, x + r, z + r, this.q);
+    let best = 0;
+    for (const id of this.q) {
+      const bi = this.buildings.indexOf(id);
+      if (bi < 0) continue;
+      if (facilityKindOf(this.catalog?.assets[this.buildings.assetIndex[bi]!]) !== 'eolien') continue;
+      const d = Math.hypot(this.buildings.x[bi]! - x, this.buildings.z[bi]! - z);
+      if (d < r && (best === 0 || d < best)) best = Math.max(0.01, d);
+    }
+    return best;
+  }
+
   /** Plus petite marge (distance - demi-largeur) entre une empreinte orientée et les routes voisines (tronçons courbes). */
   private roadClearance(o: Obb, reach: number): number {
     let best = Infinity;
@@ -613,6 +629,12 @@ export class Simulation {
       return fail('COLLISION', this.overlappingBuilding(o) !== 0 ? 'Emplacement déjà occupé par un bâtiment' : `Trop près d'un autre bâtiment (${HOUSE_GAP} m minimum autour d'une maison)`);
     }
     if (this.roadClearance(o, MAX_ROAD_HALF_WIDTH) < 0) return fail('COLLISION', 'Le bâtiment empiète sur une route');
+    // Éoliennes : espacement minimal entre mâts (les rotors ne se chevauchent pas). Une annulation de démolition
+    // rétablit la position d'origine sans contrôle (anciennes parties : parcs déjà serrés conservés).
+    if (a.restoreToken === undefined && facilityKindOf(asset) === 'eolien') {
+      const near = this.windTurbineWithin(x, z, WIND_MIN_SPACING_M);
+      if (near) return fail('COLLISION', `Trop près d'une autre éolienne (${Math.round(near)} m) : les rotors se chevaucheraient, ${WIND_MIN_SPACING_M} m minimum entre deux éoliennes`);
+    }
     // Relief : échantillons sur une grille LOCALE de l'empreinte (pas d'environ une case).
     let hMin = Infinity;
     let hMax = -Infinity;

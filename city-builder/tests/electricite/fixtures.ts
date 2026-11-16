@@ -4,7 +4,8 @@ import { TILE_SIZE } from '../../src/shared/constants';
 import { Simulation } from '../../src/sim/world';
 import type { SimPlugin } from '../../src/sim/plugins';
 import { createElectricitePlugin, type ElectricitePlugin } from '../../src/sim/plugins/electricite';
-import { buildStreet, buildTown, townCatalog } from '../sim/fixtures';
+import { buildTown, townCatalog } from '../sim/fixtures';
+import { WIND_MIN_SPACING_M } from '../../src/shared/power/render-spec';
 
 const lic = { spdx: 'CC0-1.0', source: 'tests/electricite/fixtures', author: 'tests' };
 
@@ -51,9 +52,34 @@ export function powerTown(opts: { seed?: number; days?: number; plugins?: (e: El
   return { sim, elec };
 }
 
+/**
+ * Pose des bâtiments le long d'une rue en z = roadZ (côté nord), comme `buildStreet`, mais en respectant
+ * l'espacement minimal des éoliennes (WIND_MIN_SPACING_M, contrôlé par la simulation depuis le 16/11 : les rotors
+ * ne doivent pas se chevaucher). Avant cette règle, les tests posaient les éoliennes à 16 m les unes des autres.
+ */
+export function buildFacilityStreet(sim: Simulation, roadZ: number, x0: number, x1: number, ids: string[]): number[] {
+  const r = sim.buildRoad({ type: 'street', points: [x0, roadZ, x1, roadZ] });
+  if (!r.ok) throw new Error(`route : ${r.error.message}`);
+  const out: number[] = [];
+  let x = x0 + 8;
+  let lastWind = -Infinity;
+  for (const id of ids) {
+    const a = sim.getAsset(id)!;
+    const w = a.footprint.tilesX * TILE_SIZE, d = a.footprint.tilesZ * TILE_SIZE;
+    const wind = a.tags.includes('elec:centrale:eolien');
+    if (wind) x = Math.max(x, lastWind + WIND_MIN_SPACING_M - w / 2);
+    const p = sim.placeBuilding({ assetId: id, x: x + w / 2, z: roadZ - 8 - d / 2, rot: 0 });
+    if (!p.ok) throw new Error(`${id} @ ${x} : ${p.error.message}`);
+    if (wind) lastWind = x + w / 2;
+    out.push(p.data.buildingId);
+    x += w + 8;
+  }
+  return out;
+}
+
 /** Pose des installations le long d'une rue en z = roadZ (côté nord). */
 export function placeFacilities(sim: Simulation, roadZ: number, x0: number, x1: number, ids: string[], connect = true): number[] {
-  const out = buildStreet(sim, roadZ, x0, x1, ids);
+  const out = buildFacilityStreet(sim, roadZ, x0, x1, ids);
   // Rue des installations reliée au bourg (rue z = 80) par une rue nord-sud à son extrémité ouest.
   if (connect && roadZ > 80) {
     // Jusqu'à la rue z = 80, ou jusqu'à la rue d'installations précédente si une liaison existe déjà.

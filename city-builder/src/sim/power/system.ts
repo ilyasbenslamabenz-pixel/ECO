@@ -29,7 +29,7 @@ import {
 import {
   type ClassBalance, CONSUMER_CLASSES, type ConsumerClass, COVER_CUT, COVER_NONE, COVER_OK, COVER_PARTIAL, COVER_UNLINKED,
   DEFAULT_PRIORITY_ORDER, type ElectriciteBudget, type ElectriciteCoverage, type ElectriciteDelta, type ElectriciteEvent,
-  type ElectriciteSettings, type ElectriciteSummary, ELECTRICITE_NETWORK, type FacilityKind, type FacilityView, FUNDING_MAX,
+  type ElectriciteRoads, type ElectriciteSettings, type ElectriciteSummary, ELECTRICITE_NETWORK, type FacilityKind, type FacilityView, FUNDING_MAX,
   FUNDING_MIN, type LineView, type PlantType, SOURCE_IDS, type SourceBalance, type SourceId, type StorageBalance, WEATHER_SERVICE,
   type WeatherLike,
 } from '../../shared/power/types';
@@ -48,6 +48,18 @@ export interface FacilityState { failedUntil: number; failures: number; storedKw
 const ROAD_ATTACH_M = 80;
 /** Repli sans route : installation et bâtiment voisins (m). */
 const LOCAL_FALLBACK_M = 80;
+/**
+ * Repli sans route entre deux INSTALLATIONS (m) : un parc éolien posé à l'écart (mâts espacés d'au moins
+ * WIND_MIN_SPACING_M = 88 m pour que les rotors ne se chevauchent pas) reste d'un seul tenant ; il suffit qu'une
+ * éolienne touche une route (ou une ligne HT) pour que tout le parc alimente le réseau.
+ */
+const FACILITY_LINK_M = 130;
+/**
+ * Réseau intégré aux routes : capacité de la distribution le long de la voirie (kW). Volontairement non bloquante
+ * (la route transporte tout le courant nécessaire) : seules la production, les lignes HT entre réseaux séparés et
+ * les raccordements hors route restent limités.
+ */
+const ROAD_GRID_KW = 10_000_000;
 
 export interface PowerState {
   settings: ElectriciteSettings;
@@ -80,10 +92,18 @@ export interface PowerState {
    * faute de vent ou de soleil ; réarmé quand le réseau gagne une batterie, une centrale pilotable ou le raccordement.
    */
   adviceAt?: number;
+  /** Installations isolées déjà signalées (« Reliez la centrale à une route ») ; réarmé quand elles sont reliées. */
+  isolatedNotified?: number[];
 }
 
 /** Conseil affiché quand un réseau uniquement éolien / solaire coupe faute de vent ou de soleil. */
 export const INTERMITTENT_ADVICE = 'La nuit sans vent, vos éoliennes et panneaux solaires ne produisent rien. Raccordez-vous au réseau voisin, construisez une centrale thermique ou des batteries.';
+
+/** Consigne affichée pour une installation isolée (notification, panneau). */
+export function isolatedHint(kind: FacilityKind): string {
+  const what = kind === 'poste' ? 'le poste' : kind === 'batterie' ? 'les batteries' : 'la centrale';
+  return `reliez ${what} à une route. Le courant suit les routes : tout le réseau routier connecté sera alimenté (une seule éolienne d'un parc suffit ; une ligne haute tension reste possible pour un site éloigné).`;
+}
 
 export function emptyPowerState(): PowerState {
   return {
@@ -201,6 +221,9 @@ export class PowerSystem {
     this.sentVersion = -1;
     this.coverageSent = -1;
     this.eventsSent = 0;
+    this.roadLayer = undefined;
+    this.roadGeomVersion = -1;
+    this.roadsSent = -1;
   }
 
   load(s: PowerState): void {
@@ -373,19 +396,52 @@ export class PowerSystem {
    * Raccordements locaux automatiques (réseau moyenne tension) : deux installations distantes de moins que le plus
    * petit de leurs rayons de distribution sont reliées sans ligne HT (capacité limitée, pertes plus fortes).
    */
-  localLinks(): [number, number, number][] {
+  localLinks(): [number, number, number, boolean][] {
     const facs = [...this.facilities.values()].sort((a, b) => a.id - b.id);
-    const out: [number, number, number][] = [];
+    const out: [number, number, number, boolean][] = [];
     for (let i = 0; i < facs.length; i++) {
       for (let j = i + 1; j < facs.length; j++) {
         const a = facs[i]!, b = facs[j]!;
         const d = this.lineLength(a, b);
-        // Même réseau routier (distribution le long des routes) ; repli : très proches l'une de l'autre.
+        // Même réseau routier (distribution le long des routes, non bloquante) ; repli : voisines (parc éolien).
         const ca = this.facComp.get(a.id) ?? -1, cb = this.facComp.get(b.id) ?? -1;
-        if ((ca >= 0 && ca === cb) || d <= LOCAL_FALLBACK_M) out.push([a.id, b.id, d]);
+        const sameRoad = ca >= 0 && ca === cb;
+        if (sameRoad || d <= FACILITY_LINK_M) out.push([a.id, b.id, d, sameRoad]);
       }
     }
     return out;
+  }
+
+  /**
+   * Installations isolées : leur îlot (lignes HT, même en panne, et raccordements automatiques) ne touche aucune
+   * route. Elles ne peuvent alimenter que les bâtiments à moins de 80 m : « Reliez la centrale à une route ».
+   */
+  private isolatedSet(): Set<number> {
+    const parent = new Map<number, number>([...this.facilities.keys()].map((id) => [id, id]));
+    const find = (a: number): number => { let r = a; while (parent.get(r)! !== r) r = parent.get(r)!; parent.set(a, r); return r; };
+    const join = (a: number, b: number): void => { if (!parent.has(a) || !parent.has(b)) return; const ra = find(a), rb = find(b); if (ra !== rb) parent.set(Math.max(ra, rb), Math.min(ra, rb)); };
+    for (const l of this.state.lines) join(l.a, l.b);
+    for (const [a, b] of this.localLinks()) join(a, b);
+    const linked = new Set<number>();
+    for (const f of this.facilities.values()) if ((this.facComp.get(f.id) ?? -1) >= 0) linked.add(find(f.id));
+    const out = new Set<number>();
+    for (const f of this.facilities.values()) if (!linked.has(find(f.id))) out.add(f.id);
+    return out;
+  }
+
+  /** Signale (une fois) les installations isolées nouvelles ; réarme celles qui ont été reliées. */
+  private reportIsolated(ctx: PluginContext, isolated: Set<number>): void {
+    const before = new Set(this.state.isolatedNotified ?? []);
+    const fresh = [...isolated].filter((id) => !before.has(id)).sort((a, b) => a - b);
+    const keep = [...isolated].sort((a, b) => a - b);
+    if (keep.length) this.state.isolatedNotified = keep; else delete this.state.isolatedNotified;
+    if (!fresh.length) return;
+    const f0 = this.facilities.get(fresh[0]!)!;
+    const msg = fresh.length === 1
+      ? `${f0.nameFr} n° ${f0.id} isolée : ${isolatedHint(f0.kind)}`
+      : `${fresh.length} installations électriques isolées : ${isolatedHint('thermique')}`;
+    this.event(ctx, 'site', msg, f0.id);
+    ctx.notify('warn', msg);
   }
 
   quoteLine(ctx: PluginContext, a: number, b: number): { ok: true; lengthM: number; cost: number; upkeepPerMonth: number } | { ok: false; code: string; message: string } {
@@ -917,10 +973,15 @@ export class PowerSystem {
 
     // 7. Vues (rendu / interface).
     const energized = this.energizedSet(avail);
+    const isolated = this.isolatedSet();
+    this.reportIsolated(ctx, isolated);
+    if (isolated.size) summary.isolatedFacilities = isolated.size;
+    this.updateRoads(ctx, fed, imp, summary);
     this.facilityViews = facs.map((f) => ({
       id: f.id, kind: f.kind, nameFr: f.nameFr, x: f.x, y: f.y, z: f.z, rot: f.rot,
       availableKw: avail.get(f.id)!, nominalKw: f.nominalKw, outputKw: report.outputOf.get(f.id) ?? 0,
       failedUntil: this.facilityState(f.id).failedUntil, siteOk: f.siteOk, energized: energized.has(f.id), radius: f.radius,
+      roadLinked: (this.facComp.get(f.id) ?? -1) >= 0, ...(isolated.has(f.id) ? { isolated: true } : {}),
       ...(f.kind === 'batterie' ? {
         storedKwh: Math.round(this.facilityState(f.id).storedKwh ?? 0), capacityKwh: f.capacityKwh,
         storageKw: Math.round(((charge.get(f.id) ?? 0) - (report.outputOf.get(f.id) ?? 0)) * 10) / 10,
@@ -983,7 +1044,8 @@ export class PowerSystem {
       busOf.set(f.id, J);
       if (imp && (this.facComp.get(f.id) ?? -1) >= 0) net.addEdge(impBus, J, this.importCapKw, 0);
       const D = net.addNode({ role: 'junction', x: f.x, z: f.z, ref: f.id, enabled: !(f.kind === 'poste' && failed) });
-      const trCap = f.kind === 'poste' ? f.nominalKw : Math.max(PLANT_DISTRIBUTION_MIN_KW, f.nominalKw);
+      // Installation reliée à une route : la distribution suit la voirie, sans plafond bloquant.
+      const trCap = (this.facComp.get(f.id) ?? -1) >= 0 ? ROAD_GRID_KW : f.kind === 'poste' ? f.nominalKw : Math.max(PLANT_DISTRIBUTION_MIN_KW, f.nominalKw);
       net.addEdge(J, D, trCap, 0.01);
       if (f.kind !== 'poste') {
         const cap = avail.get(f.id) ?? 0;
@@ -1013,7 +1075,7 @@ export class PowerSystem {
       if (l.failedUntil > 0) net.setEdgeEnabled(e, false);
       lineEdge.set(e, l.id);
     }
-    for (const [a, b, d] of this.localLinks()) net.addEdge(busOf.get(a)!, busOf.get(b)!, LOCAL_LINK_KW, Math.min(0.5, LOCAL_LINK_LOSS_PER_KM * (d / 1000)));
+    for (const [a, b, d, sameRoad] of this.localLinks()) net.addEdge(busOf.get(a)!, busOf.get(b)!, sameRoad ? ROAD_GRID_KW : LOCAL_LINK_KW, Math.min(0.5, LOCAL_LINK_LOSS_PER_KM * (d / 1000)));
     const r = m.networks.allocate(ELECTRICITE_NETWORK);
     for (const c of r.consumers) { const k = consumerKey.get(c.node); if (k) deliveredBy.set(k, c.delivered); }
     for (const p of r.producers) {
@@ -1025,6 +1087,73 @@ export class PowerSystem {
     for (const e of r.edges) { const l = lineEdge.get(e.edge); if (l !== undefined) lineLoad.set(l, e.load); }
     res.produced = r.produced; res.delivered = r.delivered; res.losses = r.losses;
     return res;
+  }
+
+  /* ---------------------- Réseau intégré aux routes (calque) ---------------------- */
+
+  private roadGeomVersion = -1;
+  private roadIds = new Int32Array(0);
+  private roadOffsets = new Int32Array(1);
+  private roadPoints = new Float32Array(0);
+  private roadComp = new Int32Array(0);
+  private roadLayer: ElectriciteRoads | undefined;
+  private roadsSent = -1;
+
+  /**
+   * Routes alimentées : un tronçon l'est si son réseau routier (composante connexe) touche une installation reliée
+   * à une centrale en service (pannes comprises, indépendamment du vent ou du soleil de l'heure), ou si le
+   * raccordement au réseau voisin est actif (il dessert toute la voirie).
+   */
+  private updateRoads(ctx: PluginContext, fed: Set<number>, imp: boolean, summary: ElectriciteSummary): void {
+    const net = ctx.roads;
+    if (this.roadGeomVersion !== net.version) {
+      this.roadGeomVersion = net.version;
+      const ids = net.segmentIds().sort((a, b) => a - b);
+      const offsets = new Int32Array(ids.length + 1);
+      const comp = new Int32Array(ids.length);
+      const pts: number[] = [];
+      for (let s = 0; s < ids.length; s++) {
+        const id = ids[s]!;
+        comp[s] = this.nodeComp.get(net.endpoints(id)[0]) ?? -1;
+        const c = net.curve(id);
+        const k = Math.max(2, Math.min(9, Math.ceil(net.length(id) / 24) + 1));
+        offsets[s] = pts.length / 2;
+        for (let t = 0; t < k; t++) {
+          const u = t / (k - 1), v = 1 - u;
+          pts.push(v * v * v * c[0]! + 3 * v * v * u * c[2]! + 3 * v * u * u * c[4]! + u * u * u * c[6]!,
+            v * v * v * c[1]! + 3 * v * v * u * c[3]! + 3 * v * u * u * c[5]! + u * u * u * c[7]!);
+        }
+      }
+      offsets[ids.length] = pts.length / 2;
+      this.roadIds = Int32Array.from(ids); this.roadOffsets = offsets; this.roadPoints = Float32Array.from(pts); this.roadComp = comp;
+      this.roadLayer = undefined;
+    }
+    const live = new Set<number>();
+    for (const f of this.facilities.values()) {
+      const c = this.facComp.get(f.id) ?? -1;
+      if (c >= 0 && fed.has(f.id) && !(f.kind === 'poste' && this.facilityState(f.id).failedUntil > 0)) live.add(c);
+    }
+    const n = this.roadIds.length;
+    const powered = new Uint8Array(n);
+    let on = 0;
+    for (let i = 0; i < n; i++) if (imp || live.has(this.roadComp[i]!)) { powered[i] = 1; on++; }
+    if (n) { summary.roadsPowered = on; summary.roadsUnpowered = n - on; }
+    const prev = this.roadLayer;
+    if (prev && prev.powered.length === n && prev.powered.every((v, k) => v === powered[k])) return;
+    this.roadLayer = { ids: this.roadIds, offsets: this.roadOffsets, points: this.roadPoints, powered, version: Math.max(prev?.version ?? 0, this.roadsSent) + 1 };
+  }
+
+  /** Tronçon alimenté (réseau intégré aux routes) ; faux pour un tronçon inconnu. */
+  roadPowered(segId: number): boolean {
+    const r = this.roadLayer;
+    if (!r) return false;
+    let lo = 0, hi = r.ids.length - 1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1, v = r.ids[mid]!; if (v === segId) return r.powered[mid] === 1; if (v < segId) lo = mid + 1; else hi = mid - 1; }
+    return false;
+  }
+
+  private cloneRoads(r: ElectriciteRoads): ElectriciteRoads {
+    return { ids: r.ids.slice(), offsets: r.offsets.slice(), points: r.points.slice(), powered: r.powered.slice(), version: r.version };
   }
 
   /** Calque « réseau électrique » : état par cellule de la grille municipale. */
@@ -1198,6 +1327,7 @@ export class PowerSystem {
     };
     if (this.summaryCache) d.summary = this.summaryCache;
     if (this.coverage) d.coverage = { ...this.coverage, cells: this.coverage.cells.slice() };
+    if (this.roadLayer) d.roads = this.cloneRoads(this.roadLayer);
     return d;
   }
 
@@ -1215,6 +1345,10 @@ export class PowerSystem {
       this.coverageSent = this.coverage.version;
       d.coverage = { ...this.coverage, cells: this.coverage.cells.slice() };
     }
+    if (this.roadLayer && this.roadLayer.version !== this.roadsSent) {
+      this.roadsSent = this.roadLayer.version;
+      d.roads = this.cloneRoads(this.roadLayer);
+    }
     return d;
   }
 
@@ -1222,6 +1356,7 @@ export class PowerSystem {
     this.sentVersion = this.version;
     this.eventsSent = this.state.events.length;
     this.coverageSent = this.coverage?.version ?? -1;
+    this.roadsSent = this.roadLayer?.version ?? -1;
   }
 
   /** Forçage du vent (tests, démonstration). */

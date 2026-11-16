@@ -84,6 +84,13 @@ export interface FacilityView {
   storedKwh?: number;
   capacityKwh?: number;
   storageKw?: number;
+  /** À moins de 80 m d'une route : distribue le courant sur tout le réseau routier connecté (absent des anciens deltas). */
+  roadLinked?: boolean;
+  /**
+   * Installation isolée : ni route à portée, ni installation reliée à une route (ligne HT ou voisine proche) —
+   * « Reliez la centrale à une route ». Vrai seulement quand c'est le cas.
+   */
+  isolated?: boolean;
 }
 
 /** Bilan des batteries de stockage (absent sans batterie). */
@@ -176,6 +183,11 @@ export interface ElectriciteSummary {
    * pilotable (thermique, hydro) ni raccordement au réseau voisin (absent sinon).
    */
   intermittentOnly?: boolean;
+  /** Installations isolées (voir `FacilityView.isolated`) ; absent s'il n'y en a aucune. */
+  isolatedFacilities?: number;
+  /** Tronçons de route alimentés / non alimentés (réseau intégré aux routes) ; absent sans route. */
+  roadsPowered?: number;
+  roadsUnpowered?: number;
 }
 
 /** Réglages du joueur. */
@@ -236,6 +248,19 @@ export interface ElectriciteCoverage {
   version: number;
 }
 
+/**
+ * Réseau électrique intégré aux routes (calque) : tracé de chaque tronçon (polyligne x, z) et état. `powered[i]` = 1
+ * si le tronçon `ids[i]` appartient à un réseau routier relié à une installation en service (ou au réseau voisin).
+ * Les points du tronçon i sont `points[2·offsets[i] .. 2·offsets[i+1])`. Envoyé seulement quand il change.
+ */
+export interface ElectriciteRoads {
+  ids: Int32Array;
+  offsets: Int32Array;
+  points: Float32Array;
+  powered: Uint8Array;
+  version: number;
+}
+
 /** Charge utile de `delta.ext.electricite` (envoyée quand quelque chose a changé). */
 export interface ElectriciteDelta {
   summary?: ElectriciteSummary;
@@ -245,6 +270,8 @@ export interface ElectriciteDelta {
   budget?: ElectriciteBudget;
   events?: ElectriciteEvent[];
   coverage?: ElectriciteCoverage;
+  /** Routes alimentées / non alimentées (calque) : seulement quand elles changent. */
+  roads?: ElectriciteRoads;
   /** Bâtiments coupés (identifiants, triés). */
   cutIds?: number[];
   /** Mode d'hébergement du contrat municipal : `service` (module `municipal` enregistré) ou `integre`. */

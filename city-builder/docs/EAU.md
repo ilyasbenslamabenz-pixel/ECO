@@ -41,6 +41,14 @@ nœud. Réseaux `eau` (producteurs : usines coût 1, pompages sans usine coût 2
 (exutoires : stations d'épuration coût 1, émissaires coût 10 ; consommateurs = eaux usées). Topologie reconstruite
 quand la voirie ou les bâtiments changent.
 
+### Canalisations intégrées aux routes (rappel, 16/11)
+
+Il n'y a **aucun tuyau à poser** : chaque route porte une conduite d'eau et un égout. Une station de pompage, une
+usine ou une station d'épuration à moins de 80 m d'une route dessert tout le réseau routier connecté ; un bâtiment
+au bord d'une route desservie est branché automatiquement. Installation à plus de 80 m de toute route : alerte du
+panneau et notification unique « … isolée : reliez-la à une route… » (réarmée quand elle est reliée puis isolée de
+nouveau). Le calque « Eau : desserte » montre les conduites alimentées (bleu) ou à sec (gris) le long des voies.
+
 ## 3. Pas horaire
 
 1. Demande par bâtiment : (0,05 + 0,15 m³ × habitants + emplois × 0,3 industrie / 0,04 commerce / 0,06 public)

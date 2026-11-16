@@ -150,6 +150,8 @@ export class WaterSystem {
   month: WaterBudget = emptyBudget();
   lastBudget: WaterBudget | null = null;
   alerts: string[] = [];
+  /** Installations sans route déjà signalées (notification unique, réarmée quand elles sont reliées). */
+  private isolatedNotified = new Set<number>();
 
   private muni: Municipal | null = null;
   private river: RiverRouter | null = null;
@@ -814,6 +816,7 @@ export class WaterSystem {
     if (this.history.length > HISTORY) this.history.splice(0, this.history.length - HISTORY);
     this.accountHour(bal, fac);
     this.updateAlerts(bal, fac);
+    this.reportIsolated(ctx, fac);
     this.traceEffects(ctx, bal, at);
     this.version++;
   }
@@ -943,6 +946,22 @@ export class WaterSystem {
     add('entretien:canalisations', (this.pipeKm * PIPE_UPKEEP_PER_KM * (s.fundingWater + s.fundingSewer) / 2) / (30 * 24), 'expense');
   }
 
+  /**
+   * Canalisations intégrées aux routes : une installation à plus de 80 m de toute route ne dessert rien. Notification
+   * unique « Reliez … à une route » (réarmée quand elle est reliée puis isolée de nouveau).
+   */
+  private reportIsolated(ctx: PluginContext, fac: Facility[]): void {
+    const now = new Set<number>();
+    const fresh: Facility[] = [];
+    for (const f of fac) if (f.road < 0) { now.add(f.id); if (!this.isolatedNotified.has(f.id)) fresh.push(f); }
+    this.isolatedNotified = now;
+    if (!fresh.length) return;
+    const f0 = fresh[0]!;
+    ctx.notify('warn', fresh.length === 1
+      ? `${WATER_FACILITIES[f0.kind].nameFr} n° ${f0.id} isolée : reliez-la à une route. Les canalisations suivent les routes : tout le réseau routier connecté sera desservi.`
+      : `${fresh.length} installations d'eau isolées : reliez-les à une route. Les canalisations suivent les routes : tout le réseau routier connecté sera desservi.`);
+  }
+
   private updateAlerts(b: WaterBalance, fac: Facility[]): void {
     const a: string[] = [];
     const has = (k: WaterFacilityKind): boolean => fac.some((f) => f.kind === k);
@@ -956,7 +975,7 @@ export class WaterSystem {
     if (b.sewageRaw + b.sewageOverflow > 0.01) a.push(`Rejets d'eaux usées non traitées : ${(b.sewageRaw + b.sewageOverflow).toFixed(1)} m³/h.`);
     if (this.settings.fundingSewer < 1 && has('epuration')) a.push('Station d\'épuration sous-financée : épuration partielle.');
     if (this.settings.fundingWater < 1) a.push('Service de l\'eau sous-financé : production réduite.');
-    for (const f of fac) if (f.road < 0) a.push(`${WATER_FACILITIES[f.kind].nameFr} n° ${f.id} non raccordée (aucune route à 80 m).`);
+    for (const f of fac) if (f.road < 0) a.push(`${WATER_FACILITIES[f.kind].nameFr} n° ${f.id} isolée : reliez-la à une route (aucune route à 80 m ; les canalisations suivent les routes).`);
     for (const f of fac) if ((f.kind === 'epuration' || f.kind === 'emissaire') && f.outfallCell < 0) a.push(`${WATER_FACILITIES[f.kind].nameFr} n° ${f.id} loin de l'eau : rejet au sol.`);
     this.alerts = a;
   }

@@ -69,9 +69,10 @@ const CSS = `
 
 function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta): string {
   if (!s) {
-    return `<p class="muted">Aucune installation électrique. Construisez une centrale (onglet Énergie) : centrale thermique, éolienne,
-      ferme solaire ou barrage (au bord d'un cours d'eau), des batteries de stockage pour la nuit, puis des postes de
-      transformation reliés par des lignes haute tension. Pour démarrer, le raccordement au réseau voisin suffit.</p>`;
+    return `<p class="muted">Aucune installation électrique. Construisez une centrale (onglet Énergie) au bord d'une route :
+      le courant suit les routes et alimente tous les bâtiments du réseau routier connecté, sans rien poser d'autre.
+      Centrale thermique, éolienne, ferme solaire ou barrage (au bord d'un cours d'eau), batteries pour la nuit ; les
+      lignes haute tension ne servent qu'à relier un site éloigné. Pour démarrer, le raccordement au réseau voisin suffit.</p>`;
   }
   const reserve = s.exportableKw;
   const totalOut = s.bySource.reduce((t, b) => t + b.outputKw, 0) || 1;
@@ -81,7 +82,7 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
   const cls = s.byClass.filter((b) => b.buildings > 0).map((b) => `<tr><td>${esc(CLASS_LABELS_FR[b.cls])}</td><td>${fmtPower(b.demandKw)}</td><td>${fmtPower(b.deliveredKw)}</td>
       <td class="${b.cut ? 'warn' : 'ok'}">${b.cut}</td><td class="${b.unlinked ? 'warn' : 'muted'}">${b.unlinked}</td></tr>`).join('');
   const bud = st.budget;
-  return `${zeroReason(s, st)}${raccordCta(s, st)}
+  return `${isolatedWarning(s, st)}${zeroReason(s, st)}${raccordCta(s, st)}
   <div class="kpis">
     <div class="kpi"><span>Production</span><b data-k="production">${fmtPower(s.producedKw)}</b><span>dispo. ${fmtPower(s.availableKw)}</span></div>
     <div class="kpi"><span>Consommation</span><b data-k="demande">${fmtPower(s.demandKw)}</b><span>livré ${fmtPower(s.deliveredKw)} · pertes ${fmtPower(s.lossesKw)}</span></div>
@@ -135,6 +136,16 @@ function zeroReason(s: ElectriciteSummary, st: ElectriciteDelta): string {
   return `<p class="warn" data-k="zero-raison" style="margin:4px 0 8px">⚠ Production à 0 : ${esc(why)}</p>`;
 }
 
+/** Installations isolées (aucune route, ni ligne vers une installation reliée) : « Reliez la centrale à une route ». */
+function isolatedWarning(s: ElectriciteSummary, st: ElectriciteDelta): string {
+  const iso = (st.facilities ?? []).filter((f) => f.isolated);
+  if (!iso.length) return '';
+  const names = iso.slice(0, 4).map((f) => `${KIND_FR[f.kind]} n° ${f.id}`).join(', ') + (iso.length > 4 ? '…' : '');
+  const roads = typeof s.roadsUnpowered === 'number' && s.roadsUnpowered > 0 ? ` ${s.roadsUnpowered} tronçon${s.roadsUnpowered > 1 ? 's' : ''} de route sans courant (rouge sur le calque).` : '';
+  return `<p class="warn" data-k="isolee" style="margin:4px 0 8px">⚠ Reliez la centrale à une route : ${esc(names)} ${iso.length > 1 ? 'ne touchent' : 'ne touche'} aucune route.
+    Le courant suit les routes : une installation à moins de 80 m d'une route alimente tout le réseau routier connecté (une éolienne d'un parc suffit).${esc(roads)}</p>`;
+}
+
 /** Bouton direct « Se raccorder au réseau voisin » : déficit (coupures faute de production) et raccordement coupé. */
 function raccordCta(s: ElectriciteSummary, st: ElectriciteDelta): string {
   if (st.settings?.raccordement === true || !(s.shortfallKw > 0 || s.cut > 0)) return '';
@@ -182,19 +193,19 @@ function renderNetwork(st: ElectriciteDelta): string {
   const lines = st.lines ?? [];
   if (!facs.length) return '';
   const fRows = facs.map((f) => {
-    const state = f.failedUntil > 0 ? `<span class="warn">panne</span>` : !f.siteOk ? `<span class="warn">site invalide</span>` : f.energized ? `<span class="ok">en service</span>` : `<span class="warn">hors réseau</span>`;
+    const state = f.failedUntil > 0 ? `<span class="warn">panne</span>` : !f.siteOk ? `<span class="warn">site invalide</span>` : f.isolated ? `<span class="warn" title="Reliez-la à une route">isolée (pas de route)</span>` : f.energized ? `<span class="ok">en service</span>` : `<span class="warn">hors réseau</span>`;
     const out = f.kind === 'poste' ? `<span class="muted">${fmtPower(f.nominalKw)}</span>`
       : f.kind === 'batterie' ? `${f.capacityKwh ? Math.round((100 * (f.storedKwh ?? 0)) / f.capacityKwh) : 0} % <span class="muted">${(f.storageKw ?? 0) > 0 ? '+' : ''}${fmtPower(f.storageKw ?? 0)}</span>`
       : fmtPower(f.outputKw);
     return `<tr><td>${esc(KIND_FR[f.kind])} n° ${f.id}</td><td>${out}</td><td>${state}</td>
-      <td><button data-act="auto" data-id="${f.id}" title="Ligne HT vers l'installation la plus proche">Relier</button></td></tr>`;
+      <td><button data-act="auto" data-id="${f.id}" title="Facultatif : ligne HT vers l'installation la plus proche (le courant suit déjà les routes)">Relier</button></td></tr>`;
   }).join('');
   const lRows = lines.map((l) => `<tr><td>Ligne n° ${l.id} <span class="muted">(${l.a} – ${l.b})</span></td><td>${nf1.format(l.lengthM / 1000)} km</td>
       <td class="${l.failedUntil > 0 ? 'warn' : l.load > 0.9 ? 'warn' : ''}">${l.failedUntil > 0 ? 'panne' : `${Math.round(l.load * 100)} %`}</td>
       <td><button data-act="rm-line" data-id="${l.id}">Démolir</button></td></tr>`).join('');
   const opts = facs.map((f) => `<option value="${f.id}">${esc(KIND_FR[f.kind])} n° ${f.id}</option>`).join('');
   return `<h4>Installations</h4><table>${fRows}</table>
-  <h4>Lignes haute tension</h4>
+  <h4>Lignes haute tension <span class="muted">(facultatives)</span></h4>
   ${lines.length ? `<table>${lRows}</table>` : '<p class="muted">Aucune ligne : le courant suit les routes ; une ligne haute tension relie une installation à un réseau routier séparé (centrale éloignée, hameau).</p>'}
   <div class="row"><select id="elec-a">${opts}</select><select id="elec-b">${opts}</select></div>
   <div class="row"><button data-act="quote">Devis</button><button class="primary" data-act="build">Construire la ligne</button><span id="elec-quote" class="muted"></span></div>`;

@@ -26,6 +26,7 @@ import type { IndicatorGrid } from '../municipal/grid';
 import type { PluginContext } from '../plugins/types';
 import { ATTACH_RADIUS, TruckGraph, type AttachRequest } from './graph';
 import { ROAD_KINDS } from '../roads/types';
+import { isUnstaffedUtility } from '../../shared/utility-buildings';
 
 export const NUISANCE_ID = 'dechets:nuisance' as const;
 const MIN_PER_DAY = 1440;
@@ -230,6 +231,9 @@ export class WasteSystem {
       const id = st.id[i]!;
       live.add(id);
       const a = ctx.buildings.assetOf(id);
+      // Ouvrages techniques sans occupants (éoliennes, postes, pompes, châteaux d'eau…) : aucun déchet. Un bac hérité
+      // d'une ancienne partie est retiré (sinon « bacs pleins » à vie au-dessus de chaque éolienne).
+      if (isUnstaffedUtility(a)) { this.bins.delete(id); continue; }
       const jobs = st.workers[i]!, res = st.residents[i]!;
       const kgDay = jobs <= 0 && res <= 0 ? 0 : res * P.kgPerResident + jobs * (P.kgPerJob[a?.category ?? ''] ?? P.kgPerJobDefault);
       if (kgDay <= 0) { const b0 = this.bins.get(id); if (b0) b0.rate = 0; continue; }
