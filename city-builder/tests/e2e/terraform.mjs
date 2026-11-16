@@ -145,7 +145,7 @@ try {
   // Niveaux relevés pendant le remplissage (vitesse ×2), puis retenue pleine.
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 2 }));
   const levels = [];
-  const st3 = await waitHydro((st) => { if (st.dams[0]?.level != null) levels.push(Math.round(st.dams[0].level * 10) / 10); return st.dams[0]?.full; }, 240000);
+  const st3 = await waitHydro((st) => { if (Number.isFinite(st.dams[0]?.level)) levels.push(Math.round(st.dams[0].level * 10) / 10); return st.dams[0]?.full; }, 240000);
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
   check(levels.length >= 2 && levels[0] < levels[levels.length - 1], 'le niveau monte pendant le remplissage', levels.slice(0, 12));
   const d = st3.dams[0];
@@ -160,7 +160,7 @@ try {
   // 6. Sauvegarde puis rechargement : source, barrage et retenue conservés.
   await page.evaluate(() => window.__aube.saveSlot('terraform-e2e'));
   await page.evaluate(() => window.__aube.loadSlot('terraform-e2e'));
-  const st4 = await waitHydro((st) => st.dams.length === 1 && st.dams[0].level !== null, 60000);
+  const st4 = await waitHydro((st) => st.dams.length === 1 && Number.isFinite(st.dams[0].level), 60000);
   check(st4.sources.length === 1 && st4.dams.length === 1 && Math.abs(st4.dams[0].level - d.level) < 0.01, 'après rechargement : source, barrage et retenue identiques', st4.dams[0]);
   check(errors.length === 0, 'aucune erreur de page', errors.slice(0, 5));
   await page.close();

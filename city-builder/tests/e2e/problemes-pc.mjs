@@ -3,8 +3,8 @@
  *  - même largeur que le bloc mini-carte et alignée dessus ;
  *  - au plus 3 lignes, triées par gravité ;
  *  - un clic ouvre le bon tableau de bord (et centre la caméra pour un problème localisé).
- * Ville réelle : petite ville simulée 2 mois par la vraie simulation (tests/e2e/ui-history-fixture.ts), sans centrale
- * électrique : l'alerte « sans électricité » existe donc. Captures : tests/e2e/out/problemes/*.png.
+ * Ville réelle : petite ville simulée 2 mois par la vraie simulation (tests/e2e/ui-history-fixture.ts) : chômage,
+ * couverture police et déficit y sont réels. Chaque ligne affichée est cliquée et vérifiée. Captures : tests/e2e/out/problemes/*.png.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -47,25 +47,36 @@ try {
   check(g.rows.length >= 1 && g.rows.length <= 3, `1 à 3 lignes (${g.rows.length} : ${g.rows.map((x) => x.text).join(' | ')})`);
   const order = g.rows.map((x) => (x.sev === 'urgent' ? 0 : 1));
   check(order.every((v, i) => i === 0 || order[i - 1] <= v), `triées par gravité (${g.rows.map((x) => x.sev).join(', ')})`);
-  check(g.rows.some((x) => x.id === 'power'), `alerte « sans électricité » présente (${g.rows.map((x) => x.id).join(', ')})`);
   await page.screenshot({ path: join(out, 'problemes-1280.png') });
 
-  // Clic sur « sans électricité » : tableau de bord Énergie ouvert, caméra centrée sur le groupe.
-  const before = await page.evaluate(() => window.__aube.cameraPose?.() ?? null);
-  await page.evaluate(() => document.querySelector('#problems .pb-row[data-problem="power"]')?.click());
-  await page.waitForTimeout(800);
-  const after = await page.evaluate(() => ({
-    open: !document.querySelector('#dash-panel').classList.contains('hidden'),
-    title: document.querySelector('#dash-title')?.textContent ?? '',
-    active: document.querySelector('#sidebar [data-dash="energy"]')?.classList.contains('active') ?? false,
-    pose: window.__aube.cameraPose?.() ?? null,
-  }));
-  check(after.open && /Énergie/.test(after.title), `le clic ouvre le tableau de bord Énergie (« ${after.title} »)`);
-  check(after.active, 'entrée Énergie du rail active');
-  const moved = before && after.pose ? Math.hypot((after.pose.targetX ?? 0) - (before.targetX ?? 0), (after.pose.targetZ ?? 0) - (before.targetZ ?? 0)) : 0;
-  check(!before || moved > 1, `caméra centrée sur les bâtiments touchés (déplacement ${Math.round(moved)} m)`);
-  await render(page, 2);
-  await page.screenshot({ path: join(out, 'problemes-clic-energie.png') });
+  // Clic sur chaque ligne : le bon tableau de bord s'ouvre ; un problème localisé (alerte) recentre la caméra.
+  const EXPECT = {
+    power: { sel: '#dash-panel', title: /Énergie/ }, water: { sel: '#dash-panel', title: /Eau/ }, waste: { sel: '#dash-panel', title: /Déchets/ },
+    isolated: { sel: '#dash-panel', title: /Déchets/ }, fire: { sel: '#dash-panel', title: /Services/ }, ruin: { sel: '#dash-panel', title: /Services/ },
+    crime: { sel: '#dash-panel', title: /Services/ }, deficit: { sel: '#finance-panel', title: /Finances/ }, chomage: { sel: '#pop-panel', title: /Population/ },
+    trafic: { sel: '#dash-panel', title: /Transports/ }, 'couverture-police': { sel: '#dash-panel', title: /Services/ },
+    'couverture-fire': { sel: '#dash-panel', title: /Services/ }, 'couverture-health': { sel: '#dash-panel', title: /Services/ },
+  };
+  const ids = g.rows.map((x) => x.id);
+  for (const id of ids) {
+    const exp = EXPECT[id];
+    if (!exp) { check(false, `problème « ${id} » sans destination connue du test`); continue; }
+    const before = await page.evaluate(() => window.__aube.cameraPose?.() ?? null);
+    await page.evaluate((i) => document.querySelector(`#problems .pb-row[data-problem="${i}"]`)?.click(), id);
+    await page.waitForTimeout(800);
+    const r = await page.evaluate((sel) => {
+      const p = document.querySelector(sel);
+      return { open: !!p && !p.classList.contains('hidden'), title: p?.querySelector('h3')?.textContent ?? '', pose: window.__aube.cameraPose?.() ?? null };
+    }, exp.sel);
+    check(r.open && exp.title.test(r.title), `clic sur « ${id} » : ${exp.sel} ouvert (« ${r.title} »)`);
+    if (id === ids[0]) { await render(page, 2); await page.screenshot({ path: join(out, `problemes-clic-${id}.png`) }); }
+    if (['power', 'water', 'waste', 'isolated', 'fire', 'ruin', 'crime', 'road'].includes(id) && before && r.pose) {
+      const moved = Math.hypot(r.pose.targetX - before.targetX, r.pose.targetZ - before.targetZ);
+      check(moved > 1, `« ${id} » : caméra centrée sur les bâtiments touchés (${Math.round(moved)} m)`);
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
   const errs = errors.filter((e) => !/favicon/.test(e));
   check(errs.length === 0, `aucune erreur de page (${errs.slice(0, 3).join(' ; ')})`);
   await ctx.close();
