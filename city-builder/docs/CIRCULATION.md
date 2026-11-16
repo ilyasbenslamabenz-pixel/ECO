@@ -156,3 +156,58 @@ d'affichage (les images forcées par `renderNow` la figent). Sonde e2e : `global
 `node tests/circulation/captures.mjs [--v=2000] [--demand=x] [--tag=-suffixe]` (après `npm run build`) :
 ville de charge, carrefour le plus chargé, véhicule en plein changement de voie (vue rue + aérienne), carte de
 congestion. Images commentées : `docs/captures-circulation/` (voir docs/requests/circulation-reprise.md).
+
+## 10. Reconstruction incrémentale du graphe
+
+Une édition du réseau (tracé, suppression, découpe, mise à niveau, giratoire, réglage de carrefour) ne recalcule plus
+le graphe de circulation entier :
+
+- **Conversion** (`inputFromRoadNetwork(net, 6, cache)`, `RoadInputCache` tenu par le monde) : reculs des carrefours
+  repris tant que les tronçons incidents sont les mêmes instances ; l'entrée d'un tronçon inchangé (même instance, même
+  profil en long, même anneau, mêmes reculs) est redonnée à l'identique (même objet).
+- **Graphe** (`new TrafficGraph(input, cache)`, cache par identifiant de nœud tenu par `TrafficSystem`) : tout ce qui
+  se calcule par carrefour (régime, phases, bras, branches et passages, connecteurs et leur géométrie, conflits,
+  transitions d'arc à arc) est mémorisé avec sa clé : réglage du nœud, entrées des tronçons incidents dans l'ordre
+  (identité, sinon égalité de valeur), rognage des nœuds voisins. Seuls les carrefours dont la clé change sont
+  recalculés ; le reste est recopié par un assemblage linéaire (tronçons, voies, tableaux CSR). Les polylignes
+  converties sont mémorisées par tableau de points (les entrées ne doivent pas être modifiées après coup).
+- **Conflits** : élagage exact par boîtes englobantes (connecteurs puis segments séparés de plus que le gabarit de
+  2,2 m), résultat inchangé ; un carrefour = un seul tampon mémoire (moins d'allocations au premier calcul).
+- **Itinéraires** : un véhicule garde son itinéraire s'il existe encore tel quel (mêmes tronçons, manœuvres toujours
+  autorisées) ; seuls les autres sont recalculés par A\* (auparavant : A\* pour chaque véhicule à chaque reconstruction).
+- **Accès des bâtiments** : seuls les bâtiments à moins de `accessDistance` d'un tronçon ajouté, modifié ou retiré
+  sont reprojetés (au-delà de 256 tronçons modifiés : recalcul complet).
+- Diagnostic : `TrafficSystem.lastRebuild` (durées conversion / graphe / reconstruction / accès, carrefours
+  recalculés / repris, itinéraires gardés / recalculés, accès repris / recalculés).
+
+**Équivalence** (`tests/circulation/graphe-incremental.test.ts`) : 4 graines × 30 éditions aléatoires (impasses,
+traversées avec découpes, suppressions, changements de type, inversion de sens, giratoires, réglages de carrefour,
+viaducs) sur terrain en relief ; après chaque édition, le graphe du système est identique, tableau par tableau, au graphe
+recalculé sans aucune mémoire. Vérifié aussi en développement contre l'implémentation précédente (mêmes tableaux sur
+ces réseaux et sur les quadrillages de 2 500 et 10 000 tronçons). Accès des bâtiments identiques à un calcul complet
+(hors égalité exacte de distance entre deux tronçons, où l'ordre de parcours peut différer).
+
+Non fait : construction étalée sur plusieurs pas (le premier pas après chargement reste bloquant, mais 5 à 11 fois plus
+court, voir ci-dessous) ; mise à jour en place des tableaux (l'assemblage reste linéaire en taille de réseau).
+
+### Mesures (`npm run bench:graphe -- --roads=N`, tests/perf/traffic-graph-bench.ts)
+
+Quadrillage de 90 m (une ligne sur 6 en avenue) tracé par `buildRoad`, bâtiments le long des rues, véhicules injectés,
+puis 40 éditions tirées au sort (graine 7, mêmes éditions avant / après), chacune suivie d'un pas mesuré ; puis
+sauvegarde -> `fromSave` -> premier pas. Machine : Intel Xeon @ 2,30 GHz × 4 (conteneur partagé, charge moyenne 5 à 7
+pendant les mesures : chiffres bruités, p95 surtout), 16 Go, Node v22.23.4, tsx (sans minification). « Avant » =
+commit 3743fb8, même script. Médiane / p95 en ms.
+
+| Réseau | | Pas après édition | dont graphe | Premier pas après chargement |
+|---|---|---|---|---|
+| 2 500 tronçons, 1 730 nœuds, 353 véhicules | avant | 116,9 / 184,7 | — | 1 027 |
+| | après (1re mesure) | 23,6 / 62,1 | 13,5 / 43,3 | 89 (graphe 66) |
+| | après (2e mesure, machine plus chargée) | 21,9 / 166,0 | 10,4 / 87,6 | 224 (graphe 194) |
+| 10 001 tronçons, 5 800 nœuds, 1 500 véhicules | avant | 1 533,5 / 1 679,8 | — | 5 109 |
+| | après | 78,4 / 208,7 | 29,2 / 95,7 | 473 (graphe 407) |
+
+Par édition : ≈ 5 carrefours recalculés sur 1 740 (resp. 5 800). Sur l'ensemble des éditions : itinéraires gardés
+10 018 / recalculés 99 (2 500), 49 110 / 297 (10 000) ; accès repris 13 908 / recalculés 505 (2 500). À 10 000 tronçons,
+le reste du pas après édition se partage entre la conversion (≈ 9 ms), le report des véhicules et la grille des
+tronçons (≈ 29 ms hors graphe dans la reconstruction) et le pas ordinaire (≈ 6 ms). `fromSave` (≈ 6 s) est dominé par
+la génération du terrain (érosion), hors du périmètre de ce travail.

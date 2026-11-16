@@ -50,6 +50,7 @@
     "captures": "node tests/e2e/captures.mjs",
     "circulation:bench": "tsx tests/circulation/bench.ts",
     "bench:population": "tsx tests/perf/population-bench.ts",
+    "bench:graphe": "tsx tests/perf/traffic-graph-bench.ts",
     "power:build": "tsx tools/power/build.ts",
     "e2e:electricite": "node tests/electricite/e2e.mjs",
     "waste:build": "tsx tools/waste/build.ts",

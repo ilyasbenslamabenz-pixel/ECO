@@ -117,6 +117,61 @@ export function demandShare(hour: number): number {
   return 0.004;
 }
 
+/** Au-delà de ce nombre de tronçons modifiés, tous les accès des bâtiments sont recalculés. */
+const MAX_CHANGED_BOXES = 256;
+
+/**
+ * Boîtes (x0, z0, x1, z1) des tronçons ajoutés, modifiés (polyligne ou voies) ou retirés entre deux graphes ; null si
+ * trop nombreux (recalcul complet des accès).
+ */
+function changedEdgeBoxes(old: TrafficGraph, g: TrafficGraph): Float64Array | null {
+  const out: number[] = [];
+  const box = (h: TrafficGraph, e: number): void => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let p = h.edgePtStart[e]!; p < h.edgePtStart[e + 1]!; p++) {
+      const x = h.ptX[p]!, z = h.ptZ[p]!;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    out.push(x0, z0, x1, z1);
+  };
+  for (let e = 0; e < g.edgeCount && out.length <= 4 * MAX_CHANGED_BOXES; e++) {
+    const oe = old.edgeIndex(g.edgeId[e]!);
+    let same = oe >= 0 && g.edgeLanes[e * 2] === old.edgeLanes[oe * 2] && g.edgeLanes[e * 2 + 1] === old.edgeLanes[oe * 2 + 1];
+    if (same) {
+      const p0 = g.edgePtStart[e]!, n = g.edgePtStart[e + 1]! - p0, q0 = old.edgePtStart[oe]!;
+      same = n === old.edgePtStart[oe + 1]! - q0;
+      for (let k = 0; same && k < n; k++) same = g.ptX[p0 + k] === old.ptX[q0 + k] && g.ptZ[p0 + k] === old.ptZ[q0 + k];
+    }
+    if (!same) box(g, e);
+  }
+  for (let oe = 0; oe < old.edgeCount && out.length <= 4 * MAX_CHANGED_BOXES; oe++) if (g.edgeIndex(old.edgeId[oe]!) < 0) box(old, oe);
+  return out.length > 4 * MAX_CHANGED_BOXES ? null : Float64Array.from(out);
+}
+
+/**
+ * Itinéraire précédent (paires tronçon, sens) reporté sur le nouveau graphe s'il est encore praticable : il part de
+ * `from`, finit sur `to`, et chaque manœuvre existe toujours. Écrit dans `out` et renvoie sa longueur, ou −1.
+ */
+function keptRoute(g: TrafficGraph, route: readonly number[], from: number, to: number, out: Int32Array, off: number, maxLen: number): number {
+  const n = route.length >> 1;
+  if (n < 1 || n > maxLen) return -1;
+  let prev = -1;
+  for (let i = 0; i < n; i++) {
+    const e = g.edgeIndex(route[i * 2]!);
+    if (e < 0) return -1;
+    const a = e * 2 + route[i * 2 + 1]!;
+    if (g.arcFirstLane[a]! < 0) return -1;
+    if (prev >= 0) {
+      let ok = false;
+      for (let k = g.arcNextStart[prev]!; k < g.arcNextStart[prev + 1]! && !ok; k++) ok = g.arcNext[k] === a;
+      if (!ok) return -1;
+    }
+    out[off + i] = a;
+    prev = a;
+  }
+  return out[off] === from && out[off + n - 1] === to ? n : -1;
+}
+
 /** État sauvegardé d'un carrefour à feux (par identifiant de nœud du monde). */
 export interface SignalSnapshot { nodeId: number; phase: number; stage: number; timer: number }
 
@@ -253,6 +308,22 @@ export class TrafficSystem {
   private networkInput: TrafficNetworkInput | null = null;
   private networkDirty = false;
   private buildingsDirty = false;
+  /**
+   * Projection de chaque bâtiment (`buildings[i]`) sur le réseau au dernier calcul d'accès : identifiant de tronçon
+   * (−1 : aucun), abscisse et côté. Valide tant que la liste des bâtiments n'a pas changé (`setBuildings`).
+   */
+  private hitEdge: Int32Array = new Int32Array(0);
+  private hitS: Float64Array = new Float64Array(0);
+  private hitSide: Int8Array = new Int8Array(0);
+  private hitValid = false;
+  /**
+   * Zones touchées par la dernière reconstruction du réseau (boîtes x0, z0, x1, z1 des tronçons ajoutés, modifiés ou
+   * retirés) ; null = tout recalculer. Seuls les bâtiments proches d'une zone touchée sont reprojetés.
+   */
+  private changedBoxes: Float64Array | null = null;
+  private boxesPending = false;
+  /** Diagnostic de la dernière reconstruction (bancs, tests) : carrefours recalculés / repris, itinéraires, accès. */
+  readonly lastRebuild = { inputMs: 0, graphMs: 0, rebuildMs: 0, accessMs: 0, nodesComputed: 0, nodesReused: 0, routesKept: 0, routesRecomputed: 0, accessKept: 0, accessRecomputed: 0 };
   private readonly tmp4 = new Float32Array(4);
 
   readonly stats: TrafficStats = { vehicles: 0, spawned: 0, arrived: 0, removedStuck: 0, meanSpeedKmh: 0, stopped: 0, signals: 0, priorityJunctions: 0, yieldJunctions: 0, connectedBuildings: 0, routeQueries: 0, laneChanges: 0, mandatoryLaneChanges: 0, rerouted: 0, unblocked: 0, pedestrianYields: 0 };
@@ -295,13 +366,18 @@ export class TrafficSystem {
    */
   setNetworkSource(source: () => TrafficNetworkInput): void { this.networkSource = source; this.networkDirty = true; }
   private networkSource: (() => TrafficNetworkInput) | null = null;
-  /** Conflits par carrefour conservés entre reconstructions du graphe (voir `TrafficGraph`). */
+  /**
+   * Carrefours calculés conservés entre reconstructions du graphe (régime, bras, connecteurs, conflits ; voir
+   * `TrafficGraph`) : une édition ne recalcule que les carrefours dont les tronçons incidents ont changé.
+   */
   private readonly conflictCache: ConflictCache = new Map();
   private materializeNetwork(): void {
     if (!this.networkSource) return;
     const f = this.networkSource;
     this.networkSource = null;
+    const t0 = performance.now();
     this.networkInput = this.withJunctionModes(f());
+    this.lastRebuild.inputMs = performance.now() - t0;
   }
 
   /** Réglages des carrefours par le joueur (identifiant de nœud du monde -> mode) ; conservés à chaque reconstruction. */
@@ -316,7 +392,7 @@ export class TrafficSystem {
     this.materializeNetwork();
     if (this.networkInput) { this.networkInput = this.withJunctionModes({ ...this.networkInput, nodes: this.networkInput.nodes.map(({ control: _c, ...n }) => n) }); this.networkDirty = true; }
   }
-  setBuildings(b: TrafficBuilding[]): void { this.buildings = b; this.buildingsDirty = true; }
+  setBuildings(b: TrafficBuilding[]): void { this.buildings = b; this.buildingsDirty = true; this.hitValid = false; }
   /** Points d'entrée en bord de carte (module « connexions ») ; liste vide = aucun. */
   setGates(g: readonly TrafficGate[]): void {
     const same = g.length === this.gates.length && g.every((x, i) => x.segId === this.gates[i]!.segId && x.atA === this.gates[i]!.atA);
@@ -391,27 +467,45 @@ export class TrafficSystem {
 
   private rebuildNetwork(): void {
     const input = this.networkInput!;
+    const tStart = performance.now();
     // mémorise la position des véhicules en coordonnées de tronçon (ids stables du monde)
     const old = this.graph;
-    const keep: { v: number; edgeId: number; dir: number; rank: number; sAxis: number; destEdgeId: number; destDir: number; destAxis: number }[] = [];
+    const keep: { v: number; edgeId: number; dir: number; rank: number; sAxis: number; destEdgeId: number; destDir: number; destAxis: number; route: number[] }[] = [];
     if (old) {
       for (let i = 0; i < this.actCount; i++) {
         const v = this.act[i]!;
         let l = this.link[v]!, s = this.s[v]!;
-        if (old.linkKind[l] === 1) { l = old.connTo[l - old.laneCount]!; s = 0; }
+        const onConn = old.linkKind[l] === 1;
+        if (onConn) { l = old.connTo[l - old.laneCount]!; s = 0; }
         const arc = old.linkArc[l]!;
         const dArc = this.arena[this.routeOff[v]! + this.routeLen[v]! - 1]!;
         const destLane = old.arcFirstLane[dArc]!;
-        keep.push({ v, edgeId: old.edgeId[arc >> 1]!, dir: arc & 1, rank: old.linkRank[l]!, sAxis: old.linkS0[l]! + s, destEdgeId: old.edgeId[dArc >> 1]!, destDir: dArc & 1, destAxis: old.linkS0[destLane]! + this.destS[v]! });
+        // reste de l'itinéraire (arc courant compris) en identifiants stables : (tronçon, sens)
+        const route: number[] = [];
+        for (let r = this.routeIdx[v]! + (onConn ? 1 : 0); r < this.routeLen[v]!; r++) { const a = this.arena[this.routeOff[v]! + r]!; route.push(old.edgeId[a >> 1]!, a & 1); }
+        keep.push({ v, edgeId: old.edgeId[arc >> 1]!, dir: arc & 1, rank: old.linkRank[l]!, sAxis: old.linkS0[l]! + s, destEdgeId: old.edgeId[dArc >> 1]!, destDir: dArc & 1, destAxis: old.linkS0[destLane]! + this.destS[v]!, route });
       }
     }
     // état des feux conservé par identifiant de nœud (un chantier ailleurs ne remet pas tous les feux à zéro)
     const sigKeep = this.pendingSignals ?? this.signalSnapshot();
     this.pendingSignals = null;
+    const t0 = performance.now();
     this.graph = new TrafficGraph(input, this.conflictCache);
+    const lr = this.lastRebuild;
+    lr.graphMs = performance.now() - t0;
+    lr.nodesComputed = this.graph.nodesComputed; lr.nodesReused = this.graph.nodesReused;
+    lr.routesKept = 0; lr.routesRecomputed = 0;
     this.router = new ArcRouter(this.graph);
     this.grid = new EdgeGrid(this.graph);
     const g = this.graph;
+    {
+      // zones modifiées cumulées jusqu'au prochain calcul d'accès (plusieurs reconstructions possibles entre-temps)
+      const boxes = old ? changedEdgeBoxes(old, g) : null;
+      if (!this.boxesPending) this.changedBoxes = boxes;
+      else if (this.changedBoxes && boxes) { const m = new Float64Array(this.changedBoxes.length + boxes.length); m.set(this.changedBoxes); m.set(boxes, this.changedBoxes.length); this.changedBoxes = m.length > 4 * MAX_CHANGED_BOXES ? null : m; }
+      else this.changedBoxes = null;
+      this.boxesPending = true;
+    }
     this.connOcc = new Int32Array(g.linkCount - g.laneCount);
     this.connRes = new Uint32Array(g.linkCount - g.laneCount);
     this.bucketStart = new Int32Array(g.linkCount + 1);
@@ -454,7 +548,11 @@ export class TrafficSystem {
       this.s[k.v] = Math.max(0, Math.min(g.linkLen[lane]!, k.sAxis - g.linkS0[lane]!));
       this.destS[k.v] = Math.max(0, k.destAxis - g.linkS0[g.arcFirstLane[dArc]!]!);
       const off = this.allocRoute(ROUTE_MAX);
-      const n = this.router.route(arc, dArc, this.arena, off, ROUTE_MAX);
+      // Itinéraire conservé s'il existe encore tel quel (mêmes arcs, manœuvres toujours autorisées) : seuls les
+      // véhicules dont le trajet traverse la zone modifiée sont recalculés (A*).
+      let n = keptRoute(g, k.route, arc, dArc, this.arena, off, ROUTE_MAX);
+      if (n > 0) lr.routesKept++;
+      else { n = this.router.route(arc, dArc, this.arena, off, ROUTE_MAX); lr.routesRecomputed++; }
       this.arenaLive -= this.routeLen[k.v]!;
       if (n < 1) { this.routeLen[k.v] = 0; this.despawn(k.v); continue; }
       this.routeOff[k.v] = off; this.routeLen[k.v] = n; this.routeIdx[k.v] = 0;
@@ -463,28 +561,52 @@ export class TrafficSystem {
       this.chooseNext(k.v);
     }
     this.networkDirty = false;
+    this.lastRebuild.rebuildMs = performance.now() - tStart;
     this.signalLayoutVersion++;
     this.buildingsDirty = true;
   }
 
   private rebuildAccess(): void {
+    const tStart = performance.now();
     const g = this.graph;
     this.access = [];
     this.homes = []; this.works = []; this.shops = [];
     this.depots = { pompiers: [], ambulance: [], police: [], industrie: [], gare: [] };
     this.homeWeight = 0;
     if (!g) { this.buildingsDirty = false; return; }
-    for (const b of this.buildings) {
-      const hit = g.nearestEdge(b.x, b.z, this.accessDistance, this.grid ?? undefined);
-      if (!hit) continue;
-      let arc = hit.edge * 2 + (hit.side > 0 ? 0 : 1);
+    // Projections reprises du calcul précédent pour les bâtiments loin de toute zone modifiée du réseau (le tronçon
+    // le plus proche ne peut pas avoir changé) ; les autres sont reprojetés.
+    const nb = this.buildings.length;
+    const boxes = this.hitValid && this.hitEdge.length === nb ? this.changedBoxes : null;
+    if (!boxes) { this.hitEdge = new Int32Array(nb); this.hitS = new Float64Array(nb); this.hitSide = new Int8Array(nb); }
+    const R = this.accessDistance;
+    let kept = 0, recomputed = 0;
+    for (let i = 0; i < nb; i++) {
+      const b = this.buildings[i]!;
+      let near = !boxes;
+      if (boxes) for (let q = 0; q < boxes.length && !near; q += 4) near = b.x >= boxes[q]! - R && b.x <= boxes[q + 2]! + R && b.z >= boxes[q + 1]! - R && b.z <= boxes[q + 3]! + R;
+      let edge: number, s: number, side: number;
+      if (near) {
+        recomputed++;
+        const hit = g.nearestEdge(b.x, b.z, R, this.grid ?? undefined);
+        this.hitEdge[i] = hit ? g.edgeId[hit.edge]! : -1;
+        if (!hit) continue;
+        edge = hit.edge; s = hit.s; side = hit.side;
+        this.hitS[i] = s; this.hitSide[i] = side;
+      } else {
+        kept++;
+        if (this.hitEdge[i]! < 0) continue;
+        edge = g.edgeIndex(this.hitEdge[i]!); s = this.hitS[i]!; side = this.hitSide[i]!;
+        if (edge < 0) continue; // impossible : un tronçon retiré est une zone modifiée
+      }
+      let arc = edge * 2 + (side > 0 ? 0 : 1);
       if (g.arcFirstLane[arc]! < 0) arc ^= 1;
       if (g.arcFirstLane[arc]! < 0) continue;
       const lane = g.arcFirstLane[arc]! + g.arcLaneCount[arc]! - 1;
-      const sAxis = (arc & 1) === 0 ? hit.s : g.edgeLen[hit.edge]! - hit.s;
+      const sAxis = (arc & 1) === 0 ? s : g.edgeLen[edge]! - s;
       const sLane = Math.max(1, Math.min(g.linkLen[lane]! - 1, sAxis - g.linkS0[lane]!));
       const k = this.access.length;
-      this.access.push({ b, arc, sLane, edge: hit.edge });
+      this.access.push({ b, arc, sLane, edge });
       if (RESIDENTIAL.has(b.category) && b.residents > 0) { this.homes.push(k); this.homeWeight += b.residents; }
       if (WORK.has(b.category) && b.jobs > 0) this.works.push(k);
       if (b.category === 'commercial') this.shops.push(k);
@@ -496,6 +618,11 @@ export class TrafficSystem {
       if (id.includes('gare')) this.depots.gare.push(k);
     }
     this.stats.connectedBuildings = this.access.length;
+    this.hitValid = true;
+    this.changedBoxes = null;
+    this.boxesPending = false;
+    this.lastRebuild.accessKept = kept; this.lastRebuild.accessRecomputed = recomputed;
+    this.lastRebuild.accessMs = performance.now() - tStart;
     this.rebuildGates();
     this.buildingsDirty = false;
   }

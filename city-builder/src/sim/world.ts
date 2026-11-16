@@ -44,7 +44,7 @@ import { GameClock, MINUTES_PER_DAY, MINUTES_PER_MONTH, MINUTES_PER_YEAR, format
 import { DEMOLISH_REFUND_RATE, EDU_TAX_NAMES_FR, Economy } from './economy';
 import { BuildingStore, ChunkIndex, VehicleStore } from './ecs';
 import { DemographySystem, ROAD_ACCESS_MARGIN_M, Service } from './demography';
-import { TrafficSystem, inputFromRoadNetwork, buildingsFromStore } from './traffic';
+import { TrafficSystem, inputFromRoadNetwork, buildingsFromStore, createRoadInputCache } from './traffic';
 import {
   ROAD_KINDS, RoadNetwork, commitRoadPlan, cubic, cubicBounds, gradeTerrainForRoads, halfWidth, isRoadKind,
   networkRecords, planRoad, polyline, SLOPE_WIDTH, type ProfileEnv, type RoadKindId, type RoadRequest,
@@ -1067,7 +1067,9 @@ export class Simulation {
     // Conversion pour la circulation différée à sa reconstruction (prochain pas) : réseau lu à ce moment-là.
     this.traffic.setNetworkSource(this.trafficInput);
   }
-  private readonly trafficInput = (): ReturnType<typeof inputFromRoadNetwork> => inputFromRoadNetwork(this.net);
+  /** Conversion incrémentale : tronçons et carrefours inchangés repris de la conversion précédente (adapters.ts). */
+  private readonly trafficInputCache = createRoadInputCache();
+  private readonly trafficInput = (): ReturnType<typeof inputFromRoadNetwork> => inputFromRoadNetwork(this.net, 6, this.trafficInputCache);
 
   /** Nivellement complet depuis le terrain naturel ; renvoie la région modifiée (ou null). */
   private regradeAll(): { i0: number; j0: number; i1: number; j1: number } | null {

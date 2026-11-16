@@ -168,6 +168,9 @@ Création de route (réseau de 2 501 tronçons, ville de 54 k) :
 - **Graphe de circulation** : conversion du réseau différée au prochain pas (`TrafficSystem.setNetworkSource`, une
   seule conversion pour plusieurs tracés) ; conflits entre connecteurs mémorisés par carrefour et réutilisés quand la
   géométrie du carrefour est inchangée (`ConflictCache`). Test : conflits identiques au calcul complet.
+  Depuis : reconstruction **incrémentale** (carrefours entiers mémorisés, conversion, itinéraires et accès repris
+  localement) — voir docs/CIRCULATION.md §10 et `npm run bench:graphe` : pas après édition à 2 500 tronçons 117 -> 24 ms
+  (médiane), à 10 000 tronçons 1 534 -> 78 ms ; premier pas après chargement 1 027 -> 89 ms et 5 109 -> 473 ms.
 - **Recherche d'école** : liste des écoles relevée une fois par jour au lieu d'une requête spatiale de 7 km par élève
   sans école (≈ 400 ms par jour à 54 k quand les écoles sont pleines). Seul l'ordre entre deux écoles exactement
   équidistantes peut différer.

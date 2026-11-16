@@ -10,8 +10,8 @@ import { ROAD_TYPES } from '../../shared/contracts';
 import { rotAngle } from '../../shared/footprint';
 import type { BuildingStore, RoadGraph } from '../ecs';
 import { ROAD_TYPE_ORDER } from '../pathfinding';
-import { evalCubic, profileHeightAt, ROAD_KINDS, ROAD_KIND_ORDER, type RoadNetwork } from '../roads/index';
-import { segmentTrims, type JunctionInfo } from '../roads/junction';
+import { evalCubic, profileHeightAt, ROAD_KINDS, ROAD_KIND_ORDER, type ArcTable, type RoadNetwork, type RoadProfile } from '../roads/index';
+import { computeJunction, segmentTrims, type JunctionInfo } from '../roads/junction';
 import { carriagewayWidth } from '../roads/types';
 import type { TrafficEdgeInput, TrafficNetworkInput } from './network';
 import type { TrafficBuilding } from './system';
@@ -53,8 +53,26 @@ export const MARKINGS_MIN_LENGTH = 14;
  * Les lignes d'arrêt et les passages piétons sont placés aux MÊMES cotes que les marquages peints par le rendu
  * (recul du carrefour + 5,6 m / + 2,8 m) : les véhicules s'arrêtent avant le passage dessiné.
  */
-export function inputFromRoadNetwork(net: RoadNetwork, step = 6): TrafficNetworkInput {
+export function inputFromRoadNetwork(net: RoadNetwork, step = 6, cache?: RoadInputCache): TrafficNetworkInput {
   const junctions = new Map<number, JunctionInfo>();
+  if (cache) {
+    // Carrefours : repris tant que les tronçons incidents (instances, dans l'ordre) sont les mêmes.
+    if (cache.step !== step) { cache.junctions.clear(); cache.edges.clear(); cache.step = step; }
+    for (let i = 0; i < net.nodeCount; i++) {
+      const nid = net.nodeId[i]!;
+      const inc = net.incident(nid);
+      const hit = cache.junctions.get(nid);
+      let ok = !!hit && hit.arcs.length === inc.length;
+      for (let j = 0; ok && j < inc.length; j++) ok = hit!.arcs[j] === net.arc(inc[j]!);
+      if (ok) junctions.set(nid, hit!.info);
+      else {
+        const info = computeJunction(net, nid);
+        junctions.set(nid, info);
+        cache.junctions.set(nid, { arcs: inc.map((s) => net.arc(s)), info });
+      }
+    }
+    if (cache.junctions.size > net.nodeCount) for (const k of cache.junctions.keys()) if (!net.hasNode(k)) cache.junctions.delete(k);
+  }
   const nodes = [];
   for (let i = 0; i < net.nodeCount; i++) nodes.push({ id: net.nodeId[i]!, x: net.nodeX[i]!, y: net.nodeY[i]!, z: net.nodeZ[i]! });
   const edges: TrafficEdgeInput[] = [];
@@ -64,9 +82,21 @@ export function inputFromRoadNetwork(net: RoadNetwork, step = 6): TrafficNetwork
     const kindId = ROAD_KIND_ORDER[net.segKind[k]!]!;
     const kind = ROAD_KINDS[kindId];
     if (!kind.vehicles) continue;
-    const curve = net.curve(id);
     const arc = net.arc(id);
     const prof = net.profile(id);
+    const ring = net.ringOf(id);
+    const tr = segmentTrims(net, id, junctions);
+    if (cache) {
+      // Tronçon inchangé (même instance, même profil, même anneau, mêmes reculs) : même entrée (même objet),
+      // que le graphe de circulation reconnaît par identité.
+      const hit = cache.edges.get(id);
+      if (hit && hit.arc === arc && hit.profile === prof && hit.ring === (ring ? `${ring[0]},${ring[1]},${ring[2]}` : '')
+        && hit.start === tr.start && hit.end === tr.end && hit.startType === tr.startType && hit.endType === tr.endType) {
+        edges.push(hit.edge);
+        continue;
+      }
+    }
+    const curve = net.curve(id);
     const n = Math.max(1, Math.ceil(arc.length / step));
     const pts: number[] = [];
     for (let i = 0; i <= n; i++) {
@@ -77,9 +107,8 @@ export function inputFromRoadNetwork(net: RoadNetwork, step = 6): TrafficNetwork
     const edge: TrafficEdgeInput = {
       id, a: net.segA[k]!, b: net.segB[k]!, points: pts,
       lanesForward: kind.lanesForward, lanesBackward: kind.lanesBackward, laneWidth: kind.laneWidth, median: kind.medianWidth,
-      speedKmh: kind.speedKmh, rank: net.ringOf(id) ? RING_RANK : RANK[kindId] ?? 0, crossHalf: carriagewayWidth(kind) / 2,
+      speedKmh: kind.speedKmh, rank: ring ? RING_RANK : RANK[kindId] ?? 0, crossHalf: carriagewayWidth(kind) / 2,
     };
-    const tr = segmentTrims(net, id, junctions);
     const L = arc.length;
     const s0 = Math.min(tr.start, L * 0.49), s1 = Math.max(L - tr.end, L * 0.51);
     const marked = s1 - s0 >= MARKINGS_MIN_LENGTH;
@@ -88,9 +117,25 @@ export function inputFromRoadNetwork(net: RoadNetwork, step = 6): TrafficNetwork
     if (tr.startType === 'junction') { edge.stopA = s0 + stopOff; edge.crossA = marked && walk ? s0 + CROSSWALK_CENTER : -1; }
     if (tr.endType === 'junction') { edge.stopB = L - s1 + stopOff; edge.crossB = marked && walk ? L - s1 + CROSSWALK_CENTER : -1; }
     edges.push(edge);
+    if (cache) cache.edges.set(id, { arc, profile: prof, ring: ring ? `${ring[0]},${ring[1]},${ring[2]}` : '', start: tr.start, end: tr.end, startType: tr.startType, endType: tr.endType, edge });
   }
+  if (cache && cache.edges.size > net.segCount) for (const k of cache.edges.keys()) if (!net.hasSegment(k)) cache.edges.delete(k);
   return { nodes, edges };
 }
+
+/**
+ * Mémoire de la conversion réseau routier -> circulation (`inputFromRoadNetwork`), conservée par le monde d'un appel
+ * à l'autre : reculs des carrefours (par nœud, tant que les tronçons incidents sont les mêmes instances) et entrée de
+ * chaque tronçon (même instance — table d'abscisses —, même profil en long, même anneau, mêmes reculs). Un tronçon
+ * inchangé redonne le MÊME objet d'entrée : le graphe de circulation reconnaît ainsi par identité les carrefours
+ * intacts. Résultat identique à une conversion sans mémoire (test « graphe incrémental »).
+ */
+export interface RoadInputCache {
+  step: number;
+  junctions: Map<number, { arcs: ArcTable[]; info: JunctionInfo }>;
+  edges: Map<number, { arc: ArcTable; profile: RoadProfile; ring: string; start: number; end: number; startType: string; endType: string; edge: TrafficEdgeInput }>;
+}
+export function createRoadInputCache(): RoadInputCache { return { step: 6, junctions: new Map(), edges: new Map() }; }
 
 /** Bâtiments posés -> entrées du trafic (accès = premier point de façade du catalogue, rotation appliquée). */
 export function buildingsFromStore(b: BuildingStore, cat: AssetCatalog): TrafficBuilding[] {
