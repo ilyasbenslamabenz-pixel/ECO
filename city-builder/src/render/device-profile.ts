@@ -70,6 +70,50 @@ export interface DeviceProfile {
   maxConcurrentModels: number;
   /** Qualité Basse : seule la carte de couleur des bâtiments est gardée (relief et rugosité retirés, ≈ 2/3 de mémoire). */
   colorMapsOnly: boolean;
+  /** Processeur graphique intégré détecté (Intel, AMD APU) : qualité Auto plus sobre (docs/PERFORMANCE_PC.md). */
+  igpu: boolean;
+  /** Plafond du rapport de pixels en qualité Auto / Moyenne sur ordinateur (1,5 ; 1,25 en Auto sur GPU intégré). */
+  autoPixelRatio: number;
+}
+
+/** Nom du processeur graphique lu une seule fois (petit contexte WebGL jetable), null hors navigateur. */
+let gpuNameCache: string | null | undefined;
+export function gpuRendererName(): string | null {
+  if (gpuNameCache !== undefined) return gpuNameCache;
+  gpuNameCache = null;
+  try {
+    const doc = (globalThis as { document?: Document }).document;
+    if (!doc) return null;
+    const c = doc.createElement('canvas');
+    c.width = c.height = 1;
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null;
+    if (!gl) return null;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    gpuNameCache = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+  } catch { gpuNameCache = null; }
+  return gpuNameCache;
+}
+
+/** Vrai si le nom désigne un GPU intégré de PC (Intel HD / UHD / Iris / Arc intégré, AMD « Radeon Graphics » / Vega d'APU). */
+export function isIntegratedGpuName(name: string): boolean {
+  if (/Intel/i.test(name) && !/Arc\(TM\) A\d{3}|Arc A\d{3}/i.test(name)) return true;
+  if (/AMD|Radeon/i.test(name) && /Radeon\(TM\) Graphics|Radeon Graphics|Vega \d+ Graphics|Radeon\(TM\) Vega/i.test(name)) return true;
+  return false;
+}
+
+/**
+ * GPU intégré (PC) : `?gpu=integre` / `?gpu=dedie` forcent le choix (mesures, tests) ; sinon nom du GPU WebGL.
+ * Jamais sur téléphone (le mode allégé s'en charge déjà).
+ */
+export function isIntegratedGpu(): boolean {
+  try {
+    const g = new URLSearchParams(globalThis.location?.search ?? '').get('gpu');
+    if (g === 'integre') return true;
+    if (g === 'dedie') return false;
+  } catch { /* hors navigateur */ }
+  const n = gpuRendererName();
+  return n !== null && isIntegratedGpuName(n);
 }
 
 /** Vrai sur un appareil tactile à petit écran, un téléphone / une tablette, ou un navigateur à faible mémoire. */
@@ -95,15 +139,19 @@ export function isLiteDevice(): boolean {
 const FULL: DeviceProfile = {
   lite: false, textureCap: Infinity, treeTextureCap: Infinity, gpuTextureCap: Infinity, maxPixelRatio: 2, shadowSize: 2048,
   vegDistances: [50, 120, 240, 3800], buildingLodBias: 1, preloadAll: true, maxConcurrentModels: Infinity, colorMapsOnly: false,
+  igpu: false, autoPixelRatio: 1.5,
 };
 
 /** Profil effectif d'un réglage de qualité (« auto » : allégé si l'appareil le demande). */
-export function deviceProfile(quality: QualitySetting = 'auto', lite = isLiteDevice()): DeviceProfile {
+export function deviceProfile(quality: QualitySetting = 'auto', lite = isLiteDevice(), igpu = !lite && isIntegratedGpu()): DeviceProfile {
   if (isSafeMode() && quality === 'auto') quality = 'basse';
   // Téléphone en « auto » : niveau Basse. Mesure réelle sur iPhone 17 Pro (14/11) : l'allégé à 1,5× et LOD
   // plus détaillés faisait fermer la page à la pose de certaines maisons ; en Basse, la partie tient.
   if (quality === 'auto' && lite) quality = 'basse';
-  if (quality === 'haute' || ((quality === 'moyenne') && !lite) || (quality === 'auto' && !lite)) return { ...FULL };
+  // GPU intégré en Auto : densité de rendu plafonnée à 1,25 (le remplissage des pixels domine sur ces GPU) ;
+  // Haute et Moyenne choisies à la main restent inchangées.
+  if (quality === 'auto' && !lite && igpu) return { ...FULL, igpu: true, autoPixelRatio: 1.25 };
+  if (quality === 'haute' || ((quality === 'moyenne') && !lite) || (quality === 'auto' && !lite)) return { ...FULL, igpu: igpu && !lite };
   // Allégé (auto sur téléphone, basse, ou moyenne sur téléphone : textures et ombres réduites quand même).
   const basse = quality === 'basse';
   return {
@@ -121,5 +169,7 @@ export function deviceProfile(quality: QualitySetting = 'auto', lite = isLiteDev
     preloadAll: false,
     maxConcurrentModels: 1,
     colorMapsOnly: basse,
+    igpu: false,
+    autoPixelRatio: 1.5,
   };
 }

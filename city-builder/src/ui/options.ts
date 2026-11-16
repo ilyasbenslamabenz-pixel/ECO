@@ -100,15 +100,16 @@ export function urlAa(search = typeof location !== 'undefined' ? location.search
 }
 
 /** Rapport de pixels de départ d'une qualité (avant résolution dynamique). */
-export function baseRatio(quality: GraphicsOptions['quality'], dpr: number, lite: boolean, liteMax: number): number {
-  return quality === 'basse' ? Math.min(dpr, 1) : quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, lite ? liteMax : 1.5);
+export function baseRatio(quality: GraphicsOptions['quality'], dpr: number, lite: boolean, liteMax: number, autoMax = 1.5): number {
+  // `autoMax` : plafond de la qualité Auto sur ordinateur (1,25 sur GPU intégré, src/render/device-profile.ts).
+  return quality === 'basse' ? Math.min(dpr, 1) : quality === 'haute' ? Math.min(dpr, 2) : Math.min(dpr, lite ? liteMax : quality === 'auto' ? autoMax : 1.5);
 }
 
 /** MSAA du contexte : « auto » = sur ordinateur, seulement si la densité de rendu est < 1,25 ; téléphone : toujours. */
-export function wantMsaa(o: Pick<GraphicsOptions, 'quality' | 'aa'>, dpr: number, lite: boolean, liteMax = 1.5): boolean {
+export function wantMsaa(o: Pick<GraphicsOptions, 'quality' | 'aa'>, dpr: number, lite: boolean, liteMax = 1.5, autoMax = 1.5): boolean {
   if (o.aa !== 'auto') return o.aa === 'on';
   if (lite) return true;
-  return baseRatio(o.quality, dpr, lite, liteMax) < 1.25;
+  return baseRatio(o.quality, dpr, lite, liteMax, autoMax) < 1.25;
 }
 
 export function loadOptions(): GraphicsOptions {
@@ -144,16 +145,19 @@ export interface GraphicsTargets {
   /** Contrôleur de caméra : reçoit la distance d'affichage (plan lointain) et les réglages de navigation. */
   camera?: { viewDistance: number; inputPref?: GraphicsOptions['pointer']; edgeScroll?: boolean };
   /** Cadence du rendu (src/render/scene.ts) : plafond d'images, ombres, résolution adaptative. */
-  perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number };
+  perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number; tiersEnabled?: boolean };
 }
 
 /**
  * Ordinateur, résolution dynamique : plage du rapport de pixels de la 3D. Plancher 0,6 × la densité de la qualité
  * choisie ; plafond = cette densité (qualité Auto : jusqu'à 2 sur écran Retina / 4K, comme avant).
  */
-export function desktopDynamic(quality: GraphicsOptions['quality'], ratio: number, dpr: number): { min: number; max: number } | null {
-  const max = quality === 'auto' ? Math.max(ratio, Math.min(dpr, 2)) : ratio;
-  const min = Math.max(0.5, Math.round(ratio * 0.6 * 20) / 20);
+export function desktopDynamic(quality: GraphicsOptions['quality'], ratio: number, dpr: number, igpu = false): { min: number; max: number } | null {
+  // GPU intégré : jamais au-dessus de la densité de départ (1,25), même si l'appareil semble suivre.
+  const max = quality === 'auto' && !igpu ? Math.max(ratio, Math.min(dpr, 2)) : ratio;
+  // GPU intégré : plancher 1 (en dessous, l'image d'un écran 1,5× devient floue) ; les paliers de qualité
+  // (src/render/quality-tiers.ts) prennent le relais une fois ce plancher atteint.
+  const min = igpu ? Math.min(ratio, Math.max(1, Math.round(ratio * 0.6 * 20) / 20)) : Math.max(0.5, Math.round(ratio * 0.6 * 20) / 20);
   return max - min > 1e-3 ? { min, max } : null;
 }
 
@@ -163,7 +167,7 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const prof = deviceProfile(o.quality);
   // Basse : 1 pixel par point au plus (0,75 rendait l'image trop floue) ; la résolution adaptative remonte au-delà si l'appareil suit.
-  const ratio = baseRatio(o.quality, dpr, prof.lite, prof.maxPixelRatio);
+  const ratio = baseRatio(o.quality, dpr, prof.lite, prof.maxPixelRatio, prof.autoPixelRatio);
   t.renderer.setPixelRatio(ratio);
   if (t.perf) {
     t.perf.maxFps = o.fps === '30' ? 30 : o.fps === '60' ? 60 : o.fps === 'max' ? 0 : prof.lite ? 60 : 0;
@@ -172,7 +176,9 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
     // Téléphone : résolution qui monte quand l'appareil suit (plafond prudent : 1,25 en auto/basse, 1,5 en moyenne).
     t.perf.adaptive = prof.lite
       ? (o.quality !== 'haute' ? { min: ratio, max: Math.min(dpr, o.quality === 'moyenne' ? 1.5 : 1.25) } : null)
-      : dynResEnabled(o) ? desktopDynamic(o.quality, ratio, dpr) : null;
+      : dynResEnabled(o) ? desktopDynamic(o.quality, ratio, dpr, prof.igpu) : null;
+    // Paliers de qualité automatiques (src/render/quality-tiers.ts) : qualité Auto sur ordinateur seulement.
+    if ('tiersEnabled' in t.perf) t.perf.tiersEnabled = o.quality === 'auto' && !prof.lite;
     t.perf.ratio = ratio;
   }
   const size = new THREE.Vector2();

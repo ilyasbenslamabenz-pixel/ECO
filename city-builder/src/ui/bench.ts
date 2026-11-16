@@ -153,6 +153,10 @@ export interface BenchHost {
   camera: THREE.Camera;
   /** Suspend / reprend la boucle d'affichage du jeu. */
   pauseRender: (paused: boolean) => void;
+  /** Palier de qualité automatique courant (src/render/quality-tiers.ts), facultatif. */
+  tier?: () => { tier: number; name: string; auto: boolean };
+  /** GPU intégré détecté (src/render/device-profile.ts), facultatif. */
+  igpu?: boolean;
 }
 
 export interface LayerCost { layer: string; ms: number; share: number }
@@ -280,6 +284,10 @@ interface SceneResult {
   fpsMedian: number; fpsMean: number; p95: number; p99: number; maxMs: number; over33: number;
   cpuUpdateMs: number | null; cpuRenderMs: number | null; updateEmaMs: number | null;
   calls: number; triangles: number; renderW: number; renderH: number; ratioMin: number; ratioMax: number;
+  /** 1 % bas : img/s équivalentes à la durée moyenne du 1 % d'images les plus lentes. */
+  low1: number;
+  /** Palier de qualité pendant la mesure (min–max) et nom du palier de fin. */
+  tierMin: number; tierMax: number; tierName: string;
   /** Pendant la mesure : shaders compilés, textures et géométries nouvellement envoyées (cause probable d'à-coups). */
   newPrograms: number; newTextures: number; newGeometries: number;
   /** Instant de la plus longue image (s depuis le début de la mesure). */
@@ -404,7 +412,7 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     await h.setSpeed(sc.speed).catch(() => undefined);
     const anim = sc.setup(h, home) ?? null;
     const tStart = performance.now();
-    let samples = 0, calls = 0, tris = 0, ratioMin = Infinity, ratioMax = 0;
+    let samples = 0, calls = 0, tris = 0, ratioMin = Infinity, ratioMax = 0, tierMin = Infinity, tierMax = -1;
     let measuring = false;
     const hook = (now: number): void => {
       if (anim) anim((now - tStart) / 1000);
@@ -413,6 +421,8 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       if (st) { samples++; calls += st.calls; tris += st.triangles; }
       const pr = h.pixelRatio();
       ratioMin = Math.min(ratioMin, pr); ratioMax = Math.max(ratioMax, pr);
+      const tr = h.tier?.().tier ?? 0;
+      tierMin = Math.min(tierMin, tr); tierMax = Math.max(tierMax, tr);
     };
     frameHooks.push(hook);
     await wait(preS * 1000);
@@ -438,6 +448,9 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
     frameHooks.splice(frameHooks.indexOf(hook), 1);
     const s = [...iv].sort((a, b) => a - b);
     const total = iv.reduce((a, b) => a + b, 0);
+    const worst = s.slice(Math.floor(s.length * 0.99));
+    const worstMean = worst.length ? worst.reduce((a, b) => a + b, 0) / worst.length : 0;
+    const tierNow = h.tier?.() ?? { tier: 0, name: '—', auto: false };
     const buf = h.renderer.getDrawingBufferSize(new THREE.Vector2());
     scenes.push({
       id: sc.id, label: sc.label, seconds: r1((t1 - t0) / 1000), frames: iv.length,
@@ -450,6 +463,8 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       calls: samples ? Math.round(calls / samples) : 0, triangles: samples ? Math.round(tris / samples) : 0,
       renderW: buf.x, renderH: buf.y,
       ratioMin: Number.isFinite(ratioMin) ? r2(ratioMin) : r2(h.pixelRatio()), ratioMax: ratioMax > 0 ? r2(ratioMax) : r2(h.pixelRatio()),
+      low1: worstMean > 0 ? r1(1000 / worstMean) : 0,
+      tierMin: tierMax >= 0 ? tierMin : tierNow.tier, tierMax: tierMax >= 0 ? tierMax : tierNow.tier, tierName: tierNow.name,
       newPrograms, newTextures, newGeometries, maxAtS: r1(maxAt / 1000), maxDetail: longestFrame(t0, t1)?.detail ?? null, meanDetail: phasesBetween(t0, t1, iv.length),
     });
   }
@@ -476,6 +491,8 @@ export async function runBench(h: BenchHost, opts: BenchOptions, doneAt: number)
       coeursProcesseur: navigator.hardwareConcurrency ?? 0,
       antialiasing: h.renderer.getContext().getContextAttributes()?.antialias ? `MSAA ×${(h.renderer.getContext().getParameter(h.renderer.getContext().SAMPLES) as number) || '?'}` : 'désactivé',
       bascules: abSummary(),
+      gpuIntegre: h.igpu ?? false,
+      paliersAuto: h.tier?.().auto ?? false,
       resolutionDynamique: (() => { const d = h.dynamicRange(); return d ? `activée (×${fmt(d.min)}–×${fmt(d.max)})` : 'désactivée'; })(),
     },
     load: {
@@ -571,6 +588,24 @@ const fmtInt = (n: number): string => n.toLocaleString('fr-FR');
 const fmtTris = (n: number): string => (n >= 1e6 ? `${(n / 1e6).toFixed(2).replace('.', ',')} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n));
 const fmt = (n: number | null): string => (n === null ? '—' : String(n).replace('.', ','));
 
+const tierText = (s: SceneResult): string => (s.tierMin === s.tierMax ? `${s.tierMin} (${s.tierName})` : `${s.tierMin}–${s.tierMax} (fin : ${s.tierName})`);
+
+/**
+ * Rapport court (à copier et envoyer) : une ligne par scène avec img/s moyennes, 1 % bas, appels de dessin,
+ * triangles et palier de qualité, précédée de la configuration.
+ */
+export function shortReport(r: BenchResult): string {
+  const e = r.env;
+  const lines = [
+    `Meknes City — rapport de performance (${r.mode}) — version ${r.version} — ${r.date}`,
+    `GPU : ${e['carteGraphique']}${e['gpuIntegre'] ? ' (intégré)' : ''} · ${e['navigateur']} · ${e['systeme']}`,
+    `Fenêtre ${e['fenetre']} · densité ${fmt(e['densitePixels'] as number)} · qualité ${e['qualite']}${e['paliersAuto'] ? ' (paliers automatiques)' : ''} · ombres ${e['carteOmbre']} · antialiasing ${e['antialiasing']}`,
+    'Scène | img/s moy. | 1 % bas | appels | triangles | palier | densité',
+  ];
+  for (const s of r.scenes) lines.push(`${s.label} | ${fmt(s.fpsMean)} | ${fmt(s.low1)} | ${fmtInt(s.calls)} | ${fmtTris(s.triangles)} | ${tierText(s)} | ×${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}`);
+  return lines.join('\n');
+}
+
 /** Résumé texte (copie) : lisible tel quel dans un message. */
 export function resultsText(r: BenchResult): string {
   const e = r.env;
@@ -584,10 +619,10 @@ export function resultsText(r: BenchResult): string {
     `Plus longue des premières images, processeur : ${r.load.firstDetail ?? '—'}`,
     `Étapes du chargement : ${r.load.steps.map((x) => `${x.step} ${fmt(x.s)} s`).join(' · ')}`,
     '',
-    'Scène | img/s méd. | img/s moy. | p95 ms | p99 ms | max ms (à s) | > 33 ms | CPU màj+rendu ms | appels | triangles | rendu px (ratio) | nouveaux shaders/textures/géom.',
+    'Scène | img/s méd. | img/s moy. | 1 % bas | palier | p95 ms | p99 ms | max ms (à s) | > 33 ms | CPU màj+rendu ms | appels | triangles | rendu px (ratio) | nouveaux shaders/textures/géom.',
   ];
   for (const s of r.scenes) {
-    lines.push(`${s.label} | ${fmt(s.fpsMedian)} | ${fmt(s.fpsMean)} | ${fmt(s.p95)} | ${fmt(s.p99)} | ${fmt(s.maxMs)} (${fmt(s.maxAtS)}) | ${fmt(s.over33)} % | ${fmt(s.cpuUpdateMs)} + ${fmt(s.cpuRenderMs)} | ${fmtInt(s.calls)} | ${fmtTris(s.triangles)} | ${s.renderW}×${s.renderH} (${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}) | ${s.newPrograms}/${s.newTextures}/${s.newGeometries}`);
+    lines.push(`${s.label} | ${fmt(s.fpsMedian)} | ${fmt(s.fpsMean)} | ${fmt(s.low1)} | ${tierText(s)} | ${fmt(s.p95)} | ${fmt(s.p99)} | ${fmt(s.maxMs)} (${fmt(s.maxAtS)}) | ${fmt(s.over33)} % | ${fmt(s.cpuUpdateMs)} + ${fmt(s.cpuRenderMs)} | ${fmtInt(s.calls)} | ${fmtTris(s.triangles)} | ${s.renderW}×${s.renderH} (${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}) | ${s.newPrograms}/${s.newTextures}/${s.newGeometries}`);
   }
   lines.push('', 'Processeur, moyenne par image :');
   for (const s of r.scenes) lines.push(`  ${s.label} : ${s.meanDetail}`);
@@ -627,7 +662,7 @@ function showResults(r: BenchResult): void {
   const td = 'style="text-align:right;padding:6px 8px;border-bottom:1px solid #1e2a36;white-space:nowrap;font-variant-numeric:tabular-nums"';
   const fpsColor = (f: number): string => (f >= 55 ? '#4fd18b' : f >= 30 ? '#f2c94c' : '#ff6b6b');
   const rows = r.scenes.map((s) => `<tr><td ${td.replace('right', 'left')}>${esc(s.label)}</td>`
-    + `<td ${td}><b style="color:${fpsColor(s.fpsMedian)}">${fmt(s.fpsMedian)}</b></td><td ${td}>${fmt(s.fpsMean)}</td>`
+    + `<td ${td}><b style="color:${fpsColor(s.fpsMedian)}">${fmt(s.fpsMedian)}</b></td><td ${td}>${fmt(s.fpsMean)}</td><td ${td}>${fmt(s.low1)}</td><td ${td}>${esc(tierText(s))}</td>`
     + `<td ${td}>${fmt(s.p95)}</td><td ${td}>${fmt(s.p99)}</td><td ${td}>${fmt(s.maxMs)}<br><small style="color:#93a4b8">à ${fmt(s.maxAtS)} s</small></td><td ${td}>${fmt(s.over33)} %</td>`
     + `<td ${td}>${fmt(s.cpuUpdateMs)} + ${fmt(s.cpuRenderMs)}</td><td ${td}>${fmtInt(s.calls)}</td><td ${td}>${fmtTris(s.triangles)}</td>`
     + `<td ${td}>${s.renderW}×${s.renderH}<br><small style="color:#93a4b8">×${s.ratioMin === s.ratioMax ? fmt(s.ratioMin) : `${fmt(s.ratioMin)}–${fmt(s.ratioMax)}`}</small></td><td ${td}>${s.newPrograms} / ${s.newTextures} / ${s.newGeometries}</td></tr>`).join('');
@@ -638,6 +673,11 @@ function showResults(r: BenchResult): void {
     <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between">
       <h2 style="margin:0;font-size:20px">Meknes City — mesure de performance</h2>
       <div style="color:#93a4b8">version <b style="color:#e8eef5">${esc(r.version)}</b> · ${esc(r.date)} · parcours ${esc(r.mode)}</div>
+    </div>
+    <div id="bench-short" style="margin:12px 0 4px;padding:10px 12px;border:1px solid #2c3a4a;border-radius:8px;background:#0b1016">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between"><b>Rapport à m'envoyer</b>
+      <button type="button" id="bench-copy-short" ${btn.replace('#2a3646', '#4fd18b').replace('#e8eef5', '#0d1a12')}>Copier le rapport</button></div>
+      <pre id="bench-short-text" style="margin:8px 0 0;white-space:pre-wrap;font:13px/1.45 ui-monospace,Consolas,monospace">${esc(shortReport(r))}</pre>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px;margin:12px 0">
       ${kv('Carte graphique', e['carteGraphique'])}${kv('Fabricant', `${e['fabricant']} · ${e['webgl']} · multi_draw ${e['multiDraw'] ? 'oui' : 'non'}`)}
@@ -651,7 +691,7 @@ function showResults(r: BenchResult): void {
       ${kv('Étapes du chargement', r.load.steps.map((x) => `${x.step} ${fmt(x.s)} s`).join(' · '))}
     </div>
     <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:960px">
-      <thead><tr><th ${th.replace('right', 'left')}>Scène</th><th ${th}>img/s<br>médiane</th><th ${th}>img/s<br>moyenne</th><th ${th}>p95<br>ms</th><th ${th}>p99<br>ms</th><th ${th}>plus longue<br>ms</th><th ${th}>images<br>&gt; 33 ms</th><th ${th}>CPU ms<br>màj + rendu</th><th ${th}>appels de<br>dessin</th><th ${th}>triangles</th><th ${th}>rendu px<br>(densité)</th><th ${th}>nouveaux<br>shaders / tex. / géom.</th></tr></thead>
+      <thead><tr><th ${th.replace('right', 'left')}>Scène</th><th ${th}>img/s<br>médiane</th><th ${th}>img/s<br>moyenne</th><th ${th}>1 % bas<br>img/s</th><th ${th}>palier</th><th ${th}>p95<br>ms</th><th ${th}>p99<br>ms</th><th ${th}>plus longue<br>ms</th><th ${th}>images<br>&gt; 33 ms</th><th ${th}>CPU ms<br>màj + rendu</th><th ${th}>appels de<br>dessin</th><th ${th}>triangles</th><th ${th}>rendu px<br>(densité)</th><th ${th}>nouveaux<br>shaders / tex. / géom.</th></tr></thead>
       <tbody>${rows}</tbody></table></div>
     <div style="margin-top:12px"><div style="font-weight:600">Processeur, moyenne par image</div>${r.scenes.map((s) => `<div style="font-size:13px"><span style="color:#93a4b8">${esc(s.label)} :</span> ${esc(s.meanDetail)}</div>`).join('')}</div>
     <div style="display:flex;flex-wrap:wrap;gap:12px 28px;margin-top:12px">${r.breakdown.map((b) => `<div style="min-width:280px"><div style="font-weight:600">Coût GPU par calque — ${esc(b.view)} <span style="color:#93a4b8;font-weight:400">(image ${fmt(b.totalMs)} ms)</span></div>
@@ -661,7 +701,7 @@ function showResults(r: BenchResult): void {
     <p style="margin:10px 0 0;color:#93a4b8;font-size:12px">img/s plafonnées par la fréquence de l'écran (60, 120 Hz…). CPU : échantillon séparé de ${r.mode === 'court' ? 3 : 20} images, carte graphique attendue avant chaque image. Appels et triangles : moyenne par image, ombres comprises. Aucune donnée n'est envoyée sur le réseau.</p>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
       <button type="button" id="bench-copy" ${btn.replace('#2a3646', '#4fd18b').replace('#e8eef5', '#0d1a12')}>Copier les résultats</button>
-      ${link('Relancer', {})}${link('Relancer en Haute', { qualite: 'haute' })}${link('Relancer en Moyenne', { qualite: 'moyenne' })}${link('Relancer en Auto', { qualite: 'auto' })}
+      ${link('Relancer', {})}${link('Relancer en Haute', { qualite: 'haute' })}${link('Relancer en Moyenne', { qualite: 'moyenne' })}${link('Relancer en Auto', { qualite: 'auto' })}${link('Palier fixe 0 (élevé)', { palier: '0' })}${link('Palier fixe 3 (minimal)', { palier: '3' })}${link('Paliers automatiques', { palier: null })}
       ${link('Relancer sans lots (?lots=0)', { lots: '0' })}${link('Lots activés', { lots: null })}${link('Résolution dynamique activée', { dyn: '1' })}${link('Résolution fixe', { dyn: '0' })}${link('Sans MSAA', { msaa: '0' })}${link('MSAA ×4', { msaa: '1' })}${link('Anticrénelage auto', { msaa: null })}${link('Ombres 1K', { ombres: 'low' })}${link('Sans ombres', { ombres: 'off' })}${link('Ombres du réglage', { ombres: null })}${link('Comparer ancien / nouveau (A B A B)', { comparer: '', etape: null })}${link('Ancien rendu (A)', { ordre: '0', terrain: '0', aniso: '8', trace: '0' })}${link('Nouveau rendu (B)', { ordre: null, terrain: null, aniso: null, trace: null })}
       <button type="button" id="bench-close" ${btn}>Fermer</button>
     </div>
@@ -683,6 +723,14 @@ function showResults(r: BenchResult): void {
     const cb = navigator.clipboard;
     if (!cb?.writeText) { fallback(); return; }
     cb.writeText(text).then(() => { copyBtn.textContent = 'Copié ✓'; }, fallback);
+  });
+  const shortBtn = box.querySelector('#bench-copy-short') as HTMLButtonElement;
+  shortBtn.addEventListener('click', () => {
+    const shortText = shortReport(r);
+    const sel = (): void => { const rg = document.createRange(); rg.selectNodeContents(box.querySelector('#bench-short-text')!); const se = getSelection(); se?.removeAllRanges(); se?.addRange(rg); shortBtn.textContent = 'Texte sélectionné : Ctrl+C'; };
+    const cb = navigator.clipboard;
+    if (!cb?.writeText) { sel(); return; }
+    cb.writeText(shortText).then(() => { shortBtn.textContent = 'Copié ✓'; }, sel);
   });
   (box.querySelector('#bench-close') as HTMLButtonElement).addEventListener('click', () => box.remove());
   (window as unknown as { __benchResult?: BenchResult }).__benchResult = r;

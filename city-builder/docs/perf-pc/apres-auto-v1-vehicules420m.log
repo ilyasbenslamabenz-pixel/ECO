@@ -1,0 +1,14 @@
+[apres-auto] demo aerienne: {"calls":821,"triangles":637441,"cpuUpdateMs":0.3,"cpuRenderMs":19.8,"cpuMovingUpdateMs":0.6,"cpuMovingRenderMs":31.1,"vehiclesDrawn":11,"buildings":126,"vegetation":8824,"pixelRatio":1,"tier":{"tier":3,"auto":true,"igpu":true},"staticDrawsTop":["batiments:427/3","roads:116/51","terrain:81/44","decor_urbain:14/14","vehicules:12/0","vegetation:7/0","feux_tricolores:7/4","dechets-conteneurs:6/6"],"view":"aerienne","swiftshaderLoopFps":0.5}
+[apres-auto] demo rue: {"calls":723,"triangles":1483899,"cpuUpdateMs":0.2,"cpuRenderMs":9.9,"cpuMovingUpdateMs":0.3,"cpuMovingRenderMs":17.2,"vehiclesDrawn":62,"buildings":126,"vegetation":8824,"pixelRatio":1,"tier":{"tier":3,"auto":true,"igpu":true},"staticDrawsTop":["batiments:266/3","roads:149/84","terrain:120/31","vehicules:56/16","vegetation:19/12","decor_urbain:14/0","feux_tricolores:8/0","pietons:7/0"],"view":"rue","swiftshaderLoopFps":0.2}
+[apres-auto] demo large: {"calls":791,"triangles":521249,"cpuUpdateMs":0.2,"cpuRenderMs":34.2,"cpuMovingUpdateMs":0.5,"cpuMovingRenderMs":35.6,"vehiclesDrawn":0,"buildings":126,"vegetation":8824,"pixelRatio":1,"tier":{"tier":3,"auto":true,"igpu":true},"staticDrawsTop":["batiments:420/3","roads:116/51","terrain:99/53","decor_urbain:14/0","feux_tricolores:7/0","vegetation:6/0","dechets-conteneurs:6/0","eau:5/0"],"view":"large","swiftshaderLoopFps":0.2}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+page.evaluate: Target page, context or browser has been closed
+    at measureScene (/home/user/ECO/.claude/worktrees/agent-a4076a61b6ef492eb/city-builder/tests/e2e/perf-pc.mjs:72:24)
+    at async file:///home/user/ECO/.claude/worktrees/agent-a4076a61b6ef492eb/city-builder/tests/e2e/perf-pc.mjs:83:58 {
+  log: []
+}
+
+Node.js v22.23.4

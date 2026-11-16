@@ -36,6 +36,13 @@ export interface RenderPerf {
   ratio: number;
   /** Trace des durées processeur par phase (page de mesure ?bench ; null hors mesure : aucun coût). */
   trace?: ((phase: string, ms: number) => void) | null;
+  /** Paliers de qualité automatiques actifs (qualité Auto sur ordinateur, src/render/quality-tiers.ts). */
+  tiersEnabled?: boolean;
+  /** Descend / remonte d'un palier ; vrai si le palier a changé (branché par src/render/index.ts). */
+  tierDown?: ((now: number) => boolean) | null;
+  /** Palier courant (0 = élevé). */
+  tier?: number;
+  tierUp?: ((now: number) => boolean) | null;
 }
 
 /** `antialias` : MSAA du contexte (fixé à sa création ; réglage « Anticrénelage », src/ui/options.ts). */
@@ -101,7 +108,7 @@ export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderCo
   let last = performance.now();
   let frames = 0;
   let running = false;
-  const perf: RenderPerf = { maxFps: 0, idle: () => false, shadowEvery: 1, adaptive: null, ratio: 0 };
+  const perf: RenderPerf = { maxFps: 0, idle: () => false, shadowEvery: 1, adaptive: null, ratio: 0, tiersEnabled: false, tier: 0 };
   // Ombres : clé (position du soleil et de sa cible) ; recalcul si elle change, sinon une image sur N.
   let shadowKey = '', shadowCount = 0;
   const updateShadows = (): void => {
@@ -118,9 +125,11 @@ export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderCo
   // Rapport auquel la cadence a décroché : on n'y remonte pas avant 2 min (pas d'oscillation montée / descente).
   let failRatio = Infinity, failUntil = 0;
   const adapt = (now: number): void => {
-    const a = perf.adaptive;
-    if (!a) return;
+    const tiers = !!perf.tiersEnabled;
+    if (!perf.adaptive && !tiers) return;
     if (perf.ratio <= 0) perf.ratio = renderer.getPixelRatio();
+    // Résolution fixe mais paliers actifs : seuls les paliers agissent.
+    const a = perf.adaptive ?? { min: perf.ratio, max: perf.ratio };
     winFrames++;
     const span = now - winStart;
     const target = perf.maxFps > 0 ? perf.maxFps : 60;
@@ -129,10 +138,19 @@ export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderCo
     const fps = (1000 * winFrames) / Math.max(1, span);
     const slow = winSlow / Math.max(1, winFrames);
     let next = perf.ratio;
-    if ((span > 1500 && fps < target * 0.8) || (span > 1000 && winFrames >= 30 && slow > 0.12)) { next = Math.max(a.min, perf.ratio - 0.25); holdUntil = now + 20000; failRatio = perf.ratio; failUntil = now + 120000; }
+    if ((span > 1500 && fps < target * 0.8) || (span > 1000 && winFrames >= 30 && slow > 0.12)) {
+      // Descente : la résolution d'abord, puis le palier de qualité quand elle est au plancher.
+      if (perf.ratio > a.min + 1e-3) { next = Math.max(a.min, perf.ratio - 0.25); failRatio = perf.ratio; failUntil = now + 120000; }
+      else if (tiers) perf.tierDown?.(now);
+      holdUntil = now + 20000;
+    }
     else if (span > 3000 && fps > target * 0.93 && slow < 0.03 && now > holdUntil) {
-      next = Math.min(a.max, perf.ratio + 0.25);
-      if (next >= failRatio - 1e-3 && now < failUntil) next = perf.ratio;
+      // Montée : le palier d'abord (ordre inverse de la descente), puis la résolution.
+      if (tiers && (perf.tier ?? 0) > 0) perf.tierUp?.(now);
+      else {
+        next = Math.min(a.max, perf.ratio + 0.25);
+        if (next >= failRatio - 1e-3 && now < failUntil) next = perf.ratio;
+      }
     }
     else if (span <= 3000) return;
     winStart = now; winFrames = 0; winSlow = 0;

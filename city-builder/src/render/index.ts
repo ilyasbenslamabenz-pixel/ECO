@@ -38,6 +38,8 @@ import { RENDER_PLUGINS, RenderPluginHost, type RenderPlugin } from './plugins';
 import { WaterSystem } from './water/water-system';
 import { QuayRenderer } from './water/quays';
 import { deviceProfile, isSafeMode, type DeviceProfile, type QualitySetting } from './device-profile';
+import { QUALITY_TIERS, TierController, urlTier } from './quality-tiers';
+import { pedRenderBudget } from './pedestrians/crowd';
 
 export interface RenderStats {
   /** Appels de rendu et triangles de la dernière image (ombres comprises). */
@@ -50,6 +52,9 @@ export interface RenderStats {
   vegetation: number;
   terrainTriangles: number;
   frameMs: number;
+  /** Palier de qualité automatique courant (0 = élevé, src/render/quality-tiers.ts) et son nom. */
+  tier: number;
+  tierName: string;
 }
 
 export interface RenderHandle {
@@ -87,6 +92,11 @@ export interface RenderHandle {
    */
   precompile(capMs?: number): Promise<void>;
   stats(): RenderStats;
+  /**
+   * À appeler après chaque application des options graphiques : relit la taille d'ombre choisie par le joueur et
+   * réapplique le palier de qualité (remis à « élevé » hors qualité Auto, sauf palier imposé par `?palier=`).
+   */
+  onOptionsApplied(): void;
 }
 
 export async function initRender(
@@ -173,17 +183,55 @@ export async function initRender(
   /** Groupes de petits objets dont l'ombre est coupée en vue aérienne lointaine. */
   const SMALL_SHADOW_GROUPS = new Set(['feux_tricolores', 'decor_urbain', 'pietons', 'dechets-conteneurs', 'panneaux_carrefours']);
   let smallShadowsOff = false, smallShadowTick = 0;
+  /**
+   * Paliers de qualité ≥ 1 : en vue lointaine, les bordures et le décor routier (lampadaires, bancs, jardinières ;
+   * pas les arbres d'alignement) perdent aussi leur ombre. Palier 0 : comportement d'origine.
+   */
+  let roadShadowCut = false;
+  /** Caméra au niveau de la rue (vue rue : la distance de la pose aérienne n'y a plus de sens) : décor routier ombré. */
+  let streetLevel = false;
+  const ROAD_SMALL = /^roads_(curb|decor_(?!arbre))/;
   const setSmallShadows = (on: boolean): void => {
     for (const g of ctx.scene.children) {
-      if (!SMALL_SHADOW_GROUPS.has(g.name)) continue;
+      const road = g.name === 'roads';
+      if (!road && !SMALL_SHADOW_GROUPS.has(g.name)) continue;
+      const cut = !on && (!road || (roadShadowCut && !streetLevel));
       g.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (!m.isMesh) return;
-        if (!on) { if (m.castShadow) { m.userData['ombreCoupee'] = true; m.castShadow = false; } }
+        if (!m.isMesh || (road && !ROAD_SMALL.test(m.name))) return;
+        if (cut) { if (m.castShadow) { m.userData['ombreCoupee'] = true; m.castShadow = false; } }
         else if (m.userData['ombreCoupee']) { m.castShadow = true; delete m.userData['ombreCoupee']; }
       });
     }
   };
+
+  // Paliers de qualité automatiques (qualité Auto sur ordinateur) ; `?palier=N` en impose un (mesures).
+  const tierCtl = new TierController();
+  const forcedTier = urlTier();
+  if (forcedTier !== null) { tierCtl.reset(forcedTier); tierCtl.fixed = true; }
+  let tierBaseShadow = 0;
+  let smallShadowDist = QUALITY_TIERS[0]!.smallShadowDist;
+  const tierActive = (): boolean => forcedTier !== null || !!ctx.perf.tiersEnabled;
+  const applyTier = (): void => {
+    const k = tierActive() ? tierCtl.tier : 0;
+    const t = QUALITY_TIERS[k]!;
+    ctx.perf.tier = k;
+    buildings.setLodScale(t.buildingLod);
+    veg.setQuality(t.vegScale, t.vegShadowMaxLod);
+    vehicles.maxDrawn = t.maxVehicles;
+    vehicles.maxDist = t.vehicleDist;
+    pedRenderBudget.maxDist = t.pedDist;
+    smallShadowDist = t.smallShadowDist;
+    if (roadShadowCut !== k >= 1) { roadShadowCut = k >= 1; setSmallShadows(!smallShadowsOff); }
+    // Carte d'ombre plafonnée sous le réglage du joueur (pas de recompilation : seule la carte est recréée).
+    const sun = ctx.sun;
+    if (sun.castShadow && tierBaseShadow > 0) {
+      const sz = Math.min(tierBaseShadow, t.shadowCap);
+      if (sun.shadow.mapSize.x !== sz) { sun.shadow.mapSize.set(sz, sz); sun.shadow.map?.dispose(); sun.shadow.map = null; }
+    }
+  };
+  ctx.perf.tierDown = (now) => { if (!tierCtl.down(now)) return false; applyTier(); return true; };
+  ctx.perf.tierUp = (now) => { if (!tierCtl.up(now)) return false; applyTier(); return true; };
 
   const handle: RenderHandle = {
     ctx, profile, sky, terrain, water, roads, buildings, vehicles, signals, veg, quays, plugins,
@@ -207,8 +255,10 @@ export async function initRender(
     },
     followView(p) {
       // Vue aérienne lointaine : petits objets sans ombre (1 à 2 texels de la carte d'ombre à cette distance).
-      const far = smallShadowsOff ? p.distance > 280 : p.distance > 320;
-      if (far !== smallShadowsOff || (far && ++smallShadowTick % 60 === 0)) { smallShadowsOff = far; setSmallShadows(!far); }
+      const far = smallShadowsOff ? p.distance > smallShadowDist * 0.875 : p.distance > smallShadowDist;
+      const cp = ctx.camera.position;
+      const street = cp.y - terrain.heightAt(cp.x, cp.z) < 20;
+      if (far !== smallShadowsOff || street !== streetLevel || (far && ++smallShadowTick % 60 === 0)) { smallShadowsOff = far; streetLevel = street; setSmallShadows(!far); }
       sky.shadowSnapFraction = profile.lite ? 0.18 : 0;
       sky.followView(p.targetX, p.targetY, p.targetZ, Math.min(900, Math.max(60, p.distance)));
     },
@@ -305,7 +355,13 @@ export async function initRender(
         calls: info.render.calls, triangles: info.render.triangles, geometries: info.memory.geometries, textures: info.memory.textures,
         buildings: buildings.count, vehiclesDrawn: vs.drawn.reduce((a, b) => a + b, 0), vegetation: veg.count,
         terrainTriangles: terrain.stats().triangles, frameMs,
+        tier: ctx.perf.tier ?? 0, tierName: QUALITY_TIERS[ctx.perf.tier ?? 0]!.name,
       };
+    },
+    onOptionsApplied() {
+      tierBaseShadow = ctx.sun.castShadow ? ctx.sun.shadow.mapSize.x : 0;
+      if (!tierActive()) tierCtl.reset(0);
+      applyTier();
     },
   };
 
