@@ -8,7 +8,8 @@
  *  - le long de la route : u = P·T − phase (mesuré depuis l'origine du MONDE, pas depuis le début du tronçon : une rue
  *    droite coupée en plusieurs tronçons par des carrefours garde la même trame) ;
  *  - en profondeur : v = |P·N − cn| − offset, où cn = O·N (O : point de l'axe) et offset = demi-largeur de la route
- *    (trottoirs compris) + recul de la façade. v = 0 est la ligne des façades des deux côtés de la rue.
+ *    (trottoirs compris) + recul de la façade, arrondi à la demi-case (`facadeOffset`) : v = 0 est la ligne des façades
+ *    des deux côtés de la rue, et la bande entre elles est un nombre entier de cases (un seul quadrillage).
  * Les lignes sont aux multiples de `cell` (8 m) en u et en v (v ≥ 0 : rien sur la chaussée ni le trottoir).
  *
  * Les bâtiments posés face à la route (outil de pose, zonage) ont leur façade sur v = 0 et une profondeur multiple
@@ -19,8 +20,27 @@
 import { TILE_SIZE } from './constants';
 import type { Obb } from './footprint';
 
-/** Recul (m) entre le bord du trottoir et la façade (outil de pose et zonage). */
-export const FACADE_GAP = 0.6;
+/** Recul minimal (m) entre le bord du trottoir et la façade (outil de pose et zonage). */
+export const FACADE_GAP = 0.5;
+
+/**
+ * Distance (m) de l'axe d'une route de demi-largeur `half` (trottoirs compris) à la ligne des façades : la plus petite
+ * valeur ≥ half + FACADE_GAP multiple d'une DEMI-case. La bande entre les deux lignes des façades (2 × offset) est
+ * alors un nombre entier de cases : les lignes des deux côtés de la rue, et celles des routes parallèles ou
+ * perpendiculaires calées sur le treillis du monde, forment UN SEUL quadrillage continu (retour joueur « le
+ * quadrillage au sol n'est pas partout le même » : avec un recul fixe de 0,6 m, la bande d'une rue faisait 13,6 m et
+ * l'autre côté de la rue était décalé de 5,6 m). Reculs obtenus : rue 1,8 m, sens unique 1,9, avenue 0,5,
+ * voie rapide 1,9, piétonne 1,5, boulevard 3,6.
+ */
+export function facadeOffset(half: number, cell = TILE_SIZE): number {
+  const q = cell / 2;
+  return Math.ceil((half + FACADE_GAP) / q - 1e-9) * q;
+}
+
+/** Recul (m) de la façade depuis le bord du trottoir pour une route de demi-largeur `half`. */
+export function facadeGap(half: number, cell = TILE_SIZE): number {
+  return facadeOffset(half, cell) - half;
+}
 
 export interface RoadGridFrame {
   /** Tangente unitaire canonique. */
@@ -53,7 +73,7 @@ export function canonicalTangent(tx: number, tz: number): [number, number] {
 export function roadGridFrame(ox: number, oz: number, tx: number, tz: number, half: number, phase = 0, cell = TILE_SIZE): RoadGridFrame {
   const [cx, cz] = canonicalTangent(tx, tz);
   const nx = -cz, nz = cx;
-  return { tx: cx, tz: cz, nx: nx + 0, nz: nz + 0, cn: ox * nx + oz * nz, offset: half + FACADE_GAP, phase: mod(phase, cell), cell };
+  return { tx: cx, tz: cz, nx: nx + 0, nz: nz + 0, cn: ox * nx + oz * nz, offset: facadeOffset(half, cell), phase: mod(phase, cell), cell };
 }
 
 /** Coordonnées (u le long de la route, v en profondeur depuis la ligne des façades, côté : +1 / −1). */

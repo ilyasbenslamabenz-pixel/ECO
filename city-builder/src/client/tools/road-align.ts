@@ -2,7 +2,7 @@
  * Aimantation du tracé de route au quadrillage affiché (retour joueur « le tracé n'est pas au milieu du
  * quadrillage »). TypeScript pur (aucun three).
  *
- * Une route posée a sa propre trame (src/shared/grid-field.ts) : ligne des façades à `demi-largeur + 0,6 m` de l'axe
+ * Une route posée a sa propre trame (src/shared/grid-field.ts) : ligne des façades à `facadeOffset(demi-largeur)` de l'axe (bande des façades = cases entières)
  * des DEUX côtés, rangées tous les 8 m, lignes transversales en P·T ≡ 0 (mod 8, T canonique). Le tracé est calé pour
  * que cette trame prolonge les lignes affichées avant le tracé :
  *  1. direction : parallèle / perpendiculaire aux lignes affichées si l'écart est < ALIGN_TOL (8°) ;
@@ -17,7 +17,7 @@
  * choisi en touche une, l'autre côté de la bande des façades puis le décalage d'une case sont essayés.
  */
 import { TILE_SIZE } from '../../shared/constants';
-import { FACADE_GAP } from '../../shared/road-grid';
+import { facadeOffset } from '../../shared/road-grid';
 
 /** Écart angulaire maximal (rad) pour aligner la direction du tracé sur le quadrillage. */
 export const ALIGN_TOL = (8 * Math.PI) / 180;
@@ -73,7 +73,7 @@ export function alignTrace(start: AlignEnd, end: AlignEnd, half: number, L: Alig
     return Math.abs(dT) >= Math.abs(dN) ? Math.sign(dT) * L.pu : Math.sign(dN) * L.pv;
   };
   // 2. En travers : ligne des façades (axe ± off) sur une ligne affichée.
-  const off = half + FACADE_GAP;
+  const off = facadeOffset(half, cell);
   const pc = phaseAlong(nx, nz);
   const c0 = sx * nx + sz * nz;
   const dPlus = nearestShift(c0 + off, pc, cell), dMinus = nearestShift(c0 - off, pc, cell);

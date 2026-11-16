@@ -25,7 +25,7 @@ import { governanceModifiers } from '../../shared/governance';
 import type { CatalogAsset } from '../../shared/catalog';
 import { TILE_SIZE } from '../../shared/constants';
 import { angleToRot, buildingGap, footprintObb, obbAabb, obbOverlap, obbToLocal, obbToWorld, type Obb } from '../../shared/footprint';
-import { FACADE_GAP, obbParallel, phaseFromObb, pickPhase, roadGridFrame, snapAlong, type RoadGridFrame } from '../../shared/road-grid';
+import { FACADE_GAP, facadeGap, obbParallel, phaseFromObb, pickPhase, roadGridFrame, snapAlong, type RoadGridFrame } from '../../shared/road-grid';
 import { GridField, type ObbQuery } from '../../shared/grid-field';
 import {
   ZONE_COUNT, ZONE_TYPES, zoneOf,
@@ -571,7 +571,7 @@ export class ZoningSystem {
     const { rot, nx, nz } = this.orient(a, hit, cx, cz);
     const probe = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, 0, 0, rot);
     const halfDepth = extentAlong(probe, nx, nz);
-    const s = hit.half + halfDepth + FRONT_GAP;
+    const s = hit.half + halfDepth + facadeGap(hit.half);
     for (const [x, z] of this.candidates(ctx, hit, probe, hit.x + nx * s, hit.z + nz * s)) {
       if (!this.fits(a, x, z, rot, code, hit.segId, field)) continue;
       const variant = a.variants.length > 0 ? Math.floor(ctx.rng.next() * a.variants.length) : -1;
@@ -591,11 +591,12 @@ export class ZoningSystem {
     const { rot, nx, nz } = this.orient(a, hit, cx, cz);
     const probe = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, 0, 0, rot);
     const halfDepth = extentAlong(probe, nx, nz);
-    const front0 = Math.max(FRONT_GAP, edge - TILE_SIZE / 2);
-    // Façade sur une ligne de la trame de la route (FRONT_GAP + k × 8 m depuis le bord) : rangée la plus proche, la
+    const gap = facadeGap(hit.half);
+    const front0 = Math.max(gap, edge - TILE_SIZE / 2);
+    // Façade sur une ligne de la trame de la route (recul + k × 8 m depuis le bord) : rangée la plus proche, la
     // suivante, puis la ligne des façades si la rangée de devant est encore libre. Aucun recul hors trame.
-    const k0 = Math.max(1, Math.round((front0 - FRONT_GAP) / TILE_SIZE));
-    const fronts = [k0, k0 + 1, k0 - 1].map((k) => FRONT_GAP + k * TILE_SIZE);
+    const k0 = Math.max(1, Math.round((front0 - gap) / TILE_SIZE));
+    const fronts = [k0, k0 + 1, k0 - 1].map((k) => gap + k * TILE_SIZE);
     for (let fi = 0; fi < fronts.length; fi++) {
       const s = hit.half + fronts[fi]! + halfDepth;
       for (const [x, z] of this.candidates(ctx, hit, probe, hit.x + nx * s, hit.z + nz * s)) {

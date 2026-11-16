@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AssetCatalog } from '../../src/shared/catalog';
 import { footprintObb, obbAabb } from '../../src/shared/footprint';
-import { FACADE_GAP, lineGap } from '../../src/shared/road-grid';
+import { facadeOffset, lineGap } from '../../src/shared/road-grid';
 import { zoneCode } from '../../src/shared/protocol-ext/zonage';
 import { Simulation } from '../../src/sim/world';
 import { createZonagePlugin } from '../../src/sim/plugins/zonage';
@@ -24,7 +24,7 @@ function gridGap(t: { sim: Simulation }, id: number): number {
   const st = t.sim.buildings, i = st.indexOf(id);
   const b = obbAabb(footprintObb(st.tilesX[i]!, st.tilesZ[i]!, st.x[i]!, st.z[i]!, st.rot[i]!));
   const near = Math.min(Math.abs(b.minZ), Math.abs(b.maxZ)), far = Math.max(Math.abs(b.minZ), Math.abs(b.maxZ));
-  const off = HALF + FACADE_GAP;
+  const off = facadeOffset(HALF);
   return Math.max(lineGap(b.minX), lineGap(b.maxX), lineGap(near - off), lineGap(far - off));
 }
 
@@ -64,7 +64,7 @@ test('parties existantes : les lots privés hors de leur case sont recalés au p
   t.cmd('setGrowth', { enabled: false });
   const dev = t.ctx.development!;
   const code = zoneCode('res_moyen');
-  const face = 6.8 + 8; // centre d'un 2 × 2 (16 m) dont la façade est sur la ligne des façades, côté z > 0
+  const face = facadeOffset(6.2) + 8; // centre d'un 2 × 2 (16 m) dont la façade est sur la ligne des façades (8 m de l'axe), côté z > 0
   const lot = (x: number, z: number): number => {
     const r = dev.place({ assetId: 'collectif', x, z, rot: 2 });
     assert.ok(r.ok, `pose privée en ${x}, ${z} : ${JSON.stringify(r)}`);

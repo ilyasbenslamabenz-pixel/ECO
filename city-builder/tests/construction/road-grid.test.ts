@@ -49,9 +49,9 @@ test('trame : tangente canonique, même trame quel que soit le sens du tronçon 
   assert.deepEqual(canonicalTangent(0, -2), [0, 1]);
   const a = roadGridFrame(10, 5, T[0], T[1], 6.2), b = roadGridFrame(10, 5, -T[0], -T[1], 6.2);
   assert.deepEqual([a.tx, a.tz, a.cn, a.offset], [b.tx, b.tz, b.cn, b.offset]);
-  // Point à 6,8 m de l'axe (6,2 m de demi-largeur + 0,6 m de recul) des deux côtés : ligne des façades.
+  // Point à 8 m de l'axe (6,2 m de demi-largeur + 1,8 m de recul : bande des façades de 16 m = 2 cases) des deux côtés : ligne des façades.
   for (const side of [1, -1]) {
-    const g = gridCoords(a, 10 + a.nx * 6.8 * side, 5 + a.nz * 6.8 * side);
+    const g = gridCoords(a, 10 + a.nx * 8 * side, 5 + a.nz * 8 * side);
     assert.ok(Math.abs(g.v) < 1e-9, `v=${g.v}`);
     assert.equal(g.side, side);
   }
@@ -82,7 +82,7 @@ test('pose à la main (aimantation) le long d\'une rue en biais : les bords de l
 test('partie existante : la trame se recale sur le bâtiment voisin (phase), sans le déplacer', () => {
   // Maison existante posée face à la route à une position quelconque le long de la rue (ancienne sauvegarde).
   const f0 = roadGridFrame(3, 5, T[0], T[1], 6.2);
-  const along = 23.7, depth = 6.8 + 8; // façade sur la ligne des façades, côté +N
+  const along = 23.7, depth = 8 + 8; // façade sur la ligne des façades, côté +N
   const bx = 3 + T[0] * along + f0.nx * depth, bz = 5 + T[1] * along + f0.nz * depth;
   const rot = ((Math.atan2(-f0.nx, -f0.nz) - Math.atan2(0, 1)) / (Math.PI / 2) + 4) % 4;
   const o = footprintObb(2, 2, bx, bz, rot);

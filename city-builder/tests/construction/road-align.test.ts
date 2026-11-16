@@ -9,7 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GridField, ObbBuckets, sameLines, worldLines, type FieldRoad, type ObbQuery } from '../../src/shared/grid-field';
 import { distSegmentObb, footprintObb, type Obb } from '../../src/shared/footprint';
-import { FACADE_GAP, lineGap } from '../../src/shared/road-grid';
+import { facadeOffset, lineGap } from '../../src/shared/road-grid';
 import { ROAD_KINDS, halfWidth } from '../../src/sim/roads/types';
 import type { RoadKindId } from '../../src/shared/contracts';
 import { alignTrace } from '../../src/client/tools/road-align';
@@ -28,7 +28,7 @@ test('terrain libre (axes du monde) : direction, façades et extrémités sur le
     // Direction est-ouest exacte.
     assert.ok(Math.abs(r.end.z - r.start.z) < 1e-9, `${kind} : direction`);
     // Ligne des façades d'un côté sur une ligne du monde (z ≡ 0 mod 8), décalage < une demi-case.
-    const off = half + FACADE_GAP;
+    const off = facadeOffset(half);
     assert.ok(Math.min(lineGap(r.start.z + off), lineGap(r.start.z - off)) < 1e-9, `${kind} : façade`);
     assert.ok(Math.abs(r.shift) <= 4 + 1e-9);
     // Extrémités sur les lignes transversales, longueur en cases entières.
@@ -42,7 +42,7 @@ test('après la pose, la trame de la route prolonge les lignes affichées (côt�
     const [x0, z0, x1, z1] = ray(-27.3, 160.6, 56.4, -2.5);
     const r = alignTrace({ x: x0, z: z0 }, { x: x1, z: z1 }, half, worldLines())!;
     const f = field([{ id: 1, poly: [r.start.x, r.start.z, r.end.x, r.end.z], half }]);
-    const off = half + FACADE_GAP, zc = r.start.z, xm = (r.start.x + r.end.x) / 2;
+    const off = facadeOffset(half), zc = r.start.z, xm = (r.start.x + r.end.x) / 2;
     for (const side of [-1, 1]) {
       const L = f.linesAt(xm, zc + side * (off + 2));
       assert.equal(L.kind, 'route');
@@ -80,7 +80,7 @@ test('perpendiculaire depuis un tronçon : le départ glisse le long du tronçon
   assert.ok(r);
   assert.equal(r.start.z, 3, 'le départ reste sur l\'axe du tronçon');
   assert.ok(Math.abs(r.end.x - r.start.x) < 1e-9, 'tracé perpendiculaire');
-  assert.ok(Math.min(lineGap(r.start.x + half + FACADE_GAP - L.pu), lineGap(r.start.x - half - FACADE_GAP - L.pu)) < 1e-9);
+  assert.ok(Math.min(lineGap(r.start.x + facadeOffset(half) - L.pu), lineGap(r.start.x - facadeOffset(half) - L.pu)) < 1e-9);
   assert.ok(lineGap(r.end.z) < 1e-9, 'arrivée sur une ligne transversale');
 });
 
@@ -88,7 +88,7 @@ test('rangée d\'immeubles sur la trame avec un trou de 2 cases : la rue perpend
   // Rue existante d'axe z = 0 ; immeubles 2 × 2 cases (16 m) côté nord, façade sur la ligne des façades, côtés sur les
   // lignes x ≡ 0 (mod 8), de −80 à 96, sauf le trou [0, 16].
   const old: FieldRoad = { id: 1, poly: [-200, 0, 200, 0], half: 6.2 };
-  const zc = 6.2 + FACADE_GAP + 8;
+  const zc = facadeOffset(6.2) + 8;
   const obbs: Obb[] = [];
   for (let x = -72; x <= 88; x += 16) if (x !== 8) obbs.push(footprintObb(2, 2, x, zc, 2));
   const field = new GridField([old], new ObbBuckets(obbs).query);
@@ -110,7 +110,7 @@ test('rangée d\'immeubles sur la trame avec un trou de 2 cases : la rue perpend
       assert.ok(gap(r.start, r.end) >= half, `${kind} x0=${x0} : ${(half - gap(r.start, r.end)).toFixed(2)} m de trop (axe x=${r.start.x})`);
       // Toujours calé : façade d'un côté sur une ligne, perpendiculaire, départ sur l'axe de la rue.
       assert.ok(Math.abs(r.end.x - r.start.x) < 1e-9 && Math.abs(r.start.z) < 1e-9);
-      assert.ok(Math.min(lineGap(r.start.x + half + FACADE_GAP), lineGap(r.start.x - half - FACADE_GAP)) < 1e-9);
+      assert.ok(Math.min(lineGap(r.start.x + facadeOffset(half)), lineGap(r.start.x - facadeOffset(half))) < 1e-9);
     }
     assert.equal(after, 0, `${kind} : ${after}/${n} tracés en collision`);
     assert.ok(before > 0, `${kind} : le calage seul touchait un immeuble dans ${before}/${n} cas`);
@@ -121,7 +121,7 @@ test('simulation : la rue calée dans le trou de 2 cases est acceptée (aucun «
   for (const kind of ['street', 'oneway'] as const) {
     const t = zoningTown();
     assert.ok(t.sim.buildRoad({ type: 'street', points: [-200, 0, 200, 0] }).ok);
-    const zc = 6.2 + FACADE_GAP + 8;
+    const zc = facadeOffset(6.2) + 8;
     const obbs: Obb[] = [];
     for (let x = -72; x <= 88; x += 16) {
       if (x === 8) continue;

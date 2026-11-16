@@ -7,7 +7,8 @@
  * Lignes en un point P : P·T ≡ pu et P·N ≡ pv (mod 8 m), T unitaire, N = (−T.z, T.x). Règle (la plus proche gagne) :
  *  1. Route la plus proche (bord à moins de FIELD_ROAD_REACH m, toutes rangées de zonage comprises) : T = tangente
  *     locale (routes courbes : tangente au point le plus proche, phase le long de la voie mesurée en abscisse
- *     curviligne, donc continue), lignes en profondeur depuis la ligne des façades (demi-largeur + 0,6 m) ;
+ *     curviligne, donc continue), lignes en profondeur depuis la ligne des façades (`facadeOffset` : demi-largeur + recul arrondi à la
+ *     demi-case, bande des façades = nombre entier de cases, mêmes lignes des deux côtés) ;
  *     le long de la voie, phase du bâtiment parallèle voisin (src/shared/road-grid.ts), sinon trame de la route.
  *     À moins de FIELD_BUILDING_SNAP m d'un bâtiment : ses côtés (parallèle à la route : phases recalées sur lui,
  *     rangées intérieures des anciennes parties comprises ; en biais : son propre repère).
@@ -18,7 +19,7 @@
  */
 import { TILE_SIZE } from './constants';
 import type { Obb } from './footprint';
-import { FACADE_GAP, canonicalTangent, lineGap, obbExtentAlong, type RoadGridFrame } from './road-grid';
+import { canonicalTangent, facadeOffset, lineGap, obbExtentAlong, type RoadGridFrame } from './road-grid';
 
 /** Portée (m, depuis le bord) des trames de route : 6 rangées de cases et plus (zonage de 4 rangées + intérieur). */
 export const FIELD_ROAD_REACH = 64;
@@ -248,7 +249,7 @@ export class GridField {
     const nx = -tz, nz = tx;
     const cn = ox * nx + oz * nz;
     const side = x * nx + z * nz - cn >= 0 ? 1 : -1;
-    const offset = r.half + FACADE_GAP;
+    const offset = facadeOffset(r.half, this.cell);
     const sO = r.s[hit[1]!]! + t * l;
     const pu = mod(ox * tx + oz * tz - r.sign * sO - r.base, this.cell);
     return { tx, tz, pu, pv: mod(cn + side * offset, this.cell), weight: 1, kind: 'route', roadId: r.id, side, cn, offset, edge: hit[4]! };

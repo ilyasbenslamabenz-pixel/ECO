@@ -13,7 +13,7 @@ import type { CatalogAsset } from '../../shared/catalog';
 import { rotateQuarter } from '../../shared/math';
 import { angleToRot, buildingGap, distSegmentObb, footprintObb, normRot, obbAabb, obbOverlap, type Obb } from '../../shared/footprint';
 import { roadWidth, type WorldMirror } from './mirror';
-import { FACADE_GAP, snapAlong } from '../../shared/road-grid';
+import { facadeGap, snapAlong } from '../../shared/road-grid';
 import { frameForEdge } from './road-grid';
 
 export interface PlacementProposal {
@@ -141,7 +141,6 @@ export interface SnapOptions {
 }
 
 /** Recul (m) entre le bord du trottoir et la façade (trame des routes : src/shared/road-grid.ts). */
-const FRONT_GAP = FACADE_GAP;
 
 export function proposePlacement(m: WorldMirror, asset: CatalogAsset, x: number, z: number, opt: SnapOptions): PlacementProposal {
   const t = m.terrain;
@@ -192,7 +191,7 @@ export function proposePlacement(m: WorldMirror, asset: CatalogAsset, x: number,
   const halfAlong = extentAlong(probe, near.tx, near.tz);
   let first: PlacementProposal | null = null;
   for (let k = 0; k <= 8; k++) {
-    const s = half + halfDepth + FRONT_GAP + k * 1.5;
+    const s = half + halfDepth + facadeGap(half) + k * 1.5;
     const rx = near.px + nx * s, rz = near.pz + nz * s;
     let cx = Math.round(rx * 100) / 100;
     let cz = Math.round(rz * 100) / 100;
