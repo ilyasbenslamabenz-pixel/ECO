@@ -16,6 +16,7 @@ import { createDechetsPlugin, dechetsPlugin } from './dechets';
 import { createHubsPlugin, hubsPlugin } from './hubs';
 import { createEauPlugin, eauPlugin } from './eau';
 import { createZonagePlugin, zonagePlugin } from './zonage';
+import { createRessourcesPlugin, ressourcesPlugin } from './ressources';
 import { createPolitiquesPlugin, politiquesPlugin } from './politiques';
 import { createRecherchePlugin, recherchePlugin } from './recherche';
 import { alertesPlugin, createAlertesPlugin } from './alertes';
@@ -46,6 +47,7 @@ export const SIM_PLUGINS: readonly SimPlugin[] = [
   hubsPlugin,
   eauPlugin,
   zonagePlugin,
+  ressourcesPlugin,
   politiquesPlugin,
   recherchePlugin,
   paliersPlugin,
@@ -71,7 +73,7 @@ export function createSimPlugins(): SimPlugin[] {
   return [
     batimentsPlugin, circulationPlugin, createPietonsPlugin(), chantiersPlugin, createWeatherPlugin(),
     createMunicipalPlugin(), createElectricitePlugin(), createDechetsPlugin(), createHubsPlugin(), createEauPlugin(),
-    createZonagePlugin(), createPolitiquesPlugin(), createRecherchePlugin(), createPaliersPlugin(), createDeveloppementPlugin(), createSecteursPlugin(), createAmeliorationsPlugin(), createServicesPlugin(), createAlertesPlugin(), createBusPlugin(),
+    createZonagePlugin(), createRessourcesPlugin(), createPolitiquesPlugin(), createRecherchePlugin(), createPaliersPlugin(), createDeveloppementPlugin(), createSecteursPlugin(), createAmeliorationsPlugin(), createServicesPlugin(), createAlertesPlugin(), createBusPlugin(),
     createObjectifsPlugin(), createEvenementsPlugin(), createCartesPlugin(), createHistoriquePlugin(),
   ];
 }

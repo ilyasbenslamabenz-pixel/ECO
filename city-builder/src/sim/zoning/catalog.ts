@@ -8,6 +8,12 @@
  *  - commerces           : `commercial` sans l'étiquette `bureaux` / `tertiaire` ;
  *  - bureaux             : `commercial` étiqueté `bureaux` / `tertiaire`, gratte-ciel (`skyscraper`) ;
  *  - industrie           : `industrial`, hors ouvrages de réseau (étiquettes `electricite`, `service:eau`).
+ * Zones spécialisées (un modèle peut y pousser EN PLUS de sa zone ordinaire : bâtiments existants réutilisés) :
+ *  - forêt (exploitation forestière) : `industrial` étiqueté `bois`, `artisanat` (ateliers, scieries) ou entrepôt
+ *    non logistique (dépôt de grumes) ;
+ *  - agricole : `industrial` étiqueté `agriculture`, `service:stockage_agricole` (silos) ou `artisanat` (hangars) ;
+ *  - mixte : immeubles et commerces qui ont À LA FOIS des logements et des emplois de commerce (commerces au
+ *    rez-de-chaussée, logements au-dessus), hors bureaux.
  * Niveau : rang de la capacité (habitants + emplois) dans la zone, découpé en trois tiers ; les bâtiments
  * des niveaux supérieurs ne poussent que dans un quartier valorisé (densification).
  * TypeScript pur : AUCUN import de three ni du DOM.
@@ -37,6 +43,24 @@ export function zoneForAsset(a: CatalogAsset): ZoneType | null {
   }
 }
 
+const RESIDENTIAL_CATS = ['house', 'townhouse', 'apartment_low', 'apartment_mid', 'apartment_high'];
+
+/** Zones spécialisées où un modèle peut aussi pousser (liste vide : aucune). */
+export function specialZonesForAsset(a: CatalogAsset): ZoneType[] {
+  if (a.footprint.tilesX < 1 || a.footprint.tilesZ < 1 || a.frontage.length === 0) return [];
+  if (a.tags.some((t) => EXCLUDED_TAGS.includes(t))) return [];
+  const out: ZoneType[] = [];
+  const t = a.tags;
+  if (a.category === 'industrial') {
+    const pollutes = t.some((x) => x.startsWith('pollution:'));
+    if (!pollutes && (t.includes('bois') || t.includes('artisanat') || (t.includes('entrepot') && !t.includes('logistique')))) out.push('foret');
+    if (!pollutes && (t.includes('agriculture') || t.includes('service:stockage_agricole') || (t.includes('artisanat') && !t.includes('bois')))) out.push('agricole');
+  }
+  const mixedCat = RESIDENTIAL_CATS.includes(a.category) || a.category === 'commercial';
+  if (mixedCat && !isOffice(a) && a.capacity.residents > 0 && a.capacity.jobs > 0) out.push('mixte');
+  return out;
+}
+
 export interface ZoneAsset {
   asset: CatalogAsset;
   /** Index dans le catalogue. */
@@ -52,8 +76,10 @@ export function buildZoneCatalog(cat: AssetCatalog | null): ZoneCatalog {
   const out = Object.fromEntries(ZONE_TYPES.map((z) => [z, [] as ZoneAsset[]])) as ZoneCatalog;
   if (!cat) return out;
   cat.assets.forEach((a, index) => {
+    const capacity = Math.max(0, a.capacity.residents) + Math.max(0, a.capacity.jobs);
     const z = zoneForAsset(a);
-    if (z) out[z].push({ asset: a, index, level: 1, capacity: Math.max(0, a.capacity.residents) + Math.max(0, a.capacity.jobs) });
+    if (z) out[z].push({ asset: a, index, level: 1, capacity });
+    for (const s of specialZonesForAsset(a)) if (s !== z) out[s].push({ asset: a, index, level: 1, capacity });
   });
   for (const z of ZONE_TYPES) {
     const list = out[z];

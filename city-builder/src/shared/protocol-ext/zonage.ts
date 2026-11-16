@@ -5,14 +5,23 @@
  */
 
 export const ZONAGE_ID = 'zonage';
-/** Identifiants des modules livrés par la branche zonage (registres). */
-export const ZONAGE_MODULES = [ZONAGE_ID] as const;
+/** Identifiants des modules livrés par la branche zonage (registres) : zonage, ressources des zones spécialisées. */
+export const ZONAGE_MODULES = [ZONAGE_ID, 'ressources'] as const;
 
-/** Types de zones (0 = non zoné). Codes stables : ils sont écrits dans les sauvegardes. */
-export const ZONE_TYPES = ['res_faible', 'res_moyen', 'res_dense', 'commerce', 'bureaux', 'industrie'] as const;
+/**
+ * Types de zones (0 = non zoné). Codes stables : ils sont écrits dans les sauvegardes (ajouts EN FIN de liste
+ * seulement). Zones spécialisées (codes 7 à 9, docs/ZONAGE.md §8) : `foret` (exploitation forestière, peinte sur
+ * la forêt naturelle), `agricole` (terrain fertile et plat), `mixte` (commerces au rez-de-chaussée, logements
+ * au-dessus). Leur production (bois, nourriture) est simulée par le module « ressources ».
+ */
+export const ZONE_TYPES = ['res_faible', 'res_moyen', 'res_dense', 'commerce', 'bureaux', 'industrie', 'foret', 'agricole', 'mixte'] as const;
 export type ZoneType = (typeof ZONE_TYPES)[number];
-/** Code d'une zone dans la grille : 1..6 (index dans ZONE_TYPES + 1) ; 0 = aucune. */
-export type ZoneCode = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+/** Code d'une zone dans la grille : 1..9 (index dans ZONE_TYPES + 1) ; 0 = aucune (4 bits : au plus 15). */
+export type ZoneCode = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+/** Zones spécialisées (industrie forestière et agricole, zone mixte). */
+export const SPECIAL_ZONES = ['foret', 'agricole', 'mixte'] as const satisfies readonly ZoneType[];
+export type SpecialZone = (typeof SPECIAL_ZONES)[number];
+export const isSpecialZone = (z: ZoneType | null): z is SpecialZone => z === 'foret' || z === 'agricole' || z === 'mixte';
 export const ZONE_COUNT = ZONE_TYPES.length;
 
 export const zoneCode = (t: ZoneType): ZoneCode => (ZONE_TYPES.indexOf(t) + 1) as ZoneCode;
@@ -23,22 +32,29 @@ export const isZoneType = (v: unknown): v is ZoneType => typeof v === 'string' &
 export const DEMAND_SECTORS = ['R', 'C', 'B', 'I'] as const;
 export type DemandSector = (typeof DEMAND_SECTORS)[number];
 
+/**
+ * Secteur principal d'une zone (impôt, emplois). La zone mixte relève des DEUX secteurs R et C : sa croissance
+ * suit la demande des deux (src/sim/zoning/system.ts, `zoneDemand`) ; forêt et agricole sont de l'industrie.
+ */
 export const ZONE_SECTOR: Record<ZoneType, DemandSector> = {
-  res_faible: 'R', res_moyen: 'R', res_dense: 'R', commerce: 'C', bureaux: 'B', industrie: 'I',
+  res_faible: 'R', res_moyen: 'R', res_dense: 'R', commerce: 'C', bureaux: 'B', industrie: 'I', foret: 'I', agricole: 'I', mixte: 'R',
 };
 
 export const ZONE_LABELS_FR: Record<ZoneType, string> = {
   res_faible: 'Résidentiel faible densité', res_moyen: 'Résidentiel densité moyenne', res_dense: 'Résidentiel dense',
   commerce: 'Commerces', bureaux: 'Bureaux', industrie: 'Industrie',
+  foret: 'Exploitation forestière', agricole: 'Agricole', mixte: 'Mixte (commerces et logements)',
 };
 export const ZONE_SHORT_FR: Record<ZoneType, string> = {
   res_faible: 'Rés. faible', res_moyen: 'Rés. moyen', res_dense: 'Rés. dense', commerce: 'Commerces', bureaux: 'Bureaux', industrie: 'Industrie',
+  foret: 'Forêt', agricole: 'Agricole', mixte: 'Mixte',
 };
 export const SECTOR_LABELS_FR: Record<DemandSector, string> = { R: 'Résidentiel', C: 'Commerces', B: 'Bureaux', I: 'Industrie' };
 
 /** Couleurs de la superposition (sRGB). Trois verts pour le résidentiel, du clair au foncé. */
 export const ZONE_COLORS: Record<ZoneType, string> = {
   res_faible: '#8be06f', res_moyen: '#3fbf5a', res_dense: '#13853a', commerce: '#3d9bff', bureaux: '#a77bff', industrie: '#ffc531',
+  foret: '#2f8f7a', agricole: '#d8a24a', mixte: '#3fd0d4',
 };
 export const SECTOR_COLORS: Record<DemandSector, string> = { R: '#3fbf5a', C: '#3d9bff', B: '#a77bff', I: '#ffc531' };
 
@@ -103,6 +119,8 @@ export interface ZonageDelta {
   /** Cases modifiées : [index, code, index, code, …] (code = zone | CELL_CONNECTED). */
   cells?: number[];
   demand?: ZonageDemand;
+  /** Demande des zones spécialisées (forêt, agricole : manque de ressources ; mixte : R et C), -1..1. */
+  special?: { foret: number; agricole: number; mixte: number };
   inputs?: ZonageDemandInputs;
   stats?: ZonageStats;
   settings?: ZonageSettings;

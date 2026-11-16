@@ -106,6 +106,10 @@ export interface PluginTerrain {
   isWet(x: number, z: number): boolean;
   /** Emprise de la carte (m) ; null sans partie. */
   bounds(): { minX: number; minZ: number; maxX: number; maxZ: number } | null;
+  /** Densité de la forêt naturelle en (x, z), 0..1 (0 hors carte). Facultatif (absent des façades de test). */
+  forestAt?(x: number, z: number): number;
+  /** Fertilité du sol en (x, z), 0..1 (terre fertile, humidité, pente ; 0 sur l'eau). Facultatif. */
+  fertilityAt?(x: number, z: number): number;
 }
 
 /** Économie en LECTURE SEULE (copies : aucun montant ne peut être modifié par un module). */

@@ -38,7 +38,7 @@ test('section : vide = vide, version courante, refus des versions futures et des
   assert.throws(() => migrateZonage('texte', 1), /objet attendu/);
   assert.throws(() => migrateZonage({}, 0), /invalide/);
   assert.throws(() => migrateZonage({ grid: { w: 0, h: 2, rle: [] } }, 1), /grille invalide/);
-  assert.throws(() => migrateZonage({ grid: { w: 2, h: 1, rle: [9, 2] } }, 1), /code de zone 9/);
+  assert.throws(() => migrateZonage({ grid: { w: 2, h: 1, rle: [12, 2] } }, 1), /code de zone 12/);
   // Champs abîmés : nettoyés, sans perdre le reste.
   const m = migrateZonage({
     grid: { originX: -10, originZ: -10, cell: 8, w: 2, h: 1, rle: [1, 2] },

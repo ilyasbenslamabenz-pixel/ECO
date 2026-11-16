@@ -11,7 +11,7 @@
 import { progressionView } from '../../client/progression-view';
 import { DEMAND_ORDER } from '../demand';
 import {
-  SECTOR_COLORS, SECTOR_LABELS_FR, ZONE_COLORS, ZONE_DEPTH_MAX, ZONE_DEPTH_MIN, ZONE_LABELS_FR, ZONE_SHORT_FR, ZONE_TYPES,
+  SECTOR_COLORS, SECTOR_LABELS_FR, ZONE_COLORS, ZONE_DEPTH_MAX, ZONE_DEPTH_MIN, ZONE_LABELS_FR, ZONE_SHORT_FR, ZONE_TYPES, isSpecialZone,
   type ZonageDemand, type ZonageSnapshot, type ZoneType,
 } from '../../shared/protocol-ext/zonage';
 import { TILE_SIZE } from '../../shared/constants';
@@ -44,6 +44,14 @@ async function refreshState(): Promise<void> {
 
 const ZONE_ICONS: Record<ZoneType, string> = {
   res_faible: 'house', res_moyen: 'townhouse', res_dense: 'apartment', commerce: 'shop', bureaux: 'office', industrie: 'factory',
+  foret: 'tree', agricole: 'wheat', mixte: 'building',
+};
+
+/** Consigne des zones spécialisées (condition de terrain, rôle dans l'économie). */
+const SPECIAL_TIPS: Partial<Record<ZoneType, string>> = {
+  foret: 'Exploitation forestière : seulement sur la forêt naturelle ; produit du bois (coupe et repousse des arbres)',
+  agricole: 'Agricole : seulement sur un sol fertile et plat ; produit de la nourriture (selon la saison)',
+  mixte: 'Mixte : commerces au rez-de-chaussée, logements au-dessus (demande résidentielle et commerciale)',
 };
 
 const pct = (v: number): string => `${v >= 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`;
@@ -145,12 +153,11 @@ class ZonePainter implements PointerToolSink {
 /* -------------------------------- Tiroir -------------------------------- */
 
 const PLANNED_ZONES = [
-  { label: 'Agricole', icon: 'wheat', color: '#9bd84a', tip: 'Zone agricole (5e secteur fiscal)' },
   { label: 'Spécial', icon: 'star', color: '#ffd23f', tip: 'Zones spéciales (quartiers à thème)' },
 ];
 
 class ZonageDrawer implements DrawerProvider {
-  readonly tip = 'Zones : peindre le résidentiel, les commerces, les bureaux et l’industrie le long des routes ; les bâtiments poussent selon la demande';
+  readonly tip = 'Zones : peindre le résidentiel, les commerces, les bureaux, l’industrie, la forêt exploitée, l’agricole et le mixte le long des routes ; les bâtiments poussent selon la demande';
   private painter: ZonePainter | null = null;
   private tools: ToolController | null = null;
   private active = false;
@@ -171,7 +178,8 @@ class ZonageDrawer implements DrawerProvider {
     for (const z of ZONE_TYPES) {
       const b = el('button', { cls: `tile zn-tile${v.brush === z ? ' active' : ''}`, attrs: { 'data-zone': z, style: `--ic:${ZONE_COLORS[z]}`, 'aria-pressed': String(v.brush === z) } },
         el('span', { cls: 'tile-ico' }, iconEl(ZONE_ICONS[z])), el('span', { cls: 'nm', text: ZONE_SHORT_FR[z] }));
-      b.dataset['tip'] = `${ZONE_LABELS_FR[z]} : glisser le long d’une route`;
+      b.dataset['tip'] = SPECIAL_TIPS[z] ? `${SPECIAL_TIPS[z]} — glisser le long d’une route` : `${ZONE_LABELS_FR[z]} : glisser le long d’une route`;
+      if (isSpecialZone(z)) b.classList.add('zn-special');
       // Déblocages progressifs : zone encore verrouillée (cadenas et palier requis ; la simulation refuse aussi).
       const lockAt = progressionView.zoneLock(z);
       if (lockAt) {
@@ -223,7 +231,9 @@ class ZonageDrawer implements DrawerProvider {
       el('span', { cls: 'zn-sum', text: 'Demande' }),
       demandGauge(zoningView.demand, true),
     );
-    host.dataset['tip'] = s ? `Bâtiments nés du zonage : ${grown} · ${s.residents} habitants · ${s.jobs} emplois` : 'Demande par secteur : résidentiel, commerces, bureaux, industrie';
+    const sp = zoningView.special;
+    const spTip = sp ? ` · forêt ${pct(sp.foret)} %, agricole ${pct(sp.agricole)} %, mixte ${pct(sp.mixte)} %` : '';
+    host.dataset['tip'] = (s ? `Bâtiments nés du zonage : ${grown} · ${s.residents} habitants · ${s.jobs} emplois` : 'Demande par secteur : résidentiel, commerces, bureaux, industrie') + spTip;
   }
 
   private activate(deps: BuildBarDeps): void {
@@ -269,13 +279,15 @@ export const zonagePanel: UiPanel = {
     const draw = (): void => {
       const s = zoningView.stats;
       const inp = zoningView.inputs;
+      const sp = zoningView.special;
+      const spd = (z: ZoneType): string => (sp && isSpecialZone(z) ? `${pct(sp[z])} %` : '');
       const rows = ZONE_TYPES.map((z) => el('tr', {}, el('td', {}, el('span', { text: '■ ', attrs: { style: `color:${ZONE_COLORS[z]}` } }), ZONE_LABELS_FR[z]),
-        el('td', { text: String(s?.cells[z] ?? 0) }), el('td', { text: String(s?.buildings[z] ?? 0) })));
+        el('td', { text: String(s?.cells[z] ?? 0) }), el('td', { text: String(s?.buildings[z] ?? 0) }), el('td', { text: spd(z) })));
       root.replaceChildren(
         el('div', { cls: 'zn-panel' },
           demandGauge(zoningView.demand),
           inp ? el('p', { cls: 'muted', text: `${inp.population} habitants · ${inp.workforce} actifs · ${inp.jobs} emplois · ${inp.housingFree} logements libres sur ${inp.housingCapacity}` }) : null,
-          el('table', {}, el('tr', {}, el('th', { text: 'Zone' }), el('th', { text: 'Cases' }), el('th', { text: 'Bâtiments' })), ...rows),
+          el('table', {}, el('tr', {}, el('th', { text: 'Zone' }), el('th', { text: 'Cases' }), el('th', { text: 'Bâtiments' }), el('th', { text: 'Demande' })), ...rows),
           el('p', { cls: 'muted', text: s ? `${s.grown} bâtiments nés du zonage, ${s.densified} densifiés · ${s.connected} cases desservies` : 'Aucune zone : ouvrez l’onglet Zones de la barre de construction.' }),
         ),
       );

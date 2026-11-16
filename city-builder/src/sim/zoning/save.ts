@@ -2,10 +2,11 @@
  * Zonage — section de sauvegarde versionnée (`save.plugins.zonage`).
  *
  * Version 1 :
- *   grid     : géométrie de la grille + zones encodées en plages [code, longueur, …] (codes 0..6) ;
+ *   grid     : géométrie de la grille + zones encodées en plages [code, longueur, …] (codes 0..9 ; 7 à 9 = zones spécialisées, lues comme inconnues par les versions antérieures) ;
  *   owned    : bâtiments nés du zonage [[id, code de zone, niveau, minute de naissance], …] ;
  *   demand   : demande lissée R/C/B/I ; settings : croissance active ; tuning : réglages modifiés (écarts seuls) ;
- *   counters : totaux (bâtiments poussés, densifiés).
+ *   counters : totaux (bâtiments poussés, densifiés) ;
+ *   special  : (facultatif, ajouté avec les zones spécialisées) demande lissée des zones forêt et agricole.
  * Les sauvegardes antérieures au zonage n'ont pas de section : le module démarre vide (aucune zone).
  * Migration : `migrateZonage(data, version)` — chaîne d'étapes `STEPS[v]` (v -> v+1), aucune pour l'instant.
  * TypeScript pur : AUCUN import de three ni du DOM.
@@ -23,6 +24,8 @@ export interface ZonageSaveV1 {
   settings: { growth: boolean };
   tuning: Record<string, number>;
   counters: { grown: number; densified: number };
+  /** Facultatif : absent des sauvegardes antérieures aux zones spécialisées (demande repartant de 0). */
+  special?: { foret: number; agricole: number };
 }
 export type ZonageSave = ZonageSaveV1;
 
@@ -58,6 +61,7 @@ export function migrateZonage(data: unknown, fromVersion: number): ZonageSave {
   if (isObj(d.demand)) for (const k of ['R', 'C', 'B', 'I'] as const) out.demand[k] = Math.max(-1, Math.min(1, fin(d.demand[k])));
   if (isObj(d.settings) && typeof d.settings.growth === 'boolean') out.settings.growth = d.settings.growth;
   if (isObj(d.tuning)) for (const [k, v] of Object.entries(d.tuning)) if (typeof v === 'number' && Number.isFinite(v)) out.tuning[k] = v;
+  if (isObj(d.special)) out.special = { foret: Math.max(-1, Math.min(1, fin(d.special.foret))), agricole: Math.max(-1, Math.min(1, fin(d.special.agricole))) };
   if (isObj(d.counters)) out.counters = { grown: Math.max(0, fin(d.counters.grown)), densified: Math.max(0, fin(d.counters.densified)) };
   return out;
 }

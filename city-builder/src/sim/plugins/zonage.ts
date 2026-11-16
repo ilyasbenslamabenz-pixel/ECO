@@ -16,7 +16,7 @@ import { TILE_SIZE } from '../../shared/constants';
 import { PALIERS_SERVICE, type PaliersService } from '../../shared/milestones';
 // Chemin écrit depuis la racine de src/sim (garde-fou d'architecture sur « ../save… », voir chantiers).
 import { ZONAGE_SAVE_VERSION, migrateZonage } from '../../sim/save-sections/zonage';
-import { ZoningSystem } from '../zoning/system';
+import { ZONAGE_ETAT_SERVICE, ZoningSystem } from '../zoning/system';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -42,7 +42,11 @@ export function createZonagePlugin(): ZonagePlugin {
     saveVersion: ZONAGE_SAVE_VERSION,
     systemOf: sys,
 
-    init(ctx) { sys(ctx).setCatalog(ctx); },
+    init(ctx) {
+      sys(ctx).setCatalog(ctx);
+      // Vue en lecture seule des zones pour les modules qui les exploitent (ressources : forêt, agricole, mixte).
+      ctx.provide(ZONAGE_ETAT_SERVICE, sys(ctx).etat());
+    },
     onNewGame(ctx) { sys(ctx).reset(ctx); },
     onTick(ctx) { sys(ctx).tick(ctx); },
     onDayStart(ctx) { sys(ctx).day(ctx); },
