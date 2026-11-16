@@ -230,7 +230,17 @@ export class CameraController implements ICameraController {
       this.disposers.push(() => el.removeEventListener(type, fn as EventListener, opts));
     };
     on(dom, 'contextmenu', (e) => e.preventDefault());
-    on(dom, 'pointerdown', (e) => this.pointerDown(e));
+    // Page intégrée (cadre) : le clavier n'arrive au jeu qu'une fois le cadre actif. On le rend actif au chargement,
+    // au survol et au clic de la vue 3D (flèches / ZQSD utilisables sans clic préalable). Sans effet hors navigateur.
+    const grabFocus = (): void => {
+      if (typeof window === 'undefined' || typeof document === 'undefined') return;
+      const a = document.activeElement as HTMLElement | null;
+      if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA')) return;
+      try { window.focus(); } catch { /* cadre refusant le focus */ }
+    };
+    grabFocus();
+    on(dom, 'pointerenter', grabFocus);
+    on(dom, 'pointerdown', (e) => { grabFocus(); this.pointerDown(e); });
     on(window, 'pointermove', (e) => this.pointerMove(e));
     on(window, 'pointerup', (e) => this.pointerUp(e));
     on(window, 'pointercancel', (e) => this.pointerUp(e, true));
