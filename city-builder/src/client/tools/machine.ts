@@ -25,7 +25,8 @@ import type { BuildingRecord, CommandError, RoadEdgeRecord, RoadKindId, ToolId }
 import { legacyRoadType } from '../../sim/roads/index';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SnapshotMessage, WaterCrossing } from '../../shared/protocol';
 import type { Ray } from './geometry';
-import { roadDef, type PickResult, type WorldMirror } from './mirror';
+import { roadDef, roadWidth, type PickResult, type WorldMirror } from './mirror';
+import { alignDraft } from './road-grid';
 import { RoadDraft, angleLabel, snapRoadPoint, type RoadMode, type SnapPoint } from './road-draft';
 import { DEFAULT_GRID_BLOCK, edgeOnGrid, gridCorner, gridLayout, polyOnPaths, type GridLayout } from './grid';
 import { nextUpgradeKind, prevUpgradeKind } from '../../sim/roads/upgrade';
@@ -368,15 +369,31 @@ export class ConstructionTools {
           break;
         }
         const d = this.draft;
-        d.hover = g ? snapRoadPoint(this.mirror, g.x, g.z, { radius: this.snapRadius, angleSnap: this.angleSnap, magnet: this.magnet, grid: this.gridSnap && this.magnet, guideSpacing: this.guides ? this.gridBlock : 0 }, d.phase !== 'idle' ? (d.control ?? d.start ?? undefined) : undefined) : null;
+        // Aimantation au quadrillage affiché (tracé droit, aimant actif, hors Maj) : le départ n'est plus mis sur une
+        // intersection du monde (l'axe tombait sur une ligne) ; le tracé est calé une fois la direction connue.
+        const alignGrid = this.gridSnap && this.magnet && !this.angleSnap && d.mode === 'straight';
+        d.hover = g ? snapRoadPoint(this.mirror, g.x, g.z, { radius: this.snapRadius, angleSnap: this.angleSnap, magnet: this.magnet, grid: this.gridSnap && this.magnet && !(alignGrid && d.phase === 'idle'), guideSpacing: this.guides ? this.gridBlock : 0 }, d.phase !== 'idle' ? (d.control ?? d.start ?? undefined) : undefined) : null;
+        d.startAdj = null;
+        if (alignGrid && d.phase === 'start' && d.start && d.hover) {
+          const a = alignDraft(this.mirror, d.start, d.hover, roadWidth(this.roadType) / 2);
+          if (a) {
+            d.startAdj = a.start; d.hover = a.end;
+            // Ligne guide de l'aimant (droite depuis le départ) : suit le tracé calé.
+            const gd = a.end.guide, s = a.start, e = a.end, l = Math.hypot(e.x - s.x, e.z - s.z);
+            if (gd && !/îlot/.test(gd.label) && l > 1e-6) {
+              const ux = (e.x - s.x) / l, uz = (e.z - s.z) / l, ext = Math.hypot(gd.x1 - gd.x0, gd.z1 - gd.z0) - 12;
+              d.hover = { ...e, guide: { ...gd, x0: s.x - ux * 12, z0: s.z - uz * 12, x1: s.x + ux * ext, z1: s.z + uz * ext, label: gd.label.replace(/· \d+ m$/, `· ${Math.round(l)} m`) } };
+            }
+          }
+        }
         const points = d.points();
         const def = roadDef(this.roadType);
         const length = d.length();
         this.preview = {
-          kind: 'road', type: this.roadType, mode: d.mode, points, start: d.start, control: d.control, hover: d.hover,
+          kind: 'road', type: this.roadType, mode: d.mode, points, start: d.from, control: d.control, hover: d.hover,
           validity: points ? 'pending' : 'ok', cost: def ? Math.round(length * def.costPerMeter) : 0, length,
           message: d.phase === 'idle' ? 'Placez le départ' : d.mode === 'curve' && d.phase === 'start' ? 'Placez le point de courbure' : '',
-          angle: points && d.start && d.hover ? angleLabel(this.mirror, d.start, d.hover) : '', chained: d.chained,
+          angle: points && d.from && d.hover ? angleLabel(this.mirror, d.from, d.hover) : '', chained: d.chained,
         };
         if (d.mode === 'roundabout') { if (this.refreshRoundabout()) return; break; }
         if (d.elevation) this.preview = { ...this.preview, elevation: d.elevation };

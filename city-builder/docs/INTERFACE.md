@@ -80,7 +80,11 @@ et sur les côtés des bâtiments voisins — y compris ceux des anciennes parti
 repère du bâtiment le plus proche, sinon les axes du monde. Entre deux routes, la plus proche gagne et les lignes
 s'estompent sur 3 m à la limite. Les cases colorées de l'outil Zones sont dessinées dans la même trame (attachées aux
 routes). Les lignes sont antialiasées et restent nettes de près. L'aimantation pose le bâtiment sur ces lignes.
-Détails, mesures et captures : `docs/ZONAGE.md` §2 bis et §2 ter.
+Outil Routes (tracé droit, aimant actif) : le tracé est calé sur ce quadrillage — direction parallèle ou
+perpendiculaire aux lignes (à moins de 8°), ligne des façades d'un côté sur une ligne, extrémités sur les lignes —
+et le quadrillage affiché pendant l'aperçu est déjà celui de la route posée (axe au milieu de la bande, rangées de
+cases entières des deux côtés). Aimant coupé ou Maj : tracé libre.
+Détails, mesures et captures : `docs/ZONAGE.md` §2 bis, §2 ter et §2 quater.
 
 ## 6. Coût
 

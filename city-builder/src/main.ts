@@ -24,7 +24,8 @@ import type { SimNotice, SimReport } from './sim/sim-protocol';
 import type { SnapshotMessage } from './shared/protocol';
 import { SimBridge, SimCommandError } from './client/sim-bridge';
 import { createClientState } from './client/state';
-import { fieldFor, localRoadGrid } from './client/tools/road-grid';
+import { fieldFor, fieldWithPreview, localRoadGrid, previewBox, previewKey, type PreviewRoad } from './client/tools/road-grid';
+import { roadWidth } from './client/tools/mirror';
 import { zoningView } from './client/zoning-view';
 import { GridFieldTexture } from './render/terrain/grid-field-texture';
 import { AssetLibrary, fetchCatalog } from './render/assets';
@@ -470,12 +471,23 @@ async function boot(): Promise<void> {
   // (src/shared/grid-field.ts) — comme les cases de zonage attachées aux routes. Texture calculée par morceaux.
   const gridTex = new GridFieldTexture();
   let gridVisible = false;
+  // Route en cours de tracé (outil Routes) : sa trame est affichée dès l'aperçu, telle qu'elle sera une fois posée.
+  const previewRoad = (): PreviewRoad | null => {
+    const pv = cons.machine.preview;
+    if (cons.machine.tool !== 'road' || pv.kind !== 'road' || !pv.points || pv.points.length < 4 || pv.mode === 'roundabout') return null;
+    return { poly: pv.points, half: roadWidth(pv.type) / 2 };
+  };
+  const shownField = (x: number, z: number) => {
+    const pr = previewRoad(), b = previewBox(pr);
+    return b && x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 ? fieldWithPreview(cons.machine.mirror, pr) : fieldFor(cons.machine.mirror);
+  };
   const updateGridField = (budget: number): void => {
     if (!gridVisible) return;
     const mc = cons.machine, g = mc.hoverGround;
     const p = input.camera.getPose();
     const cx = g?.x ?? p.targetX, cz = g?.z ?? p.targetZ;
-    if (gridTex.update(fieldFor(mc.mirror), mc.mirror.version, cx, cz, budget)) render.terrain.setGridField(gridTex.texture, gridTex.box);
+    const pr = previewRoad();
+    if (gridTex.update(fieldWithPreview(mc.mirror, pr), mc.mirror.version, cx, cz, budget, { key: previewKey(pr), box: previewBox(pr) })) render.terrain.setGridField(gridTex.texture, gridTex.box);
   };
   render.ctx.onFrame.push(() => updateGridField(4));
   // Le champ suit aussi les modifications du réseau et des bâtiments : les cases de l'outil Zones sont redessinées.
@@ -534,7 +546,7 @@ async function boot(): Promise<void> {
     if (!gridVisible) return null;
     const box = gridTex.box;
     if (!box || x < box.x0 || z < box.z0 || x >= box.x0 + box.size || z >= box.z0 + box.size) return { tx: 1, tz: 0, pu: 0, pv: 0, weight: 1, kind: 'monde' };
-    const L = fieldFor(cons.machine.mirror).linesAt(x, z);
+    const L = shownField(x, z).linesAt(x, z);
     return { tx: L.tx, tz: L.tz, pu: L.pu, pv: L.pv, weight: L.weight, kind: L.kind };
   };
   (debug as unknown as Record<string, unknown>).gridFieldFlush = () => { for (let k = 0; k < 4; k++) updateGridField(1e6); return gridTex.box; };
@@ -546,7 +558,7 @@ async function boot(): Promise<void> {
   debug.toolPreview = () => {
     const p = cons.machine.preview;
     if (p.kind === 'building') return { kind: p.kind, assetId: p.asset.id, x: p.proposal.x, z: p.proposal.z, rot: p.proposal.rot, snapped: p.proposal.snapped, validity: p.validity, message: p.message };
-    if (p.kind === 'road') return { kind: p.kind, type: p.type, mode: p.mode, validity: p.validity, message: p.message, length: p.length, cost: p.cost, angle: p.angle, chained: p.chained, drawing: cons.machine.drawing, guide: p.hover?.guide?.label ?? null };
+    if (p.kind === 'road') return { kind: p.kind, type: p.type, mode: p.mode, validity: p.validity, message: p.message, length: p.length, cost: p.cost, angle: p.angle, chained: p.chained, drawing: cons.machine.drawing, guide: p.hover?.guide?.label ?? null, points: p.points, start: p.start, hover: p.hover };
     if (p.kind === 'grid') return { kind: p.kind, validity: p.validity, message: p.message, cost: p.cost, lines: p.layout?.lines.length ?? 0, nx: p.layout?.nx ?? 0, nz: p.layout?.nz ?? 0, length: p.layout?.length ?? 0, drawing: cons.machine.drawing };
     if (p.kind === 'upgrade') return { kind: p.kind, validity: p.validity, message: p.message, cost: p.cost, refund: p.refund, target: p.target?.id ?? null, from: p.target?.kindId ?? null, toKind: p.toKind, reverse: p.reverse };
     if (p.kind === 'bulldoze') return { kind: p.kind, area: cons.machine.bulldozeArea, areaStart: p.areaStart ?? null, buildings: p.area?.buildings.length ?? 0, edges: p.area?.edges.length ?? 0, refund: p.area?.refund ?? p.refund, target: p.target?.kind ?? null };
@@ -554,6 +566,10 @@ async function boot(): Promise<void> {
     return { kind: p.kind };
   };
 
+  // Diagnostic (e2e) : outil, survol d'un point au sol et clic principal sans souris (mesures du tracé de route).
+  (debug as unknown as Record<string, unknown>).setTool = (t: string, opts?: { roadType?: string }) => cons.machine.setTool(t as never, opts as never);
+  (debug as unknown as Record<string, unknown>).toolHover = (x: number, z: number) => cons.machine.hover({ x, z }, null);
+  (debug as unknown as Record<string, unknown>).toolClick = () => cons.machine.primary();
   let firstSnapshot: (() => void) | null = null;
   /** Barycentre et étendue de la ville du dernier instantané (bâtiments + nœuds de routes), null si vide. */
   let cityCenter: { x: number; z: number; extent: number } | null = null;
