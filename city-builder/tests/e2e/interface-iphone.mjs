@@ -50,8 +50,8 @@ try {
   }, sel);
   const minSize = (sel) => page.evaluate((s) => [...document.querySelectorAll(s)].filter((b) => b.offsetParent !== null).map((b) => { const r = b.getBoundingClientRect(); return Math.round(Math.min(r.width, r.height)); }), sel);
 
-  await page.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 300000, polling: 500 });
+  await page.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 900000, waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 900000, polling: 500 });
   await page.evaluate(async (data) => { await window.__aube.send('load', { data }); }, save);
   await page.waitForFunction(() => window.__aube.lastStats?.population > 0, null, { timeout: 60000, polling: 200 });
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));

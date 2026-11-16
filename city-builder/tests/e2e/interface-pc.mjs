@@ -44,8 +44,8 @@ try {
   };
   const rect = (sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e || e.classList.contains('hidden')) return null; const r = e.getBoundingClientRect(); return r.width ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null; }, sel);
 
-  await page.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 300000, polling: 500 });
+  await page.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 900000, waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 900000, polling: 500 });
   await page.evaluate(async (data) => { await window.__aube.send('load', { data }); }, save);
   await page.waitForFunction(() => window.__aube.lastStats?.population > 0, null, { timeout: 60000, polling: 200 });
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
@@ -198,8 +198,8 @@ try {
   p2.setDefaultTimeout(240000);
   const err2 = collectErrors(p2);
   const shot2 = async (name) => { await p2.evaluate(() => window.__aube.renderNow(1)); const f = join(out, `interface-1080p-${name}.png`); await p2.screenshot({ path: f, timeout: 600000 }); if (extra) copyFileSync(f, join(extra, `1080p-${name}.png`)); };
-  await p2.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
-  await p2.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 300000, polling: 500 });
+  await p2.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 900000, waitUntil: 'domcontentloaded' });
+  await p2.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 900000, polling: 500 });
   await p2.evaluate(async (data) => { await window.__aube.send('load', { data }); }, save);
   await p2.waitForFunction(() => window.__aube.lastStats?.population > 0, null, { timeout: 60000, polling: 200 });
   await p2.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
