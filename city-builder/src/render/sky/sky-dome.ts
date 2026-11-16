@@ -178,7 +178,7 @@ void main() {
   vec3 col = vec3(0.0);
   if (uDayW > 0.001) col += texture2D(tDay, equirect(dd, uRotDay)).rgb * uDayW;
   if (uDuskW > 0.001) col += texture2D(tDusk, equirect(dd, uRotDusk)).rgb * uDuskW;
-  col *= mix(vec3(1.0), uZenithTint, smoothstep(0.02, 0.6, d.y) * uDayW);
+  col *= mix(vec3(1.0), uZenithTint, smoothstep(0.0, 0.45, d.y) * uDayW);
   // Nuit : dégradé bleu nuit + étoiles + lune.
   if (uNight > 0.001) {
     float up = clamp(d.y, 0.0, 1.0);

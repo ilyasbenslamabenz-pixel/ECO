@@ -36,12 +36,65 @@ const GROUPS: { before: string; label: string }[] = [
   { before: 'policy', label: 'Gouvernance' },
 ];
 
+/**
+ * Raccourcis des tableaux de bord : touches libres, au même endroit sur un clavier AZERTY ou QWERTY
+ * (codes physiques I, J, K, L, O, P, U, Y ; les autres lettres servent déjà à la caméra et aux outils).
+ */
+const SHORTCUTS: { code: string; key: string; target: string }[] = [
+  { code: 'KeyY', key: 'Y', target: '#sidebar [data-dash="city"]' },
+  { code: 'KeyU', key: 'U', target: '#sidebar [data-dash="finance"]' },
+  { code: 'KeyP', key: 'P', target: '#sidebar [data-dash="population"]' },
+  { code: 'KeyI', key: 'I', target: '#sidebar [data-dash="policy"]' },
+  { code: 'KeyO', key: 'O', target: '#sidebar [data-dash="progression"]' },
+  { code: 'KeyJ', key: 'J', target: '#btn-stats' },
+  { code: 'KeyK', key: 'K', target: '#btn-notif' },
+  { code: 'KeyL', key: 'L', target: '#btn-layers' },
+];
+
+/** Touches déjà gérées ailleurs, affichées dans les infobulles qui ne les mentionnaient pas. */
+const KNOWN_KEYS: { target: string; key: string }[] = [
+  { target: '#toolbar [data-tool="select"]', key: 'Échap' },
+  { target: '#toolbar [data-tool="bulldoze"]', key: 'B' },
+  { target: '#btn-cinematic', key: 'C' },
+  { target: '#mm-zoom-in', key: '+' },
+  { target: '#mm-zoom-out', key: '−' },
+  { target: '#btn-save', key: '' },
+];
+
 export function initRail(): void {
   document.body.classList.add('ui-rail');
   buildHud();
   buildSidebar();
   buildToolbar();
   phoneObjectives();
+  shortcuts();
+}
+
+/** Ajoute « (touche X) » à l'infobulle d'un élément, une seule fois. */
+function tipKey(t: HTMLElement | null, key: string): void {
+  if (!t || !key) return;
+  const tip = t.dataset['tip'] ?? t.getAttribute('aria-label') ?? '';
+  if (/\((touche|Échap|Ctrl)/.test(tip)) return;
+  t.dataset['tip'] = `${tip} (${key.length === 1 || key === '+' || key === '−' ? `touche ${key}` : key})`;
+}
+
+function shortcuts(): void {
+  for (const s of SHORTCUTS) tipKey(document.querySelector<HTMLElement>(s.target), s.key);
+  for (const k of KNOWN_KEYS) tipKey(document.querySelector<HTMLElement>(k.target), k.key);
+  // Le rail recopie ces libellés : on les relit après l'ajout des touches.
+  document.dispatchEvent(new Event('rail:tips'));
+  window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if ($('hud').classList.contains('hidden') || document.querySelector('.overlay:not(.hidden)')) return;
+    const s = SHORTCUTS.find((x) => x.code === e.code);
+    if (!s) return;
+    const b = document.querySelector<HTMLElement>(s.target);
+    if (!b) return;
+    e.preventDefault();
+    b.click();
+  });
 }
 
 /* ------------------------------ Barre du haut ------------------------------ */
@@ -129,9 +182,17 @@ function buildToolbar(): void {
 function phoneObjectives(): void {
   const box = $('objectives');
   let collapsedOnce = false;
+  // Hauteur occupée par l'encadré (0 s'il est masqué) : les boutons flottants du téléphone se placent au-dessus,
+  // les notifications du bureau en dessous.
+  const measure = (): void => {
+    const h = box.offsetParent !== null ? Math.round(box.getBoundingClientRect().height) + 6 : 0;
+    document.documentElement.style.setProperty('--obj-h', `${h}px`);
+  };
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measure).observe(box);
+  window.addEventListener('resize', measure);
   const sync = (): void => {
+    measure();
     const shown = !box.classList.contains('hidden') && !box.classList.contains('tuto-off');
-    document.body.classList.toggle('has-obj', shown);
     // Téléphone : l'encadré démarre replié sur une ligne (il se déplie au toucher de son intitulé).
     if (!collapsedOnce && shown && box.classList.contains('open') && matchMedia(PHONE).matches) {
       collapsedOnce = true;

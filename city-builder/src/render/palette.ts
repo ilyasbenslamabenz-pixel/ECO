@@ -149,7 +149,7 @@ export const PALETTE_VIVES: Palette = {
     dirtPatch: 0.12, macroStrength: 0.2,
   },
   water: { shallow: [0.045, 0.2, 0.22], deep: [0.007, 0.036, 0.072] },
-  foliage: [0.97, 1.04, 0.9],
+  foliage: [0.95, 1.0, 0.88],
   minimap: {
     plain: [104, 150, 70], hill: [168, 160, 120], beach: [222, 204, 150], forest: [40, 98, 46], forestMax: 0.85,
     waterShallow: [52, 132, 186], waterDeep: [22, 74, 138], shade: 0.42,
