@@ -59,6 +59,9 @@ const P: Record<string, string> = {
   /* --- Divers --- */
   close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
+  magnet: '<path class="f" d="M5 4h4.5v7.5a2.5 2.5 0 005 0V4H19v7.5a7 7 0 01-14 0z"/><path d="M5 8h4.5M14.5 8H19"/>',
+  lock: '<rect class="f" x="4.5" y="10.5" width="15" height="10" rx="2.2"/><path d="M8 10.5V7.5a4 4 0 018 0v3"/><path d="M12 14.5v2.5"/>',
+  trash: '<path d="M4 6.5h16M9.5 6.5V4.5h5v2"/><path class="f" d="M6 6.5l1 13.2a1.5 1.5 0 001.5 1.3h7a1.5 1.5 0 001.5-1.3l1-13.2z"/><path d="M10 10.5v6.5M14 10.5v6.5"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   info: '<circle class="f" cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.4"/>',
   alert: '<path class="f" d="M12 3.2l9.8 17.3H2.2z"/><path d="M12 10v4.8M12 17.6v.4"/>',

@@ -190,11 +190,11 @@ export function initUI(h: UIHandlers): UIHandle {
     }
   };
   const deleteButton = (slot: string, after: () => void): HTMLButtonElement => {
-    const del = el('button', { cls: 'danger icon-btn', text: '🗑', attrs: { 'aria-label': `Supprimer ${slot}` } });
+    const del = el('button', { cls: 'danger icon-btn', attrs: { 'aria-label': `Supprimer ${slot}` } }, iconEl('trash'));
     del.dataset['tip'] = 'Supprimer (cliquer deux fois)';
     let armed = false;
     del.addEventListener('click', () => {
-      if (!armed) { armed = true; del.textContent = 'Confirmer ?'; setTimeout(() => { armed = false; if (del.isConnected) del.textContent = '🗑'; }, 2500); return; }
+      if (!armed) { armed = true; del.textContent = 'Confirmer ?'; setTimeout(() => { armed = false; if (del.isConnected) del.replaceChildren(iconEl('trash')); }, 2500); return; }
       void removeSlotAsync(slot).then((ok) => {
         if (ok) showToast('Sauvegarde supprimée', 'ok'); else showToast('Suppression impossible', 'error');
         after();

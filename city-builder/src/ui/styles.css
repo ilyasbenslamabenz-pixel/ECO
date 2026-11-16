@@ -1,13 +1,16 @@
 /* =====================================================================================
-   Meknes City — interface (thème sombre translucide, accent vert, icônes SVG originales)
+   Meknes City — interface (surfaces opaques et sobres, un accent par thème, icônes SVG originales)
+   Direction artistique ECO CITY : la ville reste au centre ; barres fines, panneaux mats (pas de verre
+   dépoli : `--blur` vaut `none`, ce qui épargne aussi le GPU des portables), chiffres tabulaires,
+   échelle de tailles / rayons / espacements ci-dessous (jetons `--fs-*`, `--r-*`, `--sp-*`, `--dur-*`).
    Ordre : jetons · base · menu · barre supérieure · barre latérale · bas d'écran (mini-carte,
    sous-barre, outils, objectifs) · panneaux · éléments communs · téléphone portrait · paysage.
    ===================================================================================== */
 :root {
   --bg: #0b0f13;
-  --glass: rgba(13, 18, 24, 0.78);
-  --glass-2: rgba(18, 24, 31, 0.9);
-  --panel: rgba(13, 18, 24, 0.86);
+  --glass: rgba(15, 20, 26, 0.95);
+  --glass-2: rgba(18, 24, 31, 0.97);
+  --panel: rgba(15, 20, 26, 0.97);
   --panel-solid: #121920;
   --panel-2: rgba(var(--ink), 0.045);
   --line: rgba(var(--ink), 0.085);
@@ -32,8 +35,20 @@
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-l: env(safe-area-inset-left, 0px);
   --shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
-  --blur: blur(16px) saturate(140%);
+  --blur: none;
   --font: "Inter", "SF Pro Text", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  /* Échelle typographique (px) : légende · secondaire · corps · valeur · titre. */
+  --fs-xs: 10.5px; --fs-sm: 12px; --fs-md: 13.5px; --fs-lg: 15px; --fs-xl: 18px;
+  /* Rayons : contrôle · bouton · surface (barres, panneaux). */
+  --r-sm: 6px; --r-md: 8px; --r-lg: 10px;
+  /* Espacements (grille de 4 px). */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  /* Transitions : retour d'état (survol) et ouverture de menus. */
+  --dur-1: .12s; --dur-2: .2s; --ease: cubic-bezier(.2, .8, .2, 1);
+  /* Barres (supérieure, outils) : surface mate un cran plus sombre que les panneaux. */
+  --bar: rgba(12, 16, 21, 0.96);
+  --bar-line: rgba(var(--ink), 0.1);
+  --bar-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
   /* Teinte des surfaces superposées (triplet RVB) et texte fort : clair sur sombre ici, inversés en thème clair. */
   --ink: 255, 255, 255;
   --accent-rgb: 61, 220, 132;
@@ -45,9 +60,9 @@
 /* ============ Thème clair (par défaut) : verre dépoli clair, texte sombre net, un accent bleu ============ */
 :root[data-theme="clair"] {
   --bg: #dfe6ee;
-  --glass: rgba(246, 249, 252, 0.86);
-  --glass-2: rgba(250, 252, 254, 0.94);
-  --panel: rgba(247, 250, 253, 0.93);
+  --glass: rgba(246, 249, 252, 0.97);
+  --glass-2: rgba(250, 252, 254, 0.98);
+  --panel: rgba(247, 250, 253, 0.98);
   --panel-solid: #f4f7fa;
   --panel-2: rgba(22, 38, 58, 0.045);
   --line: rgba(22, 38, 58, 0.12);
@@ -67,7 +82,9 @@
   --warn: #9a6400;
   --radius: 10px;
   --shadow: 0 10px 30px rgba(18, 32, 52, 0.18);
-  --blur: blur(18px) saturate(160%);
+  --blur: none;
+  --bar: rgba(248, 250, 252, 0.97);
+  --bar-shadow: 0 2px 10px rgba(18, 32, 52, 0.14);
   --ink: 22, 38, 58;
   --accent-rgb: 11, 111, 214;
   color-scheme: light;
@@ -765,7 +782,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 
 /* Menu des calques (barre caméra) : une carte thématique à la fois + icônes de problèmes. */
 #layers-pop { position: fixed; left: 12px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); z-index: 40; width: min(300px, calc(100vw - 24px)); max-height: calc(100dvh - 260px); overflow-y: auto;
-  padding: 10px; background: var(--glass); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  padding: 10px; background: var(--glass); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
 #layers-pop .layers-head { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 2px 8px; }
 #layers-pop .layers-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 #layers-pop .layer-item { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 6px 10px; border-radius: 12px; background: rgba(var(--ink), .05); border: 1px solid transparent; text-align: left; font-size: 13px; }
@@ -810,7 +827,7 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   #toolbar button { flex: 1 1 0; min-width: 0 !important; width: auto !important; padding: 4px 1px; font-size: 10px; }
   #toolbar button .tl { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   #family-pop:not(.hidden) { display: flex; position: fixed; left: 8px; right: 8px; bottom: calc(86px + env(safe-area-inset-bottom, 0px)); z-index: 45; gap: 6px; padding: 8px;
-    background: var(--glass); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    background: var(--glass); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
   #family-pop button { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 58px; border-radius: 12px; background: rgba(var(--ink), .05); font-size: 11.5px; color: var(--ic, #e6edf3); }
   #family-pop button svg.ic { width: 22px; height: 22px; color: var(--ic, currentColor); }
 
@@ -861,9 +878,9 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
 /* ============ Thème « Nuit » (par défaut) : bleu nuit profond, verre teinté, accent bleu vif, reflets discrets ============ */
 :root[data-theme="nuit"] {
   --bg: #070c14;
-  --glass: rgba(14, 22, 34, 0.80);
-  --glass-2: rgba(17, 26, 40, 0.93);
-  --panel: rgba(13, 21, 32, 0.91);
+  --glass: rgba(15, 23, 35, 0.96);
+  --glass-2: rgba(17, 26, 40, 0.97);
+  --panel: rgba(14, 22, 33, 0.97);
   --panel-solid: #111b28;
   --panel-2: rgba(170, 200, 240, 0.045);
   --line: rgba(150, 180, 220, 0.14);
@@ -883,7 +900,9 @@ canvas.chart { width: 100%; height: 160px; display: block; touch-action: none; }
   --warn: #ffc24d;
   --radius: 11px;
   --shadow: 0 14px 40px rgba(2, 8, 18, 0.55);
-  --blur: blur(18px) saturate(150%);
+  --blur: none;
+  --bar: rgba(11, 18, 28, 0.96);
+  --bar-shadow: 0 2px 12px rgba(2, 8, 18, 0.45);
   --ink: 190, 212, 245;
   color-scheme: dark;
 }
@@ -1461,3 +1480,66 @@ body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !impor
 @media (max-width: 760px) { body.ui-rail #mm-col { display: contents; } }
 /* Intitulés de groupes de la barre d'outils : masqués quand une sous-barre ou les options d'un outil s'ouvrent juste au-dessus. */
 body.ui-rail.drawer-open #toolbar .tb-grp::after, body.ui-rail.tool-opts #toolbar .tb-grp::after, body.ui-rail.road-drawing #toolbar .tb-grp::after { display: none; }
+
+/* =====================================================================================
+   DIRECTION ARTISTIQUE ECO CITY — barre supérieure, barre d'outils, sous-barre, confirmation tactile.
+   Principes : surfaces mates (jetons --bar / --glass, sans flou), un seul accent par thème, états
+   homogènes (survol = teinte légère, actif = aplat d'accent + filet inférieur, désactivé = 40 %),
+   chiffres tabulaires, rayons --r-*, transitions courtes --dur-*. Placé en fin de feuille pour primer
+   sur les règles historiques sans les renommer (identifiants et classes inchangés).
+   ===================================================================================== */
+#hud, #toolbar, #build-drawer, #tool-options, #touch-confirm, #family-pop { font-variant-numeric: tabular-nums; }
+#toolbar button, #hud button, #build-drawer button, #touch-confirm button {
+  transition: background var(--dur-1) ease, border-color var(--dur-1) ease, color var(--dur-1) ease, box-shadow var(--dur-1) ease, opacity var(--dur-1) ease; }
+#toolbar button:disabled, #hud button:disabled { opacity: .4; }
+.lock-badge { display: inline-flex; align-items: center; gap: 3px; }
+.lock-badge svg.ic { width: 11px; height: 11px; stroke-width: 2.2; }
+#road-finish svg.ic { width: 18px; height: 18px; stroke-width: 2.4; }
+#touch-confirm #tc-magnet svg.ic, #touch-confirm #tc-cancel svg.ic, #touch-confirm #tc-rotate svg.ic { width: 22px; height: 22px; }
+#touch-confirm #tc-magnet:not(.active) { color: var(--muted); }
+
+/* Boutons actifs des barres : aplat d'accent, sans dégradé ni halo. */
+:root:is([data-theme="clair"], [data-theme="nuit"]) #toolbar button.active, :root:is([data-theme="clair"], [data-theme="nuit"]) .seg button.active,
+:root:is([data-theme="clair"], [data-theme="nuit"]) #sidebar button.active { background: var(--accent); border-color: var(--accent); box-shadow: none; color: #fff; }
+.seg button.active { background: rgba(var(--accent-rgb), .3); }
+
+/* Sous-barre, options d'outil, confirmation tactile, menu de famille : surfaces mates et rayons cohérents. */
+#build-drawer { border-radius: var(--r-lg); animation: rise var(--dur-2) var(--ease); }
+#tool-options { background: var(--bar); border-color: var(--bar-line); box-shadow: var(--bar-shadow); }
+#touch-confirm { background: var(--bar); border-color: var(--bar-line); border-radius: var(--r-lg); box-shadow: var(--bar-shadow); animation: rise var(--dur-2) var(--ease); }
+#touch-confirm button { border-radius: var(--r-md); }
+.chip-tab.active { box-shadow: none; border-color: var(--accent); background: var(--accent-soft); }
+#family-pop { animation: rise var(--dur-2) var(--ease); }
+
+@media (min-width: 761px) {
+  /* Barre supérieure : trois blocs fins (identité + temps · indicateurs · actions), la ville reste visible entre eux. */
+  body.ui-rail .hud-cap { height: 48px; border-radius: var(--r-lg); background: var(--bar); border-color: var(--bar-line); box-shadow: var(--bar-shadow); }
+  body.ui-rail .hud-brand .logo { width: 26px; height: 26px; }
+  body.ui-rail .brand-txt .city { font-size: var(--fs-md); font-weight: 700; letter-spacing: .01em; }
+  body.ui-rail #hud-date .day { font-size: var(--fs-sm); font-weight: 500; }
+  body.ui-rail #hud-date .clock { font-size: var(--fs-sm); font-weight: 700; }
+  body.ui-rail #hud .speed { border-radius: var(--r-md); background: rgba(var(--ink), .05); border: 1px solid var(--bar-line); }
+  body.ui-rail #hud .speed button { min-height: 30px; min-width: 30px; border-radius: var(--r-sm); font-size: var(--fs-sm); }
+  body.ui-rail .cap-kpi .hud-stat { min-height: 40px; border-radius: var(--r-md) !important; }
+  body.ui-rail .cap-kpi .hud-stat:hover { background: rgba(var(--ink), .06) !important; }
+  body.ui-rail .cap-kpi .hud-stat svg.ic { width: 20px; height: 20px; }
+  body.ui-rail .cap-kpi .hud-stat b { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -.01em; }
+  body.ui-rail .hud-stat .delta { font-size: 11px; font-weight: 600; }
+  body.ui-rail .hud-actions .hud-btn { width: 36px; height: 36px; min-height: 36px; border-radius: var(--r-md); }
+  body.ui-rail .hud-actions .hud-btn svg.ic { width: 20px; height: 20px; }
+  body.ui-rail .hud-actions .hud-btn:hover:not(:disabled) { background: rgba(var(--ink), .08); }
+
+  /* Barre d'outils : bande mate, boutons compacts, filet clair sous l'outil actif. */
+  body.ui-rail #toolbar { background: var(--bar); border-color: var(--bar-line); border-radius: var(--r-lg); box-shadow: var(--bar-shadow); padding: 4px; }
+  body.ui-rail #toolbar button { min-height: 54px; border-radius: var(--r-md); font-weight: 600; letter-spacing: .005em; }
+  body.ui-rail #toolbar button:hover:not(:disabled):not(.active) { background: rgba(var(--ink), .07); }
+  body.ui-rail #toolbar button.active { box-shadow: inset 0 -2px 0 rgba(255, 255, 255, .55); }
+  body.ui-rail #toolbar .tb-grp::after { top: -28px; font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+  body.ui-rail #sidebar { border-radius: var(--r-lg); background: var(--bar); border-color: var(--bar-line); box-shadow: var(--bar-shadow); }
+  body.ui-rail #sidebar button { border-radius: var(--r-md); }
+}
+@media (max-width: 760px) {
+  body.ui-rail #hud { background: var(--bar); border-bottom: 1px solid var(--bar-line); box-shadow: var(--bar-shadow); border-radius: 0 0 var(--r-lg) var(--r-lg); }
+  body.ui-rail #toolbar { background: var(--bar); border-color: var(--bar-line); box-shadow: var(--bar-shadow); border-radius: var(--r-lg); }
+  body.ui-rail #toolbar button { border-radius: var(--r-md); }
+}
