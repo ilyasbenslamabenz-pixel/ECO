@@ -38,7 +38,7 @@ const GROUPS: { before: string; label: string }[] = [
 
 /**
  * Raccourcis des tableaux de bord : touches libres, au même endroit sur un clavier AZERTY ou QWERTY
- * (codes physiques I, J, K, L, O, P, U, Y ; les autres lettres servent déjà à la caméra et aux outils).
+ * (codes physiques I, K, L, O, P, U, Y ; J ouvre déjà le tableau Déchets ; les autres lettres servent déjà à la caméra et aux outils).
  */
 const SHORTCUTS: { code: string; key: string; target: string }[] = [
   { code: 'KeyY', key: 'Y', target: '#sidebar [data-dash="city"]' },
@@ -46,7 +46,6 @@ const SHORTCUTS: { code: string; key: string; target: string }[] = [
   { code: 'KeyP', key: 'P', target: '#sidebar [data-dash="population"]' },
   { code: 'KeyI', key: 'I', target: '#sidebar [data-dash="policy"]' },
   { code: 'KeyO', key: 'O', target: '#sidebar [data-dash="progression"]' },
-  { code: 'KeyJ', key: 'J', target: '#btn-stats' },
   { code: 'KeyK', key: 'K', target: '#btn-notif' },
   { code: 'KeyL', key: 'L', target: '#btn-layers' },
 ];
@@ -56,13 +55,15 @@ const KNOWN_KEYS: { target: string; key: string }[] = [
   { target: '#toolbar [data-tool="select"]', key: 'Échap' },
   { target: '#toolbar [data-tool="bulldoze"]', key: 'B' },
   { target: '#btn-cinematic', key: 'C' },
+  { target: '#sidebar [data-dash="waste"]', key: 'J' },
   { target: '#mm-zoom-in', key: '+' },
   { target: '#mm-zoom-out', key: '−' },
-  { target: '#btn-save', key: '' },
 ];
 
 export function initRail(): void {
   document.body.classList.add('ui-rail');
+  for (const x of SHORTCUTS) tipKey(document.querySelector<HTMLElement>(x.target), x.key);
+  for (const k of KNOWN_KEYS) tipKey(document.querySelector<HTMLElement>(k.target), k.key);
   buildHud();
   buildSidebar();
   buildToolbar();
@@ -79,10 +80,6 @@ function tipKey(t: HTMLElement | null, key: string): void {
 }
 
 function shortcuts(): void {
-  for (const s of SHORTCUTS) tipKey(document.querySelector<HTMLElement>(s.target), s.key);
-  for (const k of KNOWN_KEYS) tipKey(document.querySelector<HTMLElement>(k.target), k.key);
-  // Le rail recopie ces libellés : on les relit après l'ajout des touches.
-  document.dispatchEvent(new Event('rail:tips'));
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     const t = e.target as HTMLElement | null;

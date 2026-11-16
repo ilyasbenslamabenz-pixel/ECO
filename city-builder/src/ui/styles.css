@@ -1406,3 +1406,21 @@ body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !impor
   body.ui-rail #objectives .obj-body { max-height: 40dvh; overflow-y: auto; }
   body.ui-rail.drawer-open #objectives, body.ui-rail.sidebar-open #objectives { display: none !important; }
 }
+
+/* ------------------------------ Grands écrans (1920×1080, 2560×1440…) ------------------------------
+   L'interface entière grandit d'un facteur `--uiz` (zoom CSS) pour garder des cibles et des textes confortables ;
+   les positions qui dépendent de mesures en pixels réels (hauteur de la barre du haut, des outils) sont divisées
+   par ce facteur. L'infobulle n'est pas zoomée (elle est placée en pixels réels), seul son texte grandit. */
+@media (min-width: 1800px) and (min-height: 950px) { :root { --uiz: 1.15; } }
+@media (min-width: 2300px) and (min-height: 1250px) { :root { --uiz: 1.35; } }
+@media (min-width: 1800px) and (min-height: 950px) {
+  body.ui-rail #hud, body.ui-rail #bottom, body.ui-rail #sidebar, body.ui-rail .panel, body.ui-rail #objectives, body.ui-rail #toasts,
+  body.ui-rail #layers-pop, body.ui-rail #touch-confirm { zoom: var(--uiz); }
+  body.ui-rail #sidebar { top: calc((var(--hud-h) + 8px) / var(--uiz)); max-height: calc((100dvh - var(--hud-h) - 20px) / var(--uiz)); }
+  body.ui-rail .panel { top: calc((var(--hud-h) + 10px) / var(--uiz)); max-height: calc((100dvh - var(--hud-h) - var(--tb-h) - 24px) / var(--uiz)); }
+  body.ui-rail .panel.dash { left: calc(10px / var(--uiz) + 62px); }
+  body.ui-rail #objectives { top: calc((var(--hud-h) + 8px) / var(--uiz)); }
+  body.ui-rail #toasts { top: calc((var(--hud-h) + 8px + var(--obj-h, 0px)) / var(--uiz)); }
+  body.ui-rail #tooltip { font-size: calc(13px * var(--uiz)); max-width: calc(320px * var(--uiz)); }
+  body.ui-rail .brand-txt .city { max-width: 220px; }
+}
