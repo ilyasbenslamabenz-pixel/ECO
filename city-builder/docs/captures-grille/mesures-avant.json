@@ -1,0 +1,472 @@
+{
+ "suffix": "avant",
+ "buildings": [
+  {
+   "localGridGap": null,
+   "id": 1,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 180.5399932861328,
+   "z": 10.9399995803833,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 2,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 196.49000549316406,
+   "z": 19.049999237060547,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 3,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -100,
+   "z": 13.800000190734863,
+   "rotDeg": 180,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": [
+    4,
+    1.8
+   ]
+  },
+  {
+   "localGridGap": null,
+   "id": 4,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -150,
+   "z": -13.199999809265137,
+   "rotDeg": 0,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": [
+    2,
+    1.2
+   ]
+  },
+  {
+   "localGridGap": null,
+   "id": 5,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 211.97000122070312,
+   "z": -3.940000057220459,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 6,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 180.6300048828125,
+   "z": -13.239999771118164,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 7,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 244.4199981689453,
+   "z": 19.170000076293945,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 8,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -76,
+   "z": 13.800000190734863,
+   "rotDeg": 180,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": [
+    4,
+    1.8
+   ]
+  },
+  {
+   "localGridGap": null,
+   "id": 9,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 148.72999572753906,
+   "z": -29.440000534057617,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 10,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -84,
+   "z": -7.800000190734863,
+   "rotDeg": 0,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": [
+    4,
+    3.8
+   ]
+  },
+  {
+   "localGridGap": null,
+   "id": 11,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -148,
+   "z": 13.800000190734863,
+   "rotDeg": 180,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": [
+    4,
+    1.8
+   ]
+  },
+  {
+   "localGridGap": null,
+   "id": 12,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 226.02000427246094,
+   "z": 9.819999694824219,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 13,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 135.55999755859375,
+   "z": -42.18000030517578,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 14,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -124,
+   "z": -7.800000190734863,
+   "rotDeg": 0,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": [
+    4,
+    3.8
+   ]
+  },
+  {
+   "localGridGap": null,
+   "id": 15,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 240.75999450683594,
+   "z": 41.540000915527344,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 16,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 167.4600067138672,
+   "z": -25.979999542236328,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 17,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 123.0999984741211,
+   "z": -18.229999542236328,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 18,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -104,
+   "z": -7.800000190734863,
+   "rotDeg": 0,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": [
+    0,
+    3.8
+   ]
+  },
+  {
+   "localGridGap": null,
+   "id": 19,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 218.7899932861328,
+   "z": 30.3799991607666,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": null,
+   "id": 20,
+   "asset": "maison_ville_etroite",
+   "tiles": [
+    1,
+    2
+   ],
+   "x": -20,
+   "z": -11.800000190734863,
+   "rotDeg": 0,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": [
+    0,
+    3.8
+   ]
+  },
+  {
+   "localGridGap": null,
+   "id": 21,
+   "asset": "maison_ville_etroite",
+   "tiles": [
+    1,
+    2
+   ],
+   "x": 194.1199951171875,
+   "z": -10.869999885559082,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": null,
+   "modelRotErrDeg": null,
+   "modelOverflow": null,
+   "axialGridGap": null
+  }
+ ],
+ "streets": {
+  "x": 0,
+  "z": 3,
+  "ew": [
+   -150,
+   3,
+   60,
+   3
+  ],
+  "dg": [
+   110,
+   -37,
+   252.65092611125263,
+   35.461805660650924
+  ]
+ },
+ "paint": [
+  53,
+  50,
+  72
+ ],
+ "tuning": true,
+ "grown": {
+  "grown": 19,
+  "densified": 0
+ },
+ "demand": {
+  "R": -0.09578124999999998,
+  "C": 0,
+  "B": 0,
+  "I": 0.14453125
+ },
+ "hand": [
+  {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": -20,
+   "z": -11.8,
+   "rot": 0,
+   "snapped": true,
+   "validity": "pending",
+   "message": ""
+  },
+  {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": 194.12,
+   "z": -10.87,
+   "rot": 3.7008,
+   "snapped": true,
+   "validity": "pending",
+   "message": ""
+  }
+ ],
+ "frame-rue-droite": {
+  "frame": null,
+  "preview": {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": -29.1,
+   "z": -11.8,
+   "rot": 0,
+   "snapped": true,
+   "validity": "ok",
+   "message": ""
+  }
+ },
+ "frame-rue-biais": {
+  "frame": null,
+  "preview": {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": 187.17,
+   "z": -14.4,
+   "rot": 3.7008,
+   "snapped": true,
+   "validity": "error",
+   "message": "Emplacement déjà occupé par un bâtiment"
+  }
+ },
+ "frame-rue-biais-dessus": {
+  "frame": null,
+  "preview": {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": 204.29,
+   "z": -5.7,
+   "rot": 3.7008,
+   "snapped": true,
+   "validity": "error",
+   "message": "Emplacement déjà occupé par un bâtiment"
+  }
+ },
+ "frame-rue-droite-dessus": {
+  "frame": null,
+  "preview": {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": -86,
+   "z": -20.8,
+   "rot": 0,
+   "snapped": true,
+   "validity": "ok",
+   "message": "Pas d’accès routier : le bâtiment ne sera ni desservi ni occupé tant qu’aucune route ne passe à proximité"
+  }
+ },
+ "note": "Version d'origine (3fa6cfc) : pas d'accès à la pose rendue (buildingPose) — voir mesures-apres.json pour le modèle rendu (rendu des bâtiments inchangé)."
+}

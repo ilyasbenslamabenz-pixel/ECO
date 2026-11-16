@@ -13,6 +13,8 @@ import type { CatalogAsset } from '../../shared/catalog';
 import { rotateQuarter } from '../../shared/math';
 import { angleToRot, buildingGap, distSegmentObb, footprintObb, normRot, obbAabb, obbOverlap, type Obb } from '../../shared/footprint';
 import { roadWidth, type WorldMirror } from './mirror';
+import { FACADE_GAP, snapAlong } from '../../shared/road-grid';
+import { frameForEdge } from './road-grid';
 
 export interface PlacementProposal {
   x: number;
@@ -138,8 +140,8 @@ export interface SnapOptions {
   magnet?: boolean;
 }
 
-/** Recul (m) entre le bord du trottoir et la façade. */
-const FRONT_GAP = 0.6;
+/** Recul (m) entre le bord du trottoir et la façade (trame des routes : src/shared/road-grid.ts). */
+const FRONT_GAP = FACADE_GAP;
 
 export function proposePlacement(m: WorldMirror, asset: CatalogAsset, x: number, z: number, opt: SnapOptions): PlacementProposal {
   const t = m.terrain;
@@ -184,13 +186,29 @@ export function proposePlacement(m: WorldMirror, asset: CatalogAsset, x: number,
   // Profondeur de l'empreinte mesurée selon la normale à la route.
   const probe = footprintObb(tX, tZ, 0, 0, rot);
   const halfDepth = Math.abs(probe.hx * (probe.c * fx - probe.s * fz)) + Math.abs(probe.hz * (probe.s * fx + probe.c * fz));
+  // Trame locale de la route (quadrillage affiché, src/shared/road-grid.ts) : avec l'aimantation, les côtés de
+  // l'empreinte tombent sur ses lignes le long de la route (la façade est déjà sur la ligne des façades).
+  const frame = opt.magnet ? frameForEdge(m, near, x, z) : null;
+  const halfAlong = extentAlong(probe, near.tx, near.tz);
   let first: PlacementProposal | null = null;
   for (let k = 0; k <= 8; k++) {
     const s = half + halfDepth + FRONT_GAP + k * 1.5;
-    const cx = Math.round((near.px + nx * s) * 100) / 100;
-    const cz = Math.round((near.pz + nz * s) * 100) / 100;
-    const o = footprintObb(tX, tZ, cx, cz, rot);
-    const conflict = obbConflicts(m, o, asset.category);
+    const rx = near.px + nx * s, rz = near.pz + nz * s;
+    let cx = Math.round(rx * 100) / 100;
+    let cz = Math.round(rz * 100) / 100;
+    let o = footprintObb(tX, tZ, cx, cz, rot);
+    let conflict = obbConflicts(m, o, asset.category);
+    if (frame) {
+      // Case de la trame la plus proche, puis ses voisines ; sinon position brute (rien ne tient sur la trame).
+      for (const step of [0, 1, -1]) {
+        const [gx, gz] = snapAlong(frame, rx, rz, halfAlong, step);
+        const qx = Math.round(gx * 100) / 100, qz = Math.round(gz * 100) / 100;
+        const og = footprintObb(tX, tZ, qx, qz, rot);
+        if (step !== 0 && Math.hypot(qx - rx, qz - rz) > TILE_SIZE) continue;
+        if (!obbConflicts(m, og, asset.category)) { cx = qx; cz = qz; o = og; conflict = false; break; }
+        if (step === 0 && conflict) { cx = qx; cz = qz; o = og; }
+      }
+    }
     const p: PlacementProposal = { x: cx, z: cz, rot, snapped: true, edgeId: e.id, obb: o, localConflict: conflict };
     if (!first) first = p;
     if (opt.magnet && k === 0) {

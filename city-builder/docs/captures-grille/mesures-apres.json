@@ -1,0 +1,671 @@
+{
+ "suffix": "apres",
+ "buildings": [
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 1,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 182.38999938964844,
+   "z": 11.890000343322754,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 2,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 203.7899932861328,
+   "z": 22.760000228881836,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 3,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -104,
+   "z": 13.800000190734863,
+   "rotDeg": 180,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": [
+    0,
+    1.8
+   ]
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 4,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 127.9800033569336,
+   "z": -39.97999954223633,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 5,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 227.83999633789062,
+   "z": 10.739999771118164,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 6,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -80,
+   "z": 13.800000190734863,
+   "rotDeg": 180,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": [
+    0,
+    1.8
+   ]
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 7,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -128,
+   "z": 13.800000190734863,
+   "rotDeg": 180,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": [
+    0,
+    1.8
+   ]
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 8,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 206.44000244140625,
+   "z": -0.12999999523162842,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 9,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -152,
+   "z": 13.800000190734863,
+   "rotDeg": 180,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": [
+    0,
+    1.8
+   ]
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 10,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -80,
+   "z": -7.800000190734863,
+   "rotDeg": 0,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": [
+    0,
+    3.8
+   ]
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 11,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 149.3800048828125,
+   "z": -29.110000610351562,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 12,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 239.4499969482422,
+   "z": 40.869998931884766,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 13,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 177.91000366210938,
+   "z": -14.619999885559082,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 14,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 125.33000183105469,
+   "z": -17.100000381469727,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 15,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 153.86000061035156,
+   "z": -2.609999895095825,
+   "rotDeg": 153.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0.01
+   ],
+   "id": 16,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": 256.3699951171875,
+   "z": 25.229999542236328,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": null
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 17,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -136,
+   "z": -7.800000190734863,
+   "rotDeg": 0,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": [
+    0,
+    3.8
+   ]
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 18,
+   "asset": "maison_longere_pierre",
+   "tiles": [
+    2,
+    1
+   ],
+   "x": -112,
+   "z": -7.800000190734863,
+   "rotDeg": 0,
+   "modelOffsetLocal": [
+    0,
+    0
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.33,
+    -0.46
+   ],
+   "axialGridGap": [
+    0,
+    3.8
+   ]
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 19,
+   "asset": "maison_ville_etroite",
+   "tiles": [
+    1,
+    2
+   ],
+   "x": -20,
+   "z": -11.800000190734863,
+   "rotDeg": 0,
+   "modelOffsetLocal": [
+    0,
+    0.48
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.94,
+    -1.8
+   ],
+   "axialGridGap": [
+    0,
+    3.8
+   ]
+  },
+  {
+   "localGridGap": [
+    0,
+    0
+   ],
+   "id": 20,
+   "asset": "maison_ville_etroite",
+   "tiles": [
+    1,
+    2
+   ],
+   "x": 191.39999389648438,
+   "z": -12.25,
+   "rotDeg": 333.07,
+   "modelOffsetLocal": [
+    0,
+    0.48
+   ],
+   "modelRotErrDeg": 0,
+   "modelOverflow": [
+    -0.94,
+    -1.8
+   ],
+   "axialGridGap": null
+  }
+ ],
+ "streets": {
+  "x": 0,
+  "z": 3,
+  "ew": [
+   -150,
+   3,
+   60,
+   3
+  ],
+  "dg": [
+   110,
+   -37,
+   252.65092611125263,
+   35.461805660650924
+  ]
+ },
+ "paint": [
+  53,
+  50,
+  72
+ ],
+ "tuning": true,
+ "grown": {
+  "grown": 18,
+  "densified": 0
+ },
+ "demand": {
+  "R": -0.09578124999999998,
+  "C": 0,
+  "B": 0,
+  "I": 0.14453125
+ },
+ "hand": [
+  {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": -20,
+   "z": -11.8,
+   "rot": 0,
+   "snapped": true,
+   "validity": "pending",
+   "message": ""
+  },
+  {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": 191.4,
+   "z": -12.25,
+   "rot": 3.7008,
+   "snapped": true,
+   "validity": "pending",
+   "message": ""
+  }
+ ],
+ "frame-rue-droite": {
+  "frame": {
+   "tx": 1,
+   "tz": -5.709718412357937e-17,
+   "nx": 5.709718412357937e-17,
+   "nz": 1,
+   "cn": 2.999999999999998,
+   "offset": 6.8,
+   "phase": 0,
+   "cell": 8
+  },
+  "preview": {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": -29.1,
+   "z": -11.8,
+   "rot": 0,
+   "snapped": true,
+   "validity": "ok",
+   "message": ""
+  }
+ },
+ "frame-rue-biais": {
+  "frame": {
+   "tx": 0.8915682881953284,
+   "tz": 0.4528862853790695,
+   "nx": -0.4528862853790695,
+   "nz": 0.8915682881953284,
+   "cn": -82.8055180549249,
+   "offset": 6.8,
+   "phase": 1.0981714531378657,
+   "cell": 8
+  },
+  "preview": {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": 184.27,
+   "z": -15.87,
+   "rot": 3.7008,
+   "snapped": true,
+   "validity": "error",
+   "message": "Emplacement déjà occupé par un bâtiment"
+  }
+ },
+ "frame-rue-biais-dessus": {
+  "frame": {
+   "tx": 0.891568288195329,
+   "tz": 0.452886285379068,
+   "nx": -0.452886285379068,
+   "nz": 0.891568288195329,
+   "cn": -82.80551805492463,
+   "offset": 6.8,
+   "phase": 7.996411243111254,
+   "cell": 8
+  },
+  "preview": {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": 209.44,
+   "z": -14.87,
+   "rot": 3.7008,
+   "snapped": true,
+   "validity": "ok",
+   "message": "Pas d’accès routier : le bâtiment ne sera ni desservi ni occupé tant qu’aucune route ne passe à proximité"
+  }
+ },
+ "frame-rue-droite-dessus": {
+  "frame": {
+   "tx": 1,
+   "tz": 0,
+   "nx": 0,
+   "nz": 1,
+   "cn": 3.0000000000000004,
+   "offset": 6.8,
+   "phase": 0,
+   "cell": 8
+  },
+  "preview": {
+   "kind": "building",
+   "assetId": "maison_ville_etroite",
+   "x": -84,
+   "z": -20.8,
+   "rot": 0,
+   "snapped": true,
+   "validity": "ok",
+   "message": "Pas d’accès routier : le bâtiment ne sera ni desservi ni occupé tant qu’aucune route ne passe à proximité"
+  }
+ }
+}

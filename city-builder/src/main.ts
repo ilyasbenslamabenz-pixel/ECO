@@ -24,6 +24,7 @@ import type { SimNotice, SimReport } from './sim/sim-protocol';
 import type { SnapshotMessage } from './shared/protocol';
 import { SimBridge, SimCommandError } from './client/sim-bridge';
 import { createClientState } from './client/state';
+import { localRoadGrid } from './client/tools/road-grid';
 import { AssetLibrary, fetchCatalog } from './render/assets';
 import { initRender, type RenderStats } from './render';
 import { PropLayer } from './render/props';
@@ -462,6 +463,20 @@ async function boot(): Promise<void> {
   render.ctx.onFrame.push((dt) => cons.update(dt));
   // La grille de construction s'estompe autour du curseur (au lieu de couvrir toute la carte jusqu'à l'horizon).
   render.ctx.onFrame.push(() => render.terrain.setGridFocus(cons.machine.hoverGround));
+  // Outil Bâtiment : quadrillage LOCAL aligné sur la route la plus proche du curseur (rotation, ligne des façades,
+  // côtés des bâtiments voisins), comme les cases de zonage — pose libre loin des routes : axes du monde.
+  {
+    let gridKey = '';
+    render.ctx.onFrame.push(() => {
+      const mc = cons.machine, g = mc.hoverGround, pv = mc.preview;
+      const free = mc.tool !== 'building' || !g || (pv.kind === 'building' && !pv.proposal.snapped);
+      if (free) { if (render.terrain.gridRoadFrame) render.terrain.setGridFrame(null); gridKey = ''; return; }
+      const key = `${g.x.toFixed(1)},${g.z.toFixed(1)},${mc.mirror.buildings.size},${mc.mirror.edges.size}`;
+      if (key === gridKey) return;
+      gridKey = key;
+      render.terrain.setGridFrame(localRoadGrid(mc.mirror, g.x, g.z)?.frame ?? null);
+    });
+  }
   // Grille de construction au sol (cases de 8 m) pendant le tracé des routes, la pose et le terrassement.
   // Calques des réseaux affichés automatiquement pendant la pose (électricité : ligne HT ou installation ;
   // eau : installation d'eau), retirés ensuite s'ils avaient été ouverts ainsi.
@@ -499,6 +514,11 @@ async function boot(): Promise<void> {
   (debug as unknown as Record<string, unknown>).startMove = (id: number) => { const r = cons.machine.mirror.buildings.get(id); return r ? cons.machine.startMove(r) : false; };
   // Diagnostic (e2e) : notification par le même chemin que la simulation et les outils (journal, regroupement, badge).
   (debug as unknown as Record<string, unknown>).toast = (text: string, kind?: 'info' | 'ok' | 'error') => ui.toast(text, kind ?? 'info');
+  // Diagnostic (e2e) : pose rendue d'un bâtiment (comparaison emprise simulée / modèle affiché / quadrillage).
+  (debug as unknown as Record<string, unknown>).buildingPose = (id: number) => render.buildings.instancePose(id);
+  // Diagnostic (e2e) : trame locale du quadrillage en (x, z) (null : axes du monde) et trame affichée en ce moment.
+  (debug as unknown as Record<string, unknown>).roadGridAt = (x: number, z: number) => localRoadGrid(cons.machine.mirror, x, z)?.frame ?? null;
+  (debug as unknown as Record<string, unknown>).gridFrame = () => render.terrain.gridRoadFrame;
   debug.worldToScreen = (x, z) => {
     const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);
     const r = canvas.getBoundingClientRect();
