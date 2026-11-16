@@ -16,7 +16,7 @@ mkdirSync(buildDir, { recursive: true });
 mkdirSync(out, { recursive: true });
 
 await esbuild.build({ entryPoints: [join(root, 'src/input/demo/main.ts')], outfile: join(buildDir, 'demo.js'), bundle: true, format: 'esm', target: 'es2022', logLevel: 'warning', sourcemap: 'inline' });
-const css = ['styles.css', 'styles-construction.css'].map((f) => readFileSync(join(root, 'src/ui', f), 'utf8')).join('\n');
+const css = ['styles.css', 'styles-panels.css', 'styles-construction.css'].map((f) => readFileSync(join(root, 'src/ui', f), 'utf8')).join('\n');
 const markup = readFileSync(join(root, 'src/ui/markup.html'), 'utf8');
 writeFileSync(join(buildDir, 'index.html'), `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Aube Urbaine — démo construction</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>${css}</style></head><body>${markup}<script type="module" src="./demo.js"></script></body></html>`);
