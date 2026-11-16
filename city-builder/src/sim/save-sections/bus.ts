@@ -1,11 +1,13 @@
 /**
- * Section de sauvegarde du module « bus » (lignes de bus) : lignes et arrêts (positions), bus et tarifs, comptes du
+ * Section de sauvegarde du module « bus » (lignes de bus et de tram, voies de tram) : lignes
+ et arrêts (positions), bus et tarifs, comptes du
  * mois, facteur voiture et vitesse de référence (reprise identique). Absente d'une partie sans ligne : une ancienne
  * sauvegarde se charge sans ligne. Les tracés, la couverture et la demande sont recalculés au chargement.
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
 import { DEFAULT_BUS_TUNING } from '../../shared/protocol-ext/bus';
 import { readRecord, type BusSave } from '../transit/system';
+import { readTracks } from '../transit/tracks';
 import { runMigrations, type SaveSectionSpec } from './types';
 
 export const BUS_SAVE_VERSION = 1;
@@ -31,7 +33,10 @@ export function migrateBus(data: unknown, from: number): BusSave {
   const month = (o.month ?? {}) as Record<string, unknown>, last = (o.lastMonth ?? {}) as Record<string, unknown>;
   const maxStop = Math.max(0, ...lines.flatMap((l) => l.stops.map((s) => s.id)));
   const maxLine = Math.max(0, ...lines.map((l) => l.id));
+  // Voies de tram (champ facultatif ajouté avec le tramway : absent des sauvegardes antérieures).
+  const tracks = readTracks(o.tracks);
   return {
+    ...(tracks.length ? { tracks } : {}),
     nextLineId: Math.max(maxLine + 1, Math.floor(num(o.nextLineId, 1))),
     nextStopId: Math.max(maxStop + 1, Math.floor(num(o.nextStopId, 1))),
     lines,

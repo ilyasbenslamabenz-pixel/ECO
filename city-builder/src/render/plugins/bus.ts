@@ -8,11 +8,13 @@
  *    le long du tracé depuis le temps physique de la simulation (0,1 s par minute de jeu, comme le trafic), avec arrêt
  *    à chaque station ; aucune trame de positions n'est transférée par le worker ;
  *  - l'aperçu d'une ligne en cours de tracé (ruban translucide et anneaux d'arrêts, avant validation) ;
- *  - la carte « Transports en commun » (menu Calques) : maillage drapé, couleurs de sommets.
+ *  - la carte « Transports en commun » (menu Calques) : maillage drapé, couleurs de sommets ;
+ *  - tramway : voies (deux rails par sens, bande colorée en site propre : un seul maillage fusionné, reconstruit quand
+ *    les voies changent) et rames (caisse allongée de 30 m + bandeau vitré : 2 `InstancedMesh`), animées comme les bus.
  * Le rendu ne modifie jamais l'état du jeu.
  */
 import * as THREE from 'three';
-import type { BusDelta, BusLayer, BusLineGeometry, BusStopView } from '../../shared/protocol-ext/bus';
+import type { BusDelta, BusLayer, BusLineGeometry, BusStopView, TramTrackGeometry } from '../../shared/protocol-ext/bus';
 import type { RenderPlugin, RenderPluginContext } from './types';
 
 const MAX_STOPS = 2048;
@@ -48,6 +50,30 @@ function ribbonGeometry(pts: readonly number[], half: number, lift: number): THR
   return g;
 }
 
+/** Polyligne x, y, z décalée latéralement de `off` (positif = à droite du sens de la polyligne). */
+function offsetPolyline(pts: readonly number[], off: number): number[] {
+  const n = pts.length / 3, out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+    let dx = pts[b * 3]! - pts[a * 3]!, dz = pts[b * 3 + 2]! - pts[a * 3 + 2]!;
+    const l = Math.hypot(dx, dz) || 1;
+    dx /= l; dz /= l;
+    out.push(pts[i * 3]! - dz * off, pts[i * 3 + 1]!, pts[i * 3 + 2]! + dx * off);
+  }
+  return out;
+}
+
+/** Ajoute un ruban (comme `ribbonGeometry`) aux tableaux d'un maillage fusionné, avec une couleur de sommet. */
+function appendRibbon(pos: number[], col: number[], idx: number[], pts: readonly number[], half: number, lift: number, c: THREE.Color): void {
+  const g = ribbonGeometry(pts, half, lift);
+  const p = g.getAttribute('position') as THREE.BufferAttribute;
+  const base = pos.length / 3;
+  for (let i = 0; i < p.count; i++) { pos.push(p.getX(i), p.getY(i), p.getZ(i)); col.push(c.r, c.g, c.b); }
+  const ix = g.getIndex()!;
+  for (let i = 0; i < ix.count; i++) idx.push(base + ix.getX(i));
+  g.dispose();
+}
+
 interface LineDraw { geo: BusLineGeometry; mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; cycle: number; legs: { s0: number; s1: number; t0: number; tMove: number }[] }
 
 class BusScene {
@@ -61,6 +87,16 @@ class BusScene {
   private bodies!: THREE.InstancedMesh;
   private glass!: THREE.InstancedMesh;
   private busCap = 0;
+  // Tramway : rames et voies.
+  private trams!: THREE.InstancedMesh;
+  private tramGlass!: THREE.InstancedMesh;
+  private tramCap = 0;
+  private readonly tramGeo = new THREE.BoxGeometry(2.65, 3.1, 30);
+  private readonly tramGlassGeo = new THREE.BoxGeometry(2.71, 1.05, 28.6);
+  private trackMesh: THREE.Mesh | null = null;
+  private readonly trackMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.35, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  tramCount = 0;
+  trackCount = 0;
   private readonly bodyGeo = new THREE.BoxGeometry(2.5, 2.4, 11.2);
   private readonly glassGeo = new THREE.BoxGeometry(2.56, 0.85, 10.2);
   private readonly bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.1 });
@@ -102,6 +138,49 @@ class BusScene {
     this.disks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_STOPS * 3), 3);
     this.disks.renderOrder = 4;
     this.ensureBuses(64);
+    this.ensureTrams(16);
+  }
+
+  private ensureTrams(n: number): void {
+    if (n <= this.tramCap) return;
+    const cap = Math.max(16, 1 << Math.ceil(Math.log2(n)));
+    if (this.tramCap) { this.group.remove(this.trams, this.tramGlass); this.trams.dispose(); this.tramGlass.dispose(); }
+    this.trams = new THREE.InstancedMesh(this.tramGeo, this.bodyMat, cap);
+    this.trams.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+    this.tramGlass = new THREE.InstancedMesh(this.tramGlassGeo, this.glassMat, cap);
+    for (const im of [this.trams, this.tramGlass]) { im.count = 0; im.frustumCulled = false; im.castShadow = true; }
+    this.tramCap = cap;
+    this.group.add(this.trams, this.tramGlass);
+  }
+
+  /** Voies de tram : deux rails par sens (voie de droite de chaque sens), bande colorée en site propre. */
+  private setTracks(list: TramTrackGeometry[]): void {
+    if (this.trackMesh) { this.group.remove(this.trackMesh); this.trackMesh.geometry.dispose(); this.trackMesh = null; }
+    this.trackCount = list.length;
+    if (!list.length) return;
+    const pos: number[] = [], col: number[] = [], idx: number[] = [];
+    const rail = new THREE.Color(0x4a4f55), band = new THREE.Color(0x6f8f5a), sett = new THREE.Color(0x8b8478);
+    for (const t of list) {
+      if (t.points.length < 6) continue;
+      // Centre de la voie de chaque sens : à droite (+offset) dans le sens de l'axe, à gauche pour le sens inverse.
+      const lanes = t.oneway ? [t.offset] : [t.offset, -t.offset];
+      for (const off of lanes) {
+        const center = offsetPolyline(t.points, off);
+        appendRibbon(pos, col, idx, center, t.dedicated ? 1.6 : 1.0, 0.03, t.dedicated ? band : sett);
+        for (const r of [-0.72, 0.72]) appendRibbon(pos, col, idx, offsetPolyline(center, r), 0.06, 0.07, rail);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    this.trackMesh = new THREE.Mesh(g, this.trackMat);
+    this.trackMesh.name = 'tram-voies';
+    this.trackMesh.renderOrder = 2;
+    this.trackMesh.receiveShadow = true;
+    this.group.add(this.trackMesh);
   }
 
   private makeBuses(n: number): { bodies: THREE.InstancedMesh; glass: THREE.InstancedMesh } {
@@ -124,7 +203,9 @@ class BusScene {
   /* ------------------------------ Données ------------------------------ */
 
   apply(d: BusDelta | undefined, full: boolean): void {
-    if (!d) { if (full) { this.setGeometry([]); this.setStops([]); } return; }
+    if (!d) { if (full) { this.setGeometry([]); this.setStops([]); this.setTracks([]); } return; }
+    if (d.tracks) this.setTracks(d.tracks);
+    else if (full) this.setTracks([]);
     if (Number.isFinite(d.phys)) this.phys = d.phys;
     if (Number.isFinite(d.speed)) this.speed = d.speed;
     if (d.lines) { this.colorOfLine.clear(); for (const l of d.lines) this.colorOfLine.set(l.id, l.color); }
@@ -137,7 +218,7 @@ class BusScene {
   private setGeometry(list: BusLineGeometry[]): void {
     for (const l of this.lines) { this.group.remove(l.mesh); l.mesh.geometry.dispose(); l.mat.dispose(); }
     this.lines = [];
-    let buses = 0;
+    let buses = 0, trams = 0;
     for (const g of list) {
       if (g.points.length < 6) continue;
       const mat = new THREE.MeshBasicMaterial({ color: g.color, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
@@ -157,9 +238,10 @@ class BusScene {
         t += g.dwellS + tMove;
       }
       this.lines.push({ geo: g, mesh, mat, cycle: Math.max(1, t), legs });
-      buses += g.activeBuses;
+      if (g.mode === 'tram') trams += g.activeBuses; else buses += g.activeBuses;
     }
     this.ensureBuses(buses);
+    this.ensureTrams(trams);
   }
 
   private setStops(list: BusStopView[]): void {
@@ -206,11 +288,12 @@ class BusScene {
 
   private updateBuses(dt: number): void {
     if (this.speed > 0) this.phys += Math.min(dt, 0.25) * this.speed;
-    let k = 0;
+    let k = 0, kt = 0;
     for (const l of this.lines) {
       const g = l.geo, n = g.activeBuses;
       if (n <= 0) continue;
-      for (let b = 0; b < n && k < this.busCap; b++) {
+      const tram = g.mode === 'tram';
+      for (let b = 0; b < n && (tram ? kt < this.tramCap : k < this.busCap); b++) {
         let tau = (this.phys + (b * l.cycle) / n) % l.cycle;
         if (tau < 0) tau += l.cycle;
         let s = 0;
@@ -223,6 +306,19 @@ class BusScene {
         const yaw = this.at(g, Math.min(s + 3, g.cum[g.cum.length - 1]!), this.v);
         this.at(g, s, this.v);
         this.q.setFromAxisAngle(this.up, yaw);
+        if (tram) {
+          // Rame : caisse allongée de la couleur de la ligne et bandeau vitré.
+          this.v.y += 1.85;
+          this.m.compose(this.v, this.q, this.sc.set(1, 1, 1));
+          this.trams.setMatrixAt(kt, this.m);
+          this.v.y += 0.5;
+          this.m.compose(this.v, this.q, this.sc);
+          this.tramGlass.setMatrixAt(kt, this.m);
+          this.c.set(g.color);
+          this.trams.setColorAt(kt, this.c);
+          kt++;
+          continue;
+        }
         this.v.y += 1.45;
         this.m.compose(this.v, this.q, this.sc.set(1, 1, 1));
         this.bodies.setMatrixAt(k, this.m);
@@ -240,6 +336,12 @@ class BusScene {
       if (this.bodies.instanceColor) this.bodies.instanceColor.needsUpdate = true;
     }
     this.busCount = k;
+    this.trams.count = kt; this.tramGlass.count = kt;
+    if (kt) {
+      this.trams.instanceMatrix.needsUpdate = true; this.tramGlass.instanceMatrix.needsUpdate = true;
+      if (this.trams.instanceColor) this.trams.instanceColor.needsUpdate = true;
+    }
+    this.tramCount = kt;
   }
 
   /* ------------------------------ Aperçu ------------------------------ */
@@ -320,7 +422,9 @@ class BusScene {
   get stopCount(): number { return this.stops.length; }
 
   dispose(): void {
-    this.setGeometry([]); this.setDraft(null);
+    this.setGeometry([]); this.setDraft(null); this.setTracks([]);
+    for (const im of [this.trams, this.tramGlass]) im.dispose();
+    this.tramGeo.dispose(); this.tramGlassGeo.dispose(); this.trackMat.dispose();
     this.ctx.scene.remove(this.group);
     for (const im of [this.poles, this.signs, this.disks, this.bodies, this.glass]) { im.geometry.dispose(); (im.material as THREE.Material).dispose(); im.dispose(); }
     this.layerMesh?.geometry.dispose(); this.layerMat.dispose(); this.draftMat.dispose(); this.ringGeo.dispose();
@@ -352,6 +456,8 @@ export function createBusRenderPlugin(): RenderPlugin {
       // Diagnostic e2e (lecture seule).
       (window as unknown as { __busRender?: unknown }).__busRender = {
         lines: () => scene?.lineCount ?? 0, stops: () => scene?.stopCount ?? 0, buses: () => scene?.busCount ?? 0,
+        trams: () => scene?.tramCount ?? 0, tracks: () => scene?.trackCount ?? 0,
+
         draftPoints: () => scene?.draftPoints ?? 0, layerCells: () => scene?.layerCells ?? 0, phys: () => scene?.phys ?? 0,
         frameMs: () => scene?.frameMs ?? 0, drawCalls: () => (scene ? scene.lineCount + 5 : 0),
       };

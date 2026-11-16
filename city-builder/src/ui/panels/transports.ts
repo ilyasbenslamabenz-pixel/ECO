@@ -110,8 +110,14 @@ export function busLinesView(s: BusState): TransportsSection[] {
       ['Lignes, arrêts', `${nf(m.lines)} lignes, ${nf(m.stops)} arrêts`],
       ['Dépôts (places)', m.depots ? `${nf(m.depots)} (${nf(m.depotCapacity)} bus)` : 'aucun : posez un dépôt (Transports › Gares et dépôts)'],
       ['Bus en service / demandés', `${nf(m.busesActive)} / ${nf(m.busesRequested)}`],
+      ...(m.tram && (m.tram.lines > 0 || m.tram.trackM > 0) ? [
+        ['Tram : lignes, rames en service / demandées', `${nf(m.tram.lines)} lignes, ${nf(m.tram.vehiclesActive)} / ${nf(m.tram.vehiclesRequested)}`],
+        ['Tram : dépôts (places)', m.tram.depots ? `${nf(m.tram.depots)} (${nf(m.tram.depotCapacity)} rames)` : 'aucun : posez un dépôt de tram (Transports › Gares et dépôts)'],
+        ['Tram : voies posées (site propre)', `${nf(m.tram.trackM / 1000, 2)} km (${nf(m.tram.dedicatedM / 1000, 2)} km)`],
+        ['Tram : voyages par jour', nf(m.tram.ridersDay)],
+      ] as [string, string][] : []),
       ['Voyages par jour', nf(m.ridersDay)],
-      ['Part modale bus / voiture / marche', `${pctOf(m.modal.bus)} / ${pctOf(m.modal.car)} / ${pctOf(m.modal.walk)}`],
+      ['Part modale transports en commun / voiture / marche', `${pctOf(m.modal.bus)} / ${pctOf(m.modal.car)} / ${pctOf(m.modal.walk)}`],
       ['Trafic automobile évité', pctOf(1 - m.carFactor)],
       ['Habitants à moins de 400 m d’un arrêt', m.population ? `${nf(m.coveredResidents)} (${pctOf(m.coveredResidents / Math.max(1, m.population))})` : '—'],
       ['Emplois desservis', nf(m.coveredJobs)],
@@ -122,7 +128,7 @@ export function busLinesView(s: BusState): TransportsSection[] {
   }];
   for (const l of s.lines) {
     const rows: [string, string][] = [
-      ['État', l.problem ?? `en service : un bus toutes les ${nf(l.headwayMin, 1)} min`],
+      ['État', l.problem ?? `en service : ${l.mode === 'tram' ? 'une rame' : 'un bus'} toutes les ${nf(l.headwayMin, 1)} min`],
       ['Bus en service / demandés, tarif', `${nf(l.activeBuses)} / ${nf(l.buses)}, ${nf(l.fare, 2)} CHF`],
       ['Boucle, durée d’un tour', `${nf(l.lengthM / 1000, 2)} km, ${nf(l.cycleMin, 1)} min`],
       ['Voyages par jour', `${nf(l.stats.ridersDay)}${l.stats.refusedDay ? ` (+${nf(l.stats.refusedDay)} refusés)` : ''}`],
@@ -134,7 +140,8 @@ export function busLinesView(s: BusState): TransportsSection[] {
       const st = s.stops.find((q) => q.id === id);
       if (st) rows.push([`· ${st.name}`, `${nf(st.boardings)} montées, ${nf(st.alightings)} descentes${st.ok ? '' : ' (sans route)'}`]);
     }
-    out.push({ title: `${l.name}`, rows });
+    out.push({ title: l.mode === 'tram' ? `Tram · ${l.name}` : `${l.name}`, rows });
+
   }
   if (!s.lines.length) out.push({ title: 'Aucune ligne', rows: [['Tracer une ligne', 'barre d’outils › Transports › Lignes de bus']] });
   return out;

@@ -9,10 +9,12 @@
  *    couleur, nombre de bus (fréquence), tarif, suppression de la ligne ; fiche d'arrêt (montées, descentes, desserte).
  *  - Chaque modification passe par la simulation et empile son inverse dans l'historique d'annulation existant
  *    (`ConstructionTools.undo`, étapes `plugin`) : Ctrl+Z / bouton Annuler.
+ *  - Tramway : « + Ligne de tram » (mêmes gestes, arrêts sur les routes équipées de voies) et « Voies de tram » : chaque
+ *    toucher sur une route pose la voie du tronçon (voie partagée ou site propre) ou la retire ; annulable.
  * Au doigt : cibles d'au moins 44 px ; un doigt sur la carte la déplace, sauf s'il commence sur un arrêt (glisser) ;
  * un toucher bref pose un arrêt ; deux doigts gardent la caméra (`ToolController.setPointerOverride`).
  */
-import { BUS_COLORS, BUS_FARE_MAX, BUS_MAX_BUSES_PER_LINE, type BusLineView, type BusState, type BusStopCard } from '../shared/protocol-ext/bus';
+import { BUS_COLORS, BUS_FARE_MAX, BUS_MAX_BUSES_PER_LINE, type BusLineView, type BusState, type BusStopCard, type TransitMode } from '../shared/protocol-ext/bus';
 import type { PointerToolSink } from '../input/camera';
 import type { ToolController } from '../input/tools';
 import type { ConstructionTools } from '../client/tools/machine';
@@ -69,8 +71,9 @@ function ensureCss(): void {
 interface DraftStop { x: number; z: number; ok: boolean }
 type Mode =
   | { kind: 'list' }
-  | { kind: 'draft'; stops: DraftStop[]; selected: number; color: string; name: string }
-  | { kind: 'edit'; lineId: number; selected: number | null; confirmDelete: boolean };
+  | { kind: 'draft'; stops: DraftStop[]; selected: number; color: string; name: string; mode: TransitMode }
+  | { kind: 'edit'; lineId: number; selected: number | null; confirmDelete: boolean }
+  | { kind: 'tracks'; dedicated: boolean; remove: boolean };
 
 export interface BusEditorDeps {
   tools: ToolController;
@@ -168,23 +171,36 @@ export class BusEditor implements PointerToolSink {
     const s = this.state;
     const parts: HTMLElement[] = [];
     if (this.mode.kind === 'list') {
-      parts.push(el('div', { cls: 'note', text: 'Lignes de bus : posez les arrêts sur les routes, dans l’ordre ; la ligne revient au premier arrêt par le plus court chemin.' }));
+      parts.push(el('div', { cls: 'note', text: 'Lignes de bus et de tram : posez les arrêts sur les routes, dans l’ordre ; la ligne revient au premier arrêt par le plus court chemin. Le tram ne roule que sur les routes équipées de voies.' }));
       const row = el('div', { cls: 'row' });
-      row.append(this.btn('+ Nouvelle ligne', () => this.startDraft(), 'primary', { 'data-bus': 'new' }));
+      row.append(this.btn('+ Nouvelle ligne', () => this.startDraft('bus'), 'primary', { 'data-bus': 'new' }));
+      row.append(this.btn('+ Ligne de tram', () => this.startDraft('tram'), '', { 'data-bus': 'new-tram' }));
+      row.append(this.btn('Voies de tram', () => { this.mode = { kind: 'tracks', dedicated: false, remove: false }; this.syncDraftView(); this.draw(); }, '', { 'data-bus': 'tracks' }));
       for (const l of s?.lines ?? []) {
         const b = this.btn('', () => { this.mode = { kind: 'edit', lineId: l.id, selected: null, confirmDelete: false }; this.card = null; this.syncDraftView(); this.draw(); }, 'line-chip', { 'data-bus-line': String(l.id) });
-        b.append(el('span', { cls: 'dot', attrs: { style: `background:${l.color}` } }), el('span', { text: `${l.name} · ${fmt(l.stats.ridersDay)} voy./j` }));
+        b.append(el('span', { cls: 'dot', attrs: { style: `background:${l.color}` } }), el('span', { text: `${l.mode === 'tram' ? 'Tram · ' : ''}${l.name} · ${fmt(l.stats.ridersDay)} voy./j` }));
         row.append(b);
       }
       parts.push(row);
-      if (s) parts.push(this.depotLine());
+      if (s) { parts.push(this.depotLine('bus')); if (s.lines.some((l) => l.mode === 'tram') || (s.summary.tram?.trackM ?? 0) > 0) parts.push(this.depotLine('tram')); }
+    } else if (this.mode.kind === 'tracks') {
+      const m = this.mode;
+      const tr = s?.summary.tram;
+      parts.push(el('div', { cls: 'note', text: 'Voies de tram : touchez une route pour équiper le tronçon (ni rue piétonne, ni autoroute). En site propre, les rames ne subissent pas les bouchons.' }));
+      parts.push(el('div', { cls: 'row', attrs: { role: 'radiogroup', 'aria-label': 'Type de voie' } },
+        this.btn('Voie partagée', () => { m.dedicated = false; m.remove = false; this.draw(); }, !m.remove && !m.dedicated ? 'primary' : '', { 'data-bus': 'track-shared' }),
+        this.btn('Site propre', () => { m.dedicated = true; m.remove = false; this.draw(); }, !m.remove && m.dedicated ? 'primary' : '', { 'data-bus': 'track-dedicated' }),
+        this.btn('Retirer', () => { m.remove = true; this.draw(); }, m.remove ? 'danger' : '', { 'data-bus': 'track-remove' })));
+      if (tr) parts.push(el('div', { cls: 'note', attrs: { 'data-bus': 'track-stats' }, text: `Voies posées : ${kmMin(tr.trackM)}${tr.dedicatedM ? ` (dont ${kmMin(tr.dedicatedM)} en site propre)` : ''}` }));
+      parts.push(el('div', { cls: 'row' }, this.btn('Terminer', () => { this.mode = { kind: 'list' }; this.syncDraftView(); this.draw(); }, 'primary', { 'data-bus': 'done' })));
+      if (s) parts.push(this.depotLine('tram'));
     } else if (this.mode.kind === 'draft') {
       const m = this.mode;
-      parts.push(el('div', { cls: 'row' }, el('span', { cls: 'dot', attrs: { style: `background:${m.color}` } }), el('b', { text: m.name }), el('span', { cls: 'note', text: `${m.stops.length} arrêt${m.stops.length > 1 ? 's' : ''} · touchez une route pour poser l’arrêt suivant` })));
+      parts.push(el('div', { cls: 'row' }, el('span', { cls: 'dot', attrs: { style: `background:${m.color}` } }), el('b', { text: m.name }), el('span', { cls: 'note', text: `${m.stops.length} arrêt${m.stops.length > 1 ? 's' : ''} · touchez une ${m.mode === 'tram' ? 'route équipée de voies de tram' : 'route'} pour poser l’arrêt suivant` })));
       parts.push(this.swatches(m.color, (c) => { m.color = c; this.syncDraftView(); this.draw(); }));
       const p = this.preview;
       if (p && m.stops.length >= 2) {
-        parts.push(el('div', { cls: p.problem ? 'err' : 'note', attrs: { 'data-bus-preview': p.problem ? 'ko' : 'ok' }, text: p.problem ?? `Boucle de ${kmMin(p.lengthM)} · un tour en ${minutes(p.cycleMin)} · coût des abribus ${money(p.cost)}` }));
+        parts.push(el('div', { cls: p.problem ? 'err' : 'note', attrs: { 'data-bus-preview': p.problem ? 'ko' : 'ok' }, text: p.problem ?? `Boucle de ${kmMin(p.lengthM)} · un tour en ${minutes(p.cycleMin)} · coût des ${m.mode === 'tram' ? 'quais' : 'abribus'} ${money(p.cost)}` }));
       } else if (p?.problem) parts.push(el('div', { cls: 'warn', text: p.problem }));
       const row = el('div', { cls: 'row' });
       row.append(this.btn('Valider la ligne', () => void this.commitDraft(), 'primary', { 'data-bus': 'validate', ...(m.stops.length < 2 || p?.problem ? { disabled: '' } : {}) }));
@@ -192,7 +208,7 @@ export class BusEditor implements PointerToolSink {
       else if (m.stops.length) row.append(this.btn('Retirer le dernier', () => { m.stops.pop(); void this.updatePreview(); }, '', { 'data-bus': 'pop' }));
       row.append(this.btn('Abandonner', () => { this.mode = { kind: 'list' }; this.preview = null; this.syncDraftView(); this.draw(); }, '', { 'data-bus': 'cancel' }));
       parts.push(row);
-      if (s) parts.push(this.depotLine());
+      if (s) parts.push(this.depotLine(m.mode));
     } else {
       const m = this.mode;
       const l = this.line(m.lineId);
@@ -201,19 +217,21 @@ export class BusEditor implements PointerToolSink {
       name.addEventListener('change', () => void this.update(l, { name: name.value }, 'Nom de la ligne'));
       parts.push(el('div', { cls: 'row' }, el('span', { cls: 'dot', attrs: { style: `background:${l.color}` } }), name));
       parts.push(this.swatches(l.color, (c) => void this.update(l, { color: c }, 'Couleur de la ligne')));
+      const tram = l.mode === 'tram';
+      const unit = tram ? (l.buses > 1 ? 'rames' : 'rame') : 'bus';
       const buses = el('div', { cls: 'stepper' },
-        this.btn('−', () => void this.update(l, { buses: Math.max(0, l.buses - 1) }, 'Bus de la ligne'), '', { 'aria-label': 'Un bus de moins', 'data-bus': 'buses-minus' }),
-        el('b', { text: `${l.buses} bus`, attrs: { 'data-bus': 'buses' } }),
-        this.btn('+', () => void this.update(l, { buses: Math.min(BUS_MAX_BUSES_PER_LINE, l.buses + 1) }, 'Bus de la ligne'), '', { 'aria-label': 'Un bus de plus', 'data-bus': 'buses-plus' }));
+        this.btn('−', () => void this.update(l, { buses: Math.max(0, l.buses - 1) }, tram ? 'Rames de la ligne' : 'Bus de la ligne'), '', { 'aria-label': tram ? 'Une rame de moins' : 'Un bus de moins', 'data-bus': 'buses-minus' }),
+        el('b', { text: `${l.buses} ${unit}`, attrs: { 'data-bus': 'buses' } }),
+        this.btn('+', () => void this.update(l, { buses: Math.min(BUS_MAX_BUSES_PER_LINE, l.buses + 1) }, tram ? 'Rames de la ligne' : 'Bus de la ligne'), '', { 'aria-label': tram ? 'Une rame de plus' : 'Un bus de plus', 'data-bus': 'buses-plus' }));
       const fares = el('div', { cls: 'stepper' },
         this.btn('−', () => void this.update(l, { fare: Math.max(0, l.fare - 0.25) }, 'Tarif de la ligne'), '', { 'aria-label': 'Tarif plus bas', 'data-bus': 'fare-minus' }),
         el('b', { text: fare(l.fare), attrs: { 'data-bus': 'fare' } }),
         this.btn('+', () => void this.update(l, { fare: Math.min(BUS_FARE_MAX, l.fare + 0.25) }, 'Tarif de la ligne'), '', { 'aria-label': 'Tarif plus haut', 'data-bus': 'fare-plus' }));
-      parts.push(el('div', { cls: 'row' }, el('span', { cls: 'note', text: 'Bus' }), buses, el('span', { cls: 'note', text: 'Tarif' }), fares));
+      parts.push(el('div', { cls: 'row' }, el('span', { cls: 'note', text: tram ? 'Rames' : 'Bus' }), buses, el('span', { cls: 'note', text: 'Tarif' }), fares));
       parts.push(el('dl', {},
-        el('dt', { text: 'Fréquence' }), el('dd', { text: l.headwayMin > 0 ? `un bus toutes les ${minutes(l.headwayMin)} (${l.activeBuses} en service)` : 'ne roule pas' }),
+        el('dt', { text: 'Fréquence' }), el('dd', { text: l.headwayMin > 0 ? `${tram ? 'une rame' : 'un bus'} toutes les ${minutes(l.headwayMin)} (${l.activeBuses} en service)` : 'ne roule pas' }),
         el('dt', { text: 'Boucle' }), el('dd', { text: `${kmMin(l.lengthM)}, ${l.stopIds.length} arrêts, un tour en ${minutes(l.cycleMin)}` }),
-        el('dt', { text: 'Voyages par jour' }), el('dd', { text: `${fmt(l.stats.ridersDay)}${l.stats.refusedDay ? ` (${fmt(l.stats.refusedDay)} refusés : bus pleins)` : ''}` }),
+        el('dt', { text: 'Voyages par jour' }), el('dd', { text: `${fmt(l.stats.ridersDay)}${l.stats.refusedDay ? ` (${fmt(l.stats.refusedDay)} refusés : ${tram ? 'rames pleines' : 'bus pleins'})` : ''}` }),
         el('dt', { text: 'Charge à la pointe' }), el('dd', { text: `${Math.round(l.stats.load * 100)} %` }),
         el('dt', { text: 'Recettes / coût du mois' }), el('dd', { text: `${money(l.stats.revenueMonth)} / ${money(l.stats.costMonth)}` })));
       if (l.problem) parts.push(el('div', { cls: 'warn', attrs: { 'data-bus-problem': '1' }, text: l.problem }));
@@ -231,8 +249,15 @@ export class BusEditor implements PointerToolSink {
     h.replaceChildren(...parts);
   }
 
-  private depotLine(): HTMLElement {
+  private depotLine(mode: TransitMode = 'bus'): HTMLElement {
     const s = this.state!.summary;
+    if (mode === 'tram') {
+      const t = s.tram;
+      if (t && t.depots > 0) return el('div', { cls: 'note', text: `Dépôts de tram : ${t.depots} (${t.vehiclesActive} rames en service sur ${t.depotCapacity} places) · ${fmt(t.ridersDay)} voyages par jour` });
+      const box = el('div', { cls: 'row' }, el('span', { cls: 'warn', text: 'Aucun dépôt de tram : les lignes de tram ne rouleront pas.' }));
+      box.append(this.btn('Poser un dépôt', () => this.deps?.openDepots(), '', { 'data-bus': 'depots-tram' }));
+      return box;
+    }
     if (s.depots > 0) return el('div', { cls: 'note', text: `Dépôts : ${s.depots} (${s.busesActive} bus en service sur ${s.depotCapacity} places) · ${fmt(s.ridersDay)} voyages par jour` });
     const box = el('div', { cls: 'row' }, el('span', { cls: 'warn', text: 'Aucun dépôt de bus : les lignes ne rouleront pas.' }));
     box.append(this.btn('Poser un dépôt', () => this.deps?.openDepots(), '', { 'data-bus': 'depots' }));
@@ -271,11 +296,11 @@ export class BusEditor implements PointerToolSink {
 
   /* ------------------------------ Aperçu ------------------------------ */
 
-  private startDraft(): void {
+  private startDraft(mode: TransitMode = 'bus'): void {
     const used = new Set((this.state?.lines ?? []).map((l) => l.color));
     const color = BUS_COLORS.find((c) => !used.has(c)) ?? BUS_COLORS[0]!;
     const n = (this.state?.lines.length ?? 0) + 1;
-    this.mode = { kind: 'draft', stops: [], selected: -1, color, name: `Ligne ${n}` };
+    this.mode = { kind: 'draft', stops: [], selected: -1, color, name: mode === 'tram' ? `Tram ${n}` : `Ligne ${n}`, mode };
     this.preview = null;
     this.syncDraftView();
     this.draw();
@@ -301,7 +326,7 @@ export class BusEditor implements PointerToolSink {
     if (m.kind !== 'draft') return;
     const seq = ++this.previewSeq;
     try {
-      const r = await busCommand<{ points: number[]; stops: DraftStop[]; lengthM: number; cycleMin: number; problem: string | null; cost: number }>('preview', { stops: m.stops.map((s) => ({ x: s.x, z: s.z })) });
+      const r = await busCommand<{ points: number[]; stops: DraftStop[]; lengthM: number; cycleMin: number; problem: string | null; cost: number }>('preview', { mode: m.mode, stops: m.stops.map((s) => ({ x: s.x, z: s.z })) });
       if (seq !== this.previewSeq || this.mode !== m) return;
       this.preview = r;
       r.stops.forEach((s, i) => { const d = m.stops[i]; if (d) { d.x = s.x; d.z = s.z; d.ok = s.ok; } });
@@ -315,8 +340,8 @@ export class BusEditor implements PointerToolSink {
     if (m.kind !== 'draft' || this.busy) return;
     this.busy = true;
     try {
-      const r = await busCommand<{ line: BusLineView; cost: number; warning: string | null }>('createLine', { name: m.name, color: m.color, stops: m.stops.map((s) => ({ x: s.x, z: s.z })) });
-      this.pushUndo(`Ligne de bus : ${r.line.name}`, [{ kind: 'plugin', plugin: 'bus', name: 'deleteLine', payload: { id: r.line.id } }]);
+      const r = await busCommand<{ line: BusLineView; cost: number; warning: string | null }>('createLine', { mode: m.mode, name: m.name, color: m.color, stops: m.stops.map((s) => ({ x: s.x, z: s.z })) });
+      this.pushUndo(`${m.mode === 'tram' ? 'Ligne de tram' : 'Ligne de bus'} : ${r.line.name}`, [{ kind: 'plugin', plugin: 'bus', name: 'deleteLine', payload: { id: r.line.id } }]);
       this.deps?.notify(r.warning ?? `${r.line.name} créée : ${r.line.stopIds.length} arrêts (${money(r.cost)})`, r.warning ? 'info' : 'ok');
       this.mode = { kind: 'edit', lineId: r.line.id, selected: null, confirmDelete: false };
       this.preview = null;
@@ -388,7 +413,7 @@ export class BusEditor implements PointerToolSink {
 
   capturesPrimary(): boolean { return this.mode.kind !== 'list'; }
   /** Le geste n'est pris que s'il commence sur un arrêt (glisser) ; ailleurs, la carte se déplace et un toucher pose. */
-  capturesAt(sx: number, sy: number, type: string): boolean { return this.hit(sx, sy, type) >= 0; }
+  capturesAt(sx: number, sy: number, type: string): boolean { return this.mode.kind !== 'tracks' && this.hit(sx, sy, type) >= 0; }
 
   hover(): void { /* rien : les arrêts sont toujours visibles */ }
 
@@ -418,6 +443,11 @@ export class BusEditor implements PointerToolSink {
       return;
     }
     if (!tap) return;
+    if (m.kind === 'tracks') {
+      const g = this.deps?.tools.groundAt(sx, sy);
+      if (g) void this.toggleTrack(g.x, g.z, m);
+      return;
+    }
     const i = d ? d.index : this.hit(sx, sy, type);
     if (i >= 0) {
       // Toucher sur un arrêt : sélection (fiche ou « Retirer »).
@@ -444,11 +474,24 @@ export class BusEditor implements PointerToolSink {
     if (m.kind === 'draft' && m.stops.length) { m.stops.pop(); void this.updatePreview(); }
   }
 
+  /** Voie de tram du tronçon touché : pose (partagée / site propre) ou retrait ; l'inverse est empilé (annulation). */
+  private async toggleTrack(x: number, z: number, m: { dedicated: boolean; remove: boolean }): Promise<void> {
+    try {
+      const r = await busCommand<{ segId: number; on: boolean; dedicated: boolean; lengthM: number; cost: number; previous: { on: boolean; dedicated: boolean } }>('track', { x, z, on: !m.remove, dedicated: m.dedicated });
+      if (r.previous.on !== r.on || r.previous.dedicated !== r.dedicated) {
+        this.pushUndo(r.on ? 'Voie de tram' : 'Voie de tram retirée', [{ kind: 'plugin', plugin: 'bus', name: 'track', payload: { segId: r.segId, on: r.previous.on, dedicated: r.previous.dedicated } }]);
+      }
+      this.deps?.notify(r.on ? `Voie de tram ${r.dedicated ? 'en site propre' : 'partagée'} : ${kmMin(r.lengthM)}${r.cost ? ` (${money(r.cost)})` : ''}` : `Voie de tram retirée (${kmMin(r.lengthM)})`, 'ok');
+      await this.refresh();
+    } catch (e) { this.deps?.notify(errText(e), 'error'); }
+  }
+
   private async addDraftStop(x: number, z: number): Promise<void> {
     const m = this.mode;
     if (m.kind !== 'draft') return;
     try {
-      const s = await busCommand<{ x: number; z: number }>('snap', { x, z });
+      const s = await busCommand<{ x: number; z: number }>('snap', { x, z, mode: m.mode });
+
       if (this.mode !== m) return;
       m.stops.push({ x: s.x, z: s.z, ok: true });
       m.selected = -1;
