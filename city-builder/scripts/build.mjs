@@ -47,7 +47,8 @@ const mainOpts = { ...common, entryPoints: [join(root, 'src/main.ts')], outfile:
 const workerOpts = { ...common, entryPoints: [join(root, 'src/sim/worker.ts')], outfile: join(dist, 'sim.worker.js'), format: 'iife' };
 
 function html({ fragment }) {
-  const css = readFileSync(join(root, 'src/ui/styles.css'), 'utf8');
+  // styles-construction.css (retours pendant la construction) est chargé après styles.css : il en réutilise les jetons.
+  const css = ['styles.css', 'styles-construction.css'].map((f) => readFileSync(join(root, 'src/ui', f), 'utf8')).join('\n');
   const markup = readFileSync(join(root, 'src/ui/markup.html'), 'utf8');
   const head = [
     '<title>Meknes City</title>',

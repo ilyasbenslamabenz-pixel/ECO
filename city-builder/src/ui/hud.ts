@@ -482,6 +482,7 @@ export function initUI(h: UIHandlers): UIHandle {
   let minimap: Minimap | null = null;
   let heightAt: ((x: number, z: number) => number) | null = null;
   const cursorTag = $('cursor-tag');
+  let tagKey = '';
   const touchBar = $('touch-confirm');
   /**
    * Bouton « Construire » de la barre tactile : reflète la validation (dryRun) de l'emplacement par la simulation,
@@ -498,7 +499,7 @@ export function initUI(h: UIHandlers): UIHandle {
     ok.textContent = bad ? 'Emplacement invalide' : tcLabel || 'Construire';
     // Avertissement de la simulation sur un emplacement valide (ex. aucune route ne dessert le bâtiment).
     const warn = !bad && !touchBar.classList.contains('hidden') && m?.tool === 'building' && p?.kind === 'building' && p.validity === 'ok' && !!p.message;
-    reason.textContent = p?.kind === 'building' && (bad || warn) ? `${warn ? '⚠ ' : ''}${chfText(p.message || 'Emplacement refusé par la simulation')}` : '';
+    reason.textContent = p?.kind === 'building' && (bad || warn) ? `${chfText(p.message || 'Emplacement refusé par la simulation')}` : '';
     reason.classList.toggle('hidden', !bad && !warn);
     reason.classList.toggle('warn', warn);
   };
@@ -655,9 +656,25 @@ export function initUI(h: UIHandlers): UIHandle {
     toolHooks() {
       return {
         cursorTag(text, kind, sx, sy) {
-          if (!text) { cursorTag.classList.add('hidden'); return; }
-          cursorTag.textContent = chfText(text);
+          if (!text) { cursorTag.classList.add('hidden'); tagKey = ''; return; }
+          // Étiquette structurée : une ligne par rangée (1re = coût et longueur/surface, suivantes = angle, pente, aides) ;
+          // en refus, la dernière ligne porte la cause. textContent inchangé (lignes séparées par « \n ») pour les tests.
+          const key = `${kind}|${text}`;
+          if (key !== tagKey) {
+            tagKey = key;
+            const lines = chfText(text).split('\n').filter((l) => l.trim());
+            const nodes: (Node | string)[] = [];
+            lines.forEach((l, i) => {
+              if (i) nodes.push('\n');
+              const cls = ['ct-row'];
+              if (i === 0) cls.push('ct-head');
+              if (kind === 'error' && i === lines.length - 1) cls.push('ct-reason');
+              nodes.push(el('span', { cls: cls.join(' '), text: l }));
+            });
+            cursorTag.replaceChildren(...nodes);
+          }
           cursorTag.className = kind;
+          cursorTag.dataset.state = kind === 'error' ? 'refus' : kind === 'pending' ? 'attention' : kind === 'ok' ? 'ok' : 'info';
           // Étiquette toujours entière à l'écran (centrée sous le doigt en tactile, à droite du curseur sinon).
           const w = cursorTag.offsetWidth, W = window.innerWidth;
           const centered = matchMedia('(max-width: 760px)').matches; // même règle que styles.css (étiquette centrée)
@@ -683,6 +700,7 @@ export function initUI(h: UIHandlers): UIHandle {
             const r = el.getBoundingClientRect();
             if (r.width && tr.left < r.right && tr.right > r.left && tr.bottom > r.top) limit = Math.min(limit, r.top);
           }
+          if (limit === Infinity && tr.bottom > window.innerHeight - 8) limit = window.innerHeight - 8; // jamais sous le bord de l'écran
           if (limit !== Infinity) cursorTag.style.top = `${Math.max(0, sy - (tr.bottom - limit) - 8)}px`;
         },
         touchConfirm(o) {
