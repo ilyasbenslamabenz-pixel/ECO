@@ -6,24 +6,29 @@
 const TRACE_KEY = 'meknes:trace';
 const PLAYING_KEY = 'meknes:en-jeu';
 
-interface Trace { steps: string[]; t0: number }
-let trace: Trace = { steps: [], t0: Date.now() };
+declare const __BUILD_COMMIT__: string | undefined;
+/** Version du jeu : un arrêt suivi d'un redémarrage sur une AUTRE version est une mise à jour (rechargement imposé
+ *  par la page hôte, parfois sans `pagehide`), pas un plantage. */
+const BUILD = typeof __BUILD_COMMIT__ === 'string' ? __BUILD_COMMIT__ : '';
+interface Trace { steps: string[]; t0: number; build?: string }
+let trace: Trace = { steps: [], t0: Date.now(), build: BUILD };
 
 function save(): void { try { localStorage.setItem(TRACE_KEY, JSON.stringify(trace)); } catch { /* navigation privée */ } }
 
 /** Lit le journal du lancement précédent (avant de commencer le nouveau). */
-export function previousTrace(): { steps: string[]; seconds: number; playing: boolean } | null {
+export function previousTrace(): { steps: string[]; seconds: number; playing: boolean; updated: boolean } | null {
   try {
     const raw = localStorage.getItem(TRACE_KEY);
     const playing = localStorage.getItem(PLAYING_KEY) === '1';
     if (!raw) return null;
     const t = JSON.parse(raw) as Trace;
-    return { steps: t.steps ?? [], seconds: Math.round((Date.now() - (t.t0 ?? Date.now())) / 1000), playing };
+    const updated = !!BUILD && !!t.build && t.build !== BUILD;
+    return { steps: t.steps ?? [], seconds: Math.round((Date.now() - (t.t0 ?? Date.now())) / 1000), playing, updated };
   } catch { return null; }
 }
 
 /** Démarre un nouveau journal. */
-export function traceStart(): void { trace = { steps: [], t0: Date.now() }; save(); }
+export function traceStart(): void { trace = { steps: [], t0: Date.now(), build: BUILD }; save(); }
 
 /** Ajoute une étape (les 8 dernières sont gardées), avec l'heure depuis le lancement. */
 export function traceStep(label: string): void {
