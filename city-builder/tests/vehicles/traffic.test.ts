@@ -329,3 +329,47 @@ test('Profil de demande journalier : pointes du matin et du soir', () => {
   assert.ok(demandShare(8) > demandShare(3) * 5);
   assert.ok(demandShare(17.5) > demandShare(13));
 });
+
+test('Ne pas bloquer le carrefour : pas d’entrée sans place à la sortie, aucun véhicule arrêté dans le carrefour', () => {
+  // file de 4 véhicules au sud, tous vers le nord ; la sortie nord est bouchée par un véhicule immobile qui ne laisse
+  // la place qu'à UN véhicule : un seul doit s'engager, les autres attendent à la ligne d'arrêt (avant le passage)
+  for (const kinds of [['rue', 'rue'], ['avenue', 'avenue']] as const) {
+    const t = scenario(cross(kinds[0], kinds[1]));
+    const g = t.graph!;
+    const inArc = g.edgeIndex(12) * 2, outArc = g.edgeIndex(13) * 2;
+    const inLane = g.arcFirstLane[inArc]! + g.arcLaneCount[inArc]! - 1; // voie de droite
+    const outLane = g.arcFirstLane[outArc]! + g.arcLaneCount[outArc]! - 1;
+    const blockS = 12;
+    const blocker = t.spawnVehicle(outArc, g.arcLaneCount[outArc]! - 1, blockS, outArc, 90, 0, 0, 0);
+    assert.ok(blocker >= 0);
+    const L = g.linkLen[inLane]!;
+    const queue: number[] = [];
+    for (let q = 0; q < 4; q++) {
+      const v = t.spawnVehicle(inArc, g.arcLaneCount[inArc]! - 1, L - 12 - q * 12, outArc, 90, 0, 0, 6);
+      assert.ok(v >= 0, `véhicule ${q}`);
+      queue.push(v);
+    }
+    let maxStuckInJunction = 0;
+    for (let k = 0; k < 600; k++) {
+      t.step(0.1, 12);
+      t.s[blocker] = blockS; t.v[blocker] = 0; // obstacle immobile (bouchon en aval)
+      if (k < 300) continue;
+      let stuck = 0;
+      for (const v of queue) if (t.alive[v] && g.linkKind[t.link[v]!] === 1 && t.v[v]! < 0.2) stuck++;
+      maxStuckInJunction = Math.max(maxStuckInJunction, stuck);
+    }
+    let onExit = 0, waiting = 0;
+    for (const v of queue) {
+      if (!t.alive[v]) continue;
+      if (t.link[v] === outLane) onExit++;
+      // en attente : sur la voie d'arrivée, à l'arrêt, l'avant avant la ligne d'arrêt (donc avant le passage piéton)
+      else if (g.linkKind[t.link[v]!] === 0) { waiting++; assert.ok(g.linkLen[t.link[v]!]! - t.s[v]! - t.len[v]! / 2 >= 0, 'avant la ligne'); }
+    }
+    assert.equal(maxStuckInJunction, 0, `${kinds.join('/')} : véhicules arrêtés dans le carrefour : ${maxStuckInJunction}`);
+    // avenue : deux voies de sortie, les suivants peuvent légitimement passer par la voie libre
+    if (kinds[0] === 'rue') {
+      assert.equal(onExit, 1, `${kinds.join('/')} : un seul véhicule engagé vers la sortie (${onExit})`);
+      assert.equal(waiting, 3, `${kinds.join('/')} : trois véhicules attendent à la ligne (${waiting})`);
+    }
+  }
+});

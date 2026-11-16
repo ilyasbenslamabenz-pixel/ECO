@@ -104,6 +104,7 @@ const WORK = new Set(['commercial', 'industrial', 'public', 'skyscraper', 'apart
 const ROUTE_MAX = 512;
 const APPROACH = 45; // m : distance de demande d'accès au carrefour
 const STOP_SPEED = 0.3; // m/s : vitesse sous laquelle l'arrêt au « stop » est considéré comme marqué
+const EXIT_MARGIN = 1.5; // m : marge exigée derrière un véhicule sur la voie de sortie pour s'engager dans le carrefour
 const STOP_LINE_MARGIN = 1.5; // m : au-delà de la distance de sécurité (s0), distance maximale à la ligne pour que l'arrêt compte
 
 /** Part de la population résidente circulant en voiture selon l'heure (profil journalier). */
@@ -267,6 +268,10 @@ export class TrafficSystem {
   // carrefours
   private connOcc = new Int32Array(0);
   private connRes = new Uint32Array(0);
+  /** « Ne pas bloquer le carrefour » : longueur réservée (m) sur chaque voie de sortie pendant ce pas (véhicules
+   *  engagés sur un connecteur qui y mène, accès accordés) ; valable si `exitStamp` = pas courant. */
+  private exitClaim = new Float32Array(0);
+  private exitStamp = new Uint32Array(0);
   private sigTimer = new Float32Array(0);
   private sigPhase = new Uint8Array(0);
   private sigStage = new Uint8Array(0); // 0 vert, 1 orange, 2 rouge intégral
@@ -508,6 +513,8 @@ export class TrafficSystem {
     }
     this.connOcc = new Int32Array(g.linkCount - g.laneCount);
     this.connRes = new Uint32Array(g.linkCount - g.laneCount);
+    this.exitClaim = new Float32Array(g.laneCount);
+    this.exitStamp = new Uint32Array(g.laneCount);
     this.bucketStart = new Int32Array(g.linkCount + 1);
     this.linkFill = new Int32Array(g.linkCount);
     this.laneStamp = new Uint32Array(g.linkCount);
@@ -925,7 +932,12 @@ export class TrafficSystem {
       this.wasGranted[v] = this.granted[v]!;
       this.granted[v] = 0;
       const l = this.link[v]!;
-      if (g.linkKind[l] !== 0) { this.granted[v] = 1; continue; }
+      if (g.linkKind[l] !== 0) {
+        // engagé dans le carrefour : sa place sur la voie de sortie est réservée
+        this.granted[v] = 1;
+        this.claimExit(g.connTo[l - nl]!, this.len[v]! + EXIT_MARGIN);
+        continue;
+      }
       const c = this.nextLink[v]!;
       if (c < 0) { this.granted[v] = 1; continue; }
       const node = g.linkToNode[l]!;
@@ -973,6 +985,26 @@ export class TrafficSystem {
     }
   }
 
+  /** Réserve `m` mètres sur la voie de sortie `lane` pour ce pas. */
+  private claimExit(lane: number, m: number): void {
+    if (this.exitStamp[lane] !== this.tickStamp) { this.exitStamp[lane] = this.tickStamp; this.exitClaim[lane] = 0; }
+    this.exitClaim[lane]! += m;
+  }
+
+  /**
+   * Place libre (m) au début de la voie de sortie `lane` : jusqu'à l'arrière de son dernier véhicule (plus la distance
+   * qu'il dégage s'il roule), moins ce qui est déjà réservé ce pas (véhicules dans le carrefour, accès accordés).
+   */
+  private exitRoom(lane: number, need: number): number {
+    const g = this.graph!;
+    const t = this.tailOf(lane);
+    let room: number;
+    if (t >= 0 && this.alive[t] && this.link[t] === lane) room = this.s[t]! - this.len[t]! / 2 + (this.v[t]! >= 2 ? this.v[t]! * 1.5 : 0);
+    else room = Math.max(g.linkLen[lane]!, need); // voie vide (même très courte) : au moins un véhicule
+    if (this.exitStamp[lane] === this.tickStamp) room -= this.exitClaim[lane]!;
+    return room;
+  }
+
   private conflictsBusy(c: number, stamp: number): boolean {
     const g = this.graph!;
     const ci = c - g.laneCount;
@@ -1006,8 +1038,8 @@ export class TrafficSystem {
       const sig = ctl === Control.Signal ? this.signalState(node, g.connArm[ci]!) : 0;
       let can = this.reqOk[r] === 1 || sig === 0 || (sig === 1 && this.reqEta[r]! < 1 && g.connTurn[ci] === Turn.Left);
       if (can && this.reqOk[r] !== 1) {
-        const t = this.tailOf(g.connTo[ci]!);
-        if (t >= 0 && this.s[t]! - this.len[t]! / 2 < this.len[v]! + 1.5 && this.v[t]! < 2) can = false;
+        // ne pas s'engager sans place à la sortie (sinon arrêt au milieu du carrefour ou sur le passage de sortie)
+        if (this.exitRoom(g.connTo[ci]!, this.len[v]! + EXIT_MARGIN) < this.len[v]! + EXIT_MARGIN) can = false;
         const inConn = this.tailOf(c);
         if (can && inConn >= 0 && this.v[inConn]! < 0.5) can = false;
       }
@@ -1052,7 +1084,11 @@ export class TrafficSystem {
       }
       // trajectoires en conflit occupées ou réservées : on attend (même engagé : sécurité)
       if (ok && this.conflictsBusy(c, stamp)) { ok = false; this.denyReason[v] = 3; }
+      // place à la sortie, compte tenu des accès déjà accordés ce pas (peloton, autres bras vers la même voie)
+      const need = this.len[v]! + EXIT_MARGIN;
+      if (ok && !committed && this.exitRoom(g.connTo[ci]!, need) < need) { ok = false; this.denyReason[v] = 4; }
       if (ok) {
+        this.claimExit(g.connTo[ci]!, need);
         this.connRes[ci] = stamp;
         this.granted[v] = 1;
         any = true;
@@ -1069,9 +1105,14 @@ export class TrafficSystem {
           for (let k = i0; k < i1; k++) {
             const r = idx(k);
             const v = this.reqVeh[r]!;
-            if (this.reqEta[r]! < 3 && this.waitT[v]! > bestW && !this.conflictsBusy(this.reqConn[r]!, stamp)) { bestW = this.waitT[v]!; bestK = r; }
+            const to = g.connTo[this.reqConn[r]! - nl]!, need = this.len[v]! + EXIT_MARGIN;
+            if (this.reqEta[r]! < 3 && this.waitT[v]! > bestW && !this.conflictsBusy(this.reqConn[r]!, stamp) && this.exitRoom(to, need) >= need) { bestW = this.waitT[v]!; bestK = r; }
           }
-          if (bestK >= 0) { this.granted[this.reqVeh[bestK]!] = 1; this.connRes[this.reqConn[bestK]! - nl] = stamp; this.nodeIdle[node] = 0; }
+          if (bestK >= 0) {
+            const vb = this.reqVeh[bestK]!, cb = this.reqConn[bestK]!;
+            this.granted[vb] = 1; this.connRes[cb - nl] = stamp; this.nodeIdle[node] = 0;
+            this.claimExit(g.connTo[cb - nl]!, this.len[vb]! + EXIT_MARGIN);
+          }
         }
       }
     } else this.nodeIdle[node] = 0;
