@@ -1,0 +1,167 @@
+/* =====================================================================================
+   Panneaux de gestion — refonte (chargé juste après styles.css, voir scripts/build.mjs).
+   Périmètre : .panel (fiche bâtiment #info-panel, Finances, Population, tableaux de bord #dash-panel et
+   panneaux des modules montés dedans : énergie, eau, déchets, transports…), fenêtre « Problèmes ».
+   Principes : surface presque opaque (peu de verre), en-tête icône + titre + fermer, titres de section
+   discrets en petites capitales, chiffres tabulaires, jauges fines à aplat, couleurs d'état homogènes
+   (--st-ok / --st-warn / --st-bad), aucune carte géante ni dégradé, ouverture courte et discrète.
+   Aucun identifiant ni classe n'est renommé : ce fichier ne fait que surcharger les règles de styles.css.
+   ===================================================================================== */
+:root {
+  --st-ok: var(--ok);
+  --st-warn: var(--warn);
+  --st-bad: var(--danger);
+  --pn-bg: var(--panel);
+  --pn-sub: rgba(var(--ink), .035);
+  --pn-radius: var(--r-lg);
+  --pn-w: 360px;
+  --pn-pad: var(--sp-3);
+}
+
+/* ---------- Cadre ---------- */
+.panel {
+  width: min(var(--pn-w), calc(100vw - 24px));
+  background: var(--pn-bg); border: 1px solid var(--line-2); border-radius: var(--pn-radius);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .32), 0 1px 0 rgba(var(--ink), .04) inset;
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  animation: pn-in var(--dur-2) var(--ease);
+}
+#dash-panel[data-dash="stats"], #dash-panel[data-dash="energy"] { --pn-w: 400px; }
+@keyframes pn-in { from { opacity: 0; transform: translateX(8px); } }
+@media (prefers-reduced-motion: reduce) { .panel { animation: none; } }
+
+/* ---------- En-tête : icône + (surtitre) titre + replier / fermer ---------- */
+.panel-head { position: relative; padding: 10px 8px 9px var(--pn-pad); border-bottom: 1px solid var(--line); }
+.ph-title { gap: 10px; }
+.ph-ico { width: 28px; height: 28px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--ic, var(--accent)) 14%, transparent); box-shadow: none; }
+.ph-ico svg.ic { width: 17px; height: 17px; }
+.panel-head h3 { font-size: var(--fs-lg); font-weight: 650; letter-spacing: 0; line-height: 1.2; margin: 0; overflow-wrap: anywhere; }
+.panel .kicker { font-size: 10px; letter-spacing: .08em; color: var(--muted); font-weight: 600; line-height: 1.3; }
+:root:is([data-theme="clair"], [data-theme="nuit"]) .panel .kicker { color: var(--muted); }
+.panel-btns { gap: 2px; }
+.panel-btns .icon-btn { width: 32px; height: 32px; min-height: 32px; border-radius: var(--r-sm); color: var(--muted); }
+.panel-btns .icon-btn:hover { background: rgba(var(--ink), .08); color: var(--text-strong); }
+.panel-btns .icon-btn svg.ic { width: 16px; height: 16px; }
+.panel-body { padding: 12px var(--pn-pad) 14px; gap: 14px; }
+.panel.folded .panel-head { border-bottom-color: transparent; }
+
+/* ---------- Onglets : soulignés, sans pastille ---------- */
+.ptabs { margin: 0; padding: 0 calc(var(--pn-pad) - 4px); gap: 0; border-radius: 0; background: transparent; border: 0; border-bottom: 1px solid var(--line); }
+.ptabs button { min-height: 36px; padding: 4px 6px; font-size: 12.5px; font-weight: 600; border-radius: 0; color: var(--muted); background: transparent; box-shadow: inset 0 -2px 0 transparent; }
+.ptabs button:hover { color: var(--text-strong); background: transparent; }
+.ptabs button.active { background: transparent; color: var(--text-strong); box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* ---------- Titres de section discrets ---------- */
+.panel .sec-title, .panel-body h4, #dash-body .elec h4 {
+  font-size: var(--fs-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 2px 0 -4px;
+}
+.panel .sec-title .muted { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.panel p.muted, .panel .muted.small { font-size: 11.5px; line-height: 1.4; }
+
+/* ---------- Chiffres clés : 1 chiffre fort, libellé dessous, séparateurs fins ---------- */
+.kpis { gap: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.kpi { padding: 8px 10px 8px 0; border: 0; border-radius: 0; background: transparent; gap: 2px; }
+.kpis:not(.kpis3) > .kpi:nth-child(2n), .kpis3 > .kpi:not(:nth-child(3n + 1)) { padding-left: 10px; border-left: 1px solid var(--line); }
+.kpis:not(.kpis3) > .kpi:nth-child(n + 3), .kpis3 > .kpi:nth-child(n + 4) { border-top: 1px solid var(--line); }
+.kpi b { order: -1; font-size: 19px; font-weight: 650; letter-spacing: -.01em; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.kpi .lbl, .kpi > span { font-size: 11px; color: var(--muted); }
+.kpi.neg b { color: var(--st-bad); }
+.kpi.pos b, .kpi.ok b { color: var(--st-ok); }
+.kpi.warn b { color: var(--st-warn); }
+:root[data-theme="nuit"] .kpi, :root[data-theme="nuit"] .gov-card { background: transparent; }
+#dash-body .elec .kpi { background: transparent; }
+#dash-body .elec .kpi b { font-size: 16px; }
+
+/* ---------- Lignes clé / valeur ---------- */
+.rows { gap: 0 12px; font-size: 12.5px; }
+.rows dt, .rows dd { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.rows dt:nth-last-of-type(1), .rows dd:last-of-type { border-bottom: 0; }
+.rows dd { font-variant-numeric: tabular-nums; color: var(--text-strong); font-weight: 550; }
+
+/* ---------- Grand livre (finances) : aplats, pas de dégradé ---------- */
+.ledger { border-radius: var(--r-md); background: var(--pn-sub); border-color: var(--line); }
+.lg-head { padding: 7px 10px; font-size: 12.5px; font-weight: 650; border-top: 1px solid var(--line); }
+.lg-head:first-child { border-top: 0; }
+.lg-head.inc, .lg-head.exp, .lg-head.svc { background: transparent; color: var(--text-strong); }
+.lg-head.inc { box-shadow: inset 2px 0 0 var(--st-ok); }
+.lg-head.exp { box-shadow: inset 2px 0 0 var(--st-bad); }
+.lg-head.inc svg.ic, .lg-head.inc b { color: var(--st-ok); }
+.lg-head.exp svg.ic, .lg-head.exp b { color: var(--st-bad); }
+.lg-head svg.ic { width: 16px; height: 16px; }
+.lg-rows { padding: 2px 10px 6px 30px; font-size: 12px; }
+.lg-rows dt { color: var(--text); }
+.lg-rows dt svg.ic { width: 14px; height: 14px; }
+.lg-total { padding: 9px 10px; background: rgba(var(--ink), .04); }
+.lg-total b { font-size: 16px; color: var(--st-ok); }
+.lg-total.neg { background: rgba(var(--ink), .04); }
+.lg-total.neg b { color: var(--st-bad); }
+
+/* ---------- Jauges et barres : fines, aplat, couleurs d'état ---------- */
+.bar-row { grid-template-columns: minmax(90px, 40%) 1fr auto; gap: 8px; font-size: 12px; }
+.bar-row .track { height: 4px; border-radius: 2px; background: rgba(var(--ink), .1); }
+.bar-row .fill { border-radius: 2px; background: var(--accent); }
+.bar-row .fill.neg { background: var(--st-bad); }
+.bar-row .fill.pos { background: var(--st-ok); }
+.bar-row .v { color: var(--text); font-weight: 550; }
+#dash-body .eau-gauge { height: 4px; border-radius: 2px; }
+#dash-body .eau-gauge i { background: var(--st-ok); }
+#dash-body .eau-gauge.warn i { background: var(--st-warn); }
+#dash-body .eau-row { border-bottom: 1px solid var(--line); padding: 5px 0; font-size: 12.5px; }
+#dash-body .eau-row .eau-v { font-variant-numeric: tabular-nums; font-weight: 550; }
+#dash-body .eau-row.bad .eau-v { color: var(--st-bad); }
+#dash-body .elec .warn { color: var(--st-bad); }
+#dash-body .elec .ok { color: var(--st-ok); }
+#dash-body .elec button.primary { background: var(--accent); color: var(--on-accent); }
+#dash-body .elec td, #dash-body .elec th { font-variant-numeric: tabular-nums; padding-top: 4px; padding-bottom: 4px; }
+
+/* ---------- Graphiques, listes, formulaires ---------- */
+.chart-wrap { border-radius: var(--r-md); padding: 8px 8px 6px; background: var(--pn-sub); }
+.chart-title { font-size: 12px; }
+.mod-list li, .loan-list li, .notif-list li { border-radius: var(--r-sm); }
+.notif-list li { background: var(--pn-sub); }
+.loan-form input, .loan-form select { border-radius: var(--r-sm); background: rgba(var(--ink), .05); }
+.chip { min-height: 32px; border-radius: var(--r-sm); }
+.city-hero b { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tax-grid .rate { color: var(--text-strong); }
+.panel-actions button { min-height: 36px; border-radius: var(--r-sm); }
+
+/* ---------- Fiche bâtiment ---------- */
+#info-panel .info-thumb { aspect-ratio: 16 / 9; border-radius: var(--r-sm); }
+#info-panel #info-actions { gap: 6px; }
+.why-box { border-radius: var(--r-sm); border-color: color-mix(in srgb, var(--st-warn) 45%, transparent); background: color-mix(in srgb, var(--st-warn) 7%, transparent); }
+.why-box.ok { border-color: color-mix(in srgb, var(--st-ok) 40%, transparent); background: color-mix(in srgb, var(--st-ok) 6%, transparent); }
+.why-list li::before { background: var(--st-warn); }
+.why-list li.high::before { background: var(--st-bad); }
+.why-title { font-size: 12px; }
+
+/* ---------- Fenêtre « Problèmes » : même langage (aplats, pastilles d'état) ---------- */
+@media (min-width: 761px) {
+  body.ui-rail #problems { border-radius: var(--pn-radius); background: var(--pn-bg); border-color: var(--line-2); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: 0 8px 22px rgba(0, 0, 0, .28); }
+  body.ui-rail #problems .pb-row { border-radius: var(--r-sm); }
+  body.ui-rail #problems .pb-ico { width: 22px; height: 22px; border-radius: 5px; }
+  body.ui-rail #problems .urgent .pb-ico { background: color-mix(in srgb, var(--st-bad) 16%, transparent); color: var(--st-bad); }
+  body.ui-rail #problems .important .pb-ico { background: color-mix(in srgb, var(--st-warn) 16%, transparent); color: var(--st-warn); }
+  body.ui-rail #problems .pb-n { border-radius: 4px; }
+  body.ui-rail #problems .urgent .pb-n { background: color-mix(in srgb, var(--st-bad) 20%, transparent); }
+  body.ui-rail #problems .pb-ok { color: var(--st-ok); }
+}
+
+/* ---------- Téléphone : feuille basse pleine largeur, mêmes règles, cibles ≥ 40 px ---------- */
+@media (max-width: 760px) {
+  .panel { border-radius: 12px; width: auto; }
+  .panel-head { padding: 12px 6px 8px 12px; }
+  .panel-head h3 { font-size: var(--fs-lg); }
+  .panel-btns .icon-btn { width: 40px; height: 40px; min-height: 40px; min-width: 40px; }
+  .panel-body { padding: 10px 12px 12px; }
+  .ptabs { padding: 0 6px; }
+  .ptabs button { min-height: 40px; }
+  .kpi b { font-size: 17px; }
+  .kpis3 > .kpi:not(:nth-child(3n + 1)) { border-left: 0; padding-left: 0; }
+  .kpis3 > .kpi:nth-child(2n) { border-left: 1px solid var(--line); padding-left: 10px; }
+  .kpis3 > .kpi:nth-child(n + 3) { border-top: 1px solid var(--line); }
+}
+
+/* ---------- Transitions discrètes (retour d'état seulement, aucune animation continue) ---------- */
+.panel-btns .icon-btn, .ptabs button, .chip, .panel-actions button { transition: background var(--dur-1) ease, color var(--dur-1) ease, box-shadow var(--dur-1) ease; }
+.bar-row .fill, #dash-body .eau-gauge i { transition: width var(--dur-2) var(--ease); }
+.panel, #problems { font-variant-numeric: tabular-nums; }
