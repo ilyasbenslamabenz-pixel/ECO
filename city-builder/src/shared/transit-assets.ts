@@ -34,3 +34,20 @@ export function withTransitAssets(cat: AssetCatalog): AssetCatalog {
   if (!bus) return cat;
   return { ...cat, assets: [...cat.assets, tramDepotFrom(bus)] };
 }
+
+/** Prix des logements posés à la main divisé par ce facteur (choix du joueur) ; le zonage reste gratuit pour la ville. */
+export const RESIDENTIAL_PRICE_DIVISOR = 4;
+
+/**
+ * Prix des bâtiments résidentiels (au moins un logement) divisé par `RESIDENTIAL_PRICE_DIVISOR`, arrondi à la centaine.
+ * Appliqué au chargement du catalogue (aucun fichier de assets/ modifié) ; idempotent grâce au marqueur `prix:logement`.
+ */
+export function withResidentialPricing(cat: AssetCatalog): AssetCatalog {
+  if (cat.assets.some((a) => a.tags?.includes('prix:logement'))) return cat;
+  return {
+    ...cat,
+    assets: cat.assets.map((a) => (a.capacity?.residents > 0 && a.cost > 0
+      ? { ...a, cost: Math.max(100, Math.round(a.cost / RESIDENTIAL_PRICE_DIVISOR / 100) * 100), tags: [...(a.tags ?? []), 'prix:logement'] }
+      : a)),
+  };
+}
