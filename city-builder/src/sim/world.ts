@@ -818,21 +818,11 @@ export class Simulation {
 
   /** Obstacles du planificateur : emprises des bâtiments (polyligne du tracé courbe). */
   private readonly roadBlocked = (curve: Float64Array, half: number): string | null => {
-    const [x0, z0, x1, z1] = cubicBounds(curve);
-    this.buildingIndex.query(x0 - half, z0 - half, x1 + half, z1 + half, this.q);
-    if (this.q.length === 0) return null;
-    const n = Math.max(2, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 6));
-    const poly = polyline(curve, n);
-    for (const id of this.q) {
-      const o = this.obbs.get(id);
-      if (!o) continue;
-      for (let k = 0; k + 3 < poly.length; k += 2) {
-        if (distSegmentObb(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, o) < half) {
-          return 'Le tracé traverse un bâtiment';
-        }
-      }
-    }
-    return null;
+    // Message précis : quel bâtiment gêne et de combien (le joueur ne voit pas toujours l'emprise au sol).
+    const blk = this.upgradeBlocker(curve, half);
+    if (!blk) return null;
+    const m = Math.max(0.1, Math.round(blk.missing * 10) / 10);
+    return `Le tracé traverse un bâtiment (« ${blk.name} », ${m} m de trop) : décalez le tracé ou démolissez-le`;
   };
 
   /** Vrai si la courbe passe sur de l'eau dynamique (retenue, lac d'une source, creux rempli). */
