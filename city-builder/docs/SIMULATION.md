@@ -11,7 +11,7 @@ est dans `src/save/**` (thread principal).
   le lundi, les saisons et la date en français.
 - `scheduler.ts` : tas binaire d'événements (minute, ordre d'insertion), ponctuels ou récurrents, sauvegardés.
   Événements récurrents :
-  - `DayStart` : démographie quotidienne ;
+  - `DayStart` : démographie quotidienne (étalée sur les ticks suivants dans les grandes villes, voir « Grandes villes ») ;
   - `MonthStart` : clôture économique ;
   - `YearStart` ;
   - `Migration` : toutes les 6 h de jeu ;
@@ -126,7 +126,7 @@ est dans `src/save/**` (thread principal).
 
 ## Grandes villes : passage à l'échelle et simulation agrégée
 
-### Banc de charge (`npm run bench:population -- <habitants> [--roads=N] [--days=N] [--individuel] [--logement=tour] [--json]`)
+### Banc de charge (`npm run bench:population -- <habitants> [--roads=N] [--days=N] [--individuel] [--logement=tour] [--sans-etalement] [--sans-fusion] [--croissance] [--json]`)
 `tests/perf/population-bench.ts` (Node, sans navigateur) construit une ville synthétique sur une carte plate de
 32 chunks : quadrillage de rues tous les 176 m tracé par `buildRoad`, îlots de 16 immeubles de 46 habitants (un
 immeuble de bureaux ou un centre commercial par îlot) plus une école et un hôpital ou commissariat posés par
@@ -134,7 +134,12 @@ immeuble de bureaux ou un centre commercial par îlot) plus une école et un hô
 attribués par la recherche d'emploi de la démographie, sans plafond quotidien. Il mesure ensuite le tick qui franchit
 minuit (`DayStart` + modules), la passe `daily()`, le tick ordinaire, le rapport, la clôture mensuelle et la
 sauvegarde. `--roads=N` prolonge le réseau jusqu'à N tronçons (durée de `buildRoad` par tranche de taille du réseau,
-puis 20 tracés isolés suivis chacun d'un tick, qui reconstruit le graphe de circulation).
+puis 20 tracés isolés suivis chacun d'un tick, qui reconstruit le graphe de circulation). Il mesure aussi une journée
+complète tick par tick (1 440 ticks d'une minute : pic, moyenne, p99, nombre de ticks au-delà de 16 et 50 ms), la durée
+de chaque étape de la passe quotidienne étalée et les ticks qui suivent minuit jusqu'à la fin de la passe.
+`--sans-etalement` garde la passe d'un seul tenant, `--sans-fusion` désactive la fusion des ménages, `--croissance`
+part d'une ville vide peuplée par injections toutes les 6 h pendant `--jours-croissance=20` jours (même création
+directe, embauche immédiate) en mesurant chaque tick.
 
 ### Mesures brutes (moyenne / p95 / max en ms)
 Machine : Intel Xeon @ 2,30 GHz × 4 (conteneur Linux), 16 Go, Node v22.23.4, tsx (sans minification). « Avant » =
@@ -193,7 +198,8 @@ Création de route (réseau de 2 501 tronçons, ville de 54 k) :
   ⌈population / 100 000⌉ (plafond 16) ; le nombre d'arrivées reste compté en ménages réels (même plafond de 60 ménages
   par vague). Naissances et décohabitations héritent du poids du ménage. Un ménage agrégé trop grand pour les
   logements libres voit son poids réduit ; un emploi qui n'a pas assez de places pour tout le poids détache une partie
-  du ménage (`splitHousehold`, totaux inchangés). Les ménages déjà présents ne sont pas fusionnés (non fait).
+  du ménage (`splitHousehold`, totaux inchangés). Les ménages déjà présents sont fusionnés une fois par semaine (voir
+  « Fusion des ménages identiques »).
 - **Agents visibles** : une ligne agrégée n'est jamais en LOD détaillé ; ses déplacements passent par la demande
   statistique du trafic (piétons et véhicules visibles restent échantillonnés comme avant). Les fiches d'un bâtiment
   listent les lignes (habitants représentatifs) ; leurs compteurs sont pondérés.
@@ -205,10 +211,89 @@ Création de route (réseau de 2 501 tronçons, ville de 54 k) :
   ou 10 % (ville en croissance, 4 jours) ; assiettes des entreprises à 12 % ; demandes R/C/I/O et taux de chômage à
   0,15 près ; bonheur à 4 points. Écarts mesurés à 30 jours : population 0 %, emplois 0 %, assiette résidentielle
   +0,6 %, demande résidentielle 0,033 contre 0,033.
-- **Non fait** : fusion des ménages individuels existants quand la ville passe le seuil, étalement de la passe
-  quotidienne sur plusieurs ticks (elle reste un pic de ≈ 0,8 s à un million d'habitants agrégés sur cette machine),
-  reconstruction incrémentale complète du graphe de circulation (≈ 50 ms par tracé à 2 500 tronçons, 1,1 s au premier
-  tick quand le cache est vide).
+
+### Passe quotidienne étalée (`beginDaily` / `stepDaily`)
+- **Activation** : à partir de `DAILY_SPREAD_MIN_ROWS` = 20 000 lignes de citoyens. En dessous, la passe s'exécute
+  d'un seul tenant au tick de minuit, exactement comme avant (aucune partie existante ne change). `daily()` reste
+  disponible et synchrone (commande `settle`, tests).
+- **Découpage** : passe étalée, le tick de minuit ne fait plus que planifier la passe (les modules gardent leur `onDayStart` à
+  minuit) ; à partir du tick suivant, `World.tick` exécute **une étape par tick** :
+  préparation (couverture, écoles, bus) → décès (tranches d'indices parcourues à rebours) → index des membres (si
+  lignes agrégées) → transitions (retraite, école, diplômes, formation, recherche d'emploi) → services (agrégats par
+  logement par tranches, puis criminalité / délits, puis maladies par tranches) → économie vivante (citoyens par
+  tranches, puis ménages) → bonheur → naissances (agrégats par ménage par tranches, puis tirages) → décohabitation et
+  relogements → fusion des ménages (le jour où elle a lieu). Chaque boucle sur les citoyens est coupée en
+  `DAILY_SLICES` = 32 tranches d'au moins 2 000 lignes. Les assiettes fiscales du jour sont recalculées à la fin de
+  la passe. Mesuré : ≈ 205 ticks à 54 k, ≈ 265 à 200 k et 1 M (≈ 3 h 30 – 4 h 30 de jeu, 7 à 27 s réelles selon la
+  vitesse).
+- **Recherches d'emploi** : passe étalée, le plafond quotidien de 4 000 recherches est réparti au prorata des lignes
+  parcourues (les premières tranches ne l'épuisent plus seules). Un échec de recherche depuis un logement (aucun
+  emploi libre à portée, quels que soient poids et diplôme) est mémorisé jusqu'à ce qu'un emploi se libère : même
+  résultat, recherches répétées évitées (aussi en passe d'un seul tenant).
+- **Entre deux tranches** : les lignes ajoutées (immigration) au-delà du curseur sont traitées par les transitions et
+  le bonheur mais pas par les décès ; une suppression faite par un autre système (démolition, incendie, émigration
+  mensuelle) peut faire sauter ou traiter deux fois une ligne ce jour-là. Les étapes qui accumulent par index de
+  ménage ou de bâtiment (économie vivante, services, naissances) reprennent depuis le début si des ménages ont été
+  supprimés ou des bâtiments modifiés entre deux tranches. La couverture est recalculée si les bâtiments ont changé.
+- **Sauvegarde** : `toSave()` termine d'abord la passe en cours (le curseur n'est pas sauvegardé, format inchangé) ;
+  la partie qui sauvegarde et celle qui recharge se poursuivent donc à l'identique (testé, sauvegarde faite en cours
+  de passe). Même graine, mêmes commandes : même partie (testé).
+- **Tolérances testées** (`tests/sim/daily-spread.test.ts`, passe étalée imposée en 8 tranches contre passe d'un seul
+  tenant, ville de ≈ 4 700 habitants en croissance puis installée, 3 graines, 30 jours, mêmes seuils que la simulation
+  agrégée) : écarts mesurés population 0 %, emplois 0 %, ménages −0,1 %, actifs −0,7 %, assiette résidentielle
+  −0,1 %, industrie +0,3 %, bureaux +0,2 %, chômage 0,298 contre 0,303, bonheur 65,9 contre 65,8. Un test démolit un
+  logement habité tous les 7 ticks pendant toute une passe : comptes d'occupation et sauvegarde restent cohérents.
+
+### Fusion des ménages identiques
+- **Quand** : au-delà du seuil d'agrégation (100 000 habitants), une fois par semaine (jour de jeu multiple de 7),
+  dernière étape de la passe quotidienne ; étalée, un groupe de logements par tick (id du logement modulo 32).
+- **Quoi** : des ménages du même logement, de même taille, dont les membres sont deux à deux identiques (rôle, sexe,
+  niveau d'éducation, tranche d'âge, emploi dans le même bâtiment ou sans emploi, école, malade ou non, revenu) sont
+  regroupés en une ligne pondérée ; poids plafonné à celui des nouveaux ménages (⌈population / 100 000⌉, au plus 16).
+  Tranches d'âge alignées sur les seuils de la démographie : 0-5, 6-10, 11-15, 16-17, 18-20, 21-29, 30-41, 42-44,
+  45-63, 64-74, 75 et plus. Date de naissance, bonheur, jours de maladie, mois de mécontentement et jours de
+  difficulté : moyennes pondérées ; emménagement : le plus ancien ; nom, prénoms et horaires : ceux de la ligne gardée.
+- **Conservé** (testé, `mergeHouseholds`) : habitants, ménages, occupation de chaque logement et de chaque bâtiment
+  d'emploi, emplois occupés, élèves, actifs, chômeurs, revenus, assiettes fiscales (résidentielle et entreprises) et
+  agents des services publics ; plafond de poids respecté ; sauvegarde aller-retour.
+- **Efficacité mesurée** (banc de croissance, immeubles de 46 habitants) : 900 ménages fusionnés en 20 jours, 137 242
+  lignes de citoyens au lieu de 138 255 (−0,7 %). Dans des logements de cette taille, deux ménages strictement
+  identiques sont rares (une personne seule a déjà ≈ 500 combinaisons sexe × diplôme × tranche × emploi) : la fusion
+  ne remplace pas l'agrégation des nouveaux ménages, elle n'en est qu'un complément. Coût : ≤ 15 ms par groupe.
+
+### Mesures de l'étalement et de la fusion (journée complète tick par tick, ms)
+Machine : Intel Xeon @ 2,30 GHz × 4 (conteneur Linux partagé avec d'autres tâches : charge moyenne 5,3 à 7,8 pendant
+les mesures, d'où un bruit de ± 30 % sur les pics), 16 Go, Node v22.23.4, tsx. « Avant » = commit 3743fb8 avec le même
+script de banc. Pic, moyenne, p99 et ticks > 16 / > 50 ms : sur une journée complète de 1 440 ticks d'une minute
+après 3 jours de chauffe (croissance : sur les 28 800 ticks des 20 jours) ; « minuit » : moyenne / max du tick de
+minuit sur les 3 jours de chauffe (les deux premiers comprennent la compilation à la volée du rapport des paliers) ;
+« passe » : `daily()` d'un seul tenant (avant) ou somme des étapes étalées (après), par jour.
+
+| Scénario | Habitants (lignes) | Pic | Moyenne | p99 | > 16 / > 50 ms | Minuit | Passe |
+|---|---|---|---|---|---|---|---|
+| 54 k avant | 57 946 | 82,4 | 1,79 | 6,65 | 1 / 1 | 259 / 289 | 154 |
+| 54 k après | 58 031 | 28,0 | 1,74 | 5,40 | 1 / 0 | 54 / 65 | 94 (204 ticks) |
+| 200 k avant | 204 467 (153 604) | 213,2 | 2,73 | 9,31 | 10 / 2 | 405 / 429 | 274 |
+| 200 k après | 204 722 (153 689) | 39,4 | 2,76 | 9,16 | 11 / 0 | 90 / 141 | 253 (266 ticks) |
+| 1 M avant | 977 319 (343 706) | 571,9 | 5,41 | 25,6 | 46 / 10 | 1 073 / 1 250 | 768 |
+| 1 M après | 977 333 (343 732) | 157,3 | 4,46 | 23,4 | 29 / 10 | 143 / 238 | 576 (261 ticks) |
+| Croissance 0 → 172 k avant (20 jours) | 172 500 (138 255) | 360,1 | 2,26 | 10,3 | 236 / 30 | | |
+| Croissance 0 → 172 k après (20 jours) | 172 549 (137 242) | 99,5 | 2,10 | 8,35 | 214 / 2 | | |
+
+- **Lecture** : le pic du changement de jour disparaît (54 k : 289 → 65 ms au tick de minuit ; 1 M : tick de minuit de
+  la journée mesurée 538 → 55 ms) ; la moyenne par tick ne bouge pas au bruit près et la somme des étapes étalées ne
+  dépasse pas la passe d'un seul tenant. En contrepartie, ≈ 260 ticks portent chacun quelques ms de plus (p99 de la
+  journée à 1 M : 20 → 32 ms dans une seconde mesure). Étape la plus lourde à 1 M : agrégats des services ≈ 65 ms
+  (dernière tranche), économie vivante ≈ 34 ms, transitions ≈ 27 ms, bonheur ≈ 24 ms.
+- **Pics restants à 1 M** (seconde mesure, heure de jeu du tick) : avant, minuit 538 ms + neuf ticks de 107 à 156 ms ;
+  après, minuit 55 ms + neuf ticks de 110 à 157 ms. Ces neuf ticks reviennent toutes les 3 h de jeu à hh:45, avant
+  comme après : un traitement périodique hors de la passe quotidienne, non étudié ici.
+- **Coût en mémoire** : tas en fin de banc 97 / 190 / 410 Mo après contre 106 / 140 / 342 Mo avant (54 k / 200 k / 1 M ;
+  une seule mesure, ramasse-miettes non forcé).
+- **Non fait** : reconstruction incrémentale complète du graphe de circulation (≈ 50 ms par tracé à 2 500 tronçons,
+  1,1 s au premier tick quand le cache est vide) ; étalement des vagues d'immigration, de la clôture mensuelle et du
+  rapport des paliers (`onDayStart`, qui reste au tick de minuit) ; fusion moins stricte (tranches d'âge plus larges,
+  emplois du même secteur) qui serait plus efficace mais ne conserverait plus exactement emplois et impôts.
 
 ## Portage Unity / Unreal
 Les tables SoA deviennent des `NativeArray<T>` (Unity, Jobs/Burst) ou des `TArray` (Unreal). Le PRNG sfc32,
