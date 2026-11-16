@@ -109,6 +109,7 @@ try {
   check(sculpt >= 36, 'vallon sculpté (passes du pinceau Élever)', sculpt);
   const exact = await page.evaluate(([a, b]) => window.__aube.sendExt('terrainEdit', { edit: { k: 'dam', ax: a.x, az: a.z, bx: b.x, bz: b.z }, dryRun: true }).then((r) => r.crest, (e) => String(e?.error?.message ?? e)), [DAM_A, DAM_B]);
   console.log('crête attendue (coordonnées exactes)', exact);
+  console.log('hauteurs', JSON.stringify(await page.evaluate(async () => { const out = []; for (const [x, z] of [[-430, 70], [-430, 230], [-430, 150], [-520, 150], [-450, 80], [-300, -450]]) { try { out.push((await window.__aube.sendExt('terrainEdit', { edit: { k: 'flatten', x, z, r: 8 }, dryRun: true })).h); } catch (e) { out.push(String(e?.error?.message ?? e)); } } return out; })));
 
   // 3. Source d'eau au fond du vallon (un clic).
   await pick('source');

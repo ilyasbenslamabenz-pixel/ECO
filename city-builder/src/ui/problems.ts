@@ -18,6 +18,8 @@ export interface Problem {
   id: string;
   severity: ProblemSeverity;
   text: string;
+  /** Libellé court de la ligne (le compteur porte le nombre) ; `text` reste dans l'infobulle. */
+  short: string;
   /** Compteur affiché à droite (« 14 », « −36 k »). */
   count: string;
   /** Poids de tri à gravité égale (bâtiments touchés, ou équivalent). */
@@ -39,15 +41,15 @@ interface ReportLike {
   };
 }
 
-const ALERT_PROBLEMS: { kind: AlertKind; severity: ProblemSeverity; icon: string; open: string; text: (n: number) => string }[] = [
-  { kind: 'fire', severity: 'urgent', icon: 'fire', open: '#sidebar [data-dash="services"]', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} en feu` },
-  { kind: 'power', severity: 'urgent', icon: 'energy', open: '#sidebar [data-dash="energy"]', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans électricité` },
-  { kind: 'water', severity: 'urgent', icon: 'water', open: '#sidebar [data-dash="water"]', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans eau` },
-  { kind: 'road', severity: 'important', icon: 'road', open: '#toolbar [data-tool="road"]', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans accès routier` },
-  { kind: 'waste', severity: 'important', icon: 'waste', open: '#sidebar [data-dash="waste"]', text: (n) => `Bacs pleins : ${n}` },
-  { kind: 'isolated', severity: 'important', icon: 'truck', open: '#sidebar [data-dash="waste"]', text: () => 'Dépôt de déchets isolé' },
-  { kind: 'ruin', severity: 'important', icon: 'demolish', open: '#sidebar [data-dash="services"]', text: (n) => `${n} ruine${n > 1 ? 's' : ''} à reconstruire` },
-  { kind: 'crime', severity: 'important', icon: 'police', open: '#sidebar [data-dash="services"]', text: (n) => `Criminalité élevée : ${n} bâtiment${n > 1 ? 's' : ''}` },
+const ALERT_PROBLEMS: { kind: AlertKind; severity: ProblemSeverity; icon: string; open: string; short: string; text: (n: number) => string }[] = [
+  { kind: 'fire', severity: 'urgent', icon: 'fire', open: '#sidebar [data-dash="services"]', short: 'En feu', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} en feu` },
+  { kind: 'power', severity: 'urgent', icon: 'energy', open: '#sidebar [data-dash="energy"]', short: 'Sans électricité', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans électricité` },
+  { kind: 'water', severity: 'urgent', icon: 'water', open: '#sidebar [data-dash="water"]', short: 'Sans eau', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans eau` },
+  { kind: 'road', severity: 'important', icon: 'road', open: '#toolbar [data-tool="road"]', short: 'Sans accès routier', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans accès routier` },
+  { kind: 'waste', severity: 'important', icon: 'waste', open: '#sidebar [data-dash="waste"]', short: 'Bacs pleins', text: (n) => `Bacs pleins : ${n}` },
+  { kind: 'isolated', severity: 'important', icon: 'truck', open: '#sidebar [data-dash="waste"]', short: 'Dépôt de déchets isolé', text: () => 'Dépôt de déchets isolé' },
+  { kind: 'ruin', severity: 'important', icon: 'demolish', open: '#sidebar [data-dash="services"]', short: 'Ruines à reconstruire', text: (n) => `${n} ruine${n > 1 ? 's' : ''} à reconstruire` },
+  { kind: 'crime', severity: 'important', icon: 'police', open: '#sidebar [data-dash="services"]', short: 'Criminalité élevée', text: (n) => `Criminalité élevée : ${n} bâtiment${n > 1 ? 's' : ''}` },
 ];
 
 const nf = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -62,18 +64,18 @@ export function collectProblems(counts: Partial<Record<AlertKind, number>> | nul
   const out: Problem[] = [];
   for (const a of ALERT_PROBLEMS) {
     const n = counts?.[a.kind] ?? 0;
-    if (n > 0) out.push({ id: a.kind, severity: a.severity, text: a.text(n), count: nf.format(n), weight: n, icon: a.icon, open: a.open, alert: a.kind });
+    if (n > 0) out.push({ id: a.kind, severity: a.severity, text: a.text(n), short: a.short, count: nf.format(n), weight: n, icon: a.icon, open: a.open, alert: a.kind });
   }
   const balance = report?.economy?.forecast?.balance;
   if (typeof balance === 'number' && balance < 0) {
     const broke = money !== null && money < -balance * 3;
-    out.push({ id: 'deficit', severity: broke ? 'urgent' : 'important', text: `Déficit ${kShort(balance)} CHF/mois`, count: kShort(balance), weight: Math.min(999, Math.round(-balance / 1000)),
+    out.push({ id: 'deficit', severity: broke ? 'urgent' : 'important', text: `Déficit ${kShort(balance)} CHF/mois`, short: 'Déficit mensuel', count: kShort(balance), weight: Math.min(999, Math.round(-balance / 1000)),
       icon: 'finance', open: '#sidebar [data-dash="finance"]' });
   }
   const pop = report?.demography?.population ?? 0;
   const ur = report?.demography?.unemploymentRate ?? 0;
   if (pop >= 50 && ur >= 0.08) {
-    out.push({ id: 'chomage', severity: ur >= 0.2 ? 'urgent' : 'important', text: `Chômage ${Math.round(ur * 100)} %`, count: `${Math.round(ur * 100)} %`, weight: Math.round(ur * pop),
+    out.push({ id: 'chomage', severity: ur >= 0.2 ? 'urgent' : 'important', text: `Chômage ${Math.round(ur * 100)} %`, short: 'Chômage', count: `${Math.round(ur * 100)} %`, weight: Math.round(ur * pop),
       icon: 'people', open: '#sidebar [data-dash="population"]' });
   }
   const cov = report?.demography?.cityServices?.coverage;
@@ -82,11 +84,11 @@ export function collectProblems(counts: Partial<Record<AlertKind, number>> | nul
     if (worst.v < 0.6) {
       const name = { police: 'police', fire: 'pompiers', health: 'soins' }[worst.k];
       const share = Math.round((1 - worst.v) * 100);
-      out.push({ id: `couverture-${worst.k}`, severity: 'important', text: `Pas de couverture ${name} : ${share} % des habitants`, count: `${share} %`, weight: Math.round((1 - worst.v) * pop),
+      out.push({ id: `couverture-${worst.k}`, severity: 'important', text: `Pas de couverture ${name} : ${share} % des habitants`, short: `Sans ${name === 'soins' ? 'soins' : name} à proximité`, count: `${share} %`, weight: Math.round((1 - worst.v) * pop),
         icon: worst.k === 'police' ? 'police' : worst.k === 'fire' ? 'fire' : 'hospital', open: '#sidebar [data-dash="services"]' });
     }
   }
-  if (trafficAlert) out.push({ id: 'trafic', severity: 'important', text: 'Circulation très lente', count: '!', weight: 1, icon: 'transport', open: '#sidebar [data-dash="transport"]' });
+  if (trafficAlert) out.push({ id: 'trafic', severity: 'important', text: 'Circulation très lente', short: 'Circulation très lente', count: '!', weight: 1, icon: 'transport', open: '#sidebar [data-dash="transport"]' });
   out.sort((a, b) => (a.severity === b.severity ? b.weight - a.weight : a.severity === 'urgent' ? -1 : 1));
   return out;
 }
@@ -151,7 +153,7 @@ export function initProblems(): void {
     }
     list.replaceChildren(...current.map((p) => {
       const b = el('button', { cls: `pb-row ${p.severity}`, attrs: { type: 'button', 'data-problem': p.id, 'data-tip': `${p.text} — ${p.alert ? 'ouvrir le tableau de bord et centrer la vue' : 'ouvrir le tableau de bord'}` } },
-        el('span', { cls: 'pb-ico' }, iconEl(p.icon)), el('span', { cls: 'pb-txt', text: p.text }), el('span', { cls: 'pb-n', text: p.count }));
+        el('span', { cls: 'pb-ico' }, iconEl(p.icon)), el('span', { cls: 'pb-txt', text: p.short }), el('span', { cls: 'pb-n', text: p.count }));
       b.addEventListener('click', () => run(p));
       return b;
     }));
