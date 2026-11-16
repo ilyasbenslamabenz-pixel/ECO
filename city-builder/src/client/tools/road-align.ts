@@ -13,6 +13,8 @@
  *     quand les deux extrémités sont libres).
  * Priorités : un point accroché à un nœud ne bouge pas ; un point accroché à un tronçon ne glisse que le long de ce
  * tronçon (route perpendiculaire) ; un point posé sur une ligne guide d'îlot ne bouge pas.
+ * Bâtiments : la route doit passer ENTRE les cases sans toucher aucune empreinte (aucune tolérance) ; si le calage
+ * choisi en touche une, l'autre côté de la bande des façades puis le décalage d'une case sont essayés.
  */
 import { TILE_SIZE } from '../../shared/constants';
 import { FACADE_GAP } from '../../shared/road-grid';
@@ -40,11 +42,15 @@ const mod = (a: number, m: number): number => ((a % m) + m) % m;
 /** Plus petit décalage signé d tel que v + d ≡ target (mod m), d ∈ ]−m/2, m/2]. */
 const nearestShift = (v: number, target: number, m: number): number => { let d = mod(target - v, m); if (d > m / 2) d -= m; return d; };
 
+/** Vrai si le tracé droit (a → b) touche un bâtiment (emprise de la route, trottoirs compris). */
+export type TraceCollides = (a: { x: number; z: number }, b: { x: number; z: number }) => boolean;
+
 /**
  * Cale le tracé (start → end) d'une route de demi-largeur `half` (trottoirs compris) sur les lignes `L`.
  * Null si le tracé est trop court ou trop en biais (> ALIGN_TOL) : il reste tel quel.
+ * `collides` (facultatif) : si le calage choisi touche un bâtiment, les autres positions de trame sont essayées.
  */
-export function alignTrace(start: AlignEnd, end: AlignEnd, half: number, L: AlignLines, cell = TILE_SIZE, tol = ALIGN_TOL): AlignResult | null {
+export function alignTrace(start: AlignEnd, end: AlignEnd, half: number, L: AlignLines, cell = TILE_SIZE, tol = ALIGN_TOL, collides?: TraceCollides): AlignResult | null {
   let sx = start.x, sz = start.z, ex = end.x, ez = end.z;
   const len = Math.hypot(ex - sx, ez - sz);
   if (len < 4) return null;
@@ -78,20 +84,36 @@ export function alignTrace(start: AlignEnd, end: AlignEnd, half: number, L: Alig
     const parallel = Math.abs(Nx * nx + Nz * nz) > 0.5;
     side = parallel ? (refN > c0 ? 1 : -1) : (Math.abs(dPlus) <= Math.abs(dMinus) ? 1 : -1);
   } else side = Math.abs(dPlus) <= Math.abs(dMinus) ? 1 : -1;
-  let shift = side > 0 ? dPlus : dMinus;
   // Qui peut se décaler en travers : point libre, ou glissant le long d'un tronçon parallèle à n.
   const canSlide = (e: AlignEnd): boolean => !e.fixed && (!e.slide || Math.abs(e.slide.tx * nx + e.slide.tz * nz) > 0.999);
-  if (!canSlide(start) || !canSlide(end)) shift = 0;
-  sx += nx * shift; sz += nz * shift; ex += nx * shift; ez += nz * shift;
-  // 3. Extrémités libres sur les lignes transversales de la trame de la route : P·T ≡ 0 (T canonique), soit P·u ≡ 0.
-  if (!sFixed) {
-    const d = nearestShift(sx * ux + sz * uz, 0, cell);
-    sx += ux * d; sz += uz * d;
+  const slides = canSlide(start) && canSlide(end);
+  // Calage en travers `shift` puis 3. extrémités libres sur les lignes transversales de la trame de la route :
+  // P·T ≡ 0 (T canonique), soit P·u ≡ 0.
+  const place = (shift: number, side: number): AlignResult => {
+    let ax = sx + nx * shift, az = sz + nz * shift, bx = ex + nx * shift, bz = ez + nz * shift;
+    if (!sFixed) {
+      const d = nearestShift(ax * ux + az * uz, 0, cell);
+      ax += ux * d; az += uz * d;
+    }
+    if (!eFixed) {
+      let d = nearestShift(bx * ux + bz * uz, 0, cell);
+      if ((bx + ux * d - ax) * ux + (bz + uz * d - az) * uz < cell - 1e-6) d += cell;
+      bx += ux * d; bz += uz * d;
+    }
+    return { start: { x: ax, z: az }, end: { x: bx, z: bz }, aligned: true, shift, side };
+  };
+  const first = place(slides ? (side > 0 ? dPlus : dMinus) : 0, side);
+  if (!collides || !slides || !collides(first.start, first.end)) return first;
+  // Le calage choisi touche un bâtiment : autres positions de trame valides (aucune tolérance : la route doit passer
+  // entre les cases), l'autre côté de la bande des façades sur la ligne, puis décalage d'une case ; la première
+  // sans collision. Aucune : calage d'origine (la simulation refusera le tracé en nommant le bâtiment).
+  const other = side > 0 ? dMinus : dPlus;
+  const steps: [number, number][] = [];
+  for (const [d, s] of [[first.shift, side], [other, -side]] as const) steps.push([d + cell, s], [d - cell, s]);
+  steps.sort((a, b) => Math.abs(a[0]) - Math.abs(b[0]));
+  for (const [d, s] of [[other, -side] as [number, number], ...steps]) {
+    const r = place(d, s);
+    if (!collides(r.start, r.end)) return r;
   }
-  if (!eFixed) {
-    let d = nearestShift(ex * ux + ez * uz, 0, cell);
-    if ((ex + ux * d - sx) * ux + (ez + uz * d - sz) * uz < cell - 1e-6) d += cell;
-    ex += ux * d; ez += uz * d;
-  }
-  return { start: { x: sx, z: sz }, end: { x: ex, z: ez }, aligned: true, shift, side };
+  return first;
 }

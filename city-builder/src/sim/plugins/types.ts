@@ -147,6 +147,11 @@ export type DevelopmentResult<T> = { ok: true; data: T } | { ok: false; code: st
 export interface PluginDevelopment {
   place(a: { assetId: string; x: number; z: number; rot: number; variant?: number }): DevelopmentResult<{ buildingId: number }>;
   demolish(buildingId: number): DevelopmentResult<Record<string, never>>;
+  /**
+   * Déplace un bâtiment PRIVÉ (né de la promotion privée ; jamais un bâtiment posé par le joueur) : mêmes contrôles
+   * que l'outil Déplacer, même identifiant. Sert au recalage des anciens lots sur la trame du quadrillage.
+   */
+  move?(buildingId: number, x: number, z: number, rot: number): DevelopmentResult<{ x: number; z: number }>;
 }
 
 /**

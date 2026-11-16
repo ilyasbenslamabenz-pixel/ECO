@@ -167,6 +167,11 @@ export class PluginHost {
         const r = sim.demolishPrivateBuilding(id);
         return r.ok ? { ok: true, data: {} } : { ok: false, code: r.error.code, message: r.error.message };
       },
+      move: (id, x, z, rot) => {
+        if (!sim.isPrivateBuilding(id)) return { ok: false, code: 'NOT_PRIVATE', message: 'Seuls les bâtiments privés peuvent être recalés' };
+        const r = sim.moveBuilding({ buildingId: id, x, z, rot });
+        return r.ok ? { ok: true, data: { x: r.data.x, z: r.data.z } } : { ok: false, code: r.error.code, message: r.error.message };
+      },
     };
     const rngs = this.rngs, services = this.services;
     return {

@@ -111,7 +111,8 @@ lignes affichées : **0,00 m** (≤ 0,01 m), `docs/captures-grille/mesures-apres
 Limites de cette première version (levées au §2 ter) : quadrillage local seulement avec l'outil Bâtiment, à moins de
 40 m d'une route, une seule trame pour tout l'écran ; cases de zonage alignées sur les axes du monde ; routes courbes
 approchées par une trame droite. Toujours vrai : les maisons individuelles gardent leur écart minimal de 1 m
-(`HOUSE_GAP`) : deux maisons côte à côte sur la trame laissent une case libre, ou se posent hors trame en repli.
+(`HOUSE_GAP`) : deux maisons côte à côte sur la trame laissent une case libre (la croissance des zones ne se pose
+plus jamais hors trame : voir « Tolérance zéro » ci-dessous).
 
 ## 2 ter. Champ de trames : quadrillage et cases de zonage attachés aux routes, partout
 
@@ -218,6 +219,20 @@ celle qui était affichée (écart jusqu'à 3,9 m).
 
 Captures avant / après (même partie, même tracé) : `docs/captures-trace/<cas>-{axe,dessus}-{avant,apres}.png`.
 Tests : `tests/construction/road-align.test.ts`, `tests/construction/tools.test.ts`. Sauvegardes inchangées.
+
+**Tolérance zéro** (retour joueur : « la tolérance doit être de 0 car les bâtiments ne doivent pas déborder » — rue
+perpendiculaire tracée entre deux immeubles du zonage refusée, « 0.3 m de trop ») ; le contrôle de collision de la
+simulation (`roadBlocked`) reste sans tolérance :
+- croissance et densification (`src/sim/zoning/system.ts`) : un lot n'est posé que sur la trame de sa route (côtés
+  sur les lignes, façade sur une ligne) ; les replis hors trame (décalages de ±4 / ±8 m, reculs de 1,2 / 2,4 m) sont
+  supprimés : si rien ne tient, on ne construit pas là ; le remplaçant d'une densification est recalé sur la trame ;
+- parties existantes : au premier tick après le chargement, chaque lot du zonage qui déborde de sa case est déplacé
+  sur la position de trame la plus proche si elle est libre (contrôles de l'outil Déplacer,
+  `PluginDevelopment.move`, réservé aux bâtiments privés) ; sinon il reste. Les bâtiments du joueur ne bougent pas ;
+- tracé aimanté (`alignTrace`, option `collides` ; `traceCollides`, `src/client/tools/road-grid.ts`) : si le calage
+  touche une empreinte du miroir, l'autre côté de la bande des façades puis le décalage d'une case sont essayés ; la
+  première position sans collision est retenue (aucune : calage et refus inchangés).
+Tests : `tests/zonage/trame.test.ts`, `tests/construction/road-align.test.ts` (trou de 2 cases, street et oneway).
 
 ## 3. Demande (modèle simple, prêt pour l'économie)
 
