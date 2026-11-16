@@ -143,7 +143,7 @@ export class PluginHost {
     };
     const demography: PluginDemography = {
       get population() { return sim.demography?.population ?? 0; },
-      get households() { return sim.demography?.households.count ?? 0; },
+      get households() { return sim.demography?.householdCount ?? 0; },
       report: () => sim.demography!.report(sim.clock.totalMinutes, sim.economy.taxRates.residential),
     };
     const economy: PluginEconomy = {

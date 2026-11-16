@@ -182,7 +182,13 @@ export class TrafficGraph {
   private readonly nodeIndexOf = new Map<number, number>();
   private readonly edgeIndexOf = new Map<number, number>();
 
-  constructor(input: TrafficNetworkInput) {
+  /**
+   * `conflictCache` (facultatif, conservé par le système de circulation d'une reconstruction à l'autre) : conflits déjà
+   * calculés par nœud, réutilisés quand la géométrie des connecteurs du nœud est identique. Un tracé ne modifie que
+   * quelques carrefours : la reconstruction ne recalcule plus les conflits de tout le réseau (≈ 64 distances de
+   * segments par paire de connecteurs). Résultat identique (même signature géométrique, mêmes paires).
+   */
+  constructor(input: TrafficNetworkInput, private readonly conflictCache?: ConflictCache) {
     const nodes = input.nodes;
     this.nodeCount = nodes.length;
     this.nodeId = new Int32Array(nodes.length);
@@ -665,7 +671,30 @@ export class TrafficGraph {
     const lists: number[][] = Array.from({ length: nc }, () => []);
     const segX = (c: number, k: number): number => poly[(c * (S + 1) + k) * 2]!;
     const segZ = (c: number, k: number): number => poly[(c * (S + 1) + k) * 2 + 1]!;
-    for (const conns of byNode.values()) {
+    const cache = this.conflictCache;
+    const seen = cache ? new Set<number>() : null;
+    for (const [node, conns] of byNode) {
+      // Signature : points de contrôle des connecteurs (ordre local) et classes « même voie d'origine / d'arrivée ».
+      let sig: Float32Array | null = null;
+      const key = this.nodeId[node]!;
+      if (cache) {
+        const m = conns.length;
+        sig = new Float32Array(m * 11);
+        for (let i = 0; i < m; i++) {
+          const c = conns[i]!;
+          for (let k = 0; k < 9; k++) sig[i * 11 + k] = this.connP[c * 9 + k]!;
+          let fi = i, ti = i;
+          for (let j = 0; j < i; j++) { if (fi === i && this.connFrom[conns[j]!] === this.connFrom[c]) fi = j; if (ti === i && this.connTo[conns[j]!] === this.connTo[c]) ti = j; }
+          sig[i * 11 + 9] = fi; sig[i * 11 + 10] = ti;
+        }
+        seen!.add(key);
+        const hit = cache.get(key);
+        if (hit && hit.sig.length === sig.length && hit.sig.every((v, k) => v === sig![k] || (Number.isNaN(v) && Number.isNaN(sig![k])))) {
+          for (let k = 0; k < hit.pairs.length; k += 2) { const a = conns[hit.pairs[k]!]!, b = conns[hit.pairs[k + 1]!]!; lists[a]!.push(b); lists[b]!.push(a); }
+          continue;
+        }
+      }
+      const pairs: number[] = [];
       for (let i = 0; i < conns.length; i++) for (let j = i + 1; j < conns.length; j++) {
         const a = conns[i]!, b = conns[j]!;
         if (this.connFrom[a] === this.connFrom[b]) continue; // même voie d'origine : file (IDM)
@@ -678,9 +707,12 @@ export class TrafficGraph {
             if (!nearStart && !nearEnd) conflict = true;
           }
         }
-        if (conflict) { lists[a]!.push(b); lists[b]!.push(a); }
+        if (conflict) { lists[a]!.push(b); lists[b]!.push(a); pairs.push(i, j); }
       }
+      if (cache && sig) cache.set(key, { sig, pairs: Int32Array.from(pairs) });
     }
+    // Nœuds disparus : oubliés.
+    if (cache && seen) for (const k of cache.keys()) if (!seen.has(k)) cache.delete(k);
     const start = new Int32Array(nc + 1);
     for (let c = 0; c < nc; c++) start[c + 1] = start[c]! + lists[c]!.length;
     const flat = new Int32Array(start[nc]!);
@@ -711,6 +743,9 @@ export class TrafficGraph {
     return best;
   }
 }
+
+/** Conflits mémorisés par nœud (identifiant du monde) : signature géométrique et paires (index locaux). */
+export type ConflictCache = Map<number, { sig: Float32Array; pairs: Int32Array }>;
 
 function segDist(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number): number {
   // intersection ?

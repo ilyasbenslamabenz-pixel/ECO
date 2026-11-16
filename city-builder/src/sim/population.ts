@@ -76,6 +76,15 @@ export class SoaTable<S extends Schema> {
     return i;
   }
 
+  /** Ajoute une copie de la ligne d'index `src` sous l'identifiant `id` ; renvoie son index. */
+  cloneRow(src: number, id: number): number {
+    const i = this.add(id);
+    const col = this.col as unknown as Record<string, AnyColumn>;
+    for (const name of this.names) col[name]![i] = col[name]![src]!;
+    col.id![i] = id;
+    return i;
+  }
+
   indexOf(id: number): number { return this.idToIndex.get(id) ?? -1; }
   has(id: number): boolean { return this.idToIndex.has(id); }
 
@@ -168,6 +177,11 @@ export const CITIZEN_SCHEMA = {
   lod: Uint8Array,
   /** Services (vague 2, colonne facultative : 0 dans les anciennes sauvegardes) : jours de maladie restants (0 = en bonne santé). */
   sick: Uint8Array,
+  /**
+   * Simulation agrégée (colonne facultative : 0 dans les anciennes sauvegardes = 1) : nombre d'habitants identiques que
+   * la ligne représente (ménage agrégé, docs/SIMULATION.md « Grandes villes »). Toutes les sommes sont pondérées.
+   */
+  weight: Uint16Array,
 } as const;
 
 export const HOUSEHOLD_SCHEMA = {
@@ -183,6 +197,8 @@ export const HOUSEHOLD_SCHEMA = {
   rent: Float32Array,
   /** Jours de difficulté de paiement du loyer (loyer au-delà de la part soutenable des ressources). */
   distressDays: Uint16Array,
+  /** Simulation agrégée (facultative, 0 = 1) : nombre de ménages identiques représentés par la ligne. */
+  weight: Uint16Array,
 } as const;
 
 /** Une entreprise par bâtiment d'emploi (id = id du bâtiment). */
@@ -214,7 +230,7 @@ export const COMPANY_SCHEMA = {
  * Colonnes ajoutées après la première version du format : absentes des anciennes sauvegardes, elles valent 0
  * au chargement (`SoaTable.fromJSON`) et la validation ne les exige pas.
  */
-export const OPTIONAL_COLUMNS: ReadonlySet<string> = new Set(['rent', 'distressDays', 'tax', 'customers', 'lossMonths', 'status', 'reason', 'closedAt', 'sick']);
+export const OPTIONAL_COLUMNS: ReadonlySet<string> = new Set(['rent', 'distressDays', 'tax', 'customers', 'lossMonths', 'status', 'reason', 'closedAt', 'sick', 'weight']);
 
 export type CitizenTable = SoaTable<typeof CITIZEN_SCHEMA>;
 export type HouseholdTable = SoaTable<typeof HOUSEHOLD_SCHEMA>;

@@ -480,7 +480,7 @@ export class BusSystem {
         const tgt = c.job[i]! >= 0 ? c.job[i]! : c.school[i]!;
         if (tgt < 0) continue;
         const key = c.home[i]! * 4294967296 + tgt;
-        pairs.set(key, (pairs.get(key) ?? 0) + 1);
+        pairs.set(key, (pairs.get(key) ?? 0) + demo.weightOf(i));
       }
       for (const [key, w] of pairs) {
         const home = Math.floor(key / 4294967296), tgt = key - home * 4294967296;

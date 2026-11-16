@@ -27,7 +27,7 @@ est dans `src/save/**` (thread principal).
 - **Population** (`population.ts`) : `SoaTable` générique (typed arrays, suppression par permutation,
   table id -> index, sérialisation par colonnes). Trois tables :
   - **citoyens** : id, ménage, sexe, prénom, naissance, éducation, rôle, logement, emploi, école, revenu,
-    bonheur, distance du trajet, horaires, activité, LOD ;
+    bonheur, distance du trajet, horaires, activité, LOD, poids (simulation agrégée, voir « Grandes villes ») ;
   - **ménages** : nom, logement, taille, emménagement, mois de mécontentement ;
   - **entreprises** : une par bâtiment d'emploi, avec secteur, chiffre d'affaires et bénéfice.
 - **Noms** (`names.ts`) : tables de prénoms et de noms français. Les citoyens ne stockent que des index.
@@ -122,7 +122,90 @@ est dans `src/save/**` (thread principal).
   - rapport d'environ 1 ms ;
   - sauvegarde de 8,8 ms pour 590 Ko de JSON.
 - **Banc d'essai Chromium** (1 087 habitants) : 112 Ko de JSON deviennent 28 Ko en gzip.
-- Ces mesures ne valent pas pour les cibles de 100 000 citoyens et plus : elles n'ont pas été mesurées.
+- Grandes villes (54 000 à 1 million d'habitants) : voir la section suivante.
+
+## Grandes villes : passage à l'échelle et simulation agrégée
+
+### Banc de charge (`npm run bench:population -- <habitants> [--roads=N] [--days=N] [--individuel] [--logement=tour] [--json]`)
+`tests/perf/population-bench.ts` (Node, sans navigateur) construit une ville synthétique sur une carte plate de
+32 chunks : quadrillage de rues tous les 176 m tracé par `buildRoad`, îlots de 16 immeubles de 46 habitants (un
+immeuble de bureaux ou un centre commercial par îlot) plus une école et un hôpital ou commissariat posés par
+`placeBuilding`, puis ménages créés directement (composition de l'immigration, même règle de poids) et emplois
+attribués par la recherche d'emploi de la démographie, sans plafond quotidien. Il mesure ensuite le tick qui franchit
+minuit (`DayStart` + modules), la passe `daily()`, le tick ordinaire, le rapport, la clôture mensuelle et la
+sauvegarde. `--roads=N` prolonge le réseau jusqu'à N tronçons (durée de `buildRoad` par tranche de taille du réseau,
+puis 20 tracés isolés suivis chacun d'un tick, qui reconstruit le graphe de circulation).
+
+### Mesures brutes (moyenne / p95 / max en ms)
+Machine : Intel Xeon @ 2,30 GHz × 4 (conteneur Linux), 16 Go, Node v22.23.4, tsx (sans minification). « Avant » =
+commit 5ae2ea4, même script.
+
+| Scénario | Habitants (lignes) | Tick de minuit | `daily()` | Tick ordinaire | Rapport | Sauvegarde | Tas |
+|---|---|---|---|---|---|---|---|
+| 54 k avant | 57 336 | 686 / 728 / 728 | 649 / 712 / 712 | 1,10 / 1,87 / 5,65 | 14,8 | 189 ms, 9,2 Mo | 84 Mo |
+| 54 k après | 57 336 | 150 / 165 / 165 | 101 / 109 / 109 | 0,98 / 1,56 / 4,06 | 14,1 | 220 ms, 9,5 Mo | 96 Mo |
+| 200 k avant | 203 284 | 12 788 / 14 664 / 14 664 | 12 686 / 14 496 / 14 496 | 2,74 / 4,89 / 9,26 | 24,8 | 592 ms, 26,6 Mo | 145 Mo |
+| 200 k après, individuel | 203 284 | 321 / 369 / 369 | 245 / 262 / 262 | 2,07 / 2,73 / 5,86 | 17,6 | 494 ms, 27,5 Mo | 133 Mo |
+| 200 k après, agrégé | 203 325 (153 221) | 282 / 322 / 322 | 217 / 229 / 229 | 1,86 / 3,03 / 5,88 | 14,7 | 370 ms, 22,4 Mo | 140 Mo |
+| 1 M après, individuel | 977 984 | 1 878 / 1 921 / 1 921 | 1 628 / 1 674 / 1 674 | 5,85 / 8,74 / 18,1 | 88,6 | 2 221 ms, 125,6 Mo | 705 Mo |
+| 1 M après, agrégé | 977 259 (343 656) | 796 / 1 056 / 1 056 | 650 / 815 / 815 | 3,72 / 5,08 / 17,6 | 37,9 | 906 ms, 53,7 Mo | 344 Mo |
+
+« Avant » à 1 M n'a pas été mesuré (passe quotidienne de 12,8 s dès 200 k, construction du réseau trop longue).
+Les villes 54 k et 200 k individuelles ont exactement la même population avant et après (mêmes tirages).
+
+Création de route (réseau de 2 501 tronçons, ville de 54 k) :
+
+| | `buildRoad` à 0–500 tronçons | 1 000–2 000 | 2 000–3 000 | tracé isolé à 2 501 | tick suivant (graphe de circulation) |
+|---|---|---|---|---|---|
+| avant | 19,5 | 123,4 | 180,4 | 211,6 / 263,7 / 263,7 | 871 / 1 007 / 1 007 |
+| après | 1,17 | 2,22 | 2,16 | 0,72 / 1,39 / 1,39 | 107 / 1 190 / 1 190 (1er tick : cache vide ≈ 1,1 s ; ensuite ≈ 50 ms) |
+
+### Optimisations (résultat identique, testé)
+- **Nivellement local des routes** (`Simulation.regradeRoadRegion`) : un tracé ou une suppression ne re-nivelle plus
+  toute la carte à partir de toutes les routes, mais la région touchée (tronçons ajoutés / retirés et voisins de leurs
+  extrémités, élargie de la portée du talus), avec les seules routes qui l'atteignent. Test : hauteurs identiques à
+  l'octet près à celles d'un nivellement complet (rechargement) après tracés, découpes, courbes et suppressions.
+- **Graphe de circulation** : conversion du réseau différée au prochain pas (`TrafficSystem.setNetworkSource`, une
+  seule conversion pour plusieurs tracés) ; conflits entre connecteurs mémorisés par carrefour et réutilisés quand la
+  géométrie du carrefour est inchangée (`ConflictCache`). Test : conflits identiques au calcul complet.
+- **Recherche d'école** : liste des écoles relevée une fois par jour au lieu d'une requête spatiale de 7 km par élève
+  sans école (≈ 400 ms par jour à 54 k quand les écoles sont pleines). Seul l'ordre entre deux écoles exactement
+  équidistantes peut différer.
+- **Recherche d'emploi** : cellules de l'index spatial réduites aux bâtiments d'emploi ouverts et desservis pendant la
+  passe quotidienne (les logements ne sont plus parcourus) ; mêmes candidats dans le même ordre.
+- **Recherche de logement** : capacité filtrée (accès, incendie, réseaux des modules) relevée une fois par vague
+  d'immigration et par passe de décohabitation, au lieu d'appeler les filtres des modules pour chaque bâtiment et
+  chaque ménage ; occupation relue en direct, même tirage.
+
+### Simulation agrégée (ménages agrégés pondérés)
+- **Principe** : une ligne de ménage (et chacun de ses membres) peut représenter `poids` ménages identiques logés dans
+  le même bâtiment (colonne facultative `weight` des tables citoyens et ménages ; 0 = 1). Toutes les sommes sont
+  pondérées : occupation des bâtiments (`residents`, `workers`), élèves, population, ménages, actifs, chômeurs,
+  revenus et assiettes fiscales, salaires et sous-qualification des entreprises, clientèle, statistiques du rapport,
+  facteurs de satisfaction, criminalité / santé par logement, loyers et difficultés (un ménage représentatif, comptes
+  pondérés), navetteurs du bus, compteurs du mois. Les tirages (décès, naissance, maladie…) restent un par ligne : même
+  espérance, variance plus forte à petite échelle.
+- **Activation automatique et progressive** : sous `AGGREGATE_THRESHOLD` = 100 000 habitants, rien ne change (poids 1,
+  aucun tirage supplémentaire : parties identiques). Au-delà, les ménages immigrants ont le poids
+  ⌈population / 100 000⌉ (plafond 16) ; le nombre d'arrivées reste compté en ménages réels (même plafond de 60 ménages
+  par vague). Naissances et décohabitations héritent du poids du ménage. Un ménage agrégé trop grand pour les
+  logements libres voit son poids réduit ; un emploi qui n'a pas assez de places pour tout le poids détache une partie
+  du ménage (`splitHousehold`, totaux inchangés). Les ménages déjà présents ne sont pas fusionnés (non fait).
+- **Agents visibles** : une ligne agrégée n'est jamais en LOD détaillé ; ses déplacements passent par la demande
+  statistique du trafic (piétons et véhicules visibles restent échantillonnés comme avant). Les fiches d'un bâtiment
+  listent les lignes (habitants représentatifs) ; leurs compteurs sont pondérés.
+- **Sauvegardes** : la colonne `weight` n'est écrite que si au moins une ligne est agrégée (format v2 inchangé pour
+  les autres villes) ; une sauvegarde sans colonne se charge avec le poids 1 partout ; l'occupation est recomptée au
+  chargement à partir des poids.
+- **Tolérances testées** (`tests/sim/scale.test.ts`, poids 4 imposé contre simulation individuelle, moyenne de 3 à 4
+  graines) : population, ménages, emplois occupés, actifs et assiette résidentielle à 6 % (ville installée, 30 jours)
+  ou 10 % (ville en croissance, 4 jours) ; assiettes des entreprises à 12 % ; demandes R/C/I/O et taux de chômage à
+  0,15 près ; bonheur à 4 points. Écarts mesurés à 30 jours : population 0 %, emplois 0 %, assiette résidentielle
+  +0,6 %, demande résidentielle 0,033 contre 0,033.
+- **Non fait** : fusion des ménages individuels existants quand la ville passe le seuil, étalement de la passe
+  quotidienne sur plusieurs ticks (elle reste un pic de ≈ 0,8 s à un million d'habitants agrégés sur cette machine),
+  reconstruction incrémentale complète du graphe de circulation (≈ 50 ms par tracé à 2 500 tronçons, 1,1 s au premier
+  tick quand le cache est vide).
 
 ## Portage Unity / Unreal
 Les tables SoA deviennent des `NativeArray<T>` (Unity, Jobs/Burst) ou des `TArray` (Unreal). Le PRNG sfc32,
