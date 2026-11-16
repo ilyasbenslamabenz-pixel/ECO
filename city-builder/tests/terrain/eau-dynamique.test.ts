@@ -200,6 +200,12 @@ test('barrage en travers d\'une vallée + source : la retenue monte jusqu\'à la
   assert.ok(road.ok, road.ok ? '' : road.error.message);
   const rec = s.roadRecords().edges.find((e) => road.ok && e.id === road.data.edgeIds[0]);
   assert.ok(rec && (rec.bridgeRuns?.length ?? 0) > 0, 'la route franchit la retenue en pont');
+  // Ouvrage choisi par le joueur : viaduc (plus haut, plus cher) et tunnel sous le lac (simulation à blanc).
+  const pont = s.buildRoad({ type: 'street', points: [cx - 50, cz - 100, cx - 50, cz + 100], dryRun: true });
+  const viaduc = s.buildRoad({ type: 'street', points: [cx - 50, cz - 100, cx - 50, cz + 100], dryRun: true, waterCrossing: 'viaduc' });
+  const tunnel = s.buildRoad({ type: 'street', points: [cx - 50, cz - 100, cx - 50, cz + 100], dryRun: true, waterCrossing: 'tunnel' });
+  assert.ok(pont.ok && viaduc.ok && tunnel.ok, [pont, viaduc, tunnel].map((r) => (r.ok ? 'ok' : r.error.message)).join(' | '));
+  assert.ok(pont.ok && viaduc.ok && viaduc.data.cost >= pont.data.cost, 'le viaduc coûte au moins autant que le pont');
 });
 
 test('sauvegarde : sources, barrage et retenue identiques après rechargement ; ancienne partie inchangée', () => {

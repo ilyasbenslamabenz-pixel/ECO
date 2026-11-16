@@ -244,6 +244,8 @@ export class RoadDraft {
   hover: SnapPoint | null = null;
   /** Hauteur imposée (m) : > 0 viaduc / passage supérieur, < 0 tranchée / tunnel. Conservée d'un tracé à l'autre. */
   elevation = 0;
+  /** Ouvrage quand le tracé traverse une retenue ou un lac créé en jeu (choisi dans la barre d'options). */
+  waterCrossing: 'pont' | 'viaduc' | 'tunnel' = 'pont';
   /** Taille du giratoire en mode 'roundabout'. */
   roundaboutSize: 'small' | 'large' = 'small';
 
@@ -300,11 +302,11 @@ export class RoadDraft {
    * Arguments de la commande buildRoad : en mode courbe, UNE vraie courbe (2 extrémités + point de
    * contrôle quadratique, convertie en Bézier cubique par la simulation) ; sinon un tronçon droit.
    */
-  command(): { points: number[]; control?: [number, number]; elevation?: number } | null {
+  command(): { points: number[]; control?: [number, number]; elevation?: number; waterCrossing?: 'pont' | 'viaduc' | 'tunnel' } | null {
     const a = this.start;
     const b = this.hover;
     if (!a || !b || this.phase === 'idle' || this.mode === 'roundabout' || Math.hypot(b.x - a.x, b.z - a.z) < 4) return null;
-    const elev = this.elevation ? { elevation: this.elevation } : {};
+    const elev = { ...(this.elevation ? { elevation: this.elevation } : {}), ...(this.waterCrossing !== 'pont' ? { waterCrossing: this.waterCrossing } : {}) };
     if (this.mode === 'curve' && this.control) return { points: [a.x, a.z, b.x, b.z], control: [this.control.x, this.control.z], ...elev };
     return { points: [a.x, a.z, b.x, b.z], ...elev };
   }

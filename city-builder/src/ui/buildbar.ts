@@ -607,6 +607,11 @@ export class BuildBar {
         act('▲', 'Monter le tracé de 4 m (viaduc, passage supérieur)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(1); });
         // Boutons de hauteur : cible tactile de 40 px au moins (classe ta-elev).
         for (const b of Array.from(this.actions.children).slice(-3)) b.classList.add('ta-elev');
+        // Ouvrage sur un lac ou une retenue créés en jeu (tracé sans hauteur imposée).
+        const wc = m.draft.waterCrossing;
+        act('Pont', 'Sur un lac ou une retenue : pont bas, 3 m au-dessus de l\'eau', () => m.setWaterCrossing('pont'), wc === 'pont');
+        act('Viaduc', 'Sur un lac ou une retenue : viaduc haut, 12 m au-dessus de l\'eau', () => m.setWaterCrossing('viaduc'), wc === 'viaduc');
+        act('Tunnel', 'Sur un lac ou une retenue : tunnel sous le fond du lac', () => m.setWaterCrossing('tunnel'), wc === 'tunnel');
         // Giratoire : un bouton à trois états (petit Ø 36 m → grand Ø 56 m → retour au tracé droit).
         const rb = m.draft.mode === 'roundabout' ? m.draft.roundaboutSize : null;
         act(rb === 'large' ? 'Grand giratoire' : 'Giratoire', 'Giratoire posé d\'un clic sur un carrefour ou une route (cliquer à nouveau : grand modèle, puis tracé droit)',

@@ -875,11 +875,12 @@ export class Simulation {
         // Pont automatique au-dessus d'une retenue ou d'un lac : la route passe en viaduc (comme ▲), 3 m au-dessus de l'eau.
         const depth = this.dynamicWaterDepth(p.plan.curve);
         if (depth > 0) {
-          const h = Math.ceil((depth + 3) / 4) * 4;
-          if (h > 40) return fail('UNDER_WATER', 'Retenue trop profonde pour un pont automatique (> 37 m) : contournez l\'eau');
+          const mode = a.waterCrossing ?? 'pont';
+          const h = mode === 'tunnel' ? -8 : Math.ceil((depth + (mode === 'viaduc' ? 12 : 3)) / 4) * 4;
+          if (h > 40) return fail('UNDER_WATER', `Retenue trop profonde pour un ${mode} (${Math.round(depth)} m) : choisissez Tunnel ou contournez l'eau`);
           r.elevation = h; r.startElevated = false; r.endElevated = false;
           p = planRoad(this.net, r, opts);
-          if (!p.ok) return fail(p.error.code, `Pont au-dessus de l'eau impossible : ${p.error.message}`, p.error.phase);
+          if (!p.ok) return fail(p.error.code, `${mode === 'tunnel' ? 'Tunnel sous' : mode === 'viaduc' ? 'Viaduc au-dessus de' : 'Pont au-dessus de'} l'eau impossible : ${p.error.message}`, p.error.phase);
         }
       }
       cost += p.plan.cost;

@@ -277,6 +277,7 @@ export class ConstructionTools {
   }
   /** ▲ / ▼ de l'outil Routes : hauteur imposée du tracé par pas de 4 m (aperçu 3D renvoyé par la simulation). */
   setRoadElevation(dir: 1 | -1): void { this.draft.raise(dir); this.refresh(); }
+  setWaterCrossing(c: 'pont' | 'viaduc' | 'tunnel'): void { this.draft.waterCrossing = c; this.refresh(); }
   setRoundaboutSize(size: 'small' | 'large'): void { this.draft.roundaboutSize = size; this.setRoadMode('roundabout'); }
 
   rotate(dir = 1): void {

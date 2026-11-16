@@ -45,6 +45,11 @@ export interface CommandMap {
        */
       elevation?: number;
       /**
+       * Ouvrage choisi quand le tracé (sans hauteur imposée) traverse une retenue ou un lac créé en jeu :
+       * 'pont' (défaut, 3 m au-dessus de l'eau), 'viaduc' (12 m au-dessus), 'tunnel' (sous le fond du lac).
+       */
+      waterCrossing?: 'pont' | 'viaduc' | 'tunnel';
+      /**
        * Annulation d'une suppression (Ctrl+Z) : jeton `restoreToken` renvoyé par `removeRoad`. Valable une fois, pour
        * le même type de route : la reconstruction coûte exactement le remboursement perçu (annulation neutre).
        */
@@ -289,6 +294,7 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
         if (!Array.isArray(c) || c.length !== 2 || !c.every(isNum) || p.length !== 4) return bad('Point de contrôle de courbe invalide');
       }
       if (a.elevation !== undefined && (!isNum(a.elevation) || Math.abs(a.elevation) > 40)) return bad('Hauteur de route invalide (±40 m)');
+      if (a.waterCrossing !== undefined && a.waterCrossing !== 'pont' && a.waterCrossing !== 'viaduc' && a.waterCrossing !== 'tunnel') return bad('Ouvrage sur l\'eau invalide');
       if (a.restoreToken !== undefined && !isNum(a.restoreToken)) return bad('Jeton d\'annulation invalide');
       return null;
     }
