@@ -36,7 +36,12 @@ export type UndoStep =
    */
   | { kind: 'removeGrid'; minEdgeId: number; x0: number; z0: number; x1: number; z1: number; block: number; angle?: number; ox?: number; oz?: number; lines?: number[][] }
   /** Commande d'un module (ligne haute tension retirée, pôle retiré, réglage de carrefour rétabli…). */
-  | { kind: 'plugin'; plugin: string; name: string; payload: Record<string, unknown> };
+  | { kind: 'plugin'; plugin: string; name: string; payload: Record<string, unknown> }
+  /**
+   * Éditions du terrain de rang ≥ `since` (geste pinceau, pente, barrage, source…) : la simulation restaure relief,
+   * eau, forêt et murs d'avant et rembourse le coût (commande étendue `terrainUndo`).
+   */
+  | { kind: 'terrainUndo'; since: number };
 
 export interface UndoEntry {
   label: string;

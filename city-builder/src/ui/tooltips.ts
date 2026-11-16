@@ -18,6 +18,11 @@ export function initTooltips(): void {
     x = Math.max(8, Math.min(window.innerWidth - w - 8, x));
     let y = r.top - h - 8;
     if (y < 8) y = r.bottom + 8;
+    // Rail d'icônes (`data-tip-side="right"`) : bulle à droite de l'icône, centrée verticalement.
+    if (target.dataset['tipSide'] === 'right' && r.right + 10 + w < window.innerWidth) {
+      x = r.right + 10;
+      y = Math.max(8, Math.min(window.innerHeight - h - 8, r.top + r.height / 2 - h / 2));
+    }
     tip.style.left = `${x}px`;
     tip.style.top = `${y}px`;
   };

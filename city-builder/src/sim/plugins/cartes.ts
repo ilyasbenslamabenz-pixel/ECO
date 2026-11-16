@@ -13,6 +13,7 @@ import { PLUGIN_TRANSFER_KEY } from '../../shared/protocol';
 import { CARTE_KINDS, CARTE_NO_DATA, CARTE_PALETTE, carteScale, clampCarte, type CarteKind, type CarteLayer, type CartesDelta } from '../../shared/protocol-ext/cartes';
 import { MINUTES_PER_DAY } from '../clock';
 import { Service, type DemographySystem } from '../demography';
+import { landValueIndex } from '../economie/tuning';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 
 /** Taille des cellules de la carte (m) : même grille que les cartes des services. */
@@ -56,7 +57,7 @@ export function buildCarte(ctx: PluginContext, demo: DemographySystem, kind: Car
     districtRate = new Map();
     for (const [k, l] of lab) districtRate.set(k, (un.get(k) ?? 0) / l);
   }
-  let used = 0, total = 0;
+  let used = 0, total = 0, high = 0;
   for (let i = 0; i < ctx.buildings.count; i++) {
     const ci = Math.floor((st.x[i]! - bd.minX) / CELL), cj = Math.floor((st.z[i]! - bd.minZ) / CELL);
     if (ci < 0 || cj < 0 || ci >= cols || cj >= rows) continue;
@@ -65,7 +66,13 @@ export function buildCarte(ctx: PluginContext, demo: DemographySystem, kind: Car
     const occupied = st.residents[i]! + st.workers[i]! > 0;
     let v = -1;
     switch (kind) {
-      case 'foncier': { const l = i < demo.living.land.length ? demo.living.land[i]! : 0; if (l > 0) v = carteScale.foncier(l); break; }
+      case 'foncier': {
+        let l = i < demo.living.land.length ? demo.living.land[i]! : 0;
+        // Partie tout juste chargée (valeurs du jour pas encore calculées) : même formule, sans rien écrire.
+        if (l <= 0) { const m = demo.livingMeta(i); if (m && (m.resCap > 0 || (m.jobCap > 0 && m.sector !== 4))) { const a = demo.amenitiesAt(i); l = landValueIndex(a.services, a.attract, a.pollution, demo.landValueOffset(id)); } }
+        if (l > 0) v = carteScale.foncier(l);
+        break;
+      }
       case 'pollution': if (occupied || housing) v = carteScale.pollution(demo.pollutionOf(i), air ? air.at(st.x[i]!, st.z[i]!) : 0); break;
       case 'bruit': if (occupied || housing) v = carteScale.bruit(noise ? noise.at(st.x[i]!, st.z[i]!) : 0, nuisance ? nuisance.at(st.x[i]!, st.z[i]!) : 0); break;
       case 'chomage': if (agg!.labor[i]) v = carteScale.chomage(districtRate!.get(districtKey(i)) ?? 0); break;
@@ -77,11 +84,11 @@ export function buildCarte(ctx: PluginContext, demo: DemographySystem, kind: Car
     if (v < 0) continue;
     const q = clampCarte(v);
     const k = cj * cols + ci;
-    used++; total += q;
+    used++; total += q; if (q >= 67) high++;
     if (sum && cnt) { sum[k]! += q; cnt[k]!++; values[k] = clampCarte(sum[k]! / cnt[k]!); }
     else values[k] = values[k] === CARTE_NO_DATA ? q : Math.max(values[k]!, q);
   }
-  return { kind, originX: bd.minX, originZ: bd.minZ, cellSize: CELL, cols, rows, values, buildings: used, mean: used ? Math.round(total / used) : 0, day: Math.floor(now / MINUTES_PER_DAY) };
+  return { kind, originX: bd.minX, originZ: bd.minZ, cellSize: CELL, cols, rows, values, buildings: used, mean: used ? Math.round(total / used) : 0, high, day: Math.floor(now / MINUTES_PER_DAY) };
 }
 
 export function createCartesPlugin(): SimPlugin & { readonly current: () => CarteKind | null } {

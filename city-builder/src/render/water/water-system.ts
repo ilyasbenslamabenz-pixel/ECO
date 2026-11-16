@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import type { TerrainData } from '../../shared/contracts';
 import { NO_WATER, type TerrainPatch, type WorldTerrain } from '../../sim/terrain/types';
+import { onPaletteChange, palette, setRGB, type Palette } from '../palette';
 
 /** Carte de normales d'eau tuilable (RGB = normale, A = bruit d'écume). */
 export function makeWaterNormalTexture(size = 256, seed = 3): THREE.DataTexture {
@@ -194,6 +195,7 @@ export class WaterSystem {
   private data: (TerrainData & Partial<WorldTerrain>) | null = null;
   private sea: THREE.Mesh | null = null;
   private inland: THREE.Mesh[] = [];
+  private readonly offPalette: () => void;
 
   constructor(scene: THREE.Scene) {
     this.group.name = 'eau';
@@ -213,6 +215,10 @@ export class WaterSystem {
         .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(wN, 0.0)).xyz);');
     };
     this.material = m;
+    // Couleur de l'eau seulement (eau peu profonde / profonde) : palette, src/render/palette.ts.
+    const applyPalette = (p: Palette): void => { setRGB(this.uniforms.uShallow.value, p.water.shallow); setRGB(this.uniforms.uDeep.value, p.water.deep); };
+    applyPalette(palette());
+    this.offPalette = onPaletteChange(applyPalette);
   }
 
   build(t: TerrainData): void {
@@ -395,6 +401,7 @@ export class WaterSystem {
   }
 
   dispose(): void {
+    this.offPalette();
     this.clear();
     this.material.dispose();
     this.normalTex.dispose();

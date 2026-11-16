@@ -106,7 +106,7 @@ try {
   for (const id of ['happiness', 'landValue']) {
     await page.click(`#layers-pop [data-layer=${id}]`);
     await page.waitForFunction(() => window.__cartes?.visible() && window.__cartes.cells() > 0, null, { timeout: 20000, polling: 200 }).catch(() => undefined);
-    const st = await page.evaluate(() => ({ kind: window.__cartes?.kind(), cells: window.__cartes?.cells(), on: [...document.querySelectorAll('#layers-pop .layer-item.on')].map((b) => b.getAttribute('data-layer')), legend: document.querySelector('#layers-pop .map-legend')?.textContent ?? '' }));
+    const st = await page.evaluate(() => ({ kind: window.__cartes?.kind(), cells: window.__cartes?.cells(), on: [...document.querySelectorAll('#layers-pop .layer-item.on:not([data-layer=alerts])')].map((b) => b.getAttribute('data-layer')), legend: document.querySelector('#layers-pop .map-legend')?.textContent ?? '' }));
     check(st.cells > 0 && st.on.length === 1 && st.on[0] === id && /Quoi faire/.test(st.legend), `carte « ${id} » : ${st.cells} cellules, une seule active (${st.on.join(',')}), légende « ${st.legend.slice(0, 80)}… »`);
     await page.evaluate(() => window.__aube.lookAt(0, 0, 420, 0.8, 0.5));
     await render(3, 0.2);
@@ -125,7 +125,7 @@ try {
     const s = window.__aube;
     // Bâtiments du miroir : premier logement habité dont la fiche donne au moins une raison, sinon un logement habité.
     const save = await s.send('save', { slot: 'e2e-pourquoi' });
-    const blds = (save?.buildings ?? []).map((b) => b.id);
+    const blds = (save?.data?.buildings ?? save?.buildings ?? []).map((b) => b.id);
     let first = null;
     for (const id of blds) {
       const o = await s.send('inspectBuilding', { buildingId: id }).catch(() => null);

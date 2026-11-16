@@ -67,7 +67,7 @@ try {
   const st = await page.evaluate(() => {
     const pop = document.querySelector('#layers-pop').getBoundingClientRect();
     const lg = document.querySelector('#layers-pop .map-legend');
-    return { cells: window.__cartes?.cells() ?? 0, on: [...document.querySelectorAll('#layers-pop .layer-item.on')].map((b) => b.getAttribute('data-layer')), pop: { l: pop.left, r: pop.right, t: pop.top, b: pop.bottom }, legend: lg?.textContent ?? '', legendH: lg?.getBoundingClientRect().height ?? 0 };
+    return { cells: window.__cartes?.cells() ?? 0, on: [...document.querySelectorAll('#layers-pop .layer-item.on:not([data-layer=alerts])')].map((b) => b.getAttribute('data-layer')), pop: { l: pop.left, r: pop.right, t: pop.top, b: pop.bottom }, legend: lg?.textContent ?? '', legendH: lg?.getBoundingClientRect().height ?? 0 };
   });
   check(st.cells > 0 && st.on.length === 1 && st.on[0] === 'happiness', `carte Satisfaction au doigt (${st.cells} cellules, active : ${st.on.join(',')})`);
   check(st.pop.l >= 0 && st.pop.r <= 390 && st.pop.t >= 0, `menu Cartes dans l'écran (${Math.round(st.pop.l)}–${Math.round(st.pop.r)} × ${Math.round(st.pop.t)}–${Math.round(st.pop.b)})`);
@@ -89,7 +89,7 @@ try {
     const s = window.__aube;
     const sv = await s.send('save', { slot: 'e2e-pourquoi-iphone' });
     let first = null;
-    for (const b of sv?.buildings ?? []) {
+    for (const b of sv?.data?.buildings ?? sv?.buildings ?? []) {
       const o = await s.send('inspectBuilding', { buildingId: b.id }).catch(() => null);
       if (!o) continue;
       const neg = (o.diagnosis?.factors ?? []).filter((f) => f.delta <= -0.5).length;

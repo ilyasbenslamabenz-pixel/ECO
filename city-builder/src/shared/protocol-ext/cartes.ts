@@ -28,6 +28,8 @@ export interface CarteLayer {
   /** Bâtiments pris en compte et moyenne des valeurs (0..100) : résumé affiché sous la légende. */
   buildings: number;
   mean: number;
+  /** Bâtiments dans le tiers haut de l'échelle (≥ 67 : problème marqué, ou valeur élevée). */
+  high: number;
   /** Jour de jeu du calcul. */
   day: number;
 }

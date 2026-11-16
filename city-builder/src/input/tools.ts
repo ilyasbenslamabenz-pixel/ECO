@@ -24,7 +24,7 @@ import { roadWidth, type PickResult } from '../client/tools/mirror';
 import type { CameraController, PointerToolSink } from './camera';
 import { COLORS, GhostPreview, GridPreview, RoadPreview, SelectionMarker, type ModelSource } from './previews';
 import { TerrainEditPreview } from './terrain-preview';
-import { isBrushMode, type TerrainToolMode } from '../client/tools/terrain-tool';
+import { isBrushMode, isLineMode, isPointMode, type TerrainToolMode } from '../client/tools/terrain-tool';
 
 export { TOOL_PHASE };
 
@@ -215,10 +215,10 @@ export class ToolController implements IToolController, PointerToolSink {
     const m = this.deps!.machine;
     m.terrain.beginStroke();
     const now = performance.now();
-    this.paint = { t0: now, lastT: 0, lastX: NaN, lastZ: NaN, timer: setInterval(() => this.paintTick(false), 60) };
+    this.paint = { t0: now, lastT: 0, lastX: NaN, lastZ: NaN, timer: setInterval(() => this.paintTick(false), 40) };
   }
 
-  /** Une passe si le doigt a assez bougé (moitié du rayon) ou est resté appuyé (≈ 0,3 s). */
+  /** Une passe si le doigt a assez bougé (un tiers du rayon) ou est resté appuyé (≈ 0,25 s) : trait continu. */
   private paintTick(force: boolean): void {
     const p = this.paint, d = this.deps;
     if (!p || !d) return;
@@ -232,7 +232,7 @@ export class ToolController implements IToolController, PointerToolSink {
     // Délai initial : un deuxième doigt (pincer, déplacer la carte) annule le geste avant toute passe.
     if (!force && now - p.t0 < 140) return;
     const moved = Number.isFinite(p.lastX) ? Math.hypot(g.x - p.lastX, g.z - p.lastZ) : Infinity;
-    if (!force && moved < t.radius * 0.5 && now - p.lastT < 320) return;
+    if (!force && moved < Math.max(3, t.radius * 0.33) && now - p.lastT < 250) return;
     if (force && Number.isFinite(p.lastX)) return;
     p.lastT = now; p.lastX = g.x; p.lastZ = g.z;
     void t.dab().then((ok) => { if (ok) d.machine.applied++; });
@@ -275,8 +275,8 @@ export class ToolController implements IToolController, PointerToolSink {
       this.roadStartedThisGesture = true;
       void d.machine.primary();
     }
-    // Quai / Creuser à la souris : départ posé à l'appui (clic-clic ou glisser).
-    if (type !== 'touch' && d.machine.tool === 'terraform' && !isBrushMode(d.machine.terrain.mode) && !d.machine.terrain.hasStart) {
+    // Quai / Creuser / Pente / Barrage à la souris : départ posé à l'appui (clic-clic ou glisser).
+    if (type !== 'touch' && d.machine.tool === 'terraform' && isLineMode(d.machine.terrain.mode) && !d.machine.terrain.hasStart) {
       this.roadStartedThisGesture = true;
       void d.machine.primary();
     }
@@ -318,8 +318,8 @@ export class ToolController implements IToolController, PointerToolSink {
         // Zone : premier coin au relâcher ; ensuite la démolition se confirme (bouton avec le nombre d'objets).
         if (!m.hasAreaStart) { void m.primary(); return; }
       } else if (m.tool === 'bulldoze' && !(m.preview.kind === 'bulldoze' && m.preview.target)) return;
-      // Quai / Creuser : le départ se pose au relâcher ; l'application se confirme.
-      if (m.tool === 'terraform' && !isBrushMode(m.terrain.mode) && !m.terrain.hasStart) { void m.primary(); return; }
+      // Quai / Creuser / Pente / Barrage : le départ se pose au relâcher ; l'application (et une source) se confirme.
+      if (m.tool === 'terraform' && isLineMode(m.terrain.mode) && !m.terrain.hasStart) { void m.primary(); return; }
       this.pendingTouchConfirm = true;
       this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: m.tool === 'building' });
       return;
@@ -331,6 +331,8 @@ export class ToolController implements IToolController, PointerToolSink {
       return;
     }
     if (m.tool === 'select' && !tap) return;
+    // Source d'eau à la souris : un clic franc (un glisser ne pose rien).
+    if (m.tool === 'terraform' && isPointMode(m.terrain.mode) && !tap) return;
     void m.primary();
   }
 
@@ -346,7 +348,10 @@ export class ToolController implements IToolController, PointerToolSink {
       const n = a.buildings.length + a.edges.length;
       return n ? `Démolir ${n} objet${n > 1 ? 's' : ''} · +${fmt(a.refund)} ¢` : 'Zone vide';
     }
-    if (m.tool === 'terraform') return terrainLabel(m.terrain.mode);
+    if (m.tool === 'terraform') {
+      const head = m.terrain.mode === 'source' && m.terrain.sourceRemove ? 'Retirer la source' : terrainLabel(m.terrain.mode);
+      return p.kind === 'terrain' && p.validity === 'error' ? `${head} refusé` : p.kind === 'terrain' && p.validity === 'ok' && p.cost > 0 ? `${head} · ${fmt(p.cost)} CHF` : head;
+    }
     if (p.kind === 'powerline') return !p.a ? 'Choisir le départ' : p.validity === 'error' ? 'Ligne refusée' : !p.b ? 'Choisir l’arrivée' : p.validity === 'pending' ? 'Ligne · calcul du coût…' : `Construire la ligne · ${fmt(p.cost)} ¢`;
     if (p.kind === 'road' && p.mode === 'roundabout') return p.validity === 'error' ? 'Giratoire refusé' : p.validity === 'pending' ? 'Giratoire · calcul du coût…' : `Construire le giratoire · ${fmt(p.cost)} ¢`;
     if (p.kind === 'grid') return p.validity === 'error' ? 'Îlot refusé' : `Construire l’îlot · ${fmt(p.cost)} ¢`;
@@ -484,7 +489,7 @@ export class ToolController implements IToolController, PointerToolSink {
     if (p.kind !== 'road' && p.kind !== 'upgrade') this.road.hide();
     if (p.kind !== 'grid') this.grid?.hide();
     // Barre de confirmation tactile ouverte : son libellé suit le coût validé par la simulation.
-    if (this.pendingTouchConfirm && (p.kind === 'road' || p.kind === 'grid' || p.kind === 'upgrade' || p.kind === 'powerline')) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
+    if (this.pendingTouchConfirm && (p.kind === 'road' || p.kind === 'grid' || p.kind === 'upgrade' || p.kind === 'powerline' || p.kind === 'terrain')) this.hooks?.touchConfirm({ label: this.confirmLabel(), canRotate: false });
     if (p.kind !== 'select' && p.kind !== 'bulldoze') this.hoverMarker.hide();
     if (p.kind !== 'terrain') this.terrainPrev?.hide();
     if (!(p.kind === 'bulldoze' && p.area) && p.kind !== 'junction') this.areaMarker?.hide();
@@ -598,8 +603,8 @@ export class ToolController implements IToolController, PointerToolSink {
       }
       case 'terrain': {
         this.terrainPrev?.show(p);
-        const head = terrainLabel(p.mode);
-        if (!isBrushMode(p.mode) && !p.start) tag(`${head}\n${p.message}`, 'info');
+        const head = p.removing ? 'Retirer une source' : terrainLabel(p.mode);
+        if (!isBrushMode(p.mode) && !isPointMode(p.mode) && !p.start) tag(`${head}\n${p.message}`, 'info');
         else if (!p.hover) tag(null, 'info');
         else if (p.validity === 'error') tag(`${head}${p.length ? ` · ${fmt(p.length)} m` : ''}\n${p.message}`, 'error');
         else tag(`${head}${p.length ? ` · ${fmt(p.length)} m` : ''}\n${p.validity === 'ok' ? p.message : 'Calcul du coût…'}`, p.validity === 'ok' ? 'ok' : 'pending');
@@ -637,9 +642,11 @@ export class ToolController implements IToolController, PointerToolSink {
   }
 }
 
-function terrainLabel(m: TerrainToolMode): string {
-  return m === 'clear' ? 'Défricher' : m === 'quay' ? 'Quai / remblai' : m === 'dig' ? 'Creuser' : m === 'river' ? 'Rivière' : m === 'raise' ? 'Élever' : m === 'lower' ? 'Abaisser' : 'Niveler';
-}
+const TERRAIN_LABELS: Record<TerrainToolMode, string> = {
+  clear: 'Défricher', quay: 'Quai / remblai', dig: 'Creuser', river: 'Rivière', raise: 'Élever', lower: 'Abaisser', flatten: 'Niveler',
+  smooth: 'Adoucir', slope: 'Pente', source: 'Source d\'eau', dam: 'Barrage',
+};
+function terrainLabel(m: TerrainToolMode): string { return TERRAIN_LABELS[m]; }
 
 function samePick(a: PickResult, b: PickResult): boolean {
   if (a.kind !== b.kind) return false;

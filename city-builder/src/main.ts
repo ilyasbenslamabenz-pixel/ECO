@@ -8,6 +8,7 @@
  */
 import { initToolFamilies } from './ui/tool-families';
 import { initLayersMenu } from './ui/layers-menu';
+import { initRail } from './ui/rail';
 import * as THREE from 'three';
 import { previousTrace, traceStart, traceStep, tracePlaying } from './boot-trace';
 import { powerView } from './shared/power/view';
@@ -576,6 +577,7 @@ async function boot(): Promise<void> {
   debug.workerReady = true;
   ui.setExtPort(b);
   initToolFamilies();
+  initRail();
   initLayersMenu({ pluginCommand: async (plugin, name, payload) => (await b.send('pluginCommand', { plugin, name, ...(payload !== undefined ? { payload } : {}) })).data });
   ui.setModuleBridge({ pluginCommand: async (plugin, name, payload) => (await b.send('pluginCommand', { plugin, name, ...(payload !== undefined ? { payload } : {}) })).data });
   await b.send('init', { protocolVersion: PROTOCOL_VERSION, catalog });

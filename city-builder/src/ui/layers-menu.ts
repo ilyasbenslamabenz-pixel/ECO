@@ -135,7 +135,8 @@ export function initLayersMenu(port: LayersPort): { set(id: LayerId): void; curr
     const ck = CARTE_LAYERS[m.id];
     const l = ck ? cartesLastLayer() : null;
     if (ck && l && l.kind === ck) {
-      const avgTxt = CARTE_PALETTE[ck] === 'valeur' ? `valeur moyenne ${l.mean} / 100` : `niveau moyen ${l.mean} / 100`;
+      const hi = (l.high ?? 0).toLocaleString('fr-FR');
+      const avgTxt = CARTE_PALETTE[ck] === 'valeur' ? `${hi} à valeur élevée` : `${hi} en rouge (« ${m.legend?.high ?? 'problème'} »)`;
       box.append(el('p', { cls: 'map-stat muted', text: l.buildings ? `${l.buildings.toLocaleString('fr-FR')} bâtiment(s) · ${avgTxt}` : 'Aucun bâtiment concerné pour l’instant.' }));
     }
     box.append(el('p', { cls: 'map-what', text: m.what }));

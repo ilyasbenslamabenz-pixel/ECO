@@ -1201,3 +1201,208 @@ body[data-tuto-cat="waste"] #family-pop [data-family-cat="waste"] { box-shadow: 
 #info-why:empty { display: none; }
 /* Bureau : le menu Cartes s'ouvre à droite de la barre latérale (il passait dessous et ses boutons n'étaient plus cliquables). */
 @media (min-width: 761px) and (min-height: 501px) { #layers-pop { left: calc(max(10px, var(--safe-l)) + 106px); } }
+
+/* =====================================================================================
+   RAIL D'INFOS (refonte de l'interface, src/ui/rail.ts) : capsules en haut, rail d'icônes groupé à gauche,
+   barre d'outils groupée en bas, mini-carte à droite. Téléphone : barre en 2 lignes, tiroir groupé,
+   Démolir / Annuler au pouce, « Premiers pas » replié au-dessus des outils.
+   Tout est préfixé `body.ui-rail` (classe posée par rail.ts) pour l'emporter sur les règles plus anciennes.
+   ===================================================================================== */
+/* Intitulés de groupes du rail : texte (tiroirs), simples séparateurs dans le rail de bureau. */
+body.ui-rail #sidebar .rail-h { display: block; flex: 0 0 auto; margin: 10px 12px 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+body.ui-rail #sidebar .rail-h.rail-sep { display: none; }
+body.ui-rail #sidebar .rail-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; display: none; }
+body.ui-rail #sidebar button[data-alert="urgent"] .rail-dot { display: block; background: var(--danger); box-shadow: 0 0 0 2px rgba(255, 100, 100, .25); }
+body.ui-rail #sidebar button[data-alert="important"] .rail-dot { display: block; background: var(--warn); }
+body.ui-rail .happy-bar { display: block; width: 52px; height: 4px; margin-top: 3px; border-radius: 2px; background: rgba(var(--ink), .15); overflow: hidden; }
+body.ui-rail .happy-bar i { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--muted); transition: width .4s; }
+body.ui-rail .happy-bar[data-level="good"] i { background: var(--ok); }
+body.ui-rail .happy-bar[data-level="mid"] i { background: var(--warn); }
+body.ui-rail .happy-bar[data-level="bad"] i { background: var(--danger); }
+body.ui-rail .hud-cap { display: flex; align-items: center; min-width: 0; }
+body.ui-rail .brand-txt .game { display: none; }
+body.ui-rail .hud-sub { display: flex; align-items: center; gap: 6px; min-width: 0; }
+body.ui-rail #hud-date { display: flex !important; position: static !important; flex-direction: row !important; align-items: baseline; gap: 5px; padding: 0 !important; margin: 0 !important;
+  border: 0 !important; border-radius: 0 !important; background: none !important; box-shadow: none !important; line-height: 1.2; pointer-events: auto; }
+body.ui-rail #hud-date .day { font-size: 12px; font-weight: 600; color: var(--muted); }
+body.ui-rail #hud-date .clock { font-size: 12.5px; font-weight: 800; color: var(--text-strong); }
+/* Météo : place discrète après l'heure, désactivée tant que le module n'existe pas. */
+body.ui-rail #hud-weather { display: inline-flex !important; align-items: center; gap: 0; min-height: 0 !important; padding: 0 !important; border: 0 !important; background: none !important; opacity: .42; }
+body.ui-rail #hud-weather svg.ic { width: 15px; height: 15px; }
+body.ui-rail #hud-weather .v { display: none; }
+body.ui-rail .hud-stat .lbl { display: none !important; }
+body.ui-rail #hud-pop-btn .stack, body.ui-rail .hud-stat .mrow { display: flex; flex-direction: column !important; align-items: flex-start !important; gap: 0 !important; }
+body.ui-rail .hud-stat .delta { font-size: 11.5px; font-weight: 650; }
+body.ui-rail #hud-pop-delta { display: inline !important; }
+/* Jauge R C I B lisible : lettres colorées de 11,5 px, barres de 9 px. */
+body.ui-rail .hud-demand { height: 32px; gap: 6px; }
+body.ui-rail .hud-demand .col { width: 13px; gap: 2px; }
+body.ui-rail .hud-demand .bar { width: 9px; }
+body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !important; font-weight: 800; }
+
+/* ------------------------------ Bureau ------------------------------ */
+@media (min-width: 761px) {
+  body.ui-rail #hud { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-height: 0; pointer-events: none;
+    padding: max(8px, var(--safe-t)) max(10px, var(--safe-r)) 0 max(10px, var(--safe-l));
+    background: none !important; border: 0 !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  body.ui-rail .hud-cap { pointer-events: auto; gap: 4px; height: 54px; padding: 0 8px; border-radius: 16px; background: var(--glass); border: 1px solid var(--line);
+    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--shadow); flex: 0 1 auto; }
+  body.ui-rail .cap-id { padding-left: 10px; }
+  body.ui-rail .hud-brand { padding: 0 6px 0 0; gap: 9px; min-width: 0; }
+  body.ui-rail .hud-brand .logo { width: 30px; height: 30px; }
+  body.ui-rail .brand-txt .city { font-size: 14.5px; font-weight: 800; color: var(--text-strong); max-width: 170px; line-height: 1.15; }
+  body.ui-rail #hud .speed { margin: 0 0 0 4px; padding: 2px; gap: 1px; border-radius: 11px; }
+  body.ui-rail #hud .speed button { min-width: 31px; min-height: 34px; padding: 2px 4px; border-radius: 8px; border: 0; }
+  body.ui-rail .cap-kpi { padding: 0 4px; gap: 0; }
+  body.ui-rail .cap-kpi .hud-stat { position: relative; flex: 0 0 auto !important; min-height: 44px; padding: 0 11px !important; gap: 8px; border: 0 !important; border-radius: 11px !important; background: transparent !important; }
+  body.ui-rail .cap-kpi .hud-stat + .hud-stat::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 1px; background: var(--line); }
+  body.ui-rail .cap-kpi .hud-stat svg.ic { width: 23px; height: 23px; }
+  body.ui-rail .cap-kpi .hud-stat b { font-size: 16.5px; font-weight: 800; line-height: 1.1; }
+  body.ui-rail .cap-act { padding: 0 6px; }
+  body.ui-rail .hud-actions { margin: 0; padding: 0; gap: 2px; }
+  body.ui-rail .hud-actions .hud-btn { width: 40px; height: 40px; min-height: 40px; background: transparent; border-color: transparent; }
+  /* Mini-carte, objectif et notifications à droite : le bas d'écran n'est plus décalé pour l'objectif. */
+  body.ui-rail #bottom { right: max(10px, var(--safe-r)) !important; }
+  body.ui-rail #minimap { order: 2; display: grid; grid-template-columns: auto auto; grid-template-areas: "map orient" "map ctrl"; align-content: start; gap: 4px 6px; }
+  body.ui-rail #minimap.map-off { grid-template-areas: "orient" "ctrl"; grid-template-columns: auto; }
+  body.ui-rail .mm-map { grid-area: map; width: 176px; height: 176px; }
+  body.ui-rail .mm-orient { grid-area: orient; display: grid; grid-template-columns: repeat(2, 32px); gap: 3px; }
+  body.ui-rail .mm-ctrl { grid-area: ctrl; display: grid; grid-template-columns: repeat(2, 32px); gap: 3px; }
+  body.ui-rail .mm-orient button, body.ui-rail .mm-ctrl button { width: 32px; height: 30px; min-height: 30px; padding: 0; border-radius: 9px; }
+  body.ui-rail #build-center { order: 1; }
+  body.ui-rail #objectives { top: calc(var(--hud-h) + 8px); bottom: auto; right: max(10px, var(--safe-r)); width: 300px; }
+  body.ui-rail #toasts { top: calc(var(--hud-h) + 8px + var(--obj-h, 0px)); bottom: auto; right: max(10px, var(--safe-r)); left: auto; transform: none; width: 300px; }
+  body.ui-rail #layers-pop { left: auto !important; right: max(10px, var(--safe-r)); bottom: calc(max(10px, var(--safe-b)) + 210px); }
+  /* Barre d'outils : intitulés de groupes (Aménager, Réseaux, Paysage) au-dessus des séparateurs. */
+  body.ui-rail #toolbar { overflow: visible; gap: 1px; padding: 5px; }
+  body.ui-rail #toolbar button { width: 58px; font-size: 11px; }
+  body.ui-rail #toolbar .tb-grp { position: relative; margin: 10px 3px; }
+  body.ui-rail #toolbar .tb-grp::after { content: attr(data-label); position: absolute; left: 6px; top: -32px; white-space: nowrap; font-size: 9.5px; font-weight: 800;
+    letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .78); text-shadow: 0 1px 3px rgba(0, 0, 0, .85); pointer-events: none; }
+  :root[data-theme="clair"] body.ui-rail #toolbar .tb-grp::after { color: rgba(13, 22, 32, .78); text-shadow: 0 1px 2px rgba(255, 255, 255, .9); }
+  body.ui-rail #toolbar .tb-sep:not(.tb-grp) { display: none; }
+  body.ui-rail #toolbar .tb-grp + button[data-tool="bulldoze"] { margin-left: 0; }
+}
+/* Fenêtres de bureau étroites : vitesse en un bouton « suivante », puis nom de ville masqué. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  body.ui-rail #hud .speed .spd-x { display: none; }
+  body.ui-rail #hud .speed .spd-cycle { display: inline-flex; font-weight: 700; }
+  body.ui-rail .brand-txt .city { max-width: 120px; }
+  body.ui-rail .cap-kpi .hud-stat { padding: 0 8px !important; }
+  body.ui-rail #toolbar button { width: 52px; font-size: 10.5px; }
+}
+@media (min-width: 761px) and (max-width: 940px) {
+  body.ui-rail .brand-txt { display: none; }
+  body.ui-rail .cap-kpi .hud-stat svg.ic { display: none; }
+}
+/* Rail d'icônes (bureau, hors téléphone en paysage qui garde le tiroir). */
+@media (min-width: 761px) and (min-height: 501px) {
+  body.ui-rail #sidebar { top: calc(var(--hud-h) + 8px); left: max(10px, var(--safe-l)); width: 54px; max-height: calc(100dvh - var(--hud-h) - 20px);
+    padding: 5px; gap: 1px; align-items: center; border-radius: 16px; }
+  body.ui-rail #sidebar button { width: 42px; height: 40px; min-height: 40px; padding: 0; border-radius: 11px; }
+  body.ui-rail #sidebar button svg.ic { width: 21px; height: 21px; }
+  body.ui-rail #sidebar button .tl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  body.ui-rail #sidebar .rail-h, body.ui-rail #sidebar .rail-h.rail-sep { display: block; width: 30px; height: 1px; margin: 5px 0; padding: 0; font-size: 0; background: var(--line-2); }
+  body.ui-rail #sidebar .rail-h:first-child { display: none; }
+  /* Couleur d'icône par entrée (mêmes teintes que les outils). */
+  body.ui-rail #sidebar [data-dash="city"] svg.ic { color: #8fd0ff; } body.ui-rail #sidebar [data-dash="finance"] svg.ic { color: #3ddc84; }
+  body.ui-rail #sidebar [data-dash="population"] svg.ic { color: #7cc4ff; } body.ui-rail #sidebar [data-dash="services"] svg.ic { color: #ff7a7a; }
+  body.ui-rail #sidebar [data-dash="energy"] svg.ic { color: #ffd23f; } body.ui-rail #sidebar [data-dash="water"] svg.ic { color: #4aa8ff; }
+  body.ui-rail #sidebar [data-dash="waste"] svg.ic { color: #c4a874; } body.ui-rail #sidebar [data-dash="transport"] svg.ic { color: #4fd1e8; }
+  body.ui-rail #sidebar [data-dash="environment"] svg.ic { color: #5fd38a; } body.ui-rail #sidebar [data-dash="policy"] svg.ic { color: #e0a6ff; }
+  body.ui-rail #sidebar [data-dash="research"] svg.ic { color: #7fe3d0; } body.ui-rail #sidebar [data-dash="progression"] svg.ic { color: #ffc24d; }
+  body.ui-rail #sidebar .rail-layers svg.ic { color: #9fb8ff; }
+  body.ui-rail #sidebar button.active svg.ic { color: #fff; }
+  /* Tableaux de bord : ouverts à côté du rail (la carte reste visible à droite) ; la fiche d'un objet reste à droite. */
+  body.ui-rail .panel.dash { left: calc(max(10px, var(--safe-l)) + 62px); right: auto; }
+}
+
+/* ------------------------------ Téléphone ------------------------------ */
+@media (max-width: 760px) {
+  body.ui-rail #hud { flex-wrap: wrap !important; align-items: center; row-gap: 4px !important; column-gap: 4px !important; border-radius: 0 0 18px 18px;
+    padding: max(6px, var(--safe-t)) max(8px, var(--safe-r)) 6px max(8px, var(--safe-l)); }
+  body.ui-rail .cap-id { order: 1; flex: 1 1 auto; gap: 4px; }
+  body.ui-rail .cap-act { order: 2; flex: 0 0 auto; }
+  body.ui-rail .cap-kpi { order: 3; flex: 1 1 100%; gap: 0; border-top: 1px solid var(--line); padding-top: 4px; }
+  body.ui-rail #btn-sidebar { display: inline-flex !important; width: 44px; height: 44px; min-height: 44px; flex: 0 0 auto; border: 1px solid var(--line-2); }
+  body.ui-rail #hud .hud-brand { display: flex !important; flex: 1 1 auto; min-width: 0; padding: 0 0 0 4px; gap: 0; }
+  body.ui-rail #hud .hud-brand .logo { display: none; }
+  body.ui-rail .brand-txt { min-width: 0; line-height: 1.15; }
+  body.ui-rail .brand-txt .city { font-size: 15px; font-weight: 800; color: var(--text-strong); max-width: 100%; }
+  body.ui-rail #hud .speed { flex: 0 0 auto !important; margin: 0; border-radius: 12px; }
+  body.ui-rail #hud .speed button[data-speed="0"], body.ui-rail #hud .speed .spd-cycle { min-width: 44px !important; min-height: 44px; }
+  body.ui-rail #hud .speed .spd-cycle { min-width: 52px !important; }
+  body.ui-rail #hud .hud-actions { display: flex !important; margin: 0; padding: 0; }
+  body.ui-rail #hud .hud-actions > :not(#btn-notif) { display: none !important; }
+  body.ui-rail #btn-notif { width: 44px; height: 44px; min-height: 44px; }
+  /* Indicateurs : une bande continue, séparateurs fins. */
+  body.ui-rail .cap-kpi .hud-stat { position: relative; order: 0 !important; min-width: 0; min-height: 46px !important; padding: 0 6px !important; gap: 6px !important; border: 0 !important; border-radius: 10px !important;
+    background: transparent !important; overflow: hidden; justify-content: flex-start; }
+  body.ui-rail .cap-kpi .hud-stat + .hud-stat::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 1px; background: var(--line); }
+  body.ui-rail #hud-pop-btn, body.ui-rail #hud-happy-btn { flex: 1 1 0 !important; display: inline-flex !important; }
+  body.ui-rail #hud-money-btn { flex: 1.8 1 0 !important; }
+  body.ui-rail #hud-demand-btn { flex: 0 0 auto !important; padding: 0 8px !important; }
+  body.ui-rail #hud-money-btn > svg.ic { display: block; }
+  body.ui-rail .cap-kpi .hud-stat svg.ic { width: 20px; height: 20px; }
+  body.ui-rail .cap-kpi .hud-stat b { font-size: 14.5px !important; font-weight: 800; }
+  body.ui-rail .happy-bar { width: 32px; }
+  body.ui-rail .hud-demand { height: 34px; gap: 5px; }
+  /* Pose d'un objet : barre réduite (trésorerie, vitesse, menu). */
+  body.ui-rail.tool-opts .cap-kpi > :not(#hud-money-btn), body.ui-rail.tool-opts .hud-sub, body.ui-rail.tool-opts .cap-act { display: none !important; }
+  body.ui-rail.tool-opts .cap-kpi { flex: 1 1 100%; }
+
+  /* Tiroir des tableaux de bord : pleine hauteur, groupé ; raccourcis (notifications, sauvegarde, réglages…) toujours visibles. */
+  body.ui-rail #sidebar { top: 0; padding: max(10px, var(--safe-t)) 8px max(10px, var(--safe-b)) max(8px, var(--safe-l)); width: min(304px, 84vw); gap: 0; z-index: 26; }
+  body.ui-rail.sidebar-open #sidebar-scrim { inset: 0; z-index: 25; }
+  body.ui-rail #sidebar button { min-height: 44px; padding: 6px 10px; gap: 12px; }
+  body.ui-rail #sidebar button .tl { font-size: 14.5px; }
+  body.ui-rail #sidebar .rail-dot { position: static; margin-left: auto; }
+  body.ui-rail #sidebar .rail-layers { display: none; }
+  body.ui-rail #sidebar .sb-extra { grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 8px; padding-top: 8px; }
+  body.ui-rail #sidebar .sb-extra button { gap: 8px; padding: 6px 8px; border: 1px solid var(--line); background: rgba(var(--ink), .04); }
+  body.ui-rail #sidebar .sb-extra button .tl { font-size: 13px; }
+
+  /* Barre d'outils : 7 colonnes (Sélection, Zones, Routes, Bâtiments, Services, Réseaux, Paysage), libellés entiers. */
+  body.ui-rail #toolbar { overflow: visible !important; position: relative; padding: 4px !important; }
+  body.ui-rail #toolbar button { min-height: 58px; gap: 4px; }
+  body.ui-rail #toolbar button .tl { font-size: 10px !important; letter-spacing: -0.02em; }
+  body.ui-rail #toolbar button[data-tool="select"] .tl, body.ui-rail #toolbar button[data-tool="building"] .tl { font-size: 10px !important; }
+  body.ui-rail #toolbar button[data-tool="select"] .tl::after, body.ui-rail #toolbar button[data-tool="building"] .tl::after { content: none; }
+  /* Démolir et Annuler : pastille au pouce, à droite, au-dessus des outils (et de « Premiers pas »). */
+  body.ui-rail #toolbar button[data-tool="bulldoze"], body.ui-rail #toolbar #btn-undo {
+    position: absolute; bottom: calc(100% + 8px + var(--obj-h, 0px)); flex: none !important; flex-direction: row; height: 46px; min-height: 46px; padding: 0 12px; gap: 6px;
+    background: var(--glass-2); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+  body.ui-rail #toolbar button[data-tool="bulldoze"] { right: 54px; width: auto !important; }
+  body.ui-rail #toolbar button[data-tool="bulldoze"] .tl { font-size: 13px !important; font-weight: 700; overflow: visible; }
+  body.ui-rail #toolbar #btn-undo { right: 0; width: 48px !important; padding: 0; }
+  body.ui-rail #toolbar #btn-undo .tl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  body.ui-rail.drawer-open #toolbar button[data-tool="bulldoze"], body.ui-rail.drawer-open #toolbar #btn-undo,
+  body.ui-rail.sidebar-open #toolbar button[data-tool="bulldoze"], body.ui-rail.sidebar-open #toolbar #btn-undo { visibility: hidden; }
+  body.ui-rail.tool-opts #toolbar button[data-tool="bulldoze"], body.ui-rail.tool-opts #toolbar #btn-undo,
+  body.ui-rail.confirming #toolbar button[data-tool="bulldoze"], body.ui-rail.confirming #toolbar #btn-undo { bottom: calc(100% + 8px); }
+  body.ui-rail.tool-opts #toolbar button[data-tool="bulldoze"]:not(.active) { display: none !important; }
+
+  /* Cartes et mini-carte : boutons flottants à gauche ; la mini-carte s'ouvre avec toutes ses commandes. */
+  body.ui-rail:not(.tool-opts) #minimap { position: fixed; left: max(8px, var(--safe-l)); bottom: calc(var(--tb-h) + 8px + var(--obj-h, 0px)); z-index: 15;
+    display: grid; grid-template-columns: auto auto; grid-template-areas: "map orient" "map ctrl"; gap: 4px; align-items: start; padding: 6px; }
+  body.ui-rail:not(.tool-opts) #minimap .mm-map { grid-area: map; width: 168px; height: 168px; }
+  body.ui-rail:not(.tool-opts) #minimap .mm-orient { grid-area: orient; display: grid; grid-template-columns: repeat(2, 44px); gap: 4px; }
+  body.ui-rail:not(.tool-opts) #minimap .mm-ctrl { grid-area: ctrl; display: grid; grid-template-columns: repeat(2, 44px); gap: 4px; }
+  body.ui-rail:not(.tool-opts) #minimap .mm-orient button, body.ui-rail:not(.tool-opts) #minimap .mm-ctrl button { width: 44px; height: 44px; min-height: 44px; }
+  body.ui-rail:not(.tool-opts) #minimap.map-off { display: flex; flex-direction: column; gap: 6px; padding: 0; background: none !important; border: 0 !important; box-shadow: none !important;
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  body.ui-rail:not(.tool-opts) #minimap.map-off .mm-orient, body.ui-rail:not(.tool-opts) #minimap.map-off .mm-ctrl > :not(#btn-layers):not(#mm-toggle) { display: none !important; }
+  body.ui-rail:not(.tool-opts) #minimap.map-off .mm-ctrl { display: flex; flex-direction: column; gap: 6px; }
+  body.ui-rail:not(.tool-opts) #minimap.map-off .mm-ctrl button { width: 46px; height: 46px; border-radius: 14px; background: var(--glass-2); border: 1px solid var(--line); box-shadow: var(--shadow);
+    backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+  body.ui-rail:not(.tool-opts) #minimap.map-off .mm-ctrl button svg.ic { width: 22px; height: 22px; }
+  body.ui-rail.sidebar-open #minimap { visibility: hidden; }
+  body.ui-rail #layers-pop { bottom: calc(var(--tb-h) + 120px + var(--obj-h, 0px)) !important; }
+
+  /* Premiers pas : une ligne au-dessus des outils, dépliée au toucher. */
+  body.ui-rail #objectives:not(.hidden):not(.tuto-off) { top: auto !important; bottom: calc(var(--tb-h) + 6px) !important; left: max(6px, var(--safe-l)) !important; right: max(6px, var(--safe-r)) !important;
+    width: auto !important; max-width: none !important; z-index: 16; }
+  body.ui-rail #obj-toggle { min-height: 44px; }
+  body.ui-rail #objectives .obj-body { max-height: 40dvh; overflow-y: auto; }
+  body.ui-rail.drawer-open #objectives, body.ui-rail.sidebar-open #objectives { display: none !important; }
+}

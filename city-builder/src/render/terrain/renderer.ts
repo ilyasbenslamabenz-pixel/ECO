@@ -325,6 +325,8 @@ export class TerrainSystem implements IRenderTerrain {
   applyPatch(p: TerrainPatch): void {
     if (!this.data) return;
     applyPatchData(this.data, p);
+    // Remplissage d'une retenue : seule l'eau change (hauteurs identiques), rien à remailler.
+    if (p.waterOnly) return;
     this.mesher.patch(p.i0, p.j0, p.i1 - p.i0 + 1, p.j1 - p.j0 + 1);
     const cs = this.cellsPerChunk;
     for (const c of this.chunks) {

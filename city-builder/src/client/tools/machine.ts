@@ -188,6 +188,7 @@ export class ConstructionTools {
     });
     this.terrain = new TerrainTool({
       terrainEdit: (args) => (sim.sendExt ? sim.sendExt('terrainEdit', args) : Promise.reject(new Error('Éditions du terrain indisponibles'))),
+      hydroState: () => (sim.sendExt ? sim.sendExt('hydroState', {}) : Promise.reject(new Error('Eau indisponible'))),
     }, notify, () => { if (this.tool === 'terraform') this.refresh(); });
   }
 
@@ -1160,8 +1161,15 @@ export class ConstructionTools {
     return true;
   }
 
-  /** Modification du terrain appliquée : sans inverse, elle marque la pile d'annulation. */
-  markTerrainEdit(): void { this.undo.push({ label: 'Modification du terrain', steps: [], irreversible: true }); }
+  /**
+   * Modification du terrain appliquée : annulable par `terrainUndo` (rang de sa première édition) ; sans rang connu
+   * (ancien client, test), elle marque la pile d'annulation.
+   */
+  markTerrainEdit(): void {
+    const a = this.terrain.takeApplied();
+    if (a) this.undo.push({ label: a.label, steps: [{ kind: 'terrainUndo', since: a.since }] });
+    else this.undo.push({ label: 'Modification du terrain', steps: [], irreversible: true });
+  }
 
   /** Clic droit / Échap : recule d'une étape, sinon revient à la sélection. Renvoie false si déjà au repos. */
   secondary(): boolean {
@@ -1220,6 +1228,10 @@ export class ConstructionTools {
             if (ids.length === 0) throw new Error('Route introuvable (déjà démolie ?)');
             for (const id of ids) await removeEdge(id);
           }
+        } else if (s.kind === 'terrainUndo') {
+          if (!this.sim.sendExt) throw new Error('Annulation du terrain indisponible');
+          await this.sim.sendExt('terrainUndo', { since: s.since });
+          if (this.terrain.mode === 'source' || this.terrain.mode === 'dam') void this.terrain.refreshHydro();
         } else if (s.kind === 'plugin') {
           await this.sim.send('pluginCommand', { plugin: s.plugin, name: s.name, payload: s.payload });
           if (s.plugin === 'circulation') void this.loadJunctionModes();

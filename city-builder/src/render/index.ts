@@ -238,7 +238,7 @@ export async function initRender(
         water.applyPatch(p);
         // Talus et murs des routes voisines raccordés au nouveau relief.
         const td = terrain.terrain;
-        if (td) roads.terrainChanged(td.originX + p.i0 * td.spacing, td.originZ + p.j0 * td.spacing, td.originX + p.i1 * td.spacing, td.originZ + p.j1 * td.spacing);
+        if (td && !p.waterOnly) roads.terrainChanged(td.originX + p.i0 * td.spacing, td.originZ + p.j0 * td.spacing, td.originX + p.i1 * td.spacing, td.originZ + p.j1 * td.spacing);
         if (p.quays) quays.set(p.quays);
         // Défrichage, puis végétation devenue invalide (dans l'eau, flottante ou enterrée) dans la zone modifiée.
         if (p.cleared?.length) veg.removeInDiscs(p.cleared);
