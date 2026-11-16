@@ -79,6 +79,9 @@ let countRef = 0;
 export const alertsVisible = (): boolean => shown;
 export function setAlertsVisible(v: boolean): void { shown = v; if (pointsRef) pointsRef.visible = v && countRef > 0; }
 export const alertMaskOf = (id: number): number => masks.get(id) ?? 0;
+/** Dernière charge du module (positions et compteurs) : lue par la fenêtre « Problèmes à régler » (src/ui/problems.ts). */
+let lastPayload: AlertesPayload | null = null;
+export const lastAlertes = (): AlertesPayload | null => lastPayload;
 
 export function createAlertesRenderPlugin(): RenderPlugin & { readonly count: () => number } {
   let ctx: RenderPluginContext | null = null;
@@ -89,6 +92,7 @@ export function createAlertesRenderPlugin(): RenderPlugin & { readonly count: ()
 
   const apply = (p: unknown): void => {
     const items = (p as AlertesPayload | undefined)?.items ?? [];
+    lastPayload = (p as AlertesPayload | undefined) ?? null;
     const pos: number[] = [], kind: number[] = [], slot: number[] = [];
     masks.clear();
     for (let i = 0; i + 4 < items.length; i += 5) {

@@ -12,6 +12,7 @@
 import { $, el } from './dom';
 import { iconEl } from './icons';
 import { journal, onNotify } from './notify';
+import { initProblems } from './problems';
 
 const PHONE = '(max-width: 760px)';
 
@@ -68,6 +69,7 @@ export function initRail(): void {
   buildSidebar();
   buildToolbar();
   phoneObjectives();
+  initProblems();
   shortcuts();
 }
 

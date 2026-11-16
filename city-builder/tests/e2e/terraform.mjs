@@ -29,6 +29,13 @@ try {
   await page.waitForFunction(() => window.__aube?.ready === true && window.__aube.snapshotReceived, null, { timeout: 300000 });
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
   const hydro = () => page.evaluate(() => window.__aube.sendExt('hydroState', {}));
+  /** Attend que l'état de l'eau vérifie `pred` (sondage toutes les 500 ms). */
+  const waitHydro = async (pred, timeout = 30000) => {
+    const t0 = Date.now();
+    let st = await hydro();
+    while (!pred(st) && Date.now() - t0 < timeout) { await page.waitForTimeout(500); st = await hydro(); }
+    return st;
+  };
   const shot = async (name, x, z, d, pitch, yaw) => {
     await page.evaluate(([x, z, d, p, y]) => { window.__aube.lookAt(x, z, d, p, y); window.__aube.renderNow(3, 0.5); }, [x, z, d, pitch, yaw]);
     await page.screenshot({ path: join(outDir, name) });
@@ -71,8 +78,7 @@ try {
   for (let i = 1; i <= 24; i++) { await page.mouse.move(a.x + ((b.x - a.x) * i) / 24, a.y + ((b.y - a.y) * i) / 24); await page.waitForTimeout(70); }
   await page.waitForTimeout(400);
   await page.mouse.up();
-  await page.waitForFunction(async () => (await window.__aube.sendExt('hydroState', {})).edits >= 3, null, { timeout: 30000 }).catch(() => undefined);
-  const afterPaint = await hydro();
+  const afterPaint = await waitHydro((st) => st.edits >= 3);
   check(afterPaint.edits >= 3, 'glisser continu : plusieurs passes appliquées', afterPaint.edits);
   await page.waitForFunction((m) => window.__aube.lastStats.money < m, money0, { timeout: 20000 }).catch(() => undefined);
   const money1 = await page.evaluate(() => window.__aube.lastStats.money);
@@ -81,8 +87,7 @@ try {
   await shot('apres-pinceau.png', PAINT.x, PAINT.z, 320, 0.9, 0.4);
   // Ctrl+Z : tout le geste est annulé d'un coup (coût remboursé).
   await page.keyboard.press('Control+z');
-  await page.waitForFunction(async () => (await window.__aube.sendExt('hydroState', {})).edits === 0, null, { timeout: 20000 }).catch(() => undefined);
-  const afterUndo = await hydro();
+  const afterUndo = await waitHydro((st) => st.edits === 0, 20000);
   check(afterUndo.edits === 0, 'Ctrl+Z annule le geste entier', afterUndo.edits);
   await page.waitForFunction((m) => Math.abs(window.__aube.lastStats.money - m) < 2, money0, { timeout: 20000 }).catch(() => undefined);
   check(Math.abs((await page.evaluate(() => window.__aube.lastStats.money)) - money0) < 2, 'coût remboursé à l\'annulation');
@@ -112,8 +117,7 @@ try {
   const srcTag = await page.evaluate(() => document.querySelector('#cursor-tag, .cursor-tag')?.textContent ?? '');
   check(/CHF/.test(srcTag), 'aperçu de la source (coût, eau prévue)', srcTag);
   await clickWorld(SOURCE);
-  await page.waitForFunction(async () => (await window.__aube.sendExt('hydroState', {})).sources.length === 1, null, { timeout: 30000 }).catch(() => undefined);
-  const st1 = await hydro();
+  const st1 = await waitHydro((st) => st.sources.length === 1);
   check(st1.sources.length === 1 && st1.sources[0].q === 25, 'source posée (25 m³/s)', st1.sources);
 
   // 4. Barrage en travers du vallon : aperçu vert (chute, production), puis pose.
@@ -132,17 +136,18 @@ try {
   await page.evaluate(() => window.__aube.renderNow(1));
   await page.screenshot({ path: join(outDir, 'barrage-apercu.png') });
   await clickWorld(DAM_B);
-  await page.waitForFunction(async () => (await window.__aube.sendExt('hydroState', {})).dams.length === 1, null, { timeout: 30000 }).catch(() => undefined);
-  const st2 = await hydro();
+  const st2 = await waitHydro((st) => st.dams.length === 1);
   check(st2.dams.length === 1, 'barrage posé', st2.dams);
   check(st2.dams[0] && !st2.dams[0].full, 'retenue vide au départ (remplissage progressif)', st2.dams[0]);
   check(await page.evaluate(() => window.__aube.quays().length >= 16), 'parements du barrage rendus');
 
   // 5. Remplissage : la retenue monte jusqu'à la crête.
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 4 }));
-  await page.waitForFunction(async () => { const s = await window.__aube.sendExt('hydroState', {}); return s.dams[0]?.full; }, null, { timeout: 120000, polling: 1000 }).catch(() => undefined);
+  // Niveau intermédiaire pendant le remplissage, puis retenue pleine.
+  const mid = await waitHydro((st) => st.dams[0] && st.dams[0].level !== null, 60000);
+  const st3 = await waitHydro((st) => st.dams[0]?.full, 180000);
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
-  const st3 = await hydro();
+  check(mid.dams[0]?.level !== null && mid.dams[0].level <= st3.dams[0].level, 'le niveau monte pendant le remplissage', { pendant: mid.dams[0]?.level, final: st3.dams[0]?.level });
   const d = st3.dams[0];
   check(d && d.full && d.headM > 5 && Math.abs(d.level - d.crest) < 0.5, 'retenue pleine au niveau de la crête, chute mesurée', d);
   check(st3.lastMs < 200, 'calcul de l\'eau léger (ms)', st3.lastMs);
@@ -155,8 +160,7 @@ try {
   // 6. Sauvegarde puis rechargement : source, barrage et retenue conservés.
   await page.evaluate(() => window.__aube.saveSlot('terraform-e2e'));
   await page.evaluate(() => window.__aube.loadSlot('terraform-e2e'));
-  await page.waitForFunction(async () => (await window.__aube.sendExt('hydroState', {})).dams.length === 1, null, { timeout: 60000 }).catch(() => undefined);
-  const st4 = await hydro();
+  const st4 = await waitHydro((st) => st.dams.length === 1 && st.dams[0].level !== null, 60000);
   check(st4.sources.length === 1 && st4.dams.length === 1 && Math.abs(st4.dams[0].level - d.level) < 0.01, 'après rechargement : source, barrage et retenue identiques', st4.dams[0]);
   check(errors.length === 0, 'aucune erreur de page', errors.slice(0, 5));
   await page.close();
