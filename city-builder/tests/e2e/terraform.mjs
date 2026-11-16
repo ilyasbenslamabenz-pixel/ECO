@@ -142,12 +142,12 @@ try {
   check(await page.evaluate(() => window.__aube.quays().length >= 16), 'parements du barrage rendus');
 
   // 5. Remplissage : la retenue monte jusqu'à la crête.
-  await page.evaluate(() => window.__aube.send('setSpeed', { speed: 4 }));
-  // Niveau intermédiaire pendant le remplissage, puis retenue pleine.
-  const mid = await waitHydro((st) => st.dams[0] && st.dams[0].level !== null, 60000);
-  const st3 = await waitHydro((st) => st.dams[0]?.full, 180000);
+  // Niveaux relevés pendant le remplissage (vitesse ×2), puis retenue pleine.
+  await page.evaluate(() => window.__aube.send('setSpeed', { speed: 2 }));
+  const levels = [];
+  const st3 = await waitHydro((st) => { if (st.dams[0]?.level != null) levels.push(Math.round(st.dams[0].level * 10) / 10); return st.dams[0]?.full; }, 240000);
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
-  check(mid.dams[0]?.level !== null && mid.dams[0].level <= st3.dams[0].level, 'le niveau monte pendant le remplissage', { pendant: mid.dams[0]?.level, final: st3.dams[0]?.level });
+  check(levels.length >= 2 && levels[0] < levels[levels.length - 1], 'le niveau monte pendant le remplissage', levels.slice(0, 12));
   const d = st3.dams[0];
   check(d && d.full && d.headM > 5 && Math.abs(d.level - d.crest) < 0.5, 'retenue pleine au niveau de la crête, chute mesurée', d);
   check(st3.lastMs < 200, 'calcul de l\'eau léger (ms)', st3.lastMs);

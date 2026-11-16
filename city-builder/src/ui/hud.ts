@@ -21,7 +21,7 @@ import { hydrateIcons, iconEl } from './icons';
 import { Minimap } from './minimap';
 import type { SimReport } from '../sim/sim-protocol';
 import type { CameraMode, SimStats } from '../shared/contracts';
-import type { SimSpeed } from '../shared/constants';
+import { DEFAULT_MAP_CHUNKS, type SimSpeed } from '../shared/constants';
 import type { PickResult, WorldMirror } from '../client/tools/mirror';
 import { roadDef } from '../client/tools/mirror';
 import type { ConstructionTools } from '../client/tools/machine';
@@ -172,7 +172,7 @@ export function initUI(h: UIHandlers): UIHandle {
     const rm = String(f.get('riverMode') ?? 'une');
     const riverMode = rm === 'aucune' || rm === 'plusieurs' ? rm : 'une';
     const hydrology = String(f.get('hydrology') ?? 'mer') === 'aucune' ? 'aucune' : 'mer';
-    h.onNewGameWith?.({ cityName, seed: Number.isFinite(seed) ? seed | 0 : randomSeed(), mapChunks: Number(f.get('mapChunks')) || 8, startMoney: Number(f.get('startMoney')) || 500000, riverMode, hydrology, paliers: f.get('paliers') !== null });
+    h.onNewGameWith?.({ cityName, seed: Number.isFinite(seed) ? seed | 0 : randomSeed(), mapChunks: Number(f.get('mapChunks')) || DEFAULT_MAP_CHUNKS, startMoney: Number(f.get('startMoney')) || 500000, riverMode, hydrology, paliers: f.get('paliers') !== null });
   });
 
   /* ---------- Chargement ---------- */

@@ -20,7 +20,7 @@ export const TERRAIN_GEN_VERSION = 2;
 /** Paramètres de génération du monde (tous bornés par `normalizeParams`). */
 export interface WorldGenParams {
   seed: number;
-  /** Côté de la carte en chunks de 256 m (8..16 => 2..4 km ; 1..32 acceptés pour les tests). */
+  /** Côté de la carte en chunks de 256 m (8..32 => 2..8 km proposés, 16 par défaut ; 1..32 acceptés). */
   mapChunks: number;
   /** Échantillons de hauteur par case de 8 m (1 = 8 m, 2 = 4 m). Défaut 1 (compatible avec world.ts). */
   samplesPerTile: 1 | 2;

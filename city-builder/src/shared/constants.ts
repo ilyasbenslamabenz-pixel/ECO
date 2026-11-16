@@ -14,8 +14,13 @@ export const TILE_SIZE = 8;
 export const CHUNK_TILES = 32;
 /** Taille d'un chunk en mètres. */
 export const CHUNK_SIZE = TILE_SIZE * CHUNK_TILES; // 256 m
-/** Taille par défaut de la carte, en chunks par côté. */
-export const DEFAULT_MAP_CHUNKS = 8; // 8 x 256 m = 2 048 m
+/**
+ * Taille par défaut d'une NOUVELLE carte, en chunks par côté : 16 x 256 m = 4 096 m (4 fois la surface de l'ancienne
+ * carte de 2 km). Les sauvegardes gardent leur propre taille (`params.mapChunks`, terrain régénéré au chargement).
+ */
+export const DEFAULT_MAP_CHUNKS = 16;
+/** Taille maximale proposée à l'écran Nouvelle partie : 32 x 256 m = 8 192 m (16 fois l'ancienne surface). */
+export const MAX_MAP_CHUNKS = 32;
 /** Résolution de la carte de hauteurs : un échantillon par coin de case. */
 export const HEIGHT_SAMPLES_PER_TILE = 1;
 /** Niveau de l'eau (mètres). */

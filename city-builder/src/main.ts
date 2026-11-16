@@ -15,7 +15,7 @@ import { powerView } from './shared/power/view';
 import { waterView } from './render/water-network/view';
 import { bootDone, bootStarted, deviceProfile, isSafeMode, safeModeReason, setSafeMode } from './render/device-profile';
 import { imageLimits } from './render/image-cap';
-import { DEFAULT_START_MONEY, GAME_NAME, PROTOCOL_VERSION, type SimSpeed } from './shared/constants';
+import { DEFAULT_MAP_CHUNKS, DEFAULT_START_MONEY, GAME_NAME, PROTOCOL_VERSION, type SimSpeed } from './shared/constants';
 import { validateCatalog } from './shared/catalog';
 import type { CommandError, NewGameParams, SaveFile, SimStats } from './shared/contracts';
 import { terrainBounds } from './shared/terrain-gen';
@@ -789,7 +789,7 @@ async function boot(): Promise<void> {
       const snap = waitSnapshot();
       await b.send('newGame', {
         seed: p.seed ?? (params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 2 ** 31) | 0),
-        mapChunks: p.mapChunks ?? 8,
+        mapChunks: p.mapChunks ?? (params.has('chunks') ? Number(params.get('chunks')) | 0 : DEFAULT_MAP_CHUNKS),
         startMoney: p.startMoney ?? DEFAULT_START_MONEY,
         cityName: p.cityName ?? 'Nouvelle-Aube',
         startHour: params.has('h') ? Number(params.get('h')) : 9,
@@ -821,7 +821,7 @@ async function boot(): Promise<void> {
       ui.hideMenu();
       ui.setLoading(0.55, 'Scène de démonstration : génération du terrain…');
       let snap = waitSnapshot();
-      await b.send('newGame', { seed: DEMO_SEED, mapChunks: 8, startMoney: DEMO_START_MONEY, cityName: asGame ? 'Meknes City' : 'Aube-sur-Mer (démonstration)', startHour: params.has('h') ? Number(params.get('h')) : 10.5, startMonth: START_MONTH });
+      await b.send('newGame', { seed: DEMO_SEED, mapChunks: params.has('chunks') ? Number(params.get('chunks')) | 0 : 8, startMoney: DEMO_START_MONEY, cityName: asGame ? 'Meknes City' : 'Aube-sur-Mer (démonstration)', startHour: params.has('h') ? Number(params.get('h')) : 10.5, startMonth: START_MONTH });
       await snap;
       ui.setLoading(0.65, 'Construction de la ville (routes, ponts, bâtiments, habitants)…');
       snap = waitSnapshot();
