@@ -1453,3 +1453,5 @@ body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !impor
   body.ui-rail #problems .pb-ok { font-size: 12px; font-weight: 650; color: var(--ok); padding: 4px 6px; }
 }
 @media (max-width: 760px) { body.ui-rail #mm-col { display: contents; } }
+/* Intitulés de groupes de la barre d'outils : masqués quand une sous-barre ou les options d'un outil s'ouvrent juste au-dessus. */
+body.ui-rail.drawer-open #toolbar .tb-grp::after, body.ui-rail.tool-opts #toolbar .tb-grp::after, body.ui-rail.road-drawing #toolbar .tb-grp::after { display: none; }
