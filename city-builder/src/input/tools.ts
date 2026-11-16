@@ -528,19 +528,29 @@ export class ToolController implements IToolController, PointerToolSink {
         } else this.coverage?.hide();
         const v = p.variant >= 0 ? p.asset.variants[p.variant] : undefined;
         const head = `${p.asset.nameFr}${v ? ` · ${v.nameFr}` : ''}`;
-        const snap = (p.proposal.snapped ? ' · façade côté route' : '') + (p.proposal.neighbor ? ' · aligné sur le voisin' : '');
+        const snap = [p.proposal.snapped ? 'Façade côté route' : '', p.proposal.neighbor ? 'aligné sur le voisin' : ''].filter(Boolean).join(' · ');
         const svcR = serviceOf(p.asset) ? `\nRayon d’action : ${fmt(serviceRadius(p.asset))} m${this.coverageOthers.length ? ` · ${this.coverageOthers.length} déjà construit${this.coverageOthers.length > 1 ? 's' : ''} (cercles bleus)` : ''}` : '';
         if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');
-        else tag(`${head}\n${d.machine.moving ? 'Déplacement gratuit' : `${fmt(p.cost)} ¢`}${snap}${svcR}`, p.validity === 'ok' ? 'ok' : 'pending');
+        // Ligne 1 : coût et nom ; ligne 2 : alignement ; puis rayon d'action (équipements de service).
+        else tag(`${d.machine.moving ? 'Déplacement gratuit' : `${fmt(p.cost)} ¢`} · ${head}${snap ? `\n${snap}` : ''}${svcR}${p.message ? `\n${p.message}` : ''}`, p.validity === 'ok' && !p.message ? 'ok' : 'pending');
         break;
       }
       case 'road': {
         this.road.show({ points: p.points, width: roadWidth(p.type), validity: p.points ? p.validity : 'ok', start: p.start, control: p.control, hover: p.hover, arrows: p.type === 'oneway', ...(p.path ? { path: p.path } : {}) });
-        const head = `${fmt(p.length)} m${p.angle ? ` · ${p.angle}` : ''}`;
+        // Ligne 1 : coût · longueur ; ligne 2 : angle · pente moyenne · hauteur (pont) ; refus : cause seule en rouge.
+        let geo = p.angle || '';
+        if (p.points && p.points.length >= 4 && p.length > 1) {
+          const n = p.points.length;
+          const dh = d.heightAt(p.points[n - 2]!, p.points[n - 1]!) - d.heightAt(p.points[0]!, p.points[1]!);
+          const grade = Math.round(Math.abs(dh) / p.length * 100);
+          geo = [geo, `pente ${grade} %`].filter(Boolean).join(' · ');
+        }
+        if (p.elevation) geo = [geo, `hauteur ${p.elevation > 0 ? '+' : ''}${fmt(p.elevation)} m`].filter(Boolean).join(' · ');
+        const head = `${fmt(p.length)} m${geo ? `\n${geo}` : ''}`;
         if (p.mode === 'roundabout') tag(p.message || null, p.validity === 'error' ? 'error' : p.validity === 'pending' ? 'pending' : p.hover ? 'ok' : 'info');
         else if (!p.points) tag(p.message ? `${p.message}${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}${p.chained ? `\n${p.chained} tronçon${p.chained > 1 ? 's' : ''} · Terminer pour arrêter` : ''}` : null, 'info');
         else if (p.validity === 'error') tag(`${head}\n${p.message}`, 'error');
-        else tag(`${head} · ${fmt(p.cost)} ¢${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}`, p.validity === 'ok' ? 'ok' : 'pending');
+        else tag(`${p.validity === 'ok' ? '' : '≈ '}${fmt(p.cost)} ¢ · ${head}${p.hover?.guide ? `\n${p.hover.guide.label}` : ''}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
       }
       case 'grid': {

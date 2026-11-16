@@ -1,0 +1,44 @@
+/* ==================== Retours pendant la construction ====================
+   Chargé après styles.css (scripts/build.mjs) : n'en réutilise que les jetons (:root et thèmes).
+   Étiquette du curseur (#cursor-tag) rendue par src/ui/hud.ts en rangées :
+     .ct-head   ligne 1 : coût · longueur / surface (valeur forte, chiffres tabulaires)
+     .ct-row    lignes suivantes : angle, pente, hauteur, aides (secondaire)
+     .ct-reason refus : cause courte en rouge (dernière ligne)
+   États homogènes (data-state) : ok · attention · refus · info — pastille + filet gauche, sans pictogramme. */
+
+#cursor-tag {
+  --ct-state: var(--accent-2);
+  display: flex; flex-direction: column; gap: 1px;
+  white-space: normal; /* les « \n » entre rangées ne créent pas de ligne vide ; chaque rangée garde pre-line */
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) calc(var(--sp-2) + 2px);
+  border-radius: var(--r-md);
+  border-left: 3px solid var(--ct-state);
+  background: var(--bar);
+  border-color: var(--bar-line);
+  border-left-color: var(--ct-state);
+  box-shadow: var(--bar-shadow);
+  font-size: var(--fs-sm); line-height: 1.35;
+  max-width: min(320px, calc(100vw - 2 * var(--sp-4)));
+  transition: border-color var(--dur-1) var(--ease);
+}
+#cursor-tag[data-state="ok"] { --ct-state: var(--ok); }
+#cursor-tag[data-state="attention"] { --ct-state: var(--warn); }
+#cursor-tag[data-state="refus"] { --ct-state: var(--danger); color: var(--text); }
+#cursor-tag[data-state="info"] { --ct-state: var(--accent-2); }
+
+#cursor-tag .ct-row { display: block; white-space: pre-line; color: var(--muted); font-size: var(--fs-xs); letter-spacing: .01em; }
+#cursor-tag .ct-head { color: var(--text-strong); font-size: var(--fs-sm); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+/* Pastille d'état devant la ligne 1 (lisible sans couleur grâce au texte de la ligne de refus). */
+#cursor-tag .ct-head::before { content: ""; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--ct-state); }
+#cursor-tag .ct-reason { color: var(--danger); font-size: var(--fs-sm); font-weight: 600; }
+#cursor-tag .ct-head.ct-reason { color: var(--danger); }
+#cursor-tag[data-state="attention"] .ct-row:last-child:not(.ct-head) { color: var(--warn); }
+
+/* Message de contrainte de la barre tactile : même code couleur que l'étiquette (refus rouge, attention ambre). */
+#tc-reason { font-weight: 600; font-size: var(--fs-sm); }
+#tc-reason.warn::before, #tc-reason:not(.warn)::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: currentColor; }
+
+:root[data-theme="clair"] #cursor-tag { background: var(--glass-2); border-color: var(--line-2); border-left-color: var(--ct-state); }
+:root[data-theme="clair"] #cursor-tag[data-state="attention"] .ct-row:last-child:not(.ct-head) { color: #8a5a00; }
+
+@media (prefers-reduced-motion: reduce) { #cursor-tag { transition: none; } }
