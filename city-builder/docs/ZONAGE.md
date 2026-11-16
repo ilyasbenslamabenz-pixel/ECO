@@ -177,6 +177,48 @@ près d'une route impose son repère à 6 m autour de lui ; une case de la trame
 du monde qu'une voisine est peinte avec elle (rare, rues en biais) ; l'aimantation pose toujours la façade sur la
 ligne des façades de la route (pas sur les lignes recalées d'un ancien bâtiment intérieur voisin).
 
+## 2 quater. Tracé de route calé sur le quadrillage
+
+Retour joueur (outil Routes, aperçu d'un tracé de 56 m vu dans l'axe, quadrillage blanc au sol) : « le tracé n'est
+pas au milieu du quadrillage ». **Cause** : l'accroche à la grille mettait le premier point sur une intersection des
+axes du monde — donc l'**axe** de la route sur une ligne — alors que la trame d'une route posée (§2 bis) part de la
+**ligne des façades** (demi-largeur + 0,6 m) ; aucune largeur ne tombe juste (2 × (demi-largeur + 0,6) n'est jamais
+un multiple de 8 m : rue 13,6 m, avenue 24,2 m, boulevard 34 m…). De plus le départ déplacé faisait sortir la
+direction de la tolérance de l'aimant (7°) : tracé à 7° des lignes. Une fois la route posée, sa trame remplaçait
+celle qui était affichée (écart jusqu'à 3,9 m).
+
+**Mesure** (`tests/e2e/trace-grille.mjs`, `docs/captures-trace/mesures-{avant,apres}.json` ; lignes affichées
+`__aube.gridLinesAt`, tracé « joueur » légèrement en biais et hors trame) :
+
+| cas | angle tracé / lignes | façade → ligne (max) | extrémités | après pose : lignes déplacées |
+|---|---|---|---|---|
+| terrain libre, rue | 7,0° → **0°** | 3,6 m → **0** | 0 / 3,4 m → **0 / 0** | 3,6 m → **0** |
+| terrain libre, avenue | 0° → 0° | 3,9 m → **0** | 0 / 0 → 0 / 0 | 3,9 m → **0** |
+| terrain libre, boulevard | 7,0° → **0°** | 3,5 m → **0** | 0 / 0 → 0 / 0 | 3,5 m → **0** |
+| parallèle à une rue | 0° → 0° | 3,0 m → **0** | 0 / 0 → 0 / 0 | 3,0 m → **0** |
+| perpendiculaire depuis une rue | 0° → 0° | 2,5 m → **0** | 1,2 / 3,8 m → 1,2 / **0** | 3,1 m → **0** |
+
+(Départ accroché à une route existante : il reste sur l'axe de cette route, d'où 1,2 m restant sur cette extrémité.)
+
+**Correction** :
+- `src/client/tools/road-align.ts` (pur) : aimantation du tracé **droit** au quadrillage affiché avant le tracé
+  (champ du miroir) — direction parallèle / perpendiculaire aux lignes si l'écart est < 8° ; position en travers :
+  la ligne des façades d'un côté sur une ligne affichée (côté de la route existante pour une rue parallèle : cases
+  entières entre les deux rues ; sinon le décalage le plus petit, ≤ 4 m) ; extrémités libres sur les lignes
+  transversales (longueur en cases entières). Priorités conservées : nœud accroché fixe, point accroché à un tronçon
+  qui ne fait que glisser le long de ce tronçon (rue perpendiculaire), ligne guide d'îlot, angles à 45° (hors
+  tolérance : inchangés). Toutes largeurs (la ligne des façades suit la demi-largeur du type choisi).
+- Activée par défaut avec l'**aimant** (option « grille » du tracé) ; aimant coupé ou **Maj** (angles par pas de
+  15°) : tracé libre. En mode courbe, le premier point reste sur une intersection de la grille (inchangé).
+- Pendant le tracé, le quadrillage affiché est celui **d'après la pose** : la route aperçue est ajoutée au champ
+  (`fieldWithPreview`, `src/client/tools/road-grid.ts`) ; seule la zone qu'elle touche est recalculée dans la
+  texture (`GridFieldTexture`, `extra`). L'axe est donc au milieu de la bande comprise entre les deux lignes des
+  façades, sur lesquelles commencent les rangées de cases des deux côtés ; après la pose les lignes ne bougent pas
+  (écart mesuré 0,00 m).
+
+Captures avant / après (même partie, même tracé) : `docs/captures-trace/<cas>-{axe,dessus}-{avant,apres}.png`.
+Tests : `tests/construction/road-align.test.ts`, `tests/construction/tools.test.ts`. Sauvegardes inchangées.
+
 ## 3. Demande (modèle simple, prêt pour l'économie)
 
 Entrées lues chaque heure dans la simulation de base : population, actifs (`laborForce` de la démographie), emplois

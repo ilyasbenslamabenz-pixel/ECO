@@ -1,0 +1,389 @@
+{
+ "suffix": "apres",
+ "site": {
+  "X": 0,
+  "Z": 3
+ },
+ "cases": {
+  "libre-rue": {
+   "type": "street",
+   "points": [
+    -24,
+    161.2,
+    32,
+    161.2
+   ],
+   "longueur": 56,
+   "accroche": [
+    "free",
+    "angle"
+   ],
+   "angleMax": 0,
+   "facadeMax": 0,
+   "bordMax": 0.6,
+   "extremites": [
+    0,
+    0
+   ],
+   "symetrieMax": 0,
+   "apresPose": {
+    "angleMax": 0,
+    "ecartMax": 0
+   },
+   "rows": [
+    {
+     "t": 0.25,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.25,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    }
+   ]
+  },
+  "libre-avenue": {
+   "type": "avenue",
+   "points": [
+    -24,
+    267.9,
+    32,
+    267.9
+   ],
+   "longueur": 56,
+   "accroche": [
+    "free",
+    "angle"
+   ],
+   "angleMax": 0,
+   "facadeMax": 0,
+   "bordMax": 0.6,
+   "extremites": [
+    0,
+    0
+   ],
+   "symetrieMax": 0,
+   "apresPose": {
+    "angleMax": 0,
+    "ecartMax": 0
+   },
+   "rows": [
+    {
+     "t": 0.25,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.25,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    }
+   ]
+  },
+  "libre-boulevard": {
+   "type": "boulevard",
+   "points": [
+    -24,
+    214.8,
+    32,
+    214.8
+   ],
+   "longueur": 56,
+   "accroche": [
+    "free",
+    "angle"
+   ],
+   "angleMax": 0,
+   "facadeMax": 0,
+   "bordMax": 0.6,
+   "extremites": [
+    0,
+    0
+   ],
+   "symetrieMax": 0,
+   "apresPose": {
+    "angleMax": 0,
+    "ecartMax": 0
+   },
+   "rows": [
+    {
+     "t": 0.25,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.25,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    }
+   ]
+  },
+  "parallele-rue": {
+   "type": "street",
+   "points": [
+    -32,
+    48.6,
+    24,
+    48.6
+   ],
+   "longueur": 56,
+   "accroche": [
+    "free",
+    "angle"
+   ],
+   "angleMax": 0,
+   "facadeMax": 0,
+   "bordMax": 0.6,
+   "extremites": [
+    0,
+    0
+   ],
+   "symetrieMax": 0,
+   "apresPose": {
+    "angleMax": 0,
+    "ecartMax": 0
+   },
+   "rows": [
+    {
+     "t": 0.25,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.25,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    }
+   ]
+  },
+  "perpendiculaire-rue": {
+   "type": "street",
+   "points": [
+    70.8,
+    3,
+    70.8,
+    56
+   ],
+   "longueur": 53,
+   "accroche": [
+    "edge",
+    "angle"
+   ],
+   "angleMax": 0,
+   "facadeMax": 0,
+   "bordMax": 0.6,
+   "extremites": [
+    1.2,
+    0
+   ],
+   "symetrieMax": 0,
+   "apresPose": {
+    "angleMax": 0,
+    "ecartMax": 0
+   },
+   "rows": [
+    {
+     "t": 0.25,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.25,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.5,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": -1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    },
+    {
+     "t": 0.75,
+     "side": 1,
+     "kind": "route",
+     "angle": 0,
+     "facade": 0,
+     "bord": 0.6
+    }
+   ]
+  }
+ }
+}

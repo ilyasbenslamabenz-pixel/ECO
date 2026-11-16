@@ -379,12 +379,12 @@ export class GridField {
 
   /**
    * Remplit une texture RGBA (angle de T, pu, pv, intensité + 2 si axes du monde) de `n × n` texels de `texel` m,
-   * coin (x0, z0), lignes [j0, j1[.
+   * coin (x0, z0), lignes [j0, j1[, colonnes [i0, i1[.
    */
-  fill(out: Float32Array, x0: number, z0: number, n: number, texel: number, j0 = 0, j1 = n): void {
+  fill(out: Float32Array, x0: number, z0: number, n: number, texel: number, j0 = 0, j1 = n, i0 = 0, i1 = n): void {
     for (let j = j0; j < j1; j++) {
       const z = z0 + (j + 0.5) * texel;
-      for (let i = 0; i < n; i++) {
+      for (let i = i0; i < i1; i++) {
         const L = this.linesAt(x0 + (i + 0.5) * texel, z);
         const o = (j * n + i) * 4;
         out[o] = Math.atan2(L.tz, L.tx);

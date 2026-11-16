@@ -243,6 +243,13 @@ export class RoadDraft {
   control: SnapPoint | null = null;
   /** Point courant sous le curseur (déjà accroché). */
   hover: SnapPoint | null = null;
+  /**
+   * Départ recalé par l'aimantation au quadrillage (src/client/tools/road-align.ts) pour le tracé en cours vers
+   * `hover` ; null : départ tel que cliqué. Utilisé par l'aperçu et la commande.
+   */
+  startAdj: SnapPoint | null = null;
+  /** Départ effectif du tracé. */
+  get from(): SnapPoint | null { return this.startAdj ?? this.start; }
   /** Hauteur imposée (m) : > 0 viaduc / passage supérieur, < 0 tranchée / tunnel. Conservée d'un tracé à l'autre. */
   elevation = 0;
   /** Ouvrage quand le tracé traverse une retenue ou un lac créé en jeu (choisi dans la barre d'options). */
@@ -256,7 +263,7 @@ export class RoadDraft {
     return this.elevation;
   }
 
-  reset(): void { this.phase = 'idle'; this.start = null; this.control = null; this.chained = 0; }
+  reset(): void { this.phase = 'idle'; this.start = null; this.startAdj = null; this.control = null; this.chained = 0; }
 
   /** Clic principal. Renvoie 'build' quand le tracé est complet et doit être envoyé. */
   click(p: SnapPoint): 'build' | 'continue' {
@@ -274,7 +281,7 @@ export class RoadDraft {
   chained = 0;
 
   /** Après une construction réussie : le tracé continue depuis l'extrémité (enchaînement). */
-  chainFrom(end: SnapPoint): void { this.start = end; this.control = null; this.phase = 'start'; this.chained++; }
+  chainFrom(end: SnapPoint): void { this.start = end; this.startAdj = null; this.control = null; this.phase = 'start'; this.chained++; }
 
   /** Retour d'une étape (clic droit / Échap). Renvoie false si rien à annuler. */
   back(): boolean {
@@ -285,7 +292,7 @@ export class RoadDraft {
 
   /** Polyligne du tracé courant (vers `hover`), ou null si incomplet. */
   points(): number[] | null {
-    const a = this.start;
+    const a = this.from;
     const b = this.hover;
     if (!a || !b || this.phase === 'idle' || this.mode === 'roundabout') return null;
     if (Math.hypot(b.x - a.x, b.z - a.z) < 4) return null;
@@ -304,7 +311,7 @@ export class RoadDraft {
    * contrôle quadratique, convertie en Bézier cubique par la simulation) ; sinon un tronçon droit.
    */
   command(): { points: number[]; control?: [number, number]; elevation?: number; waterCrossing?: WaterCrossing } | null {
-    const a = this.start;
+    const a = this.from;
     const b = this.hover;
     if (!a || !b || this.phase === 'idle' || this.mode === 'roundabout' || Math.hypot(b.x - a.x, b.z - a.z) < 4) return null;
     const elev = { ...(this.elevation ? { elevation: this.elevation } : {}), ...(this.waterCrossing !== 'pont' ? { waterCrossing: this.waterCrossing } : {}) };

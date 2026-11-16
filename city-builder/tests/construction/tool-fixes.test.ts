@@ -81,7 +81,9 @@ test('caméra : deux doigts glissés verticalement = déplacement ; inclinaison 
 
 test('annulation d\'un quadrillage : la rue existante découpée par le quadrillage est conservée', async () => {
   const { m, tools, notes } = await world();
-  // Rue existante sur le bord ouest du futur quadrillage, qui en couvre le début (z -96 → -56).
+  // Rue existante sur le bord ouest du futur quadrillage, qui en couvre le début (z -96 → -56) : tracé exact, sans
+  // l'aimantation au quadrillage affiché (qui décalerait la rue pour centrer ses cases).
+  tools.gridSnap = false;
   await road(tools, -304, -200, -304, -56);
   assert.equal(m.edges.size, 1);
   const before = [...m.edges.values()].reduce((s, e) => s + e.length, 0);

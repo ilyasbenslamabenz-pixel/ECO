@@ -402,12 +402,13 @@ test('machine (VRAIE simulation) : rue courbe = une vraie Bézier ; aimantation 
   assert.ok(Math.abs([...m.buildings.values()][0]!.rot - p.proposal.rot) < 1e-6);
 });
 
-test('route : accroche à la grille de construction (premier point, longueur en cases de 8 m)', async () => {
+test('route : accroche à la grille de construction (courbe : premier point sur une intersection, longueur en cases de 8 m)', async () => {
   const sim = flatMock();
   const { tools } = setup(sim, sim.catalog);
   tools.gridSnap = true;
   sim.start(0);
   tools.setTool('road', { roadType: 'street' });
+  tools.setRoadMode('curve');
   tools.hover({ x: -61, z: 3 }, null);
   await tools.primary();
   assert.equal(tools.preview.kind === 'road' && tools.preview.start?.x, -64);
@@ -418,4 +419,29 @@ test('route : accroche à la grille de construction (premier point, longueur en 
   assert.ok(pts, 'aperçu de route');
   assert.equal(pts![pts!.length - 2], 56, 'extrémité sur la grille (longueur 120 m)');
   assert.equal(pts![pts!.length - 1], 0);
+});
+
+test('route droite : aimantation au quadrillage affiché (façade sur une ligne, extrémités sur les lignes, Maj = sans)', async () => {
+  const sim = flatMock();
+  const { tools } = setup(sim, sim.catalog);
+  tools.gridSnap = true;
+  sim.start(0);
+  tools.setTool('road', { roadType: 'street' });
+  tools.hover({ x: -61, z: 3 }, null);
+  await tools.primary();
+  tools.hover({ x: -4.5, z: 6 }, null); // ≈ 3° de l'axe est-ouest
+  await settle();
+  const pts = tools.preview.kind === 'road' ? tools.preview.points : null;
+  assert.ok(pts, 'aperçu de route');
+  const [x0, z0, x1, z1] = pts! as [number, number, number, number];
+  const gap = (v: number): number => { const m = ((v % 8) + 8) % 8; return Math.min(m, 8 - m); };
+  assert.ok(Math.abs(z1 - z0) < 1e-9, 'direction est-ouest');
+  assert.ok(Math.min(gap(z0 + 6.8), gap(z0 - 6.8)) < 1e-9, `ligne des façades sur une ligne (axe z = ${z0})`);
+  assert.ok(gap(x0) < 1e-9 && gap(x1) < 1e-9 && Math.abs(x1 - x0 - 56) < 1e-9, `extrémités ${x0} → ${x1}`);
+  // Maj (angle par pas de 15°) : tracé libre, sans calage sur le quadrillage.
+  tools.angleSnap = true;
+  tools.hover({ x: -4.5, z: 6 }, null);
+  await settle();
+  const free = tools.preview.kind === 'road' ? tools.preview.points : null;
+  assert.equal(free![0], -61);
 });
