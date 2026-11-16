@@ -1206,18 +1206,36 @@ export class Simulation {
 
   /* ------------------------------ Tick ------------------------------ */
 
+  /** Tick (compteur) où la passe quotidienne étalée a commencé : sa première étape attend le tick suivant. */
+  private dailyBegunTick = -1;
+
+  /** Suites de la passe quotidienne : assiettes fiscales du jour, occupants transmis au trafic. */
+  private afterDaily(): void {
+    const demo = this.demography;
+    if (!demo) return;
+    const tb = demo.computeTaxBase(false);
+    Object.assign(this.economy.taxBase, tb.taxBase);
+    this.economy.serviceWorkers = tb.serviceWorkers;
+    this.economy.setResidentialEduBase(tb.residentialByEdu);
+    this.trafficBuildingsDirty = true;
+  }
+
+  /** Termine la passe quotidienne étalée en cours (avant une sauvegarde : état cohérent, curseur non sauvegardé). */
+  finishDailyPass(): void {
+    const demo = this.demography;
+    if (demo?.dailyPending) { demo.finishDaily(); this.afterDaily(); }
+  }
+
   private readonly onEvent = (type: number): void => {
     const now = this.clock.totalMinutes;
     const demo = this.demography;
     switch (type) {
       case SimEvent.DayStart:
         if (demo) {
-          demo.daily(now, this.economy.taxRates.residential);
-          const tb = demo.computeTaxBase(false);
-          Object.assign(this.economy.taxBase, tb.taxBase);
-          this.economy.serviceWorkers = tb.serviceWorkers;
-          this.economy.setResidentialEduBase(tb.residentialByEdu);
-          this.trafficBuildingsDirty = true;
+          // Grande ville : passe quotidienne étalée sur les ticks suivants (`stepDaily` dans `tick`), suites appliquées
+          // à la fin de la passe ; sinon exécutée tout de suite, comme avant.
+          if (demo.dailyPending) { demo.finishDaily(); this.afterDaily(); }
+          if (demo.beginDaily(now, this.economy.taxRates.residential)) this.dailyBegunTick = this.tickCount; else this.afterDaily();
         }
         this.plugins.onDayStart();
         break;
@@ -1329,6 +1347,8 @@ export class Simulation {
     this.scheduler.runDue(now, this.onEvent);
     const demo = this.demography;
     if (demo) {
+      // Passe quotidienne étalée : une étape par tick, à partir du tick qui suit minuit (minuit garde les modules).
+      if (demo.dailyPending && this.dailyBegunTick !== this.tickCount && demo.stepDaily()) this.afterDaily();
       demo.tick(now);
       demo.drainTrips(TRIPS_PER_TICK, this.sendTrip);
     }
@@ -1912,6 +1932,9 @@ export class Simulation {
   /* ---------------------------- Sauvegarde ---------------------------- */
 
   toSave(): SaveFileV2 & PluginSaveField & TerrainEditsSaveField {
+    // Passe quotidienne étalée en cours : terminée avant d'écrire (le curseur n'est pas sauvegardé ; la partie qui
+    // sauvegarde et celle qui recharge se poursuivent donc à l'identique).
+    this.finishDailyPass();
     const save: SaveFileV2 & PluginSaveField & TerrainEditsSaveField = {
       format: SAVE_FORMAT_ID,
       version: CURRENT_SAVE_VERSION,

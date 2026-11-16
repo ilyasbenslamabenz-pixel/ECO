@@ -161,6 +161,10 @@ export class CityServices {
   private aAge = new Float32Array(0);
   private aRes = new Float32Array(0);
   private aOwn = new Float32Array(0);
+  /** Change à chaque remise à zéro des agrégats par logement (calcul quotidien étalé : reprise si recalculés entre-temps). */
+  private derivedGen = 0;
+  /** Calcul quotidien étalé en cours (`dailyBegin` / `dailyStep`). */
+  private dp: { now: number; stage: number; prepared: boolean; cursor: number; n: number; gen: number; sick: number } | null = null;
   private readonly q: number[] = [];
   /** Rapport mis en cache (recalculé à chaque événement ou chaque heure de jeu : le rapport part ≈ 1 fois/s). */
   private reportCache: { key: string; r: ServicesReport } | null = null;
@@ -181,7 +185,7 @@ export class CityServices {
   reset(): void {
     this.recs.clear(); this.burningIds.clear(); this.ruinIds.clear(); this.damagedIds.clear(); this.engaged.clear();
     this.startedAt = -1; this.month = zero(); this.lastMonth = zero(); this.recent = []; this.events.length = 0;
-    this.derivedStale = true; this.incidentsToday = 0; this.sickNow = 0; this.lastDailyNow = 0; this.reportCache = null; this.version++;
+    this.derivedStale = true; this.incidentsToday = 0; this.sickNow = 0; this.lastDailyNow = 0; this.reportCache = null; this.dp = null; this.version++;
   }
 
   /* ------------------------------ Accès ------------------------------ */
@@ -219,11 +223,14 @@ export class CityServices {
   ruinList(): number[] { return [...this.ruinIds]; }
 
   onBuildingAdded(id: number, now: number): void {
+    // Index des bâtiments changés : un calcul quotidien étalé en cours reprend ses agrégats.
+    this.derivedGen++;
     const r = this.rec(id);
     r.builtAt = Math.floor(now);
   }
 
   onBuildingRemoved(id: number): void {
+    this.derivedGen++;
     const r = this.recs.get(id);
     if (r && r.station >= 0 && r.arrival >= 0) this.release(r.station);
     this.recs.delete(id); this.burningIds.delete(id); this.ruinIds.delete(id); this.damagedIds.delete(id);
@@ -249,11 +256,24 @@ export class CityServices {
    * risque d'incendie, santé ; met à jour la criminalité (inertie) si `advance`. Renvoie rien ; écrit les `Rec`.
    */
   private computeDerived(now: number, advance: boolean): void {
-    const h = this.host, t = this.tuning, b = h.ctx.buildings, n = b.count;
-    const c = h.citizens.col, hh = h.households;
+    this.prepareDerived();
+    this.accumulateDerived(now, 0, Infinity);
+    this.finishDerived(now, advance);
+  }
+
+  /** Agrégats par logement remis à zéro (début du calcul des valeurs dérivées). */
+  private prepareDerived(): void {
+    const b = this.host.ctx.buildings, n = b.count;
     this.ensureBuffers(b.capacity);
     this.aLabor.fill(0, 0, n); this.aUnemp.fill(0, 0, n); this.aHh.fill(0, 0, n); this.aDistress.fill(0, 0, n); this.aAge.fill(0, 0, n); this.aRes.fill(0, 0, n);
-    for (let i = 0; i < h.citizens.count; i++) {
+    this.derivedGen++;
+  }
+
+  /** Agrégats par logement des citoyens d'index [from, to) ; renvoie l'index où la boucle s'est arrêtée. */
+  private accumulateDerived(now: number, from: number, to: number): number {
+    const h = this.host, b = h.ctx.buildings, c = h.citizens.col;
+    let i = from;
+    for (; i < h.citizens.count && i < to; i++) {
       const bi = b.indexOf(c.home[i]!);
       if (bi < 0) continue;
       const age = h.ageOf(i, now);
@@ -261,6 +281,13 @@ export class CityServices {
       this.aRes[bi]! += w; this.aAge[bi]! += age * w;
       if (age >= 18 && age < 64 && c.school[i]! < 0) { this.aLabor[bi]! += w; if (c.job[i]! < 0) this.aUnemp[bi]! += w; }
     }
+    return i;
+  }
+
+  /** Fin du calcul des valeurs dérivées : ménages, criminalité (inertie si `advance`), risque, santé. */
+  private finishDerived(now: number, advance: boolean): void {
+    const h = this.host, t = this.tuning, b = h.ctx.buildings, n = b.count;
+    const hh = h.households;
     for (let k = 0; k < hh.count; k++) {
       const bi = b.indexOf(hh.col.home[k]!);
       if (bi < 0) continue;
@@ -316,10 +343,79 @@ export class CityServices {
    * criminalité, risque, santé, délits du jour, maladies (début, guérison), réparations et reconstructions privées.
    */
   daily(now: number): void {
+    this.dailyBegin(now);
+    this.dailyStep(Infinity);
+  }
+
+  /**
+   * Calcul quotidien étalé (grandes villes) : `dailyBegin`, puis `dailyStep(n)` à chaque tick (n lignes de citoyens par
+   * étape : agrégats par logement, puis maladies) jusqu'à ce qu'il renvoie vrai. Même résultat que `daily` quand rien ne
+   * change entre deux étapes ; bâtiments modifiés ou agrégats recalculés entre-temps : agrégats repris depuis le début.
+   */
+  dailyBegin(now: number): void {
     this.lastDailyNow = now;
-    const h = this.host, t = this.tuning, b = h.ctx.buildings;
-    this.computeDerived(now, true);
+    this.dp = { now, stage: 0, prepared: false, cursor: 0, n: 0, gen: 0, sick: 0 };
+  }
+
+  dailyStep(rows: number): boolean {
+    const dp = this.dp;
+    if (!dp) return true;
+    const h = this.host, b = h.ctx.buildings, now = dp.now;
+    if (dp.stage === 0) {
+      if (!dp.prepared || dp.gen !== this.derivedGen || dp.n !== b.count) { this.prepareDerived(); dp.prepared = true; dp.cursor = 0; dp.n = b.count; dp.gen = this.derivedGen; }
+      dp.cursor = this.accumulateDerived(now, dp.cursor, dp.cursor + rows);
+      if (dp.cursor < h.citizens.count) return false;
+      dp.stage = 2;
+      if (rows !== Infinity) return false;
+    }
+    if (dp.stage === 2) {
+      // Agrégats recalculés entre-temps (bâtiment ajouté ou retiré) : reprise des agrégats.
+      if (dp.gen !== this.derivedGen || dp.n !== b.count) { dp.stage = 0; dp.prepared = false; return false; }
+      this.finishDerived(now, true);
+      this.dailyIncidents(now);
+      dp.stage = 1; dp.cursor = 0;
+      if (rows !== Infinity) return false;
+    }
+    // Maladies : guérison, puis nouveaux cas (logement : santé du jour). Tirages par empreinte (citoyen, jour) : sans PRNG.
+    const t = this.tuning, c = h.citizens.col;
     const ramp = this.ramp(now);
+    const day = Math.floor(now / MINUTES_PER_DAY);
+    let sick = dp.sick;
+    let i = dp.cursor;
+    for (; i < h.citizens.count && i < dp.cursor + rows; i++) {
+      if (c.sick[i]! > 0) { c.sick[i]!--; if (c.sick[i]! > 0) sick += h.weightOf(i); continue; }
+      if (ramp <= 0) continue;
+      const bi = b.indexOf(c.home[i]!);
+      if (bi < 0) continue;
+      const r = this.recs.get(b.id[bi]!);
+      const health = r && r.health >= 0 ? r.health : 70;
+      if (hash01(c.id[i]!, day, SALT_SICK) < sicknessChance(t, health, h.ageOf(i, now), ramp) * this.eventSickFactor) {
+        c.sick[i] = h.coverageQuality(SVC.Health, bi) > 0 ? t.maladieDureeSoins : t.maladieDureeSans;
+        const w = h.weightOf(i);
+        this.month.sickCases += w;
+        sick += w;
+      }
+    }
+    dp.sick = sick; dp.cursor = i;
+    if (i < h.citizens.count) return false;
+    this.dp = null;
+    this.sickNow = sick;
+    // Réparations terminées, reconstructions par les promoteurs (lots privés).
+    for (const id of [...this.damagedIds]) { const r = this.recs.get(id); if (!r || r.damagedUntil <= now) { this.damagedIds.delete(id); if (r) r.damagedUntil = 0; } }
+    for (const id of [...this.ruinIds]) {
+      const r = this.recs.get(id);
+      if (r && h.isPrivate(id) && now - r.ruinedAt >= t.reconstructionPriveeJours * MINUTES_PER_DAY) {
+        this.rebuild(id, now);
+        this.push({ kind: 'rebuild', id, minute: now, level: 'info', text: `Reconstruit par son promoteur : ${this.assetName(id)} (${this.placeName(id)})` });
+      }
+    }
+    this.version++;
+    return true;
+  }
+
+  /** Délits du jour (après les valeurs dérivées du jour). */
+  private dailyIncidents(now: number): void {
+    const h = this.host, t = this.tuning, b = h.ctx.buildings;
     const day = Math.floor(now / MINUTES_PER_DAY);
     // Délits du jour.
     let incidents = 0, topId = -1, topN = 0, topCrime = 0;
@@ -345,34 +441,6 @@ export class CityServices {
         this.push({ kind: 'crime', id: topId, minute: now, level, text: `Délits signalés aujourd'hui : ${incidents} — le plus touché : ${this.assetName(topId)} (${where}, criminalité ${Math.round(topCrime)})${h.coverageQuality(SVC.Police, bi) > 0 ? '' : ' — aucun commissariat ne couvre ce secteur'}` }, false);
       }
     }
-    // Maladies : guérison, puis nouveaux cas (logement : santé du jour).
-    const c = h.citizens.col;
-    let sick = 0;
-    for (let i = 0; i < h.citizens.count; i++) {
-      if (c.sick[i]! > 0) { c.sick[i]!--; if (c.sick[i]! > 0) sick += h.weightOf(i); continue; }
-      if (ramp <= 0) continue;
-      const bi = b.indexOf(c.home[i]!);
-      if (bi < 0) continue;
-      const r = this.recs.get(b.id[bi]!);
-      const health = r && r.health >= 0 ? r.health : 70;
-      if (hash01(c.id[i]!, day, SALT_SICK) < sicknessChance(t, health, h.ageOf(i, now), ramp) * this.eventSickFactor) {
-        c.sick[i] = h.coverageQuality(SVC.Health, bi) > 0 ? t.maladieDureeSoins : t.maladieDureeSans;
-        const w = h.weightOf(i);
-        this.month.sickCases += w;
-        sick += w;
-      }
-    }
-    this.sickNow = sick;
-    // Réparations terminées, reconstructions par les promoteurs (lots privés).
-    for (const id of [...this.damagedIds]) { const r = this.recs.get(id); if (!r || r.damagedUntil <= now) { this.damagedIds.delete(id); if (r) r.damagedUntil = 0; } }
-    for (const id of [...this.ruinIds]) {
-      const r = this.recs.get(id);
-      if (r && h.isPrivate(id) && now - r.ruinedAt >= t.reconstructionPriveeJours * MINUTES_PER_DAY) {
-        this.rebuild(id, now);
-        this.push({ kind: 'rebuild', id, minute: now, level: 'info', text: `Reconstruit par son promoteur : ${this.assetName(id)} (${this.placeName(id)})` });
-      }
-    }
-    this.version++;
   }
 
   /** Mortalité : multiplicateur d'un citoyen malade (soigné ou non). */

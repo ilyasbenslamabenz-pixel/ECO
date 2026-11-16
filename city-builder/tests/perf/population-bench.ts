@@ -10,6 +10,9 @@
  *    attribués par la recherche d'emploi de la démographie (sans le plafond quotidien) : on mesure une ville
  *    « installée », pas sa croissance.
  * 4. Mesures : passe quotidienne (`DayStart`), tick ordinaire, rapport, clôture mensuelle, sauvegarde.
+ * `--sans-etalement` / `--sans-fusion` : passe quotidienne d'un seul tenant / pas de fusion des ménages (comparaison).
+ * `--croissance` : ville vide peuplée par injections toutes les 6 h pendant `--jours-croissance=20` jours (pic par jour).
+ * Mesure aussi une journée complète tick par tick (pic, moyenne, p99, ticks > 16 ms / 50 ms).
  * Imprime un tableau lisible puis une ligne JSON (`--json` : la ligne JSON seule).
  */
 import { readFileSync } from 'node:fs';
@@ -164,14 +167,22 @@ const rng = sim.rng;
 const now0 = sim.clock.totalMinutes;
 // `--individuel` : simulation agrégée désactivée (comparaison) ; sinon règle automatique (seuil, poids croissant).
 if (args.includes('--individuel')) d.aggregateThreshold = Infinity;
-const tp = performance.now();
-{
+// `--sans-etalement` : passe quotidienne d'un seul tenant (comparaison) ; `--sans-fusion` : pas de fusion des ménages.
+if (args.includes('--sans-etalement')) d.dailySpreadMinRows = Infinity;
+if (args.includes('--sans-fusion') && typeof d.mergeCap === 'function') d.mergeCap = (): number => 1;
+// Création directe de ménages (même composition que l'immigration, même règle de poids) dans les logements libres, à
+// partir du bâtiment `cursor`, puis embauche de leurs actifs par la recherche d'emploi de la démographie.
+let cursor = 0;
+const inject = (count: number, hireNow = true): void => {
   const b = sim.buildings;
-  outer: for (let i = 0; i < b.count; i++) {
-    let free = demo.freeHousingAt(i);
-    const home = b.id[i]!;
+  const goal = demo.population + count;
+  const first = demo.citizens.count;
+  const now = sim.clock.totalMinutes;
+  outer: for (; cursor < b.count; cursor++) {
+    let free = demo.freeHousingAt(cursor);
+    const home = b.id[cursor]!;
     while (free > 0) {
-      if (demo.population >= TARGET) break outer;
+      if (demo.population >= goal) break outer;
       const kind = rng.weighted([0.3, 0.25, 0.32, 0.06, 0.07]);
       const adults = kind === 0 || kind === 3 ? 1 : 2;
       let kids = kind === 2 ? rng.int(1, 3) : kind === 3 ? rng.int(1, 2) : 0;
@@ -181,24 +192,37 @@ const tp = performance.now();
       while (adults + kids > free && kids > 0) kids--;
       if (adults + kids > free) break;
       const baseAge = kind === 4 ? rng.int(65, 82) : kids > 0 ? rng.int(28, 46) : rng.int(20, 58);
-      const hid = d.newHousehold(home, rng.int(0, 500), now0, hw);
+      const hid = d.newHousehold(home, rng.int(0, 500), now, hw);
       for (let a = 0; a < adults; a++) {
-        d.addCitizen(hid, home, adults === 2 ? a : rng.int(0, 1), Math.max(18, baseAge + (a === 0 ? 0 : rng.int(-4, 4))), rng.weighted([0.08, 0.12, 0.3, 0.25, 0.25]), 0, now0);
+        d.addCitizen(hid, home, adults === 2 ? a : rng.int(0, 1), Math.max(18, baseAge + (a === 0 ? 0 : rng.int(-4, 4))), rng.weighted([0.08, 0.12, 0.3, 0.25, 0.25]), 0, now);
         d.addMember(hid);
       }
       for (let kk = 0; kk < kids; kk++) {
         const age = rng.int(0, Math.min(17, Math.max(0, baseAge - 18)));
-        d.addCitizen(hid, home, rng.int(0, 1), age, age >= 16 ? 2 : age >= 11 ? 1 : 0, 1, now0);
+        d.addCitizen(hid, home, rng.int(0, 1), age, age >= 16 ? 2 : age >= 11 ? 1 : 0, 1, now);
         d.addMember(hid);
       }
       free -= (adults + kids) * hw;
     }
   }
-}
+  if (!hireNow) return;
+  d.ensureCoverage?.();
+  const c = demo.citizens.col;
+  for (let i = first; i < demo.citizens.count; i++) {
+    const age = demo.ageOf(i, now);
+    if (age < 18 || age >= 64 || c.job[i]! >= 0) continue;
+    const j = d.findJob(i);
+    if (j >= 0) d.hire(d.jobPartialFree > 0 ? d.splitHousehold(i, d.jobPartialFree) : i, j);
+  }
+  d.memberIndex = null;
+};
+const GROWTH = args.includes('--croissance');
+const tp = performance.now();
+if (!GROWTH) inject(TARGET, false);
 const seedPopMs = performance.now() - tp;
 // Emplois : recherche de la démographie pour chaque actif (sans plafond quotidien).
 const tj = performance.now();
-{
+if (!GROWTH) {
   d.ensureCoverage?.();
   const c = demo.citizens.col;
   for (let i = 0; i < demo.citizens.count; i++) {
@@ -223,6 +247,15 @@ const tickMs: number[] = [];
 const reportMs: number[] = [];
 const origDaily = demo.daily.bind(demo);
 demo.daily = (now: number, rate: number): void => { const a = performance.now(); origDaily(now, rate); dailyMs.push(performance.now() - a); };
+// Passe quotidienne étalée (si présente) : durée de chaque étape, par étape (0 décès, 1 transitions, 2 services,
+// 3 économie vivante, 4 bonheur, 5 naissances, 6 décohabitation, 7 fusion), et ticks qui suivent minuit jusqu'à la fin.
+const stageMs: Record<string, number[]> = {};
+if (typeof d.stepDaily === 'function') {
+  const origStep = d.stepDaily.bind(demo);
+  d.stepDaily = (): boolean => { const st = String(d.pass?.stage ?? '?'); const a = performance.now(); const r = origStep(); (stageMs[st] ??= []).push(performance.now() - a); return r; };
+}
+const spreadTickMs: number[] = [];
+const spreadTotalMs: number[] = [];
 for (let day = 0; day < DAYS; day++) {
   const toMidnight = MINUTES_PER_DAY - (sim.clock.totalMinutes % MINUTES_PER_DAY);
   // Ticks ordinaires mesurés (≈ 1 h de jeu avant minuit), le reste en grands pas.
@@ -235,8 +268,42 @@ for (let day = 0; day < DAYS; day++) {
   sim.tick(2); // franchit minuit
   dayMs.push(performance.now() - a);
   sim.takeDelta();
+  // Passe étalée : ticks d'une minute jusqu'à la fin de la passe (somme = coût total de la journée).
+  let tot = dayMs[dayMs.length - 1]!;
+  while (d.dailyPending) { const q = performance.now(); sim.tick(); const dt = performance.now() - q; spreadTickMs.push(dt); tot += dt; sim.takeDelta(); }
+  spreadTotalMs.push(tot);
   const r = performance.now(); sim.report(); reportMs.push(performance.now() - r);
 }
+// Journée complète tick par tick (1 tick = 1 min de jeu) : pic et moyenne par tick, passe quotidienne comprise.
+const fullDayMs: number[] = [];
+// Ticks de plus de 50 ms de la journée complète : heure de jeu (hh:mm) et durée, pour les attribuer.
+const slowTicks: string[] = [];
+const fullDay = (): void => {
+  for (let k = 0; k < MINUTES_PER_DAY; k++) {
+    const a = performance.now(); sim.tick(); const dt = performance.now() - a; fullDayMs.push(dt); sim.takeDelta();
+    if (dt > 50) { const m = sim.clock.totalMinutes % MINUTES_PER_DAY; slowTicks.push(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')} ${round(dt, 1)}`); }
+  }
+};
+// Croissance (`--croissance`) : ville vide, ménages injectés toutes les 6 h (TARGET / GROWTH_DAYS par jour, embauche
+// immédiate), toutes les journées mesurées tick par tick ; pic par jour et lignes en fin de journée.
+const GROWTH_DAYS = opt('jours-croissance', 20);
+const growthDays: { day: number; population: number; rows: number; householdRows: number; aggregatedRows: number; maxTickMs: number; meanTickMs: number }[] = [];
+if (GROWTH) {
+  for (let day = 0; day < GROWTH_DAYS; day++) {
+    const from = fullDayMs.length;
+    for (let k = 0; k < MINUTES_PER_DAY; k++) {
+      if (k % 360 === 0) inject(Math.ceil(TARGET / GROWTH_DAYS / 4));
+      const a = performance.now(); sim.tick(); fullDayMs.push(performance.now() - a); sim.takeDelta();
+    }
+    const dayTicks = fullDayMs.slice(from);
+    const info = demo.aggregateInfo();
+    growthDays.push({ day, population: info.population, rows: info.rows, householdRows: info.householdRows, aggregatedRows: info.aggregatedRows, maxTickMs: round(Math.max(...dayTicks)), meanTickMs: round(dayTicks.reduce((x, y) => x + y, 0) / dayTicks.length, 3) });
+    log(`jour ${day} : ${JSON.stringify(growthDays[growthDays.length - 1])}`);
+  }
+} else fullDay();
+const fullDayStats = { ...stats(fullDayMs), p99: round([...fullDayMs].sort((x, y) => x - y)[Math.floor(fullDayMs.length * 0.99)] ?? 0), over16: fullDayMs.filter((x) => x > 16).length, over50: fullDayMs.filter((x) => x > 50).length };
+log(`Journée complète tick par tick : ${JSON.stringify(fullDayStats)}`);
+log(`Passe étalée : ticks après minuit ${JSON.stringify(stats(spreadTickMs))}, total par jour (minuit compris) ${JSON.stringify(stats(spreadTotalMs))}`);
 // Clôture mensuelle (démographie seule) et sauvegarde.
 const tm = performance.now(); demo.monthly(sim.clock.totalMinutes); const monthlyMs = performance.now() - tm;
 const ts = performance.now(); const save = JSON.stringify(sim.toSave()); const saveMs = performance.now() - ts;
@@ -249,6 +316,10 @@ const out = {
   buildRoadMs: roadBuckets, buildRoadFinalMs: stats(lateMs), buildRoadFinalOk: lateOk, tickAfterRoadMs: stats(lateTickMs), placeBuildingMs: stats(placeMs),
   dayTickMs: stats(dayMs), dailyMs: stats(dailyMs), tickMs: stats(tickMs), reportMs: stats(reportMs), monthlyMs: Math.round(monthlyMs),
   saveMs: Math.round(saveMs), saveMB: round(save.length / 2 ** 20, 1), heapMB: Math.round(mem.heapUsed / 2 ** 20),
+  spreadTickMs: stats(spreadTickMs), spreadTicksPerDay: Math.round(spreadTickMs.length / DAYS), spreadTotalMs: stats(spreadTotalMs),
+  stageSumPerDayMs: round(Object.values(stageMs).flat().reduce((x, y) => x + y, 0) / Math.max(1, DAYS + (GROWTH ? GROWTH_DAYS : 1))),
+  stageMs: Object.fromEntries(Object.entries(stageMs).map(([k, v]) => [k, stats(v)])), mergedHouseholds: d.mergedHouseholds ?? 0,
+  fullDayTickMs: fullDayStats, slowTicks, growthDays,
   aggregate: (demo as unknown as { aggregateInfo?: () => unknown }).aggregateInfo?.() ?? null,
 };
 log(`Jour (tick de minuit) : ${JSON.stringify(out.dayTickMs)} ; daily() ${JSON.stringify(out.dailyMs)}`);

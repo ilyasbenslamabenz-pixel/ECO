@@ -65,6 +65,15 @@ export interface LivingHost {
   weightOf(ci: number): number;
   hhWeightOf(hk: number): number;
   readonly householdCount: number;
+  /** Change à chaque suppression d'une ligne de ménage (index des ménages décalés) : calcul quotidien étalé repris. */
+  readonly householdRowsVersion?: number;
+}
+
+/** Calcul quotidien en cours (`assessBegin` / `assessStep`) : accumulateurs de la boucle sur les citoyens. */
+interface AssessPass {
+  now: number; version: number; hhVersion: number; ramp: number; nh: number; cursor: number;
+  districtIdx: Map<number, number>; dNames: string[]; dPop: number[]; dLf: number[]; dUn: number[]; dRent: number[]; dHh: number[];
+  keyOf: Int32Array; adults: number[]; jobs: number[]; workersByTier: number[]; under: number; over: number; employed: number;
 }
 
 export interface LivingCounters { relocations: number; departuresRent: number; closures: number; reopenings: number; graduates: number }
@@ -146,6 +155,7 @@ export class LivingEconomy {
     this.builtVersion = -1;
     this.pending = [];
     this.stats = null;
+    this.ap = null;
     this.globalCustomers = 1;
   }
 
@@ -187,20 +197,46 @@ export class LivingEconomy {
    * des ménages qui chercheront un logement moins cher ou quitteront la ville (`resolve`). Ne déplace personne.
    */
   assess(now: number, version: number): void {
-    const h = this.host, t = this.tuning;
+    this.assessBegin(now, version);
+    this.assessStep(Infinity);
+  }
+
+  private ap: AssessPass | null = null;
+
+  /**
+   * Calcul quotidien étalé (grandes villes) : `assessBegin` prépare, puis chaque `assessStep(n)` traite n lignes de
+   * citoyens ; la dernière étape fait le calcul des ménages et les statistiques. Même résultat que `assess` quand rien
+   * ne change entre deux étapes ; si des ménages ont été supprimés ou des bâtiments modifiés entre deux étapes (index
+   * décalés), le calcul reprend depuis le début. `assessStep` renvoie vrai quand le calcul est terminé.
+   */
+  assessBegin(now: number, version: number): void {
+    const h = this.host;
     const ramp = h.noServiceRamp();
     this.lastRamp = ramp;
     this.refreshBuildings(version, true);
-    const b = h.ctx.buildings, c = h.citizens.col, hh = h.households;
+    const b = h.ctx.buildings, hh = h.households;
     const nh = hh.count;
     if (this.hhRes.length < hh.capacity) { this.hhRes = new Float64Array(hh.capacity); this.hhBurden = new Float32Array(hh.capacity); }
     this.hhRes.fill(0, 0, nh);
     this.hhBurden.fill(0, 0, nh);
+    this.ap = {
+      now, version, hhVersion: h.householdRowsVersion ?? 0, ramp, nh, cursor: 0,
+      districtIdx: new Map(), dNames: [], dPop: [], dLf: [], dUn: [], dRent: [], dHh: [],
+      keyOf: new Int32Array(b.count).fill(-1), adults: [0, 0, 0], jobs: [0, 0, 0], workersByTier: [0, 0, 0], under: 0, over: 0, employed: 0,
+    };
+  }
+
+  assessStep(rows: number, version?: number): boolean {
+    let ap = this.ap;
+    if (!ap) return true;
+    const h = this.host, t = this.tuning;
+    // Index décalés depuis le début (ménages supprimés, bâtiments ajoutés ou retirés : `version`) : reprise du début.
+    const v = version ?? ap.version;
+    if ((h.householdRowsVersion ?? 0) !== ap.hhVersion || v !== ap.version || h.ctx.buildings.count !== ap.keyOf.length) { this.assessBegin(ap.now, v); ap = this.ap!; }
+    const now = ap.now, ramp = ap.ramp, nh = ap.nh;
+    const b = h.ctx.buildings, c = h.citizens.col, hh = h.households;
     // Quartiers : clé par bâtiment résidentiel.
-    const districtIdx = new Map<number, number>();
-    const dNames: string[] = [];
-    const dPop: number[] = [], dLf: number[] = [], dUn: number[] = [], dRent: number[] = [], dHh: number[] = [];
-    const keyOf = new Int32Array(b.count).fill(-1);
+    const { districtIdx, dNames, dPop, dLf, dUn, dRent, dHh, keyOf } = ap;
     const districtOfIndex = (bi: number): number => {
       if (bi < 0) return -1;
       if (keyOf[bi]! >= 0) return keyOf[bi]!;
@@ -218,10 +254,14 @@ export class LivingEconomy {
       return k;
     };
     // Éducation : adultes par niveau simplifié, emplois et employés par niveau exigé, inadéquations.
-    const adults = [0, 0, 0], jobs = [0, 0, 0], workersByTier = [0, 0, 0];
-    let under = 0, over = 0, employed = 0;
-    for (let i = 0; i < h.citizens.count; i++) {
-      const hk = hh.indexOf(c.household[i]!);
+    const { adults, jobs, workersByTier } = ap;
+    let under = ap.under, over = ap.over, employed = ap.employed;
+    const limit = ap.cursor + rows;
+    let i = ap.cursor;
+    for (; i < h.citizens.count && i < limit; i++) {
+      let hk = hh.indexOf(c.household[i]!);
+      // Ménage arrivé depuis le début du calcul : évalué demain.
+      if (hk >= nh) hk = -1;
       const age = h.ageOf(i, now);
       const bi = b.indexOf(c.home[i]!);
       const dk = districtOfIndex(bi);
@@ -247,12 +287,16 @@ export class LivingEconomy {
         }
       }
     }
+    ap.cursor = i; ap.under = under; ap.over = over; ap.employed = employed;
+    if (i < h.citizens.count) return false;
+    this.ap = null;
     // Ménages : loyer, effort, jours de difficulté.
     const threshold = distressThreshold(t, ramp);
     const col = hh.col;
     let rentSum = 0, resSum = 0, burdenSum = 0, rented = 0, distress = 0, landSum = 0, landN = 0;
     this.pending = [];
-    for (let k = 0; k < nh; k++) {
+    const nhNow = Math.min(nh, hh.count);
+    for (let k = 0; k < nhNow; k++) {
       const bi = b.indexOf(col.home[k]!);
       const unit = bi >= 0 ? this.rentUnit[bi]! : 0;
       const rent = unit * householdSizeFactor(col.size[k]!);
@@ -320,6 +364,7 @@ export class LivingEconomy {
       education: { tiers: [...EDU_TIERS_FR], adults, jobs, workers: workersByTier, underqualified: under, overqualified: over, mismatchShare: employed ? r1((under + over) / employed) : 0 },
       month: { ...this.month }, lastMonth: { ...this.lastMonth },
     };
+    return true;
   }
 
   /**

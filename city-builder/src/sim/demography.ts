@@ -59,6 +59,39 @@ export const TRIP_QUEUE_CAPACITY = 4096;
 export const AGGREGATE_THRESHOLD = 100_000;
 export const AGGREGATE_ROWS_TARGET = 100_000;
 export const AGGREGATE_MAX_WEIGHT = 16;
+/**
+ * Passe quotidienne étalée (docs/SIMULATION.md, « Grandes villes ») : à partir de DAILY_SPREAD_MIN_ROWS lignes de
+ * citoyens, la passe de minuit est répartie sur les ticks suivants (DAILY_SLICES tranches par boucle sur les citoyens,
+ * au moins DAILY_MIN_SLICE_ROWS lignes par tranche, plus une étape par traitement lourd) au lieu d'un pic unique.
+ */
+export const DAILY_SPREAD_MIN_ROWS = 20_000;
+export const DAILY_SLICES = 32;
+export const DAILY_MIN_SLICE_ROWS = 2_000;
+/**
+ * Fusion des ménages identiques au-delà du seuil d'agrégation : groupes de logements traités par tick (id modulo
+ * MERGE_GROUPS), période (jours) quand la table ne dépasse plus la cible de lignes, bornes des tranches d'âge (alignées
+ * sur les seuils de la démographie : école, diplômes, majorité, études supérieures, fécondité, formation, retraite).
+ */
+export const MERGE_GROUPS = 32;
+export const MERGE_PERIOD_DAYS = 7;
+export const MERGE_AGE_BANDS: readonly number[] = [6, 11, 16, 18, 21, 30, 42, 45, 64, 75];
+
+const DailyStage = { Prep: 9, Index: 10, Deaths: 0, Transitions: 1, Services: 2, Assess: 3, Happiness: 4, Births: 5, Households: 6, Merge: 7, Done: 8 } as const;
+
+/** État d'une passe quotidienne en cours (non sauvegardé : terminée avant toute sauvegarde). */
+interface DailyPass {
+  now: number; rate: number;
+  /** Lignes par tranche (Infinity : passe d'un seul tenant). */
+  slice: number;
+  stage: number; cursor: number;
+  searches: number; noReach: number; unemployed: number; labor: number;
+  /** Décohabitations (id de citoyens), facteurs de satisfaction, satisfaction des modules par logement (id). */
+  pending: number[]; fs: Float64Array; homeCache: Map<number, Float64Array>;
+  taxPenalty: number; eduPen: number[]; ramp: number;
+  merge: boolean; mergeCap: number; group: number;
+  /** Lignes de citoyens au début de l'étape (répartition des recherches d'emploi), ménages et version (naissances). */
+  total: number; nh: number; hhVersion: number;
+}
 
 /** Salaires mensuels de base par secteur (crédits), modulés par l'éducation. */
 export const BASE_WAGE: Record<number, number> = { 1: 2000, 2: 2300, 3: 3200, 4: 2300 };
@@ -415,6 +448,11 @@ export class DemographySystem {
   private hhFertile = new Uint8Array(0);
   private hhHappy = new Float32Array(0);
   private hhMembers = new Uint8Array(0);
+  // Agrégats par ménage de l'étape des naissances (passe quotidienne, éventuellement étalée sur plusieurs ticks).
+  private bAdults = new Uint8Array(0);
+  private bFertile = new Uint8Array(0);
+  private bHappy = new Float32Array(0);
+  private bMembers = new Uint8Array(0);
   private tickCounter = 0;
 
   /** Économie vivante : loyers, difficultés des ménages, comptes et fermetures d'entreprises. */
@@ -481,6 +519,12 @@ export class DemographySystem {
     this.pupilsBySchool.clear();
     this.coverageDirty = true;
     this.tickCounter = 0;
+    this.pass = null;
+    this.memberIndex = null;
+    this.jobCells = null;
+    this.housingCap = null;
+    this.rowsVersion++;
+    this.hhRowsVersion++;
     this.living.reset();
     this.services.reset();
     this.buildingsVersion++;
@@ -867,6 +911,7 @@ export class DemographySystem {
     this.popW -= w;
     if (w > 1) this.aggRows--;
     this.citizens.remove(c.id[i]!);
+    this.rowsVersion++;
   }
 
   /** Retire une ligne de ménage (compteur pondéré tenu à jour). */
@@ -875,6 +920,7 @@ export class DemographySystem {
     if (hk < 0) return;
     this.hhW -= this.hhWeightOf(hk);
     this.households.remove(hid);
+    this.hhRowsVersion++;
   }
 
   /* ------------------------------- Citoyens ------------------------------- */
@@ -1046,8 +1092,43 @@ export class DemographySystem {
 
   /** Places libres de l'emploi renvoyé par `findJob` quand il ne peut pas accueillir tout le poids (0 sinon). */
   private jobPartialFree = 0;
+  /**
+   * Logements (id) d'où une recherche d'emploi vient d'échouer pendant l'étape en cours : un échec signifie qu'aucun
+   * emploi n'a de place libre à portée, quels que soient le poids et le diplôme ; il reste vrai tant qu'aucun emploi ne
+   * se libère (vidé par `quitJob` et à chaque étape). Résultat identique, recherches répétées évitées.
+   */
+  private readonly noJobFrom = new Set<number>();
   /** Membres (index de citoyens) par ménage, construit à la demande pendant la passe quotidienne (découpes). */
   private memberIndex: Map<number, number[]> | null = null;
+  /**
+   * Change à chaque suppression ou changement de ménage d'une ligne de citoyen : l'index des membres (index de lignes)
+   * est alors reconstruit ; les lignes ajoutées à la fin (immigration, naissances) y sont simplement ajoutées. Valable
+   * d'un tick à l'autre d'une passe étalée.
+   */
+  private rowsVersion = 0;
+  private memberIndexVersion = -1;
+  /** Lignes de citoyens [0, memberIndexCount) couvertes par l'index des membres. */
+  private memberIndexCount = 0;
+
+  /** Index des membres à jour jusqu'à la ligne `upTo` (exclue) ; reconstruit si des lignes ont été supprimées. */
+  private extendMemberIndex(upTo: number): void {
+    if (!this.memberIndex || this.memberIndexVersion !== this.rowsVersion || this.memberIndexCount > this.citizens.count) {
+      this.memberIndex = new Map();
+      this.memberIndexVersion = this.rowsVersion;
+      this.memberIndexCount = 0;
+    }
+    const c = this.citizens.col, idx = this.memberIndex;
+    const end = Math.min(upTo, this.citizens.count);
+    for (let i = this.memberIndexCount; i < end; i++) {
+      const h = c.household[i]!;
+      const l = idx.get(h);
+      if (l) l.push(i); else idx.set(h, [i]);
+    }
+    if (end > this.memberIndexCount) this.memberIndexCount = end;
+  }
+  /** Change à chaque suppression d'une ligne de ménage (index des ménages décalés : étapes étalées reprises). */
+  private hhRowsVersion = 0;
+  get householdRowsVersion(): number { return this.hhRowsVersion; }
 
   /**
    * Découpe le ménage agrégé du citoyen d'index `ci` : un nouveau ménage de poids `f` (copie du ménage et de tous ses
@@ -1061,14 +1142,8 @@ export class DemographySystem {
     if (hk < 0) return ci;
     const hw = this.hhWeightOf(hk);
     if (f <= 0 || f >= hw) return ci;
-    if (!this.memberIndex) {
-      this.memberIndex = new Map();
-      for (let i = 0; i < this.citizens.count; i++) {
-        const h = c.household[i]!;
-        const l = this.memberIndex.get(h);
-        if (l) l.push(i); else this.memberIndex.set(h, [i]);
-      }
-    }
+    this.extendMemberIndex(Infinity);
+    const index = this.memberIndex!;
     const nid = this.nextHouseholdId++;
     const k2 = this.households.cloneRow(hk, nid);
     const hc = this.households.col;
@@ -1076,7 +1151,7 @@ export class DemographySystem {
     hc.weight[hk] = hw - f > 1 ? hw - f : 0;
     const clones: number[] = [];
     let out = ci;
-    for (const m of this.memberIndex.get(hid) ?? []) {
+    for (const m of index.get(hid) ?? []) {
       const n = this.citizens.cloneRow(m, this.nextCitizenId++);
       const cc = this.citizens.col;
       cc.household[n] = nid;
@@ -1086,7 +1161,9 @@ export class DemographySystem {
       clones.push(n);
       if (m === ci) out = n;
     }
-    this.memberIndex.set(nid, clones);
+    index.set(nid, clones);
+    // Copies ajoutées à la fin et déjà indexées.
+    this.memberIndexCount = this.citizens.count;
     return out;
   }
 
@@ -1106,6 +1183,8 @@ export class DemographySystem {
   }
 
   quitJob(ci: number): void {
+    // Un emploi se libère : les échecs de recherche mémorisés ne valent plus.
+    if (this.noJobFrom.size) this.noJobFrom.clear();
     const c = this.citizens.col;
     const b = this.ctx.buildings;
     const j = b.indexOf(c.job[ci]!);
@@ -1171,188 +1250,453 @@ export class DemographySystem {
 
   /**
    * Journée : vieillissement, décès, retraite, scolarité, diplômes, recherche d'emploi,
-   * revenus, bonheur, naissances, décohabitation.
+   * revenus, bonheur, naissances, décohabitation (et fusion des ménages au-delà du seuil d'agrégation).
+   * Appel synchrone : la passe entière est exécutée tout de suite (une éventuelle passe étalée en cours est terminée
+   * d'abord). Résultat identique à l'ancienne passe (hors fusion hebdomadaire au-delà du seuil d'agrégation).
    */
   daily(now: number, residentialTaxRate: number): void {
-    // Couverture recalculée chaque jour : la capacité des équipements suit les habitants logés.
-    this.coverageDirty = true;
-    this.ensureCoverage();
-    this.transitPrepare(now);
-    this.prepareSchools();
-    const c = this.citizens.col;
+    if (this.pass) this.finishDaily();
+    this.pass = this.newPass(now, residentialTaxRate, Infinity);
+    this.finishDaily();
+  }
+
+  /**
+   * Début de journée : passe quotidienne étalée sur plusieurs ticks quand la table des citoyens compte au moins
+   * `dailySpreadMinRows` lignes (sinon exécutée tout de suite, comme avant). Étalée, chaque boucle sur les citoyens est
+   * découpée en `dailySlices` tranches d'indices et chaque étape lourde (services, économie vivante, naissances,
+   * décohabitation, fusion) occupe son propre tick : `stepDaily()` en exécute une par tick. Renvoie vrai si la passe
+   * reste en cours (l'appelant applique les suites — assiettes fiscales — quand `stepDaily()` renvoie vrai).
+   */
+  beginDaily(now: number, residentialTaxRate: number): boolean {
+    if (this.pass) this.finishDaily();
+    const spread = this.citizens.count >= this.dailySpreadMinRows;
+    this.pass = this.newPass(now, residentialTaxRate, spread ? Math.max(this.dailyMinSliceRows, Math.ceil(this.citizens.count / Math.max(1, this.dailySlices))) : Infinity);
+    if (!spread) { this.finishDaily(); return false; }
+    return true;
+  }
+
+  /** Passe quotidienne étalée en cours (curseur non sauvegardé : `finishDaily()` avant une sauvegarde). */
+  get dailyPending(): boolean { return this.pass !== null; }
+
+  /** Exécute l'étape suivante de la passe en cours ; vrai quand la passe est terminée (ou s'il n'y en a pas). */
+  stepDaily(): boolean {
+    const p = this.pass;
+    if (!p) return true;
+    this.runDailyStep(p);
+    if (p.stage === DailyStage.Done) { this.pass = null; return true; }
+    return false;
+  }
+
+  /** Termine immédiatement la passe en cours (sauvegarde, nouvelle journée, appel synchrone). */
+  finishDaily(): void {
+    while (this.pass && !this.stepDaily()) { /* étapes restantes */ }
+  }
+
+  /** Seuil (lignes de citoyens) à partir duquel la passe quotidienne est étalée ; Infinity la garde d'un seul tenant. */
+  dailySpreadMinRows = DAILY_SPREAD_MIN_ROWS;
+  /** Tranches par boucle sur les citoyens quand la passe est étalée, et lignes au moins par tranche. */
+  dailySlices = DAILY_SLICES;
+  dailyMinSliceRows = DAILY_MIN_SLICE_ROWS;
+  private pass: DailyPass | null = null;
+
+  private newPass(now: number, rate: number, slice: number): DailyPass {
+    return {
+      now, rate, slice, stage: DailyStage.Prep, cursor: 0,
+      searches: 0, noReach: 0, unemployed: 0, labor: 0, pending: [], fs: new Float64Array(FACTOR_COUNT), homeCache: new Map(),
+      taxPenalty: 0, eduPen: [], ramp: 0, merge: false, mergeCap: 1, group: 0, total: 0, nh: 0, hhVersion: 0,
+    };
+  }
+
+  /** Emplois libres desservis (aucune recherche quand il n'y en a pas : coût CPU). */
+  private countFreeJobs(): number {
     const b = this.ctx.buildings;
-    const rng = this.ctx.rng;
-    const yesterday = now - MINUTES_PER_DAY;
-    const healthy = (bi: number): boolean => bi >= 0 && this.coverage[Service.Health]![bi] === 1;
-    let searches = 0, noReach = 0, unemployedNow = 0, laborNow = 0;
-    // Emplois libres desservis : inutile de chercher quand il n'y en a aucun (coût CPU).
     let freeJobs = 0;
     for (let k = 0; k < b.count; k++) {
       const m = this.metaOfIndex(k);
       if (m && b.roadAccess[k] && this.jobOpen(k)) freeJobs += Math.max(0, m.jobCap - b.workers[k]!);
     }
+    return freeJobs;
+  }
 
-    // 1) Décès (parcours à rebours : suppression par permutation sûre).
-    for (let i = this.citizens.count - 1; i >= 0; i--) {
-      const age = this.ageOf(i, now);
-      const bi = b.indexOf(c.home[i]!);
-      const sf = c.sick[i]! > 0 ? this.services.mortalityFactor(i, bi) : 1;
-      const p = (annualMortality(age) * (healthy(bi) ? 0.7 : 1) * sf) / DAYS_PER_YEAR;
-      if (rng.next() < p) { const w = this.weightOf(i); if (sf > 1) this.services.month.sickDeaths += w; this.removeCitizenAt(i); this.month.deaths += w; }
+  private runDailyStep(p: DailyPass): void {
+    const c = this.citizens.col;
+    const b = this.ctx.buildings;
+    const rng = this.ctx.rng;
+    const now = p.now;
+    const spread = p.slice !== Infinity;
+    // Passe étalée : des bâtiments ont pu changer entre deux ticks (index des tableaux par bâtiment).
+    if (spread) this.ensureCoverage();
+    switch (p.stage) {
+      case DailyStage.Prep: {
+        // Couverture recalculée chaque jour : la capacité des équipements suit les habitants logés.
+        this.coverageDirty = true;
+        this.ensureCoverage();
+        this.transitPrepare(now);
+        this.prepareSchools();
+        // Fusion des ménages identiques (au-delà du seuil d'agrégation), une fois par semaine. Fonction de la date et de
+        // l'état sauvegardé : une partie rechargée fusionne les mêmes jours.
+        p.mergeCap = this.mergeCap();
+        p.merge = p.mergeCap > 1 && this.popW >= this.aggregateThreshold && Math.floor(now / MINUTES_PER_DAY) % MERGE_PERIOD_DAYS === 0;
+        p.stage = DailyStage.Deaths; p.cursor = this.citizens.count - 1;
+        return;
+      }
+      case DailyStage.Deaths: {
+        // 1) Décès (parcours à rebours : suppression par permutation sûre ; les lignes ajoutées depuis le début de la
+        // passe, au-delà du curseur, ne sont pas concernées).
+        const healthy = (bi: number): boolean => bi >= 0 && this.coverage[Service.Health]![bi] === 1;
+        const end = Math.min(p.cursor, this.citizens.count - 1);
+        const stop = Math.max(0, end - p.slice + 1);
+        for (let i = end; i >= stop; i--) {
+          const age = this.ageOf(i, now);
+          const bi = b.indexOf(c.home[i]!);
+          const sf = c.sick[i]! > 0 ? this.services.mortalityFactor(i, bi) : 1;
+          const pr = (annualMortality(age) * (healthy(bi) ? 0.7 : 1) * sf) / DAYS_PER_YEAR;
+          if (rng.next() < pr) { const w = this.weightOf(i); if (sf > 1) this.services.month.sickDeaths += w; this.removeCitizenAt(i); this.month.deaths += w; }
+        }
+        p.cursor = stop - 1;
+        if (p.cursor < 0) {
+          // Lignes agrégées : index des membres (découpes à l'embauche) construit par tranches avant les transitions.
+          p.stage = spread && this.aggRows > 0 ? DailyStage.Index : DailyStage.Transitions;
+          p.cursor = 0; p.total = this.citizens.count;
+        }
+        return;
+      }
+      case DailyStage.Index: {
+        if (p.cursor === 0) this.memberIndex = null;
+        p.cursor += p.slice;
+        this.extendMemberIndex(p.cursor);
+        if (this.memberIndexCount >= this.citizens.count) { p.stage = DailyStage.Transitions; p.cursor = 0; p.total = this.citizens.count; }
+        return;
+      }
+      case DailyStage.Transitions: {
+        // 2) Transitions individuelles.
+        if (spread) this.prepareSchools();
+        let freeJobs = this.countFreeJobs();
+        this.noJobFrom.clear();
+        const yesterday = now - MINUTES_PER_DAY;
+        // Âge franchi hier -> aujourd'hui (fonction hors de la boucle : pas de fermeture créée par citoyen).
+        const crossed = (agePrev: number, age: number, y: number): boolean => agePrev < y && age >= y;
+        const limit = p.cursor + p.slice;
+        // Passe étalée : plafond de recherches d'emploi réparti au prorata des lignes parcourues (sinon les premières
+        // tranches épuisaient tout le plafond du jour et portaient seules le coût des recherches).
+        const searchCap = spread ? Math.min(JOB_SEARCHES_PER_DAY, Math.ceil((JOB_SEARCHES_PER_DAY * Math.min(limit, p.total)) / Math.max(1, p.total))) : JOB_SEARCHES_PER_DAY;
+        let i = p.cursor;
+        for (; i < this.citizens.count && i < limit; i++) {
+          const age = this.ageOf(i, now);
+          const agePrev = (yesterday - c.birth[i]!) / MINUTES_PER_YEAR;
+          const w = this.weightOf(i);
+          // Retraite.
+          if (c.job[i]! >= 0 && age >= RETIREMENT_AGE) { this.quitJob(i); c.income[i] = PENSION; this.assignSchedule(i); }
+          if (age >= RETIREMENT_AGE && c.job[i]! < 0) c.income[i] = PENSION;
+          // Scolarité.
+          if (age >= SCHOOL_AGE_MIN && age < SCHOOL_AGE_MAX + 1) {
+            if (c.school[i]! < 0) {
+              const s = this.findSchool(i);
+              if (s >= 0) { c.school[i] = s; this.pupilsBySchool.set(s, (this.pupilsBySchool.get(s) ?? 0) + w); this.updateCommute(i); this.assignSchedule(i); }
+            }
+            if (c.school[i]! >= 0) {
+              if (crossed(agePrev, age, 11) && c.education[i]! < Education.Primary) c.education[i] = Education.Primary;
+              if (crossed(agePrev, age, 16) && c.education[i]! < Education.Secondary) c.education[i] = Education.Secondary;
+            }
+          } else if (c.school[i]! >= 0 && age >= SCHOOL_AGE_MAX + 1) {
+            // Fin de scolarité : baccalauréat pour 80 % des lycéens.
+            if (c.education[i]! >= Education.Secondary && rng.chance(0.8)) c.education[i] = Education.Baccalaureate;
+            this.pupilsBySchool.set(c.school[i]!, Math.max(0, (this.pupilsBySchool.get(c.school[i]!) ?? w) - w));
+            c.school[i] = -1;
+            c.commute[i] = 0;
+            this.assignSchedule(i);
+          }
+          // Économie vivante : études supérieures (bachelier de 21 ans dont le quartier est couvert par l'éducation) et
+          // formation continue des adultes sans emploi (moins de 45 ans, quartier couvert).
+          if (crossed(agePrev, age, 21) && c.education[i] === Education.Baccalaureate) {
+            const hb = b.indexOf(c.home[i]!);
+            if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.chance(this.living.tuning.probaSuperieur * this.educationFactor)) { c.education[i] = Education.Higher; this.living.month.graduates += w; }
+          } else if (c.job[i]! < 0 && c.school[i]! < 0 && age >= WORKING_AGE_MIN && age < 45 && c.education[i]! < Education.Baccalaureate) {
+            const hb = b.indexOf(c.home[i]!);
+            if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.next() < (this.living.tuning.probaFormationAn * this.educationFactor) / DAYS_PER_YEAR) {
+              c.education[i] = Math.max(Education.Secondary, c.education[i]! + 1);
+              this.living.month.graduates += w;
+            }
+          }
+          // Recherche d'emploi.
+          // Plafond en habitants réels : une ligne agrégée compte pour son poids.
+          if (freeJobs > 0 && age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.job[i]! < 0 && c.school[i]! < 0 && p.searches + w <= searchCap) {
+            p.searches += w;
+            if (!this.jobCells) this.prepareJobCells();
+            // Échec déjà constaté depuis ce logement (aucun emploi libre à portée, quels que soient poids et diplôme) et
+            // aucun emploi libéré depuis : même résultat sans refaire la recherche.
+            const home = c.home[i]!;
+            let j = -1;
+            if (!this.noJobFrom.has(home)) { j = this.findJob(i); if (j < 0) this.noJobFrom.add(home); }
+            if (j >= 0) {
+              const f = this.jobPartialFree;
+              if (f > 0) { this.hire(this.splitHousehold(i, f), j); freeJobs -= f; } else { this.hire(i, j); freeJobs -= w; }
+            } else p.noReach += w;
+          }
+          // Poids relu : une découpe (emploi partiel) a pu le réduire ; la copie détachée est comptée à son tour.
+          if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { const wn = this.weightOf(i); p.labor += wn; if (c.job[i]! < 0) p.unemployed += wn; }
+        }
+        p.cursor = i;
+        // Cellules d'emploi : index de bâtiments, valables pour ce tick seulement.
+        this.jobCells = null;
+        if (i >= this.citizens.count) {
+          this.memberIndex = null;
+          this.jobNoReachDay = p.noReach; this.lastUnemployed = p.unemployed; this.lastLaborForce = p.labor;
+          p.stage = DailyStage.Services; p.cursor = 0;
+        }
+        return;
+      }
+      case DailyStage.Services:
+        // 2 bis) Services : criminalité, risque d'incendie, santé des logements, délits du jour, maladies (étalé : par
+        // tranches de citoyens).
+        if (!spread) { this.services.daily(now); p.stage = DailyStage.Assess; p.cursor = 0; return; }
+        if (p.cursor === 0) { this.services.dailyBegin(now); p.cursor = 1; }
+        if (this.services.dailyStep(p.slice)) { p.stage = DailyStage.Assess; p.cursor = 0; }
+        return;
+      case DailyStage.Assess:
+        // 2 ter) Économie vivante : loyers, ressources et effort des ménages, statistiques du jour (étalé : par tranches).
+        if (!spread) { this.living.assess(now, this.buildingsVersion); p.stage = DailyStage.Happiness; p.cursor = 0; return; }
+        if (p.cursor === 0) { this.living.assessBegin(now, this.buildingsVersion); p.cursor = 1; }
+        if (this.living.assessStep(p.slice, this.buildingsVersion)) { p.stage = DailyStage.Happiness; p.cursor = 0; }
+        return;
+      case DailyStage.Happiness: {
+        // 3) Bonheur (agrégats par ménage : étape des naissances).
+        if (p.cursor === 0) {
+          p.taxPenalty = residentialTaxPenalty(p.rate);
+          // Impôt par niveau d'éducation : chaque adulte ressent le taux de son niveau (les enfants, le taux moyen).
+          p.eduPen = this.eduTaxPenalties(p.taxPenalty);
+          this.lastEduRates = this.eduTaxRates ? [...this.eduTaxRates] : null;
+          p.fs.fill(0);
+          p.ramp = this.noServiceRamp();
+          this.lastTaxRate = p.rate;
+        }
+        // Détail par facteur (rapport) ; états des réseaux et satisfaction des modules calculés une fois par logement.
+        const fs = p.fs, ramp = p.ramp, taxPenalty = p.taxPenalty, eduPen = p.eduPen, homeCache = p.homeCache;
+        const homeParts = (bi: number): Float64Array => {
+          const id = b.id[bi]!;
+          let v = homeCache.get(id);
+          if (v) return v;
+          v = this.homePartsOf(bi, ramp, new Float64Array(7));
+          homeCache.set(id, v);
+          return v;
+        };
+        const limit = p.cursor + p.slice;
+        let i = p.cursor;
+        for (; i < this.citizens.count && i < limit; i++) {
+          const age = this.ageOf(i, now);
+          const bi = b.indexOf(c.home[i]!);
+          const hkr = this.households.indexOf(c.household[i]!);
+          let t = this.scoreCitizen(i, age, bi, hkr, ramp, age >= 18 ? eduPen[c.education[i]!] ?? taxPenalty : taxPenalty, homeParts, fs, this.weightOf(i));
+          t = t < 0 ? 0 : t > 100 ? 100 : t;
+          c.happiness[i] = c.happiness[i]! * 0.8 + t * 0.2;
+          // Décohabitation : jeunes adultes actifs vivant chez leurs parents.
+          if (c.role[i] === Role.Child && age >= 20 && c.job[i]! >= 0 && rng.next() < 0.3 / DAYS_PER_YEAR) p.pending.push(c.id[i]!);
+        }
+        p.cursor = i;
+        if (i >= this.citizens.count) {
+          this.factorSum.set(fs);
+          this.factorCount = this.popW;
+          p.homeCache = new Map();
+          p.stage = DailyStage.Births; p.cursor = 0;
+        }
+        return;
+      }
+      case DailyStage.Births: {
+        // 4) Naissances : agrégats par ménage (adultes, femme de 18 à 42 ans, bonheur moyen), par tranches de citoyens
+        // (tampons propres à la passe), puis tirages. Ménages supprimés entre deux tranches (index décalés) : reprise.
+        if (p.cursor === 0 || this.hhRowsVersion !== p.hhVersion) {
+          p.nh = this.households.count; p.hhVersion = this.hhRowsVersion; p.cursor = 0;
+          if (this.bAdults.length < p.nh) {
+            const cap = this.households.capacity;
+            this.bAdults = new Uint8Array(cap); this.bFertile = new Uint8Array(cap); this.bHappy = new Float32Array(cap); this.bMembers = new Uint8Array(cap);
+          }
+          this.bAdults.fill(0, 0, p.nh); this.bFertile.fill(0, 0, p.nh); this.bHappy.fill(0, 0, p.nh); this.bMembers.fill(0, 0, p.nh);
+        }
+        const nh = p.nh;
+        const start = p.cursor > 0 ? p.cursor - 1 : 0;
+        const limit = start + p.slice;
+        let i = start;
+        for (; i < this.citizens.count && i < limit; i++) {
+          const hk = this.households.indexOf(c.household[i]!);
+          if (hk < 0 || hk >= nh) continue;
+          const age = this.ageOf(i, now);
+          this.bMembers[hk]!++;
+          this.bHappy[hk]! += c.happiness[i]!;
+          if (age >= 18) this.bAdults[hk]!++;
+          if (c.sex[i] === 0 && age >= 18 && age <= 42) this.bFertile[hk] = 1;
+        }
+        // Curseur décalé de 1 : 0 signifie « étape à préparer ».
+        p.cursor = i + 1;
+        if (i < this.citizens.count) return;
+        const nhNow = Math.min(nh, this.households.count);
+        for (let hk = 0; hk < nhNow; hk++) {
+          if (!this.bFertile[hk] || this.bAdults[hk]! < 2) continue;
+          const hid = this.households.col.id[hk]!;
+          const home = this.households.col.home[hk]!;
+          const bi = b.indexOf(home);
+          const hw = this.hhWeightOf(hk);
+          if (bi < 0 || this.freeHousingAt(bi) < hw || this.households.col.size[hk]! >= 7) continue;
+          const happy = this.bMembers[hk]! ? this.bHappy[hk]! / this.bMembers[hk]! : 50;
+          const pr = (0.09 * (0.5 + happy / 100)) / DAYS_PER_YEAR;
+          if (rng.next() < pr) {
+            this.addCitizen(hid, home, rng.int(0, 1), 0, Education.None, Role.Child, now);
+            this.addMember(hid);
+            this.month.births += hw;
+          }
+        }
+        p.stage = DailyStage.Households;
+        return;
+      }
+      case DailyStage.Households: {
+        // 5) Décohabitation (nouveau ménage dans un logement libre).
+        if (p.pending.length) this.beginHousingCache();
+        for (const cid of p.pending) {
+          const i = this.citizens.indexOf(cid);
+          if (i < 0) continue;
+          const w = this.weightOf(i);
+          const target = this.findHousing(w);
+          if (target < 0) { if (w === 1) break; continue; }
+          const oldHk = this.households.indexOf(c.household[i]!);
+          const surname = oldHk >= 0 ? this.households.col.surname[oldHk]! : randomSurname(rng);
+          const hid = this.newHousehold(target, surname, now, w);
+          if (oldHk >= 0) this.households.col.size[oldHk]!--;
+          const oi = b.indexOf(c.home[i]!);
+          if (oi >= 0 && b.residents[oi]! > 0) b.residents[oi] = Math.max(0, b.residents[oi]! - w);
+          const ti = b.indexOf(target);
+          if (ti >= 0) b.residents[ti]! += w;
+          c.household[i] = hid;
+          c.home[i] = target;
+          c.role[i] = Role.Adult;
+          this.addMember(hid);
+          this.updateCommute(i);
+          this.month.householdsFormed += w;
+          this.rowsVersion++;
+        }
+        this.housingCap = null;
+        p.pending = [];
+        // 6) Économie vivante : ménages en difficulté durable -> logement moins cher, sinon départ (plafonnés).
+        this.living.resolve(now);
+        p.stage = p.merge ? DailyStage.Merge : DailyStage.Done;
+        return;
+      }
+      case DailyStage.Merge: {
+        // 7) Fusion des ménages identiques, par groupes de logements (id du bâtiment modulo MERGE_GROUPS).
+        if (spread) { this.mergeHouseholdGroup(p.mergeCap, MERGE_GROUPS, p.group, now); p.group++; }
+        else { this.mergeHouseholdGroup(p.mergeCap, 1, 0, now); p.group = MERGE_GROUPS; }
+        if (p.group >= MERGE_GROUPS) p.stage = DailyStage.Done;
+        return;
+      }
+      default:
+        p.stage = DailyStage.Done;
     }
+  }
 
-    // 2) Transitions individuelles.
-    // Âge franchi hier -> aujourd'hui (fonction hors de la boucle : pas de fermeture créée par citoyen).
-    const crossed = (agePrev: number, age: number, y: number): boolean => agePrev < y && age >= y;
+  /* ------------------------- Fusion des ménages identiques ------------------------- */
+
+  /** Poids maximal d'une ligne fusionnée : celui des nouveaux ménages (1 sous le seuil d'agrégation). */
+  private mergeCap(): number { return this.newHouseholdWeight(); }
+
+  /** Fusions effectuées depuis le début de la partie (lignes de ménage retirées ; statistique du banc d'essai). */
+  mergedHouseholds = 0;
+
+  /**
+   * Fusionne tous les ménages identiques de la ville (poids plafonné à `cap`) ; renvoie le nombre de lignes de ménage
+   * retirées. Utilisé par la passe quotidienne (par groupes) et par les tests.
+   */
+  mergeHouseholds(now: number, cap = this.mergeCap()): number {
+    return this.mergeHouseholdGroup(cap, 1, 0, now);
+  }
+
+  /**
+   * Fusion des ménages dont le logement a un id ≡ `group` (mod `groups`) : les ménages identiques — même logement,
+   * même taille, et membres deux à deux identiques (rôle, sexe, éducation, tranche d'âge, emploi dans le même bâtiment
+   * ou sans emploi, école, malade ou non, revenu) — sont regroupés en une ligne pondérée dont le poids reste ≤ `cap`.
+   * Toutes les sommes sont conservées : habitants, ménages, occupation des logements et des emplois, élèves, revenus
+   * (donc assiettes fiscales et salaires des entreprises). Date de naissance, bonheur, jours de maladie et de difficulté
+   * : moyennes pondérées (même tranche d'âge : la date reste dans la tranche) ; emménagement : le plus ancien.
+   */
+  private mergeHouseholdGroup(cap: number, groups: number, group: number, now: number): number {
+    if (cap <= 1) return 0;
+    const c = this.citizens.col;
+    const hc = this.households.col;
+    // Ménages candidats du groupe (poids sous le plafond), puis leurs membres (index de citoyens, ordre des lignes).
+    const members = new Map<number, number[]>();
+    for (let k = 0; k < this.households.count; k++) {
+      const h = hc.home[k]!;
+      if (h >= 0 && h % groups === group && this.hhWeightOf(k) < cap) members.set(hc.id[k]!, []);
+    }
+    if (members.size < 2) return 0;
     for (let i = 0; i < this.citizens.count; i++) {
-      const age = this.ageOf(i, now);
-      const agePrev = (yesterday - c.birth[i]!) / MINUTES_PER_YEAR;
-      const w = this.weightOf(i);
-      // Retraite.
-      if (c.job[i]! >= 0 && age >= RETIREMENT_AGE) { this.quitJob(i); c.income[i] = PENSION; this.assignSchedule(i); }
-      if (age >= RETIREMENT_AGE && c.job[i]! < 0) c.income[i] = PENSION;
-      // Scolarité.
-      if (age >= SCHOOL_AGE_MIN && age < SCHOOL_AGE_MAX + 1) {
-        if (c.school[i]! < 0) {
-          const s = this.findSchool(i);
-          if (s >= 0) { c.school[i] = s; this.pupilsBySchool.set(s, (this.pupilsBySchool.get(s) ?? 0) + w); this.updateCommute(i); this.assignSchedule(i); }
+      const h = c.home[i]!;
+      if (h < 0 || h % groups !== group) continue;
+      members.get(c.household[i]!)?.push(i);
+    }
+    // Clé de chaque ménage fusionnable (poids < plafond), membres triés par clé.
+    const groupsByKey = new Map<string, { hk: number; m: number[] }[]>();
+    const sortedKeys: string[] = [];
+    for (const [hid, list] of members) {
+      const hk = this.households.indexOf(hid);
+      if (hk < 0 || this.hhWeightOf(hk) >= cap || hc.size[hk] !== list.length) continue;
+      sortedKeys.length = 0;
+      const keyed = list.map((i) => ({ i, k: this.memberKey(i, now) }));
+      keyed.sort((x, y) => (x.k < y.k ? -1 : x.k > y.k ? 1 : x.i - y.i));
+      for (const e of keyed) sortedKeys.push(e.k);
+      const key = `${hc.home[hk]}|${list.length}|${sortedKeys.join(';')}`;
+      const entry = { hk, m: keyed.map((e) => e.i) };
+      const g = groupsByKey.get(key);
+      if (g) g.push(entry); else groupsByKey.set(key, [entry]);
+    }
+    const removeHh: number[] = [];
+    const removeCit: number[] = [];
+    for (const list of groupsByKey.values()) {
+      if (list.length < 2) continue;
+      list.sort((x, y) => hc.id[x.hk]! - hc.id[y.hk]!);
+      let rep = list[0]!;
+      let acc = this.hhWeightOf(rep.hk);
+      for (let k = 1; k < list.length; k++) {
+        const h = list[k]!;
+        const hw = this.hhWeightOf(h.hk);
+        if (acc + hw > cap) { rep = h; acc = hw; continue; }
+        const tot = acc + hw;
+        // Ménage : poids, emménagement le plus ancien, mois de mécontentement et jours de difficulté moyens.
+        hc.unhappyMonths[rep.hk] = Math.round((hc.unhappyMonths[rep.hk]! * acc + hc.unhappyMonths[h.hk]! * hw) / tot);
+        hc.distressDays[rep.hk] = Math.round((hc.distressDays[rep.hk]! * acc + hc.distressDays[h.hk]! * hw) / tot);
+        hc.movedIn[rep.hk] = Math.min(hc.movedIn[rep.hk]!, hc.movedIn[h.hk]!);
+        hc.weight[rep.hk] = tot;
+        // Membres appariés dans l'ordre des clés.
+        for (let m = 0; m < rep.m.length; m++) {
+          const r = rep.m[m]!, o = h.m[m]!;
+          const wr = this.weightOf(r), wo = this.weightOf(o);
+          c.birth[r] = Math.round((c.birth[r]! * wr + c.birth[o]! * wo) / tot);
+          c.happiness[r] = (c.happiness[r]! * wr + c.happiness[o]! * wo) / tot;
+          c.sick[r] = Math.round((c.sick[r]! * wr + c.sick[o]! * wo) / tot);
+          c.weight[r] = tot;
+          // Ligne agrégée : jamais en LOD détaillé (pas de trajet individuel).
+          if (c.lod[r] === SimLod.Detailed) c.lod[r] = SimLod.Simplified;
+          this.aggRows += 1 - (wr > 1 ? 1 : 0) - (wo > 1 ? 1 : 0);
+          removeCit.push(c.id[o]!);
         }
-        if (c.school[i]! >= 0) {
-          if (crossed(agePrev, age, 11) && c.education[i]! < Education.Primary) c.education[i] = Education.Primary;
-          if (crossed(agePrev, age, 16) && c.education[i]! < Education.Secondary) c.education[i] = Education.Secondary;
-        }
-      } else if (c.school[i]! >= 0 && age >= SCHOOL_AGE_MAX + 1) {
-        // Fin de scolarité : baccalauréat pour 80 % des lycéens.
-        if (c.education[i]! >= Education.Secondary && rng.chance(0.8)) c.education[i] = Education.Baccalaureate;
-        this.pupilsBySchool.set(c.school[i]!, Math.max(0, (this.pupilsBySchool.get(c.school[i]!) ?? w) - w));
-        c.school[i] = -1;
-        c.commute[i] = 0;
-        this.assignSchedule(i);
-      }
-      // Économie vivante : études supérieures (bachelier de 21 ans dont le quartier est couvert par l'éducation) et
-      // formation continue des adultes sans emploi (moins de 45 ans, quartier couvert).
-      if (crossed(agePrev, age, 21) && c.education[i] === Education.Baccalaureate) {
-        const hb = b.indexOf(c.home[i]!);
-        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.chance(this.living.tuning.probaSuperieur * this.educationFactor)) { c.education[i] = Education.Higher; this.living.month.graduates += w; }
-      } else if (c.job[i]! < 0 && c.school[i]! < 0 && age >= WORKING_AGE_MIN && age < 45 && c.education[i]! < Education.Baccalaureate) {
-        const hb = b.indexOf(c.home[i]!);
-        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.next() < (this.living.tuning.probaFormationAn * this.educationFactor) / DAYS_PER_YEAR) {
-          c.education[i] = Math.max(Education.Secondary, c.education[i]! + 1);
-          this.living.month.graduates += w;
-        }
-      }
-      // Recherche d'emploi.
-      // Plafond en habitants réels : une ligne agrégée compte pour son poids.
-      if (freeJobs > 0 && age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.job[i]! < 0 && c.school[i]! < 0 && searches + w <= JOB_SEARCHES_PER_DAY) {
-        searches += w;
-        if (!this.jobCells) this.prepareJobCells();
-        const j = this.findJob(i);
-        if (j >= 0) {
-          const f = this.jobPartialFree;
-          if (f > 0) { this.hire(this.splitHousehold(i, f), j); freeJobs -= f; } else { this.hire(i, j); freeJobs -= w; }
-        } else noReach += w;
-      }
-      // Poids relu : une découpe (emploi partiel) a pu le réduire ; la copie détachée est comptée à son tour.
-      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { const wn = this.weightOf(i); laborNow += wn; if (c.job[i]! < 0) unemployedNow += wn; }
-    }
-
-    this.memberIndex = null;
-    this.jobCells = null;
-    this.jobNoReachDay = noReach; this.lastUnemployed = unemployedNow; this.lastLaborForce = laborNow;
-
-    // 2 bis) Services : criminalité, risque d'incendie, santé des logements, délits du jour, maladies.
-    this.services.daily(now);
-
-    // 2 ter) Économie vivante : loyers, ressources et effort des ménages, statistiques du jour.
-    this.living.assess(now, this.buildingsVersion);
-
-    // 3) Bonheur + agrégats par ménage.
-    this.ensureHouseholdBuffers();
-    const nh = this.households.count;
-    this.hhAdults.fill(0, 0, nh); this.hhFertile.fill(0, 0, nh); this.hhHappy.fill(0, 0, nh); this.hhMembers.fill(0, 0, nh);
-    const taxPenalty = residentialTaxPenalty(residentialTaxRate);
-    // Impôt par niveau d'éducation : chaque adulte ressent le taux de son niveau (les enfants, le taux moyen).
-    const eduPen = this.eduTaxPenalties(taxPenalty);
-    this.lastEduRates = this.eduTaxRates ? [...this.eduTaxRates] : null;
-    const pending: number[] = [];
-    // Détail par facteur (rapport) ; états des réseaux et satisfaction des modules calculés une fois par logement.
-    const fs = this.factorSum;
-    fs.fill(0);
-    const ramp = this.noServiceRamp();
-    this.lastTaxRate = residentialTaxRate;
-    const homeCache = new Map<number, Float64Array>();
-    const homeParts = (bi: number): Float64Array => {
-      const id = b.id[bi]!;
-      let v = homeCache.get(id);
-      if (v) return v;
-      v = this.homePartsOf(bi, ramp, new Float64Array(7));
-      homeCache.set(id, v);
-      return v;
-    };
-    for (let i = 0; i < this.citizens.count; i++) {
-      const age = this.ageOf(i, now);
-      const bi = b.indexOf(c.home[i]!);
-      const hkr = this.households.indexOf(c.household[i]!);
-      let t = this.scoreCitizen(i, age, bi, hkr, ramp, age >= 18 ? eduPen[c.education[i]!] ?? taxPenalty : taxPenalty, homeParts, fs, this.weightOf(i));
-      t = t < 0 ? 0 : t > 100 ? 100 : t;
-      c.happiness[i] = c.happiness[i]! * 0.8 + t * 0.2;
-      const hk = hkr;
-      if (hk >= 0) {
-        this.hhMembers[hk]!++;
-        this.hhHappy[hk]! += c.happiness[i]!;
-        if (age >= 18) this.hhAdults[hk]!++;
-        if (c.sex[i] === 0 && age >= 18 && age <= 42) this.hhFertile[hk] = 1;
-      }
-      // Décohabitation : jeunes adultes actifs vivant chez leurs parents.
-      if (c.role[i] === Role.Child && age >= 20 && c.job[i]! >= 0 && rng.next() < 0.3 / DAYS_PER_YEAR) pending.push(c.id[i]!);
-    }
-
-    this.factorCount = this.popW;
-
-    // 4) Naissances.
-    for (let hk = 0; hk < nh; hk++) {
-      if (!this.hhFertile[hk] || this.hhAdults[hk]! < 2) continue;
-      const hid = this.households.col.id[hk]!;
-      const home = this.households.col.home[hk]!;
-      const bi = b.indexOf(home);
-      const hw = this.hhWeightOf(hk);
-      if (bi < 0 || this.freeHousingAt(bi) < hw || this.households.col.size[hk]! >= 7) continue;
-      const happy = this.hhMembers[hk]! ? this.hhHappy[hk]! / this.hhMembers[hk]! : 50;
-      const p = (0.09 * (0.5 + happy / 100)) / DAYS_PER_YEAR;
-      if (rng.next() < p) {
-        this.addCitizen(hid, home, rng.int(0, 1), 0, Education.None, Role.Child, now);
-        this.addMember(hid);
-        this.month.births += hw;
+        acc = tot;
+        removeHh.push(hc.id[h.hk]!);
       }
     }
+    // Suppressions en fin de groupe (les index relevés plus haut restent valables jusque-là). Les compteurs pondérés
+    // (habitants, ménages, occupation, élèves) sont inchangés : le poids est passé à la ligne représentative.
+    for (const id of removeCit) this.citizens.remove(id);
+    for (const id of removeHh) this.households.remove(id);
+    if (removeHh.length) this.hhRowsVersion++;
+    if (removeCit.length) this.rowsVersion++;
+    this.mergedHouseholds += removeHh.length;
+    return removeHh.length;
+  }
 
-    // 5) Décohabitation (nouveau ménage dans un logement libre).
-    if (pending.length) this.beginHousingCache();
-    for (const cid of pending) {
-      const i = this.citizens.indexOf(cid);
-      if (i < 0) continue;
-      const w = this.weightOf(i);
-      const target = this.findHousing(w);
-      if (target < 0) { if (w === 1) break; continue; }
-      const oldHk = this.households.indexOf(c.household[i]!);
-      const surname = oldHk >= 0 ? this.households.col.surname[oldHk]! : randomSurname(rng);
-      const hid = this.newHousehold(target, surname, now, w);
-      if (oldHk >= 0) this.households.col.size[oldHk]!--;
-      const oi = b.indexOf(c.home[i]!);
-      if (oi >= 0 && b.residents[oi]! > 0) b.residents[oi] = Math.max(0, b.residents[oi]! - w);
-      const ti = b.indexOf(target);
-      if (ti >= 0) b.residents[ti]! += w;
-      c.household[i] = hid;
-      c.home[i] = target;
-      c.role[i] = Role.Adult;
-      this.addMember(hid);
-      this.updateCommute(i);
-      this.month.householdsFormed += w;
-    }
-
-    this.housingCap = null;
-    // 6) Économie vivante : ménages en difficulté durable -> logement moins cher, sinon départ (plafonnés).
-    this.living.resolve(now);
+  /** Clé de fusion d'un citoyen (rôle, sexe, éducation, tranche d'âge, emploi, école, maladie, revenu). */
+  private memberKey(i: number, now: number): string {
+    const c = this.citizens.col;
+    const age = this.ageOf(i, now);
+    let band = 0;
+    while (band < MERGE_AGE_BANDS.length && age >= MERGE_AGE_BANDS[band]!) band++;
+    return `${c.role[i]},${c.sex[i]},${c.education[i]},${band},${c.job[i]},${c.school[i]},${c.sick[i]! > 0 ? 1 : 0},${c.income[i]}`;
   }
 
   /** Taux de l'impôt résidentiel du dernier calcul quotidien (fiche « Pourquoi » d'un bâtiment). */
