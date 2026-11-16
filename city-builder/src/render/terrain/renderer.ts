@@ -85,6 +85,46 @@ export class TerrainSystem implements IRenderTerrain {
   private disposed = false;
   private readonly byPrio = (a: number, b: number): number => this.prio[a]! - this.prio[b]!;
 
+  /** Limite de la carte : rideau lumineux qui suit le relief le long des quatre bords (repère de la zone constructible). */
+  private border: THREE.Mesh | null = null;
+
+  /** (Re)construit le rideau de bordure à partir des hauteurs du bord (peu coûteux : un échantillon sur deux). */
+  private buildBorder(): void {
+    const t = this.data;
+    if (this.border) { this.group.remove(this.border); this.border.geometry.dispose(); (this.border.material as THREE.Material).dispose(); this.border = null; }
+    if (!t || t.samplesX < 2 || t.samplesZ < 2) return;
+    const nx = t.samplesX - 1, nz = t.samplesZ - 1, step = 2;
+    const pts: [number, number][] = [];
+    for (let i = 0; i < nx; i += step) pts.push([i, 0]);
+    for (let j = 0; j < nz; j += step) pts.push([nx, j]);
+    for (let i = nx; i > 0; i -= step) pts.push([i, nz]);
+    for (let j = nz; j > 0; j -= step) pts.push([0, j]);
+    pts.push([0, 0]);
+    const H = 16, n = pts.length;
+    const pos = new Float32Array(n * 2 * 3), col = new Float32Array(n * 2 * 4);
+    for (let k = 0; k < n; k++) {
+      const [i, j] = pts[k]!;
+      const x = t.originX + i * t.spacing, z = t.originZ + j * t.spacing;
+      const y = Math.max(t.heights[j * t.samplesX + i]!, t.waterLevel) + 0.3;
+      pos.set([x, y, z, x, y + H, z], k * 6);
+      // Orange vif au sol, fondu vers le haut.
+      col.set([1, 0.55, 0.1, 0.95, 1, 0.7, 0.25, 0.05], k * 8);
+    }
+    const idx: number[] = [];
+    for (let k = 0; k < n - 1; k++) { const a = k * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 4));
+    g.setIndex(idx);
+    g.computeBoundingSphere();
+    const m = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true });
+    this.border = new THREE.Mesh(g, m);
+    this.border.name = 'limite-carte';
+    this.border.renderOrder = 2;
+    this.border.frustumCulled = false;
+    this.group.add(this.border);
+  }
+
   constructor(scene: THREE.Scene, private readonly options: TerrainSystemOptions) {
     this.opts = {
       anisotropy: options.anisotropy ?? 8,
@@ -134,6 +174,7 @@ export class TerrainSystem implements IRenderTerrain {
   build(t: TerrainData): void {
     this.clearChunks();
     this.data = t;
+    this.buildBorder();
     if (this.matHandle) this.matHandle.uniforms.uWaterLevel.value = t.waterLevel;
     const world = isWorldTerrain(t) ? t : null;
     const src: MeshSource = {
@@ -327,6 +368,7 @@ export class TerrainSystem implements IRenderTerrain {
     applyPatchData(this.data, p);
     // Remplissage d'une retenue : seule l'eau change (hauteurs identiques), rien à remailler.
     if (p.waterOnly) return;
+    if (p.i0 <= 0 || p.j0 <= 0 || p.i1 >= this.data.samplesX - 1 || p.j1 >= this.data.samplesZ - 1) this.buildBorder();
     this.mesher.patch(p.i0, p.j0, p.i1 - p.i0 + 1, p.j1 - p.j0 + 1);
     const cs = this.cellsPerChunk;
     for (const c of this.chunks) {
@@ -366,6 +408,7 @@ export class TerrainSystem implements IRenderTerrain {
   dispose(): void {
     this.disposed = true;
     this.clearChunks();
+    if (this.border) { this.border.geometry.dispose(); (this.border.material as THREE.Material).dispose(); this.border = null; }
     this.mesher.dispose();
     this.matHandle?.material.dispose();
     this.textures?.dispose();
