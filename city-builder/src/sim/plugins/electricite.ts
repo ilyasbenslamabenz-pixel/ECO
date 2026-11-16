@@ -183,6 +183,12 @@ export function createElectricitePlugin(): ElectricitePlugin {
           system.setVente(ctx, p.on);
           return { ok: true, data: system.state.settings };
         }
+        case 'prixVente': {
+          if (typeof p.price !== 'number' || !Number.isFinite(p.price)) return bad('price (nombre, ct/kWh) attendu');
+          activate();
+          system.setPrixVente(ctx, p.price);
+          return { ok: true, data: system.state.settings };
+        }
         case 'setRooftops':
           if (typeof p.enabled !== 'boolean') return bad('enabled (booléen) attendu');
           activate();

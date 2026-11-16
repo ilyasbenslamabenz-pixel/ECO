@@ -314,3 +314,11 @@ meshopt) : 0,84 Mo (budget de l'étape : 2 Mo).
   3 fermes solaires la nuit sans vent — sans batterie : coupure et conseil unique ; avec batteries chargées : 7 h
   sans coupure ; avec raccordement : alimentée —, sauvegarde ancienne partie et niveau de charge) ; `npm run build`
   ✓ (45,9 Mo / 60) ; `npm run e2e`, `npm run e2e:play`, `npm run e2e:mobile` SUCCÈS.
+
+### Vente simplifiée et prix réglable (mise à jour)
+
+Sur retour du joueur, la vente du surplus aux villes voisines n'exige plus ni raccordement ni route au bord de la
+carte, et n'a plus de plafond de puissance. Le joueur règle le prix de vente (0,5 à 15 ct/kWh, défaut 1,5) dans le
+panneau Énergie. Les voisins achètent tout le surplus jusqu'à 4,5 ct/kWh (leur propre prix d'achat), puis une part
+décroissante jusqu'à 15 ct/kWh (rien). Recette maximale vers 7,5 ct/kWh. Champ de sauvegarde facultatif
+`settings.prixVente`. Commande `electricite` / `prixVente` `{ price }`.

@@ -23,7 +23,7 @@ import { governanceModifiers } from '../../shared/governance';
 import {
   BATTERY_ONE_WAY, BATTERY_SPEC, batteryStep, capacityKwhOf,
   baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hourlyFactor, hydroShare,
-  hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, CABLE_SPEC, cableCost, EXPORT_SPEC, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
+  hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, CABLE_SPEC, cableCost, EXPORT_SPEC, clampExportPrice, exportDemandShare, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
   TARIFF_CENTS_PER_KWH, windPowerShare, windProfile,
 } from '../../shared/power/model';
 import {
@@ -37,7 +37,6 @@ import { TILE_SIZE } from '../../shared/constants';
 import type { Municipal } from '../municipal/municipal';
 import { decodeFloat32, encodeFloat32 } from '../municipal/codec';
 import type { PluginContext } from '../plugins/types';
-import { linkedToNeighbours } from '../connexions/lien';
 
 /* ------------------------------- État sauvegardé ------------------------------- */
 
@@ -265,7 +264,7 @@ export class PowerSystem {
   isIdle(ctx: PluginContext): boolean {
     if (this.state.lines.length || this.state.cables?.length || this.state.events.length || this.rooftopSet.size) return false;
     const s = this.state.settings;
-    if (s.funding !== 1 || s.rooftops || s.raccordement || s.vente === false || s.priorities.join() !== DEFAULT_PRIORITY_ORDER.join()) return false;
+    if (s.funding !== 1 || s.rooftops || s.raccordement || s.vente === false || s.prixVente !== undefined || s.priorities.join() !== DEFAULT_PRIORITY_ORDER.join()) return false;
     return this.scanFacilities(ctx).size === 0;
   }
 
@@ -729,6 +728,21 @@ export class PowerSystem {
     this.version++;
     this.allocate(ctx, false);
     return { ok: true };
+  }
+
+  /** Prix de vente du surplus choisi par le joueur (¢/kWh). */
+  get exportPrice(): number { return clampExportPrice(this.state.settings.prixVente); }
+
+  /** Règle le prix de vente du surplus (¢/kWh, borné). */
+  setPrixVente(ctx: PluginContext, price: number): void {
+    const p = clampExportPrice(price);
+    if (p === this.exportPrice) return;
+    const next = { ...this.state.settings };
+    if (p === EXPORT_SPEC.priceCentsPerKwh) delete next.prixVente; else next.prixVente = p;
+    this.state.settings = next;
+    this.event(ctx, 'reglage', `Prix de vente de l'électricité : ${p.toLocaleString('fr-FR')} ct/kWh`);
+    this.version++;
+    this.allocate(ctx, false);
   }
 
   /** Vente du surplus aux villes voisines : activée (par défaut) ou désactivée par le joueur. */
@@ -1204,7 +1218,7 @@ export class PowerSystem {
   /**
    * Surplus vendable et puissance vendue cette heure (kW). Vendable : capacité disponible non appelée des centrales
    * éoliennes, solaires et hydroélectriques en service et reliées (non isolées), plus les toitures, APRÈS la recharge
-   * des batteries. Vendu : ce surplus plafonné à `EXPORT_SPEC.capacityKw` (réduit comme le raccordement pendant une
+   * des batteries. Vendu : ce surplus multiplié par la part achetée au prix choisi (`exportDemandShare`), sans plafond ni lien exigé (ancien texte : réduit pendant une
    * panne du réseau voisin), seulement si la vente est activée, que la ville est reliée aux voisins (raccordement ou
    * connexion extérieure par route) et qu'elle n'achète rien cette heure-ci.
    */
@@ -1215,8 +1229,9 @@ export class PowerSystem {
       if (isolated.has(f.id) || this.facilityState(f.id).failedUntil > 0) continue;
       spare += Math.max(0, (avail.get(f.id) ?? 0) - (outputOf.get(f.id) ?? 0));
     }
-    if (!linkedToNeighbours(ctx, this.importOn)) return 0;
-    const sold = this.exportOn && importedKw <= 1e-6 ? Math.min(spare, EXPORT_SPEC.capacityKw * Math.max(0, capFactor)) : 0;
+    // Ni raccordement ni route au bord exigés, ni plafond : seul le prix choisi règle la part achetée par les voisins.
+    void ctx; void capFactor;
+    const sold = this.exportOn && importedKw <= 1e-6 ? spare * exportDemandShare(this.exportPrice) : 0;
     summary.sellableKw = Math.round(spare * 10) / 10;
     summary.exportedKw = Math.round(sold * 10) / 10;
     return sold > 1e-6 ? sold : 0;
@@ -1224,7 +1239,7 @@ export class PowerSystem {
 
   /** Vente de l'heure : recette versée tout de suite à la trésorerie (poste détaillé du bilan), cumuls du mois. */
   private sellExport(ctx: PluginContext, kw: number): void {
-    const cents = kw * EXPORT_SPEC.priceCentsPerKwh;
+    const cents = kw * this.exportPrice;
     const mo = this.state.month;
     mo.exportedKwh = (mo.exportedKwh ?? 0) + kw;
     mo.exportIncome = (mo.exportIncome ?? 0) + cents;

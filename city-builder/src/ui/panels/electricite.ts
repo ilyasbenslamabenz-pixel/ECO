@@ -13,7 +13,7 @@ import {
   SOURCE_LABELS_FR, type FacilityView,
 } from '../../shared/power/types';
 import { powerView } from '../../shared/power/view';
-import { EXPORT_SPEC, IMPORT_SPEC } from '../../shared/power/model';
+import { EXPORT_SPEC, IMPORT_SPEC, clampExportPrice, exportDemandShare } from '../../shared/power/model';
 import type { UiPanel, UiPanelApi } from './types';
 
 /* --------------------------------- Formats --------------------------------- */
@@ -175,9 +175,10 @@ function renderExport(s: ElectriciteSummary, st: ElectriciteDelta): string {
   const month = st.budget?.monthExportIncome;
   const income = month !== undefined ? ` · ce mois ${fmtChf(month)}` : '';
   let text: string;
-  if (s.exportedKw === undefined) text = 'aucune ville voisine reliée : activez le raccordement au réseau voisin ou reliez une route au bord de la carte.';
+  const price = clampExportPrice(st.settings?.prixVente);
+  if (s.exportedKw === undefined) text = `aucun surplus à vendre en ce moment${income}.`;
   else if (!on) text = `désactivée (surplus vendable ${fmtPower(s.sellableKw ?? 0)}).`;
-  else if (s.exportedKw > 0) text = `<b class="ok">${fmtPower(s.exportedKw)}</b> vendus cette heure (${EXPORT_SPEC.priceCentsPerKwh.toLocaleString('fr-FR')} ct/kWh)${income}.`;
+  else if (s.exportedKw > 0) text = `<b class="ok">${fmtPower(s.exportedKw)}</b> vendus cette heure (${price.toLocaleString('fr-FR')} ct/kWh)${income}.`;
   else text = `aucun surplus à vendre en ce moment${income}.`;
   return `<p style="margin:6px 0" data-k="vente">Vente d'électricité : ${text}</p>`;
 }
@@ -199,7 +200,9 @@ function renderSettings(st: ElectriciteDelta): string {
   return `<h4>Réglages</h4>
   ${renderRaccordement(st)}
   <div class="row"><label><input id="elec-vente" type="checkbox" ${set.vente !== false ? 'checked' : ''}> <b>Vendre le surplus aux villes voisines</b></label></div>
-  <p class="muted" style="margin:2px 0 6px">Chaque heure, le surplus éolien, solaire, hydraulique et des toitures (après recharge des batteries) est vendu ${EXPORT_SPEC.priceCentsPerKwh.toLocaleString('fr-FR')} ct/kWh, jusqu'à ${fmtPower(EXPORT_SPEC.capacityKw)}, si la ville est raccordée au réseau voisin ou reliée par une route au bord de la carte.</p>
+  <div class="row"><label for="elec-prix">Prix de vente</label><b data-k="prix-vente">${clampExportPrice(set.prixVente).toLocaleString('fr-FR')} ct/kWh · voisins achètent ${Math.round(exportDemandShare(clampExportPrice(set.prixVente)) * 100)} %</b></div>
+  <div class="row"><input id="elec-prix" type="range" min="${EXPORT_SPEC.minPrice}" max="${EXPORT_SPEC.maxPrice}" step="0.5" value="${clampExportPrice(set.prixVente)}"></div>
+  <p class="muted" style="margin:2px 0 6px">Automatique et sans limite : chaque heure, tout le surplus éolien, solaire, hydraulique et des toitures (après recharge des batteries) est vendu. Jusqu'à ${EXPORT_SPEC.refPrice.toLocaleString('fr-FR')} ct/kWh les voisins achètent tout ; plus cher, ils achètent moins (rien à ${EXPORT_SPEC.maxPrice} ct).</p>
   <div class="row"><label for="elec-fund">Financement de l'entretien</label><b data-k="financement">${Math.round(set.funding * 100)} %</b></div>
   <div class="row"><input id="elec-fund" type="range" min="${FUNDING_MIN * 100}" max="${FUNDING_MAX * 100}" step="5" value="${Math.round(set.funding * 100)}"></div>
   <p class="muted" style="margin:2px 0 6px">Sous-financer augmente les pannes (×4 à 50 %) et allonge les réparations.</p>
@@ -302,6 +305,7 @@ function mountPanel(root: HTMLElement, api: UiPanelApi): () => void {
     const t = ev.target as HTMLInputElement;
     if (t.id === 'elec-fund') void run('setFunding', { funding: Number(t.value) / 100 }).then(refresh);
     if (t.id === 'elec-vente') void run('vente', { on: t.checked }).then(refresh);
+    if (t.id === 'elec-prix') void run('prixVente', { price: Number(t.value) }).then(refresh);
     if (t.id === 'elec-roof') void run('setRooftops', { enabled: t.checked }).then(refresh);
     if (t.id === 'elec-racc') {
       const on = t.checked;

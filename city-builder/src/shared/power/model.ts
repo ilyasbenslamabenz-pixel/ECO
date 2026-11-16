@@ -134,7 +134,25 @@ export const IMPORT_SPEC = { capacityKw: 3_000, priceCentsPerKwh: 4.5, connectio
  * (`IMPORT_SPEC.priceCentsPerKwh`) et au tarif de revente local : acheter puis revendre fait toujours perdre.
  * Les centrales thermiques ne vendent pas leur capacité inutilisée (pilotables : elles ne brûlent que le gaz appelé).
  */
-export const EXPORT_SPEC = { capacityKw: 10_000, priceCentsPerKwh: 1.5 } as const;
+/**
+ * Vente du surplus aux villes voisines : sans plafond de puissance ni condition de raccordement. Prix réglable par le
+ * joueur (`minPrice`..`maxPrice`, défaut `priceCentsPerKwh`). Les voisins achètent tout le surplus jusqu'au prix de
+ * référence (`refPrice`, leur propre prix d'achat), puis une part décroissante jusqu'à `maxPrice` (part nulle).
+ */
+export const EXPORT_SPEC = { priceCentsPerKwh: 1.5, minPrice: 0.5, maxPrice: 15, refPrice: 4.5 } as const;
+
+/** Prix de vente borné (¢/kWh) ; valeur absente ou invalide → prix par défaut. */
+export function clampExportPrice(p: number | undefined): number {
+  if (typeof p !== 'number' || !Number.isFinite(p)) return EXPORT_SPEC.priceCentsPerKwh;
+  return Math.min(EXPORT_SPEC.maxPrice, Math.max(EXPORT_SPEC.minPrice, Math.round(p * 10) / 10));
+}
+
+/** Part du surplus achetée par les voisins à ce prix : 1 jusqu'au prix de référence, puis décroissance linéaire. */
+export function exportDemandShare(price: number): number {
+  const { refPrice, maxPrice } = EXPORT_SPEC;
+  if (price <= refPrice) return 1;
+  return Math.max(0, (maxPrice - price) / (maxPrice - refPrice));
+}
 
 /**
  * Conversion centimes (unité des montants du module électricité : tarifs, coûts, entretien) -> CHF (unité de la

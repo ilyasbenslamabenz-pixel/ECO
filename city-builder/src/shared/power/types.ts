@@ -236,6 +236,8 @@ export interface ElectriciteSettings {
    * = activée.
    */
   vente?: boolean;
+  /** Prix de vente du surplus (¢/kWh) choisi par le joueur ; absent = `EXPORT_SPEC.priceCentsPerKwh`. */
+  prixVente?: number;
 }
 
 /** Bilan budgétaire mensuel du service (¢). */

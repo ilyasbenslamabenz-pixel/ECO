@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EXPORT_SPEC, IMPORT_SPEC, TARIFF_CENTS_PER_KWH } from '../../src/shared/power/model';
+import { EXPORT_SPEC, IMPORT_SPEC, TARIFF_CENTS_PER_KWH, clampExportPrice, exportDemandShare } from '../../src/shared/power/model';
 import type { SimPlugin } from '../../src/sim/plugins';
 import { createElectricitePlugin } from '../../src/sim/plugins/electricite';
 import { migrateElectricite } from '../../src/sim/save-sections/electricite';
@@ -29,10 +29,14 @@ function scene(opts: { battery?: boolean; link?: boolean; road?: boolean } = {})
 const exportLine = (sim: Simulation): number => sim.economy.currentServiceLines()['vente_electricite_exterieure'] ?? 0;
 const firstSaleNotices = (sim: Simulation): number => sim.notices.filter((n) => n.message.startsWith('Première vente d\'électricité')).length;
 
-test('prix : vente moins chère que l\'achat au voisin et que le tarif local, plafond de capacité', () => {
+test('prix : défaut moins cher que l\'achat au voisin ; part achetée par les voisins selon le prix choisi', () => {
   assert.ok(EXPORT_SPEC.priceCentsPerKwh < IMPORT_SPEC.priceCentsPerKwh);
   assert.ok(EXPORT_SPEC.priceCentsPerKwh < TARIFF_CENTS_PER_KWH);
-  assert.ok(EXPORT_SPEC.capacityKw > 0 && EXPORT_SPEC.capacityKw <= 20_000);
+  assert.equal(exportDemandShare(EXPORT_SPEC.refPrice), 1);
+  assert.equal(exportDemandShare(EXPORT_SPEC.maxPrice), 0);
+  assert.ok(exportDemandShare(8) > 0 && exportDemandShare(8) < 1);
+  assert.equal(clampExportPrice(99), EXPORT_SPEC.maxPrice);
+  assert.equal(clampExportPrice(undefined), EXPORT_SPEC.priceCentsPerKwh);
 });
 
 test('surplus vendu (raccordement) : la trésorerie augmente exactement de la recette, poste détaillé, notification unique', () => {
@@ -45,7 +49,6 @@ test('surplus vendu (raccordement) : la trésorerie augmente exactement de la re
   advanceHours(a.sim, 4); advanceHours(b.sim, 4);
   const s = a.elec.system.summary()!;
   assert.ok((s.exportedKw ?? 0) > 0, `vendu ${s.exportedKw} kW`);
-  assert.ok(s.exportedKw! <= EXPORT_SPEC.capacityKw);
   assert.equal(s.importedKw, 0, 'rien acheté');
   const income = ((a.elec.system.state.month.exportIncome ?? 0) - inc0) / 100;
   assert.ok(income > 0);
@@ -77,16 +80,27 @@ test('connexion extérieure par route reliée : vente sans raccordement', () => 
   assert.ok(exportLine(t.sim) > 0);
 });
 
-test('pas de connexion avec l\'extérieur : rien n\'est vendu', () => {
+test('sans raccordement ni route au bord : le surplus est vendu quand même, sans plafond', () => {
   const t = scene();
   advanceToHour(t.sim, 12);
   advanceHours(t.sim, 3);
   const s = t.elec.system.summary()!;
   assert.ok(s.exportableKw > 0, 'surplus présent');
-  assert.equal(s.exportedKw, undefined);
-  assert.equal(exportLine(t.sim), 0);
-  assert.equal(t.elec.system.state.month.exportIncome, undefined);
-  assert.equal(firstSaleNotices(t.sim), 0);
+  assert.ok((s.exportedKw ?? 0) > 0, `vendu ${s.exportedKw} kW`);
+  assert.ok(Math.abs((s.exportedKw ?? 0) - (s.sellableKw ?? 0)) < 0.2, 'tout le surplus vendu (prix par défaut)');
+  assert.ok(exportLine(t.sim) > 0);
+});
+
+test('prix de vente réglable : plus cher, recette par kWh plus haute et part vendue réduite au-delà du prix de référence', () => {
+  const a = scene(), b = scene();
+  assert.ok(b.sim.plugins.command('electricite', 'prixVente', { price: 9 }).ok);
+  assert.equal(b.elec.system.exportPrice, 9);
+  assert.ok(!b.sim.plugins.command('electricite', 'prixVente', { price: 'x' }).ok);
+  advanceToHour(a.sim, 12); advanceToHour(b.sim, 12);
+  advanceHours(a.sim, 2); advanceHours(b.sim, 2);
+  const sa = a.elec.system.summary()!, sb = b.elec.system.summary()!;
+  assert.ok((sb.exportedKw ?? 0) < (sa.exportedKw ?? 0), 'moins vendu à 9 ct');
+  assert.ok((b.elec.system.state.month.exportIncome ?? 0) > (a.elec.system.state.month.exportIncome ?? 0), 'mais recette plus haute');
 });
 
 test('pas de surplus (nuit sans vent) : rien n\'est vendu', () => {
