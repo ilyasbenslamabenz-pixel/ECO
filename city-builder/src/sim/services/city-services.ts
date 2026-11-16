@@ -47,6 +47,10 @@ export interface ServicesHost {
   districtOf(id: number): { key: number; name: string } | null;
   /** Ménage en difficulté de loyer (économie vivante). */
   householdInDistress(hk: number): boolean;
+  /** Simulation agrégée : habitants (ligne de citoyen) et ménages (ligne de ménage) représentés ; habitants réels. */
+  weightOf(ci: number): number;
+  hhWeightOf(hk: number): number;
+  readonly population: number;
 }
 
 interface AssetInfo { crimeKind: number; level: number; fireBase: number; resCap: number; jobCap: number; name: string; cost: number; upkeep: number }
@@ -251,14 +255,16 @@ export class CityServices {
       const bi = b.indexOf(c.home[i]!);
       if (bi < 0) continue;
       const age = h.ageOf(i, now);
-      this.aRes[bi]!++; this.aAge[bi]! += age;
-      if (age >= 18 && age < 64 && c.school[i]! < 0) { this.aLabor[bi]!++; if (c.job[i]! < 0) this.aUnemp[bi]!++; }
+      const w = h.weightOf(i);
+      this.aRes[bi]! += w; this.aAge[bi]! += age * w;
+      if (age >= 18 && age < 64 && c.school[i]! < 0) { this.aLabor[bi]! += w; if (c.job[i]! < 0) this.aUnemp[bi]! += w; }
     }
     for (let k = 0; k < hh.count; k++) {
       const bi = b.indexOf(hh.col.home[k]!);
       if (bi < 0) continue;
-      this.aHh[bi]!++;
-      if (h.householdInDistress(k)) this.aDistress[bi]!++;
+      const hw = h.hhWeightOf(k);
+      this.aHh[bi]! += hw;
+      if (h.householdInDistress(k)) this.aDistress[bi]! += hw;
     }
     // Criminalité propre puis moyenne du voisinage (îlots de `crimeIlotM` m, une passe).
     const cell = t.crimeIlotM;
@@ -341,7 +347,7 @@ export class CityServices {
     const c = h.citizens.col;
     let sick = 0;
     for (let i = 0; i < h.citizens.count; i++) {
-      if (c.sick[i]! > 0) { c.sick[i]!--; if (c.sick[i]! > 0) sick++; continue; }
+      if (c.sick[i]! > 0) { c.sick[i]!--; if (c.sick[i]! > 0) sick += h.weightOf(i); continue; }
       if (ramp <= 0) continue;
       const bi = b.indexOf(c.home[i]!);
       if (bi < 0) continue;
@@ -349,8 +355,9 @@ export class CityServices {
       const health = r && r.health >= 0 ? r.health : 70;
       if (hash01(c.id[i]!, day, SALT_SICK) < sicknessChance(t, health, h.ageOf(i, now), ramp) * this.eventSickFactor) {
         c.sick[i] = h.coverageQuality(SVC.Health, bi) > 0 ? t.maladieDureeSoins : t.maladieDureeSans;
-        this.month.sickCases++;
-        sick++;
+        const w = h.weightOf(i);
+        this.month.sickCases += w;
+        sick += w;
       }
     }
     this.sickNow = sick;
@@ -586,7 +593,7 @@ export class CityServices {
         if (h.coverageQuality(SVC.Health, bi) > 0) covH += res;
       }
     }
-    const pop = h.citizens.count;
+    const pop = h.population;
     const per: Record<number, number> = { [SVC.Police]: 600, [SVC.Fire]: 900, [SVC.Health]: 20 };
     const station = (svc: number, key: 'police' | 'pompiers' | 'sante'): ServicesReport['stations'][number] => {
       const list = h.serviceStations(svc);
@@ -633,7 +640,7 @@ export class CityServices {
     const a = this.info(bi);
     let sick = 0;
     const c = this.host.citizens.col;
-    for (let i = 0; i < this.host.citizens.count; i++) if (c.home[i] === id && c.sick[i]! > 0) sick++;
+    for (let i = 0; i < this.host.citizens.count; i++) if (c.home[i] === id && c.sick[i]! > 0) sick += this.host.weightOf(i);
     const state = this.burningIds.has(id) ? 'feu' : this.ruinIds.has(id) ? 'ruine' : this.damagedIds.has(id) ? 'endommage' : 'normal';
     const priv = this.host.isPrivate(id);
     return {

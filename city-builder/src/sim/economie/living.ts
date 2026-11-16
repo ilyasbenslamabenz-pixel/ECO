@@ -61,6 +61,10 @@ export interface LivingHost {
   districtOf(buildingId: number): { key: number; name: string } | null;
   /** Taux d'imposition d'un secteur d'entreprise (1 commerce, 2 industrie, 3 bureaux). */
   companyTaxRate(sector: number): number;
+  /** Simulation agrégée : habitants représentés par une ligne de citoyen, ménages par une ligne de ménage, ménages réels. */
+  weightOf(ci: number): number;
+  hhWeightOf(hk: number): number;
+  readonly householdCount: number;
 }
 
 export interface LivingCounters { relocations: number; departuresRent: number; closures: number; reopenings: number; graduates: number }
@@ -127,7 +131,7 @@ export class LivingEconomy {
   // Par index de ménage (calcul du jour).
   private hhRes = new Float64Array(0);
   private hhBurden = new Float32Array(0);
-  private pending: { hid: number; res: number; size: number; rent: number; days: number }[] = [];
+  private pending: { hid: number; res: number; size: number; rent: number; days: number; w?: number }[] = [];
   private stats: LivingReport | null = null;
   /** Facteur de clientèle de la ville entière (commerces), calculé avec les assiettes. */
   globalCustomers = 1;
@@ -221,23 +225,25 @@ export class LivingEconomy {
       const age = h.ageOf(i, now);
       const bi = b.indexOf(c.home[i]!);
       const dk = districtOfIndex(bi);
-      if (dk >= 0) dPop[dk]!++;
+      // Ligne agrégée : statistiques pondérées ; les ressources restent celles d'UN ménage représentatif.
+      const w = h.weightOf(i);
+      if (dk >= 0) dPop[dk]! += w;
       if (hk >= 0) this.hhRes[hk]! += c.income[i]!;
       const working = age >= WORK_MIN && age < WORK_MAX && c.school[i]! < 0;
       if (working) {
-        if (dk >= 0) dLf[dk]!++;
-        if (c.job[i]! < 0) { if (hk >= 0) this.hhRes[hk]! += t.allocationChomage; if (dk >= 0) dUn[dk]!++; }
+        if (dk >= 0) dLf[dk]! += w;
+        if (c.job[i]! < 0) { if (hk >= 0) this.hhRes[hk]! += t.allocationChomage; if (dk >= 0) dUn[dk]! += w; }
       }
-      if (age >= WORK_MIN) adults[eduTier(c.education[i]!)]!++;
+      if (age >= WORK_MIN) adults[eduTier(c.education[i]!)]! += w;
       if (c.job[i]! >= 0) {
         const j = b.indexOf(c.job[i]!);
         const m = j >= 0 ? h.livingMeta(j) : undefined;
         if (m) {
           const tier = eduTier(c.education[i]!);
-          employed++;
-          workersByTier[m.reqTier]!++;
-          if (tier < m.reqTier) under++;
-          else if (tier >= m.reqTier + 2) over++;
+          employed += w;
+          workersByTier[m.reqTier]! += w;
+          if (tier < m.reqTier) under += w;
+          else if (tier >= m.reqTier + 2) over += w;
         }
       }
     }
@@ -254,16 +260,17 @@ export class LivingEconomy {
       const res = this.hhRes[k]!;
       const burden = rent > 0 ? rent / Math.max(100, res) : 0;
       this.hhBurden[k] = burden;
+      const hw = h.hhWeightOf(k);
       if (rent > 0) {
-        rented++; rentSum += rent; resSum += res; burdenSum += Math.min(2, burden);
-        landSum += this.land[bi]!; landN++;
+        rented += hw; rentSum += rent * hw; resSum += res * hw; burdenSum += Math.min(2, burden) * hw;
+        landSum += this.land[bi]! * hw; landN += hw;
         const dk = districtOfIndex(bi);
-        if (dk >= 0) { dRent[dk]! += rent; dHh[dk]!++; }
+        if (dk >= 0) { dRent[dk]! += rent * hw; dHh[dk]! += hw; }
       }
       if (ramp > 0 && rent > 0 && burden > threshold) {
         col.distressDays[k] = Math.min(60_000, col.distressDays[k]! + 1);
-        distress++;
-        if (col.distressDays[k]! >= t.joursAvantDemenagement) this.pending.push({ hid: col.id[k]!, res, size: col.size[k]!, rent: unit, days: col.distressDays[k]! });
+        distress += hw;
+        if (col.distressDays[k]! >= t.joursAvantDemenagement) this.pending.push({ hid: col.id[k]!, res, size: col.size[k]!, rent: unit, days: col.distressDays[k]!, w: hw });
       } else col.distressDays[k] = Math.max(0, col.distressDays[k]! - 3);
     }
     // Les plus anciennes difficultés d'abord (départs plafonnés).
@@ -302,7 +309,7 @@ export class LivingEconomy {
       rentBurden: rented ? r1(burdenSum / rented) : 0,
       householdIncomeAverage: rented ? Math.round(resSum / rented) : 0,
       householdsInDistress: distress,
-      distressShare: nh ? r1(distress / nh) : 0,
+      distressShare: nh ? r1(distress / Math.max(1, h.householdCount)) : 0,
       landValueAverage: landN ? Math.round((100 * landSum) / landN) : 0,
       businessRentAverage: bRentN ? Math.round(bRent / bRentN) : 0,
       companiesActive: active, companiesInDifficulty: diff, companiesClosed: closedN,
@@ -323,7 +330,7 @@ export class LivingEconomy {
     const h = this.host, t = this.tuning;
     if (!this.pending.length) return;
     const b = h.ctx.buildings;
-    let moves = 0, departures = 0;
+    let moves = 0, departures = 0, departedW = 0;
     const leaving = new Set<number>();
     for (const p of this.pending) {
       if (moves >= t.maxDemenagementsParJour && departures >= t.maxDepartsParJour) break;
@@ -337,7 +344,7 @@ export class LivingEconomy {
         for (let i = 0; i < b.count; i++) {
           const u = this.rentUnit[i]!;
           if (u <= 0 || u >= p.rent * 0.92 || u * sf > budget || u >= best) continue;
-          if (h.freeHousingAt(i) < p.size) continue;
+          if (h.freeHousingAt(i) < p.size * (p.w ?? 1)) continue;
           best = u; target = b.id[i]!;
         }
       }
@@ -345,14 +352,15 @@ export class LivingEconomy {
         h.moveHousehold(p.hid, target, now);
         h.households.col.distressDays[hk] = 0;
         moves++;
-        this.month.relocations++;
+        this.month.relocations += p.w ?? 1;
       } else if (p.days >= t.joursAvantDepart && departures < t.maxDepartsParJour) {
         leaving.add(p.hid);
         departures++;
+        departedW += p.w ?? 1;
       }
     }
     if (leaving.size) {
-      this.month.departuresRent += leaving.size;
+      this.month.departuresRent += departedW;
       h.removeHouseholds(leaving, true);
     }
     this.pending = [];

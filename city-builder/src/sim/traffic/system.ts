@@ -22,7 +22,7 @@ import { SIGNAL_HEAD_STRIDE, type VehicleFrame } from '../../shared/protocol';
 import { congestionLevel, FEU_ORANGE, FEU_ROUGE, FEU_VERT, type CongestionFrame, type CongestionLayout, type CrossingState, type FeuArmState, type FeuJunctionState, type FeuxApi } from '../../shared/protocol-ext/circulation';
 import { FREE_GAP, IDM_BY_KIND, idmAccel } from './idm';
 import { MOBIL_DEFAULT, mandatoryBSafe, mobilGain, mobilSafe, type MobilParams } from './mobil';
-import { Control, EdgeGrid, TrafficGraph, Turn, type JunctionMode, type TrafficNetworkInput } from './network';
+import { Control, EdgeGrid, TrafficGraph, Turn, type ConflictCache, type JunctionMode, type TrafficNetworkInput } from './network';
 import { ArcRouter } from './router';
 import { setActiveTraffic } from './registry';
 
@@ -267,7 +267,23 @@ export class TrafficSystem {
   }
 
   /** Nouveau réseau (reconstruit au prochain pas ; les véhicules sont reportés sur le nouveau graphe). */
-  setNetwork(input: TrafficNetworkInput): void { this.networkInput = this.withJunctionModes(input); this.networkDirty = true; }
+  setNetwork(input: TrafficNetworkInput): void { this.networkSource = null; this.networkInput = this.withJunctionModes(input); this.networkDirty = true; }
+
+  /**
+   * Nouveau réseau fourni à la demande : `source` n'est appelée qu'à la reconstruction (prochain pas ou
+   * `ensureNetwork`). Plusieurs changements entre deux pas (tracés successifs, chargement) ne coûtent qu'une conversion,
+   * et la commande de construction ne paie plus la conversion du réseau entier.
+   */
+  setNetworkSource(source: () => TrafficNetworkInput): void { this.networkSource = source; this.networkDirty = true; }
+  private networkSource: (() => TrafficNetworkInput) | null = null;
+  /** Conflits par carrefour conservés entre reconstructions du graphe (voir `TrafficGraph`). */
+  private readonly conflictCache: ConflictCache = new Map();
+  private materializeNetwork(): void {
+    if (!this.networkSource) return;
+    const f = this.networkSource;
+    this.networkSource = null;
+    this.networkInput = this.withJunctionModes(f());
+  }
 
   /** Réglages des carrefours par le joueur (identifiant de nœud du monde -> mode) ; conservés à chaque reconstruction. */
   readonly junctionModes = new Map<number, JunctionMode>();
@@ -278,6 +294,7 @@ export class TrafficSystem {
   /** Fixe (ou retire avec null) le réglage d'un carrefour ; le réseau de circulation est reconstruit au pas suivant. */
   setJunctionMode(nodeId: number, mode: JunctionMode | null): void {
     if (mode) this.junctionModes.set(nodeId, mode); else this.junctionModes.delete(nodeId);
+    this.materializeNetwork();
     if (this.networkInput) { this.networkInput = this.withJunctionModes({ ...this.networkInput, nodes: this.networkInput.nodes.map(({ control: _c, ...n }) => n) }); this.networkDirty = true; }
   }
   setBuildings(b: TrafficBuilding[]): void { this.buildings = b; this.buildingsDirty = true; }
@@ -363,7 +380,7 @@ export class TrafficSystem {
     // état des feux conservé par identifiant de nœud (un chantier ailleurs ne remet pas tous les feux à zéro)
     const sigKeep = this.pendingSignals ?? this.signalSnapshot();
     this.pendingSignals = null;
-    this.graph = new TrafficGraph(input);
+    this.graph = new TrafficGraph(input, this.conflictCache);
     this.router = new ArcRouter(this.graph);
     this.grid = new EdgeGrid(this.graph);
     const g = this.graph;
@@ -607,6 +624,7 @@ export class TrafficSystem {
 
   /** Avance la simulation de `dt` secondes (temps physique) ; `hour` = heure du jeu (demande). */
   step(dt: number, hour: number): void {
+    if (this.networkDirty) this.materializeNetwork();
     if (this.networkDirty && this.networkInput) this.rebuildNetwork();
     if (this.buildingsDirty) this.rebuildAccess();
     const g = this.graph;
@@ -1543,6 +1561,7 @@ export class TrafficSystem {
 
   /** Reconstruit le graphe tout de suite s'il a changé (sinon c'est fait au prochain pas). */
   ensureNetwork(): void {
+    if (this.networkDirty) this.materializeNetwork();
     if (this.networkDirty && this.networkInput) this.rebuildNetwork();
   }
 

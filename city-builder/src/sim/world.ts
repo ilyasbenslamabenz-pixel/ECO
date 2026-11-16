@@ -95,6 +95,8 @@ const fail = (code: CommandError['code'], message: string, phase?: number): { ok
   ({ ok: false, error: phase === undefined ? { code, message } : { code, message, phase } });
 
 /** Demi-largeur maximale d'une route (m) : marge des requêtes spatiales. */
+/** En dessous de ce nombre de tronçons, le nivellement complet reste utilisé (coût négligeable). */
+const LOCAL_REGRADE_MIN_SEGMENTS = 0;
 const MAX_ROAD_HALF_WIDTH = Math.max(...(Object.keys(ROAD_KINDS) as RoadKindId[]).map((k) => halfWidth(k)));
 /** Trajets individuels transmis au trafic au plus par tick. */
 const TRIPS_PER_TICK = 8;
@@ -935,6 +937,7 @@ export class Simulation {
       const poly = this.segPolys.get(id);
       if (poly) {
         for (let k = 0; k < poly.length; k += 2) grow(poly[k]!, poly[k + 1]!, poly[k]!, poly[k + 1]!);
+        this.removedEnds.set(id, [poly[0]!, poly[1]!, poly[poly.length - 2]!, poly[poly.length - 1]!]);
         this.segPolys.delete(id);
       }
       this.edgeIndex.remove(id);
@@ -958,22 +961,11 @@ export class Simulation {
     if (bx0 <= bx1) {
       // Nivellement : hauteurs naturelles + plateforme/talus de TOUTES les routes (résultat indépendant de l'ordre
       // de construction, donc identique après chargement d'une sauvegarde). Zone modifiée = différence.
-      const before = t.heights;
-      const graded = new Float32Array(this.naturalHeights);
-      t.heights = graded;
-      if (this.net.segCount > 0) gradeTerrainForRoads(t, this.net);
-      let i0 = t.samplesX, j0 = t.samplesZ, i1 = -1, j1 = -1;
-      for (let j = 0; j < t.samplesZ; j++) {
-        const row = j * t.samplesX;
-        for (let i = 0; i < t.samplesX; i++) {
-          if (graded[row + i] !== before[row + i]) {
-            if (i < i0) i0 = i; if (i > i1) i1 = i; if (j < j0) j0 = j; if (j > j1) j1 = j;
-          }
-        }
-      }
-      if (withDelta && i1 >= 0) {
-        this.queuePatch({ i0, j0, i1, j1 }, false);
-      }
+      // Un changement local (commande du joueur) ne re-nivelle que sa région : seules les routes qui l'atteignent y
+      // contribuent, d'où le même résultat que le nivellement complet (test « nivellement local ») pour un coût
+      // proportionnel à la zone et non plus au réseau entier (≈ 180 ms -> quelques ms à 2 500 tronçons).
+      const r = withDelta && this.net.segCount > LOCAL_REGRADE_MIN_SEGMENTS ? this.regradeRoadRegion(ch, bx0, bz0, bx1, bz1) : this.regradeAll();
+      if (withDelta && r) this.queuePatch(r, false);
       if (withDelta) this.refreshRoadAccessNear(bx0, bz0, bx1, bz1);
     }
     if (withDelta) {
@@ -981,8 +973,93 @@ export class Simulation {
       this.pendingNodesAdded.push(...rec.nodes);
       this.pendingEdgesAdded.push(...rec.edges);
     }
-    this.traffic.setNetwork(inputFromRoadNetwork(this.net));
+    // Conversion pour la circulation différée à sa reconstruction (prochain pas) : réseau lu à ce moment-là.
+    this.traffic.setNetworkSource(this.trafficInput);
   }
+  private readonly trafficInput = (): ReturnType<typeof inputFromRoadNetwork> => inputFromRoadNetwork(this.net);
+
+  /** Nivellement complet depuis le terrain naturel ; renvoie la région modifiée (ou null). */
+  private regradeAll(): { i0: number; j0: number; i1: number; j1: number } | null {
+    const t = this.terrain!;
+    const before = t.heights;
+    const graded = new Float32Array(this.naturalHeights);
+    t.heights = graded;
+    if (this.net.segCount > 0) gradeTerrainForRoads(t, this.net);
+    let i0 = t.samplesX, j0 = t.samplesZ, i1 = -1, j1 = -1;
+    for (let j = 0; j < t.samplesZ; j++) {
+      const row = j * t.samplesX;
+      for (let i = 0; i < t.samplesX; i++) {
+        if (graded[row + i] !== before[row + i]) {
+          if (i < i0) i0 = i; if (i > i1) i1 = i; if (j < j0) j0 = j; if (j > j1) j1 = j;
+        }
+      }
+    }
+    return i1 >= 0 ? { i0, j0, i1, j1 } : null;
+  }
+
+  /** Tampon de travail du nivellement local (taille de la carte, réutilisé). */
+  private gradeScratch = new Float32Array(0);
+
+  /**
+   * Nivellement local après un changement du réseau : région = boîtes des tronçons ajoutés / retirés et des tronçons
+   * qui touchent leurs extrémités (profils invalidés), élargie de la portée du talus. Dans la région, hauteurs =
+   * naturelles + nivellement des seules routes qui l'atteignent. Hauteurs modifiées EN PLACE ; renvoie la région
+   * réellement modifiée (ou null).
+   */
+  private regradeRoadRegion(ch: { segmentsAdded: number[]; segmentsRemoved: number[] }, bx0: number, bz0: number, bx1: number, bz1: number): { i0: number; j0: number; i1: number; j1: number } | null {
+    const t = this.terrain!;
+    const W = t.samplesX, H = t.samplesZ, sp = t.spacing;
+    const net = this.net;
+    // Tronçons voisins des extrémités (ajoutés : nœuds connus ; retirés : premier / dernier point de leur polyligne).
+    const nodes = new Set<number>();
+    for (const id of ch.segmentsAdded) if (net.hasSegment(id)) { const [a, b] = net.endpoints(id); nodes.add(a); nodes.add(b); }
+    for (const id of ch.segmentsRemoved) {
+      const [x0, z0, x1, z1] = this.removedEnds.get(id) ?? [NaN, NaN, NaN, NaN];
+      for (const [x, z] of [[x0, z0], [x1, z1]] as const) { if (!Number.isFinite(x)) continue; const nd = net.nodeNear(x, z, 0.5); if (nd >= 0) nodes.add(nd); }
+    }
+    this.removedEnds.clear();
+    for (const nd of nodes) {
+      for (const s of net.incident(nd)) {
+        const [x0, z0, x1, z1] = cubicBounds(net.curve(s));
+        const h = halfWidth(net.kindOf(s));
+        if (x0 - h < bx0) bx0 = x0 - h; if (z0 - h < bz0) bz0 = z0 - h; if (x1 + h > bx1) bx1 = x1 + h; if (z1 + h > bz1) bz1 = z1 + h;
+      }
+    }
+    const m = MAX_ROAD_HALF_WIDTH + SLOPE_WIDTH + 2 * sp;
+    const i0 = Math.max(0, Math.floor((bx0 - m - t.originX) / sp)), i1 = Math.min(W - 1, Math.ceil((bx1 + m - t.originX) / sp));
+    const j0 = Math.max(0, Math.floor((bz0 - m - t.originZ) / sp)), j1 = Math.min(H - 1, Math.ceil((bz1 + m - t.originZ) / sp));
+    if (i1 < i0 || j1 < j0) return null;
+    // Région trop grande (plus du quart de la carte) : le nivellement complet n'est pas plus cher.
+    if ((i1 - i0 + 1) * (j1 - j0 + 1) * 4 > W * H) return this.regradeAll();
+    // Routes qui atteignent la région (leur talus peut toucher un échantillon de la région).
+    const segs: number[] = [];
+    net.segmentsIn(t.originX + i0 * sp - m, t.originZ + j0 * sp - m, t.originX + i1 * sp + m, t.originZ + j1 * sp + m, segs);
+    if (this.gradeScratch.length !== W * H) this.gradeScratch = new Float32Array(W * H);
+    const work = this.gradeScratch;
+    // Copie des hauteurs naturelles sur la région élargie de la portée d'un tronçon : le nivellement lit le naturel
+    // aux échantillons qu'il écrit ; hors de cette bande, les valeurs écrites sont ignorées.
+    const pad = Math.ceil(m / sp) + 2;
+    const ci0 = Math.max(0, i0 - pad), ci1 = Math.min(W - 1, i1 + pad), cj0 = Math.max(0, j0 - pad), cj1 = Math.min(H - 1, j1 + pad);
+    const nat = this.naturalHeights;
+    for (let j = cj0; j <= cj1; j++) work.set(nat.subarray(j * W + ci0, j * W + ci1 + 1), j * W + ci0);
+    if (segs.length) gradeTerrainForRoads({ ...t, heights: work }, net, segs);
+    const graded = t.heights;
+    let r0 = W, s0 = H, r1 = -1, s1 = -1;
+    for (let j = j0; j <= j1; j++) {
+      const row = j * W;
+      for (let i = i0; i <= i1; i++) {
+        const k = row + i;
+        if (graded[k] !== work[k]) {
+          graded[k] = work[k]!;
+          if (i < r0) r0 = i; if (i > r1) r1 = i; if (j < s0) s0 = j; if (j > s1) s1 = j;
+        }
+      }
+    }
+    return r1 >= 0 ? { i0: r0, j0: s0, i1: r1, j1: s1 } : null;
+  }
+
+  /** Extrémités (x0, z0, x1, z1) des tronçons retirés depuis le dernier nivellement (voisins à re-niveler). */
+  private readonly removedEnds = new Map<number, [number, number, number, number]>();
 
   removeRoad(a: CommandArgs<'removeRoad'>): CmdOutcome<'removeRoad'> {
     if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
@@ -1095,7 +1172,7 @@ export class Simulation {
             const pop = Math.max(1, demo.population);
             let detailed = 0;
             const lod = demo.citizens.col.lod;
-            for (let i = 0; i < demo.citizens.count; i++) if (lod[i] === 0) detailed++;
+            for (let i = 0; i < demo.citizens.count; i++) if (lod[i] === 0) detailed += demo.weightOf(i);
             // La demande statistique du trafic couvre les citoyens non détaillés ; les détaillés émettent leurs trajets.
             this.traffic.demandScale = Math.max(0, 1 - detailed / pop);
           }
@@ -1375,7 +1452,8 @@ export class Simulation {
           const lod = { detailed: 0, simplified: 0, statistical: 0 };
           const col = this.demo.citizens.col.lod;
           for (let i = 0; i < this.demo.citizens.count; i++) {
-            if (col[i] === 0) lod.detailed++; else if (col[i] === 1) lod.simplified++; else lod.statistical++;
+            const w = this.demo.weightOf(i);
+            if (col[i] === 0) lod.detailed += w; else if (col[i] === 1) lod.simplified += w; else lod.statistical += w;
           }
           return ok(lod);
         }
@@ -1389,7 +1467,7 @@ export class Simulation {
           e.serviceWorkers = tb.serviceWorkers;
           this.demo.updateLod();
           this.trafficBuildingsDirty = true;
-          return ok({ population: this.demo.population, households: this.demo.households.count });
+          return ok({ population: this.demo.population, households: this.demo.householdCount });
         }
         case 'buildRoundabout': {
           const a = args as ExtCommandArgs<'buildRoundabout'>;

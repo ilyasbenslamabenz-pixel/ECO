@@ -47,6 +47,18 @@ export const MAX_ARRIVALS_PER_WAVE = 60;
 /** Distance façade-route maximale pour être desservi (m), en plus de la demi-largeur de la route. */
 export const ROAD_ACCESS_MARGIN_M = TILE_SIZE;
 export const TRIP_QUEUE_CAPACITY = 4096;
+/**
+ * Simulation agrégée (docs/SIMULATION.md, « Grandes villes ») : au-delà de AGGREGATE_THRESHOLD habitants, les NOUVEAUX
+ * ménages (immigration) sont des ménages agrégés : une ligne représente `poids` ménages identiques logés dans le même
+ * bâtiment, avec un poids qui croît avec la population (≈ AGGREGATE_ROWS_TARGET lignes) jusqu'à AGGREGATE_MAX_WEIGHT.
+ * Naissances et décohabitations héritent du poids du ménage. Toutes les sommes (habitants, emplois, revenus, impôts,
+ * demande, statistiques) sont pondérées : les grandeurs observables ne changent qu'au bruit d'échantillonnage près
+ * (tests/sim/scale.test.ts). Les citoyens agrégés ne sont jamais en LOD détaillé (pas de trajet individuel : la demande
+ * statistique du trafic les couvre).
+ */
+export const AGGREGATE_THRESHOLD = 100_000;
+export const AGGREGATE_ROWS_TARGET = 100_000;
+export const AGGREGATE_MAX_WEIGHT = 16;
 
 /** Salaires mensuels de base par secteur (crédits), modulés par l'éducation. */
 export const BASE_WAGE: Record<number, number> = { 1: 2000, 2: 2300, 3: 3200, 4: 2300 };
@@ -326,6 +338,17 @@ export class DemographySystem {
   lastMonth: MonthCounters = zeroCounters();
   attractiveness = 0.5;
   tripsEmitted = 0;
+  /** Habitants et ménages réels (somme des poids des lignes). */
+  private popW = 0;
+  private hhW = 0;
+  /** Lignes agrégées (poids > 1) : citoyens. */
+  private aggRows = 0;
+  /**
+   * Seuil d'activation de la simulation agrégée (habitants) ; Infinity la désactive. `forcedWeight` (tests, banc) impose
+   * le poids des nouveaux ménages.
+   */
+  aggregateThreshold = AGGREGATE_THRESHOLD;
+  forcedWeight = 0;
 
   // Point focal (caméra) pour le LOD de simulation.
   /** Événement « afflux de nouveaux habitants » (module `evenements`) : multiplicateur des arrivées (1 = aucun effet). */
@@ -417,6 +440,9 @@ export class DemographySystem {
     this.lastMonth = zeroCounters();
     this.attractiveness = 0.5;
     this.tripsEmitted = 0;
+    this.popW = 0;
+    this.hhW = 0;
+    this.aggRows = 0;
     this.tripHead = 0;
     this.tripCount = 0;
     this.pupilsBySchool.clear();
@@ -427,7 +453,24 @@ export class DemographySystem {
     this.buildingsVersion++;
   }
 
-  get population(): number { return this.citizens.count; }
+  /** Habitants (réels : somme des poids). */
+  get population(): number { return this.popW; }
+  /** Ménages (réels : somme des poids). */
+  get householdCount(): number { return this.hhW; }
+  /** Nombre d'habitants représentés par la ligne de citoyen `i` (1 hors simulation agrégée). */
+  weightOf(i: number): number { return this.citizens.col.weight[i] || 1; }
+  /** Nombre de ménages représentés par la ligne de ménage `k`. */
+  hhWeightOf(k: number): number { return this.households.col.weight[k] || 1; }
+  /** Poids d'un NOUVEAU ménage (immigration) selon la population : 1 sous le seuil d'activation. */
+  newHouseholdWeight(): number {
+    if (this.forcedWeight > 0) return Math.min(AGGREGATE_MAX_WEIGHT, Math.floor(this.forcedWeight));
+    if (this.popW < this.aggregateThreshold) return 1;
+    return Math.max(1, Math.min(AGGREGATE_MAX_WEIGHT, Math.ceil(this.popW / AGGREGATE_ROWS_TARGET)));
+  }
+  /** État de la simulation agrégée (rapport, banc d'essai). */
+  aggregateInfo(): { rows: number; aggregatedRows: number; population: number; households: number; householdRows: number; nextWeight: number } {
+    return { rows: this.citizens.count, aggregatedRows: this.aggRows, population: this.popW, households: this.hhW, householdRows: this.households.count, nextWeight: this.newHouseholdWeight() };
+  }
 
   private metaOfIndex(bi: number): AssetMeta | undefined { return this.meta[this.ctx.buildings.assetIndex[bi]!]; }
 
@@ -480,7 +523,7 @@ export class DemographySystem {
     for (const hid of toRelocate) {
       const hk = this.households.indexOf(hid);
       if (hk < 0) continue;
-      const size = this.households.col.size[hk]!;
+      const size = this.households.col.size[hk]! * this.hhWeightOf(hk);
       const target = this.findHousing(size, id);
       if (target >= 0) this.moveHousehold(hid, target, now);
       else leavingHouseholds.add(hid);
@@ -689,12 +732,36 @@ export class DemographySystem {
     return Math.max(0, m.resCap - this.ctx.buildings.residents[bi]!);
   }
 
+  /**
+   * Capacité de logement par index de bâtiment, filtres compris (accès route, incendie, réseaux des modules : 0 si l'un
+   * refuse), relevée au début d'une vague d'immigration ou des décohabitations : `findHousing` n'appelle plus les
+   * filtres des modules pour chaque bâtiment et chaque ménage (≈ 600 ms par jour à un million d'habitants). Les filtres
+   * ne changent pas pendant ces passes et l'occupation est relue en direct : mêmes candidats, même tirage.
+   */
+  private housingCap: Int32Array | null = null;
+  private beginHousingCache(): void {
+    const b = this.ctx.buildings;
+    const a = new Int32Array(b.count);
+    for (let i = 0; i < b.count; i++) {
+      const m = this.metaOfIndex(i);
+      if (!m || m.resCap <= 0 || !b.roadAccess[i]) continue;
+      const id = b.id[i]!;
+      if (this.services.blocksHousing(id)) continue;
+      let ok = true;
+      for (const g of this.growthGates) if (!g(id)) { ok = false; break; }
+      if (ok) a[i] = m.resCap;
+    }
+    this.housingCap = a;
+  }
+
   /** Bâtiment (id) au hasard ayant au moins `size` places libres, -1 sinon. */
   private findHousing(size: number, excludeId = -1): number {
     const b = this.ctx.buildings;
     const cands = this.tmp2;
     cands.length = 0;
-    for (let i = 0; i < b.count; i++) if (b.id[i] !== excludeId && this.freeHousingAt(i) >= size) cands.push(b.id[i]!);
+    const hc = this.housingCap;
+    if (hc) { for (let i = 0; i < b.count; i++) if (hc[i]! - b.residents[i]! >= size && b.id[i] !== excludeId) cands.push(b.id[i]!); }
+    else for (let i = 0; i < b.count; i++) if (b.id[i] !== excludeId && this.freeHousingAt(i) >= size) cands.push(b.id[i]!);
     if (!cands.length) return -1;
     return cands[Math.floor(this.ctx.rng.next() * cands.length)]!;
   }
@@ -709,8 +776,9 @@ export class DemographySystem {
     const c = this.citizens.col;
     for (let i = 0; i < this.citizens.count; i++) {
       if (c.household[i] !== hid) continue;
-      if (oi >= 0) b.residents[oi]!--;
-      if (ti >= 0) b.residents[ti]!++;
+      const w = this.weightOf(i);
+      if (oi >= 0) b.residents[oi] = Math.max(0, b.residents[oi]! - w);
+      if (ti >= 0) b.residents[ti]! += w;
       c.home[i] = targetId;
       this.updateCommute(i);
     }
@@ -722,30 +790,41 @@ export class DemographySystem {
   removeHouseholds(ids: Set<number>, emigrate: boolean): void {
     for (let i = this.citizens.count - 1; i >= 0; i--) {
       if (ids.has(this.citizens.col.household[i]!)) {
-        if (emigrate) this.month.emigrants++;
+        if (emigrate) this.month.emigrants += this.weightOf(i);
         this.removeCitizenAt(i, false);
       }
     }
-    for (const id of ids) this.households.remove(id);
+    for (const id of ids) this.removeHouseholdRow(id);
   }
 
   /** Supprime le citoyen d'index i (libère logement, emploi, école). */
   private removeCitizenAt(i: number, updateHousehold = true): void {
     const c = this.citizens.col;
     const b = this.ctx.buildings;
+    const w = this.weightOf(i);
     const home = b.indexOf(c.home[i]!);
-    if (home >= 0 && b.residents[home]! > 0) b.residents[home]!--;
+    if (home >= 0 && b.residents[home]! > 0) b.residents[home] = Math.max(0, b.residents[home]! - w);
     const job = b.indexOf(c.job[i]!);
-    if (job >= 0 && b.workers[job]! > 0) b.workers[job]!--;
-    if (c.school[i]! >= 0) this.pupilsBySchool.set(c.school[i]!, Math.max(0, (this.pupilsBySchool.get(c.school[i]!) ?? 1) - 1));
+    if (job >= 0 && b.workers[job]! > 0) b.workers[job] = Math.max(0, b.workers[job]! - w);
+    if (c.school[i]! >= 0) this.pupilsBySchool.set(c.school[i]!, Math.max(0, (this.pupilsBySchool.get(c.school[i]!) ?? w) - w));
     if (updateHousehold) {
       const hk = this.households.indexOf(c.household[i]!);
       if (hk >= 0) {
         const s = --this.households.col.size[hk]!;
-        if (s <= 0) this.households.remove(c.household[i]!);
+        if (s <= 0) this.removeHouseholdRow(c.household[i]!);
       }
     }
+    this.popW -= w;
+    if (w > 1) this.aggRows--;
     this.citizens.remove(c.id[i]!);
+  }
+
+  /** Retire une ligne de ménage (compteur pondéré tenu à jour). */
+  private removeHouseholdRow(hid: number): void {
+    const hk = this.households.indexOf(hid);
+    if (hk < 0) return;
+    this.hhW -= this.hhWeightOf(hk);
+    this.households.remove(hid);
   }
 
   /* ------------------------------- Citoyens ------------------------------- */
@@ -755,6 +834,12 @@ export class DemographySystem {
     const i = this.citizens.add(id);
     const c = this.citizens.col;
     const rng = this.ctx.rng;
+    // Poids du ménage (1 hors simulation agrégée ; 0 stocké pour 1 : sauvegardes inchangées).
+    const hk = this.households.indexOf(householdId);
+    const w = hk >= 0 ? this.hhWeightOf(hk) : 1;
+    c.weight[i] = w > 1 ? w : 0;
+    this.popW += w;
+    if (w > 1) this.aggRows++;
     c.household[i] = householdId;
     c.sex[i] = sex;
     c.firstName[i] = randomFirstName(rng, sex);
@@ -768,14 +853,16 @@ export class DemographySystem {
     c.activity[i] = Activity.Home;
     c.lod[i] = SimLod.Statistical;
     const bi = this.ctx.buildings.indexOf(homeId);
-    if (bi >= 0) this.ctx.buildings.residents[bi]!++;
+    if (bi >= 0) this.ctx.buildings.residents[bi]! += w;
     this.assignSchedule(i);
     return i;
   }
 
-  private newHousehold(homeId: number, surname: number, now: number): number {
+  private newHousehold(homeId: number, surname: number, now: number, weight = 1): number {
     const id = this.nextHouseholdId++;
     const k = this.households.add(id);
+    this.households.col.weight[k] = weight > 1 ? weight : 0;
+    this.hhW += Math.max(1, weight);
     this.households.col.surname[k] = surname;
     this.households.col.home[k] = homeId;
     this.households.col.size[k] = 0;
@@ -841,22 +928,32 @@ export class DemographySystem {
     const reach = MAX_COMMUTE_M + (extra > 0 ? extra : 0);
     const maxRing = Math.ceil(reach / idx.cellSize);
     const edu = c.education[ci]!;
+    const w = this.weightOf(ci);
     let best = -1, bestD = Infinity, fallback = -1, fallbackD = Infinity, foundRing = -1;
+    let partial = -1, partialD = Infinity, partialFree = 0;
+    this.jobPartialFree = 0;
     for (let ring = 0; ring <= maxRing; ring++) {
       if (foundRing >= 0 && ring > foundRing + 1) break;
       for (let dr = -ring; dr <= ring; dr++) {
         for (let dc = -ring; dc <= ring; dc++) {
           if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
-          const cell = idx.cell(c0 + dc, r0 + dr);
+          // Passe quotidienne : cellules réduites aux bâtiments d'emploi ouverts et desservis (index déjà résolus).
+          const jc = this.jobCells;
+          const cc = c0 + dc, rr = r0 + dr;
+          const pre = jc && cc >= 0 && rr >= 0 && cc < idx.cols && rr < idx.rows ? jc[rr * idx.cols + cc]! : null;
+          const cell = pre ?? idx.cell(cc, rr);
           for (let k = 0; k < cell.length; k++) {
-            const j = b.indexOf(cell[k]!);
+            const j = pre ? cell[k]! : b.indexOf(cell[k]!);
             if (j < 0 || !b.roadAccess[j]) continue;
             const m = this.metaOfIndex(j);
             if (!m || m.jobCap - b.workers[j]! <= 0 || !this.jobOpen(j)) continue;
+            const free = m.jobCap - b.workers[j]!;
             const dx = b.x[j]! - hx, dz = b.z[j]! - hz;
             const d = Math.sqrt(dx * dx + dz * dz);
             if (d > MAX_COMMUTE_M && (d > reach || !this.transitServes(homeId, b.id[j]!))) continue;
             const qualified = edu >= m.reqEdu;
+            // Ligne agrégée : un emploi qui n'a pas assez de places pour tout le poids reste un repli partiel.
+            if (free < w) { if (d < partialD) { partialD = d; partial = b.id[j]!; partialFree = free; } continue; }
             if (qualified) { if (d < bestD) { bestD = d; best = b.id[j]!; } }
             else if (d < fallbackD) { fallbackD = d; fallback = b.id[j]!; }
           }
@@ -864,9 +961,83 @@ export class DemographySystem {
       }
       if ((best >= 0 || fallback >= 0) && foundRing < 0) foundRing = ring;
     }
-    const found = best >= 0 ? best : fallback;
-    if (found >= 0 && (best >= 0 ? bestD : fallbackD) > MAX_COMMUTE_M) this.transitHires++;
+    let found = best >= 0 ? best : fallback;
+    let foundD = best >= 0 ? bestD : fallbackD;
+    // Aucun emploi n'accueille tout le poids : le plus proche qui a des places, pour une partie du ménage agrégé.
+    if (found < 0 && partial >= 0) { found = partial; foundD = partialD; this.jobPartialFree = partialFree; }
+    if (found >= 0 && foundD > MAX_COMMUTE_M) this.transitHires++;
     return found;
+  }
+
+  /**
+   * Cellules de l'index spatial réduites aux bâtiments d'emploi ouverts et desservis (index de bâtiment, ordre des
+   * cellules conservé), construites au premier besoin de la passe quotidienne : la recherche d'emploi ne parcourt plus
+   * les logements (la grande majorité des bâtiments). Mêmes candidats, même ordre : résultat identique.
+   */
+  private jobCells: number[][] | null = null;
+  private prepareJobCells(): void {
+    const idx = this.ctx.buildingIndex, b = this.ctx.buildings;
+    const cells: number[][] = new Array(idx.cols * idx.rows);
+    for (let r = 0; r < idx.rows; r++) {
+      for (let col = 0; col < idx.cols; col++) {
+        const src = idx.cell(col, r);
+        const out: number[] = [];
+        for (let k = 0; k < src.length; k++) {
+          const j = b.indexOf(src[k]!);
+          if (j < 0 || !b.roadAccess[j]) continue;
+          const m = this.metaOfIndex(j);
+          if (m && m.jobCap > 0 && this.jobOpen(j)) out.push(j);
+        }
+        cells[r * idx.cols + col] = out;
+      }
+    }
+    this.jobCells = cells;
+  }
+
+  /** Places libres de l'emploi renvoyé par `findJob` quand il ne peut pas accueillir tout le poids (0 sinon). */
+  private jobPartialFree = 0;
+  /** Membres (index de citoyens) par ménage, construit à la demande pendant la passe quotidienne (découpes). */
+  private memberIndex: Map<number, number[]> | null = null;
+
+  /**
+   * Découpe le ménage agrégé du citoyen d'index `ci` : un nouveau ménage de poids `f` (copie du ménage et de tous ses
+   * membres) est détaché ; l'ancien garde le reste du poids. Totaux inchangés (habitants, emplois, élèves, ménages).
+   * Renvoie l'index de la copie de `ci`. N'ajoute que des lignes (aucun index existant ne change).
+   */
+  private splitHousehold(ci: number, f: number): number {
+    const c = this.citizens.col;
+    const hid = c.household[ci]!;
+    const hk = this.households.indexOf(hid);
+    if (hk < 0) return ci;
+    const hw = this.hhWeightOf(hk);
+    if (f <= 0 || f >= hw) return ci;
+    if (!this.memberIndex) {
+      this.memberIndex = new Map();
+      for (let i = 0; i < this.citizens.count; i++) {
+        const h = c.household[i]!;
+        const l = this.memberIndex.get(h);
+        if (l) l.push(i); else this.memberIndex.set(h, [i]);
+      }
+    }
+    const nid = this.nextHouseholdId++;
+    const k2 = this.households.cloneRow(hk, nid);
+    const hc = this.households.col;
+    hc.weight[k2] = f > 1 ? f : 0;
+    hc.weight[hk] = hw - f > 1 ? hw - f : 0;
+    const clones: number[] = [];
+    let out = ci;
+    for (const m of this.memberIndex.get(hid) ?? []) {
+      const n = this.citizens.cloneRow(m, this.nextCitizenId++);
+      const cc = this.citizens.col;
+      cc.household[n] = nid;
+      cc.weight[n] = f > 1 ? f : 0;
+      cc.weight[m] = hw - f > 1 ? hw - f : 0;
+      this.aggRows += (f > 1 ? 1 : 0) + (hw - f > 1 ? 1 : 0) - 1;
+      clones.push(n);
+      if (m === ci) out = n;
+    }
+    this.memberIndex.set(nid, clones);
+    return out;
   }
 
   private hire(ci: number, jobId: number): void {
@@ -874,23 +1045,50 @@ export class DemographySystem {
     const b = this.ctx.buildings;
     const j = b.indexOf(jobId);
     if (j < 0) return;
-    b.workers[j]!++;
+    const w = this.weightOf(ci);
+    b.workers[j]! += w;
     c.job[ci] = jobId;
     const m = this.metaOfIndex(j)!;
     c.income[ci] = this.wageFor(m.sector, c.education[ci]!);
     this.updateCommute(ci);
     this.assignSchedule(ci);
-    this.month.hires++;
+    this.month.hires += w;
   }
 
   quitJob(ci: number): void {
     const c = this.citizens.col;
     const b = this.ctx.buildings;
     const j = b.indexOf(c.job[ci]!);
-    if (j >= 0 && b.workers[j]! > 0) b.workers[j]!--;
+    if (j >= 0 && b.workers[j]! > 0) b.workers[j] = Math.max(0, b.workers[j]! - this.weightOf(ci));
     c.job[ci] = -1;
     c.income[ci] = 0;
     c.commute[ci] = 0;
+  }
+
+  /**
+   * Écoles desservies (index de bâtiment, position, rayon, capacité), relevées une fois par passe quotidienne : la
+   * recherche d'école d'un élève parcourt cette liste (quelques dizaines d'écoles) au lieu d'interroger l'index
+   * spatial sur 7 km de côté, ce qui coûtait ≈ 400 ms par jour à 54 000 habitants quand les écoles sont pleines.
+   * Même résultat que la requête d'origine : les rayons d'école (≤ 900 m amélioration comprise) sont bien inférieurs à
+   * la demi-largeur de la zone interrogée (3 500 m) ; seul l'ordre entre deux écoles exactement équidistantes peut
+   * différer.
+   */
+  private schools: { id: number; x: number; z: number; rad: number; cap: number }[] = [];
+  private schoolsFree = 0;
+
+  private prepareSchools(): void {
+    const b = this.ctx.buildings;
+    this.schools = [];
+    this.schoolsFree = 0;
+    for (let j = 0; j < b.count; j++) {
+      if (!b.roadAccess[j]) continue;
+      const m = this.metaOfIndex(j);
+      if (!m || m.service !== Service.Education) continue;
+      const id = b.id[j]!;
+      const lvl = this.serviceLevel(id);
+      const cap = (m.serviceCapacity > 0 ? m.serviceCapacity : 300) * (1 + 0.5 * (lvl - 1));
+      this.schools.push({ id, x: b.x[j]!, z: b.z[j]!, rad: m.radius * (1 + 0.25 * (lvl - 1)), cap });
+    }
   }
 
   /** École (service éducation) couvrant le logement et ayant de la place. */
@@ -899,19 +1097,12 @@ export class DemographySystem {
     const hi = b.indexOf(this.citizens.col.home[ci]!);
     if (hi < 0) return -1;
     const hx = b.x[hi]!, hz = b.z[hi]!;
-    this.ctx.buildingIndex.query(hx - 3500, hz - 3500, hx + 3500, hz + 3500, this.tmp);
     let best = -1, bestD = Infinity;
-    for (const id of this.tmp) {
-      const j = b.indexOf(id);
-      if (j < 0 || !b.roadAccess[j]) continue;
-      const m = this.metaOfIndex(j);
-      if (!m || m.service !== Service.Education) continue;
-      const lvl = this.serviceLevel(id);
-      const cap = (m.serviceCapacity > 0 ? m.serviceCapacity : 300) * (1 + 0.5 * (lvl - 1));
-      if ((this.pupilsBySchool.get(id) ?? 0) >= cap) continue;
-      const dx = b.x[j]! - hx, dz = b.z[j]! - hz;
+    for (const s of this.schools) {
+      if ((this.pupilsBySchool.get(s.id) ?? 0) + this.weightOf(ci) > s.cap) continue;
+      const dx = s.x - hx, dz = s.z - hz;
       const d = Math.sqrt(dx * dx + dz * dz);
-      if (d <= m.radius * (1 + 0.25 * (lvl - 1)) && d < bestD) { bestD = d; best = id; }
+      if (d <= s.rad && d < bestD) { bestD = d; best = s.id; }
     }
     return best;
   }
@@ -937,6 +1128,7 @@ export class DemographySystem {
     this.coverageDirty = true;
     this.ensureCoverage();
     this.transitPrepare(now);
+    this.prepareSchools();
     const c = this.citizens.col;
     const b = this.ctx.buildings;
     const rng = this.ctx.rng;
@@ -956,14 +1148,16 @@ export class DemographySystem {
       const bi = b.indexOf(c.home[i]!);
       const sf = c.sick[i]! > 0 ? this.services.mortalityFactor(i, bi) : 1;
       const p = (annualMortality(age) * (healthy(bi) ? 0.7 : 1) * sf) / DAYS_PER_YEAR;
-      if (rng.next() < p) { if (sf > 1) this.services.month.sickDeaths++; this.removeCitizenAt(i); this.month.deaths++; }
+      if (rng.next() < p) { const w = this.weightOf(i); if (sf > 1) this.services.month.sickDeaths += w; this.removeCitizenAt(i); this.month.deaths += w; }
     }
 
     // 2) Transitions individuelles.
+    // Âge franchi hier -> aujourd'hui (fonction hors de la boucle : pas de fermeture créée par citoyen).
+    const crossed = (agePrev: number, age: number, y: number): boolean => agePrev < y && age >= y;
     for (let i = 0; i < this.citizens.count; i++) {
       const age = this.ageOf(i, now);
       const agePrev = (yesterday - c.birth[i]!) / MINUTES_PER_YEAR;
-      const crossed = (y: number): boolean => agePrev < y && age >= y;
+      const w = this.weightOf(i);
       // Retraite.
       if (c.job[i]! >= 0 && age >= RETIREMENT_AGE) { this.quitJob(i); c.income[i] = PENSION; this.assignSchedule(i); }
       if (age >= RETIREMENT_AGE && c.job[i]! < 0) c.income[i] = PENSION;
@@ -971,41 +1165,49 @@ export class DemographySystem {
       if (age >= SCHOOL_AGE_MIN && age < SCHOOL_AGE_MAX + 1) {
         if (c.school[i]! < 0) {
           const s = this.findSchool(i);
-          if (s >= 0) { c.school[i] = s; this.pupilsBySchool.set(s, (this.pupilsBySchool.get(s) ?? 0) + 1); this.updateCommute(i); this.assignSchedule(i); }
+          if (s >= 0) { c.school[i] = s; this.pupilsBySchool.set(s, (this.pupilsBySchool.get(s) ?? 0) + w); this.updateCommute(i); this.assignSchedule(i); }
         }
         if (c.school[i]! >= 0) {
-          if (crossed(11) && c.education[i]! < Education.Primary) c.education[i] = Education.Primary;
-          if (crossed(16) && c.education[i]! < Education.Secondary) c.education[i] = Education.Secondary;
+          if (crossed(agePrev, age, 11) && c.education[i]! < Education.Primary) c.education[i] = Education.Primary;
+          if (crossed(agePrev, age, 16) && c.education[i]! < Education.Secondary) c.education[i] = Education.Secondary;
         }
       } else if (c.school[i]! >= 0 && age >= SCHOOL_AGE_MAX + 1) {
         // Fin de scolarité : baccalauréat pour 80 % des lycéens.
         if (c.education[i]! >= Education.Secondary && rng.chance(0.8)) c.education[i] = Education.Baccalaureate;
-        this.pupilsBySchool.set(c.school[i]!, Math.max(0, (this.pupilsBySchool.get(c.school[i]!) ?? 1) - 1));
+        this.pupilsBySchool.set(c.school[i]!, Math.max(0, (this.pupilsBySchool.get(c.school[i]!) ?? w) - w));
         c.school[i] = -1;
         c.commute[i] = 0;
         this.assignSchedule(i);
       }
       // Économie vivante : études supérieures (bachelier de 21 ans dont le quartier est couvert par l'éducation) et
       // formation continue des adultes sans emploi (moins de 45 ans, quartier couvert).
-      if (crossed(21) && c.education[i] === Education.Baccalaureate) {
+      if (crossed(agePrev, age, 21) && c.education[i] === Education.Baccalaureate) {
         const hb = b.indexOf(c.home[i]!);
-        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.chance(this.living.tuning.probaSuperieur)) { c.education[i] = Education.Higher; this.living.month.graduates++; }
+        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.chance(this.living.tuning.probaSuperieur)) { c.education[i] = Education.Higher; this.living.month.graduates += w; }
       } else if (c.job[i]! < 0 && c.school[i]! < 0 && age >= WORKING_AGE_MIN && age < 45 && c.education[i]! < Education.Baccalaureate) {
         const hb = b.indexOf(c.home[i]!);
         if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.next() < this.living.tuning.probaFormationAn / DAYS_PER_YEAR) {
           c.education[i] = Math.max(Education.Secondary, c.education[i]! + 1);
-          this.living.month.graduates++;
+          this.living.month.graduates += w;
         }
       }
       // Recherche d'emploi.
-      if (freeJobs > 0 && age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.job[i]! < 0 && c.school[i]! < 0 && searches < JOB_SEARCHES_PER_DAY) {
-        searches++;
+      // Plafond en habitants réels : une ligne agrégée compte pour son poids.
+      if (freeJobs > 0 && age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.job[i]! < 0 && c.school[i]! < 0 && searches + w <= JOB_SEARCHES_PER_DAY) {
+        searches += w;
+        if (!this.jobCells) this.prepareJobCells();
         const j = this.findJob(i);
-        if (j >= 0) { this.hire(i, j); freeJobs--; } else noReach++;
+        if (j >= 0) {
+          const f = this.jobPartialFree;
+          if (f > 0) { this.hire(this.splitHousehold(i, f), j); freeJobs -= f; } else { this.hire(i, j); freeJobs -= w; }
+        } else noReach += w;
       }
-      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { laborNow++; if (c.job[i]! < 0) unemployedNow++; }
+      // Poids relu : une découpe (emploi partiel) a pu le réduire ; la copie détachée est comptée à son tour.
+      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { const wn = this.weightOf(i); laborNow += wn; if (c.job[i]! < 0) unemployedNow += wn; }
     }
 
+    this.memberIndex = null;
+    this.jobCells = null;
     this.jobNoReachDay = noReach; this.lastUnemployed = unemployedNow; this.lastLaborForce = laborNow;
 
     // 2 bis) Services : criminalité, risque d'incendie, santé des logements, délits du jour, maladies.
@@ -1038,7 +1240,7 @@ export class DemographySystem {
       const age = this.ageOf(i, now);
       const bi = b.indexOf(c.home[i]!);
       const hkr = this.households.indexOf(c.household[i]!);
-      let t = this.scoreCitizen(i, age, bi, hkr, ramp, taxPenalty, homeParts, fs);
+      let t = this.scoreCitizen(i, age, bi, hkr, ramp, taxPenalty, homeParts, fs, this.weightOf(i));
       t = t < 0 ? 0 : t > 100 ? 100 : t;
       c.happiness[i] = c.happiness[i]! * 0.8 + t * 0.2;
       const hk = hkr;
@@ -1052,7 +1254,7 @@ export class DemographySystem {
       if (c.role[i] === Role.Child && age >= 20 && c.job[i]! >= 0 && rng.next() < 0.3 / DAYS_PER_YEAR) pending.push(c.id[i]!);
     }
 
-    this.factorCount = this.citizens.count;
+    this.factorCount = this.popW;
 
     // 4) Naissances.
     for (let hk = 0; hk < nh; hk++) {
@@ -1060,38 +1262,42 @@ export class DemographySystem {
       const hid = this.households.col.id[hk]!;
       const home = this.households.col.home[hk]!;
       const bi = b.indexOf(home);
-      if (bi < 0 || this.freeHousingAt(bi) < 1 || this.households.col.size[hk]! >= 7) continue;
+      const hw = this.hhWeightOf(hk);
+      if (bi < 0 || this.freeHousingAt(bi) < hw || this.households.col.size[hk]! >= 7) continue;
       const happy = this.hhMembers[hk]! ? this.hhHappy[hk]! / this.hhMembers[hk]! : 50;
       const p = (0.09 * (0.5 + happy / 100)) / DAYS_PER_YEAR;
       if (rng.next() < p) {
         this.addCitizen(hid, home, rng.int(0, 1), 0, Education.None, Role.Child, now);
         this.addMember(hid);
-        this.month.births++;
+        this.month.births += hw;
       }
     }
 
     // 5) Décohabitation (nouveau ménage dans un logement libre).
+    if (pending.length) this.beginHousingCache();
     for (const cid of pending) {
       const i = this.citizens.indexOf(cid);
       if (i < 0) continue;
-      const target = this.findHousing(1);
-      if (target < 0) break;
+      const w = this.weightOf(i);
+      const target = this.findHousing(w);
+      if (target < 0) { if (w === 1) break; continue; }
       const oldHk = this.households.indexOf(c.household[i]!);
       const surname = oldHk >= 0 ? this.households.col.surname[oldHk]! : randomSurname(rng);
-      const hid = this.newHousehold(target, surname, now);
+      const hid = this.newHousehold(target, surname, now, w);
       if (oldHk >= 0) this.households.col.size[oldHk]!--;
       const oi = b.indexOf(c.home[i]!);
-      if (oi >= 0 && b.residents[oi]! > 0) b.residents[oi]!--;
+      if (oi >= 0 && b.residents[oi]! > 0) b.residents[oi] = Math.max(0, b.residents[oi]! - w);
       const ti = b.indexOf(target);
-      if (ti >= 0) b.residents[ti]!++;
+      if (ti >= 0) b.residents[ti]! += w;
       c.household[i] = hid;
       c.home[i] = target;
       c.role[i] = Role.Adult;
       this.addMember(hid);
       this.updateCommute(i);
-      this.month.householdsFormed++;
+      this.month.householdsFormed += w;
     }
 
+    this.housingCap = null;
     // 6) Économie vivante : ménages en difficulté durable -> logement moins cher, sinon départ (plafonnés).
     this.living.resolve(now);
   }
@@ -1122,11 +1328,11 @@ export class DemographySystem {
    * Satisfaction cible d'un habitant (avant bornage 0..100) : chaque facteur est ajouté à la fois au total et à
    * `fs[facteur]`, dans un ordre fixe (calcul quotidien et fiche « Pourquoi » d'un bâtiment donnent les mêmes points).
    */
-  private scoreCitizen(i: number, age: number, bi: number, hkr: number, ramp: number, taxPenalty: number, homeParts: (bi: number) => Float64Array, fs: Float64Array): number {
+  private scoreCitizen(i: number, age: number, bi: number, hkr: number, ramp: number, taxPenalty: number, homeParts: (bi: number) => Float64Array, fs: Float64Array, w = 1): number {
     const c = this.citizens.col;
     const b = this.ctx.buildings;
     let t = 55;
-    const add = (f: number, v: number): void => { t += v; fs[f]! += v; };
+    const add = (f: number, v: number): void => { t += v; fs[f]! += v * w; };
     if (bi < 0 || !b.roadAccess[bi]) add(F.logement, -30);
     if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) add(F.emploi, c.job[i]! >= 0 ? 12 : -18);
     // Emploi très en dessous de son niveau (supérieur dans un poste sans diplôme) : légère insatisfaction.
@@ -1179,11 +1385,12 @@ export class DemographySystem {
     for (let i = 0; i < this.citizens.count; i++) {
       const bi = b.indexOf(c.home[i]!);
       if (bi < 0) continue;
-      a.happy[bi]! += c.happiness[i]!;
-      a.count[bi]!++;
+      const w = this.weightOf(i);
+      a.happy[bi]! += c.happiness[i]! * w;
+      a.count[bi]! += w;
       const age = this.ageOf(i, now);
-      if (age >= 18) { a.adults[bi]!++; a.eduSum[bi]! += c.education[i]!; }
-      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { a.labor[bi]!++; if (c.job[i]! < 0) a.unemployed[bi]!++; }
+      if (age >= 18) { a.adults[bi]! += w; a.eduSum[bi]! += c.education[i]! * w; }
+      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { a.labor[bi]! += w; if (c.job[i]! < 0) a.unemployed[bi]! += w; }
     }
     return a;
   }
@@ -1216,8 +1423,8 @@ export class DemographySystem {
     if (!nh || this.living.ramp <= 0) return 0;
     let d = 0;
     const col = this.households.col;
-    for (let k = 0; k < nh; k++) if (col.distressDays[k]! > 0) d++;
-    return d / nh;
+    for (let k = 0; k < nh; k++) if (col.distressDays[k]! > 0) d += this.hhWeightOf(k);
+    return d / Math.max(1, this.hhW);
   }
 
   /** Vague de migration (toutes les 6 h de jeu) : arrivées selon l'attractivité et les logements libres. */
@@ -1228,26 +1435,36 @@ export class DemographySystem {
     const rng = this.ctx.rng;
     let free = 0;
     // Logements sans électricité / sans eau (hors de tout réseau, après la période de grâce) : arrivées freinées.
-    for (let i = 0; i < b.count; i++) { const f = this.freeHousingAt(i); if (f > 0) free += f * this.growthWeight(b.id[i]!); }
-    if (free <= 0) return 0;
+    this.beginHousingCache();
+    const hc = this.housingCap!;
+    for (let i = 0; i < b.count; i++) { const f = hc[i]! - b.residents[i]!; if (f > 0) free += f * this.growthWeight(b.id[i]!); }
+    if (free <= 0) { this.housingCap = null; return 0; }
     // Proportionnel aux logements libres, avec un flux de base pour qu'une petite ville naissante (quelques
     // maisons desservies) se peuple en un ou deux jours de jeu au lieu d'une semaine (recette QA phase 1).
     const expected = ((free / 2.6) * this.attractiveness * 0.3 + Math.min(1, free / 4) * this.attractiveness * 0.6) * this.immigrationFactor;
     let arrivals = Math.floor(expected) + (rng.next() < expected - Math.floor(expected) ? 1 : 0);
     arrivals = Math.min(arrivals, MAX_ARRIVALS_PER_WAVE);
+    // Simulation agrégée : les arrivées (en ménages réels) forment arrivals / W ménages agrégés de poids W (arrondi
+    // aléatoire sans biais). Hors simulation agrégée (W = 1), aucun tirage supplémentaire : partie identique.
+    const W = this.newHouseholdWeight();
+    let rows = arrivals;
+    if (W > 1) rows = Math.floor(arrivals / W) + (rng.next() < arrivals / W - Math.floor(arrivals / W) ? 1 : 0);
     let placed = 0;
-    for (let k = 0; k < arrivals; k++) {
+    for (let k = 0; k < rows; k++) {
       // Composition du ménage.
       const kind = rng.weighted([0.3, 0.25, 0.32, 0.06, 0.07]);
       let adults = kind === 0 || kind === 3 ? 1 : 2;
       let kids = kind === 2 ? rng.int(1, 3) : kind === 3 ? rng.int(1, 2) : 0;
       const retired = kind === 4;
-      let target = this.findHousing(adults + kids);
+      let hw = W;
+      let target = this.findHousing((adults + kids) * hw);
+      // Ménage agrégé sans bâtiment assez grand : poids réduit (la composition est conservée).
+      while (target < 0 && hw > 1) { hw = Math.max(1, hw >> 1); target = this.findHousing((adults + kids) * hw); }
       while (target < 0 && kids > 0) { kids--; target = this.findHousing(adults + kids); }
       if (target < 0 && adults > 1) { adults = 1; target = this.findHousing(1); }
       if (target < 0) break;
       const surname = randomSurname(rng);
-      const hid = this.newHousehold(target, surname, now);
+      const hid = this.newHousehold(target, surname, now, hw);
       const baseAge = retired ? rng.int(65, 82) : kids > 0 ? rng.int(28, 46) : rng.int(20, 58);
       for (let a = 0; a < adults; a++) {
         const sex = adults === 2 ? a : rng.int(0, 1);
@@ -1262,9 +1479,10 @@ export class DemographySystem {
         this.addCitizen(hid, target, rng.int(0, 1), age, edu, Role.Child, now);
         this.addMember(hid);
       }
-      this.month.immigrants += adults + kids;
-      placed++;
+      this.month.immigrants += (adults + kids) * hw;
+      placed += hw;
     }
+    this.housingCap = null;
     return placed;
   }
 
@@ -1316,7 +1534,7 @@ export class DemographySystem {
     const L = this.living, t = L.tuning;
     const taxBase: Record<TaxSector, number> = { residential: 0, commercial: 0, industrial: 0, office: 0 };
     let householdIncome = 0;
-    for (let i = 0; i < this.citizens.count; i++) householdIncome += c.income[i]!;
+    for (let i = 0; i < this.citizens.count; i++) householdIncome += c.income[i]! * this.weightOf(i);
     taxBase.residential = householdIncome * RES_TAXABLE_SHARE;
     let commercialWorkers = 0, serviceWorkers = 0, employedTotal = 0;
     for (let i = 0; i < b.count; i++) {
@@ -1326,7 +1544,7 @@ export class DemographySystem {
       if (m.sector === Sector.Commercial) commercialWorkers += b.workers[i]!;
       if (m.sector === Sector.Public) serviceWorkers += b.workers[i]!;
     }
-    const customers = this.citizens.count + WORKER_CUSTOMER_SHARE * employedTotal;
+    const customers = this.popW + WORKER_CUSTOMER_SHARE * employedTotal;
     const demandFactor = commercialWorkers > 0 ? Math.min(1.25, Math.max(0.25, customers / RESIDENTS_PER_COMMERCIAL_JOB / commercialWorkers)) : 1;
     L.globalCustomers = demandFactor;
     // Salaires effectifs et employés sous-qualifiés par index de bâtiment (sans allocation).
@@ -1339,10 +1557,11 @@ export class DemographySystem {
       if (c.job[i]! < 0) continue;
       const j = b.indexOf(c.job[i]!);
       if (j < 0) continue;
-      wages[j]! += c.income[i]!;
+      const w = this.weightOf(i);
+      wages[j]! += c.income[i]! * w;
       const m = this.metaOfIndex(j);
-      if (m && c.education[i]! < m.reqEdu) under[j]!++;
-      if (c.sick[i]! > 0) sickW[j]!++;
+      if (m && c.education[i]! < m.reqEdu) under[j]! += w;
+      if (c.sick[i]! > 0) sickW[j]! += w;
     }
     L.refreshBuildings(this.buildingsVersion);
     const cc = this.companies.col;
@@ -1383,7 +1602,7 @@ export class DemographySystem {
         for (let i = 0; i < this.citizens.count; i++) {
           if (c.job[i]! >= 0 || c.school[i]! >= 0 || c.education[i]! < Education.Baccalaureate) continue;
           const age = this.ageOf(i, now);
-          if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE) unemployedQualified++;
+          if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE) unemployedQualified += this.weightOf(i);
         }
         return unemployedQualified;
       };
@@ -1446,6 +1665,8 @@ export class DemographySystem {
         const dx = b.x[bi]! - this.focusX, dz = b.z[bi]! - this.focusZ;
         const d = dx * dx + dz * dz;
         lod = d <= d1 ? SimLod.Detailed : d <= d2 ? SimLod.Simplified : SimLod.Statistical;
+        // Ligne agrégée : pas de trajet individuel (la demande statistique du trafic la couvre).
+        if (lod === SimLod.Detailed && c.weight[i]! > 1) lod = SimLod.Simplified;
       }
       if (lod === SimLod.Statistical) c.activity[i] = Activity.Unknown;
       c.lod[i] = lod;
@@ -1534,14 +1755,15 @@ export class DemographySystem {
     const covOk = !this.coverageDirty;
     for (let i = 0; i < this.citizens.count; i++) {
       const age = this.ageOf(i, now);
-      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.job[i]! < 0 && c.school[i]! < 0) unemployed++;
-      happinessSum += c.happiness[i]!;
+      const w = this.weightOf(i);
+      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.job[i]! < 0 && c.school[i]! < 0) unemployed += w;
+      happinessSum += c.happiness[i]! * w;
       if (covOk) {
         const bi = b.indexOf(c.home[i]!);
-        if (bi >= 0) for (let k = 0; k < SERVICE_COUNT; k++) covered[k]! += this.coverage[k]![bi]!;
+        if (bi >= 0) for (let k = 0; k < SERVICE_COUNT; k++) covered[k]! += this.coverage[k]![bi]! * w;
       }
     }
-    return { population: this.citizens.count, jobsTotal, jobsFilled, unemployed, happinessSum, covered, attractSum };
+    return { population: this.popW, jobsTotal, jobsFilled, unemployed, happinessSum, covered, attractSum };
   }
 
   /** Dernière date connue (pour les âges dans les statistiques). */
@@ -1564,31 +1786,32 @@ export class DemographySystem {
     let statSeen = 0;
     for (let i = 0; i < this.citizens.count; i++) {
       const age = this.ageOf(i, now);
-      ageBands[Math.min(8, Math.floor(age / 10))]!++;
-      if (age < 18) children++; else if (age < RETIREMENT_AGE) adults++; else seniors++;
-      if (age >= 18) education[c.education[i]!]!++;
-      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { laborForce++; if (c.job[i]! >= 0) employed++; }
-      if (c.job[i]! >= 0 && age >= RETIREMENT_AGE) employed++;
-      if (c.school[i]! >= 0) pupils++;
-      if (age >= RETIREMENT_AGE) retirees++;
-      if (c.income[i]! > 0) { incomeSum += c.income[i]!; earners++; }
-      happinessSum += c.happiness[i]!;
+      const w = this.weightOf(i);
+      ageBands[Math.min(8, Math.floor(age / 10))]! += w;
+      if (age < 18) children += w; else if (age < RETIREMENT_AGE) adults += w; else seniors += w;
+      if (age >= 18) education[c.education[i]!]! += w;
+      if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { laborForce += w; if (c.job[i]! >= 0) employed += w; }
+      if (c.job[i]! >= 0 && age >= RETIREMENT_AGE) employed += w;
+      if (c.school[i]! >= 0) pupils += w;
+      if (age >= RETIREMENT_AGE) retirees += w;
+      if (c.income[i]! > 0) { incomeSum += c.income[i]! * w; earners += w; }
+      happinessSum += c.happiness[i]! * w;
       const bi = b.indexOf(c.home[i]!);
       if (bi >= 0) {
-        for (let k = 0; k < SERVICE_COUNT; k++) covered[k]! += this.coverage[k]![bi]!;
-        pollutionSum += this.pollutionAt[bi]!;
+        for (let k = 0; k < SERVICE_COUNT; k++) covered[k]! += this.coverage[k]![bi]! * w;
+        pollutionSum += this.pollutionAt[bi]! * w;
       }
       const l = c.lod[i]!;
-      if (l === SimLod.Detailed) lod.detailed++;
-      else if (l === SimLod.Simplified) lod.simplified++;
-      else lod.statistical++;
-      if (l !== SimLod.Statistical) acts[c.activity[i]!] = (acts[c.activity[i]!] ?? 0) + 1;
+      if (l === SimLod.Detailed) lod.detailed += w;
+      else if (l === SimLod.Simplified) lod.simplified += w;
+      else lod.statistical += w;
+      if (l !== SimLod.Statistical) acts[c.activity[i]!] = (acts[c.activity[i]!] ?? 0) + w;
       else if (statSeen++ % STATISTICAL_SAMPLE === 0) {
         const a = this.activityAt(i, mod, weekend);
-        acts[a] = (acts[a] ?? 0) + STATISTICAL_SAMPLE;
+        acts[a] = (acts[a] ?? 0) + STATISTICAL_SAMPLE * w;
       }
     }
-    const pop = this.citizens.count;
+    const pop = this.popW;
     let jobsTotal = 0, jobsFilled = 0, housingCapacity = 0, housingFree = 0;
     let commercialJobs = 0, freeIndustrial = 0, freeOffice = 0;
     for (let i = 0; i < b.count; i++) {
@@ -1656,7 +1879,7 @@ export class DemographySystem {
     const fc = Math.max(1, this.factorCount);
     const satisfactionFactors = SATISFACTION_FACTORS.map(([key, label], k) => ({ key, label, delta: Math.round((this.factorSum[k]! / fc) * 10) / 10 }));
     return {
-      population: pop, households: this.households.count, children, adults, seniors, ageBands, education,
+      population: pop, households: this.hhW, children, adults, seniors, ageBands, education,
       educationNames: EDUCATION_NAMES_FR, laborForce, employed, unemployed,
       unemploymentRate: laborForce ? unemployed / laborForce : 0, pupils, retirees, jobsTotal, jobsFilled,
       housingCapacity, housingFree, happiness: pop ? happinessSum / pop : 0, averageIncome: earners ? incomeSum / earners : 0,
@@ -1720,17 +1943,18 @@ export class DemographySystem {
       if (c.home[i] === id) {
         if (occupants.length < limit) occupants.push(this.citizenInfo(i, now));
         const age = this.ageOf(i, now);
-        this.scoreCitizen(i, age, bi, this.households.indexOf(c.household[i]!), ramp, taxPenalty, () => hp, fsum);
-        scored++;
-        if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { labor++; if (c.job[i]! < 0) unemployed++; }
+        const w = this.weightOf(i);
+        this.scoreCitizen(i, age, bi, this.households.indexOf(c.household[i]!), ramp, taxPenalty, () => hp, fsum, w);
+        scored += w;
+        if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { labor += w; if (c.job[i]! < 0) unemployed += w; }
       }
       if (c.job[i] === id) {
         if (employees.length < limit) employees.push(this.citizenInfo(i, now));
-        if (c.education[i]! < m.reqEdu) under++;
+        if (c.education[i]! < m.reqEdu) under += this.weightOf(i);
       }
     }
     let burdenSum = 0, burdenN = 0;
-    for (let hk = 0; hk < this.households.count; hk++) if (this.households.col.home[hk] === id) { burdenSum += this.living.burdenOf(hk); burdenN++; }
+    for (let hk = 0; hk < this.households.count; hk++) if (this.households.col.home[hk] === id) { const hw = this.hhWeightOf(hk); burdenSum += this.living.burdenOf(hk) * hw; burdenN += hw; }
     let vacancy: keyof VacancyReasons | null = null;
     if (m.resCap > 0 && b.residents[bi] === 0) {
       const ws = this.waterState(id), ps = this.powerState(id);
@@ -1745,7 +1969,7 @@ export class DemographySystem {
     const cc = this.companies.col;
     const statusOf = (st: number): 'active' | 'difficulty' | 'closed' => (st === CompanyStatus.Closed ? 'closed' : st === CompanyStatus.Difficulty ? 'difficulty' : 'active');
     let distressHh = 0;
-    for (let hk = 0; hk < this.households.count; hk++) if (this.households.col.home[hk] === id && this.households.col.distressDays[hk]! > 0) distressHh++;
+    for (let hk = 0; hk < this.households.count; hk++) if (this.households.col.home[hk] === id && this.households.col.distressDays[hk]! > 0) distressHh += this.hhWeightOf(hk);
     const L = this.living;
     const economy = bi < L.land.length && L.land[bi]! > 0
       ? { landValue: Math.round(L.land[bi]! * 100), rent: Math.round(L.rentUnit[bi]!), householdsInDistress: distressHh } : undefined;
@@ -1780,9 +2004,12 @@ export class DemographySystem {
   /* ------------------------------ Sauvegarde ------------------------------ */
 
   toJSON(): DemographyJSON {
+    const citizens = this.citizens.toJSON(), households = this.households.toJSON();
+    // Colonne `weight` écrite seulement si la simulation agrégée est active (sinon sauvegarde identique à l'ancienne).
+    if (this.aggRows === 0 && !households.weight?.some((v) => v > 1)) { delete citizens.weight; delete households.weight; }
     return {
       nextCitizenId: this.nextCitizenId, nextHouseholdId: this.nextHouseholdId,
-      citizens: this.citizens.toJSON(), households: this.households.toJSON(), companies: this.companies.toJSON(),
+      citizens, households, companies: this.companies.toJSON(),
       month: { ...this.month }, lastMonth: { ...this.lastMonth }, attractiveness: this.attractiveness, tripsEmitted: this.tripsEmitted,
       living: this.living.toJSON(),
       services: this.services.toJSON(),
@@ -1819,12 +2046,17 @@ export class DemographySystem {
     for (let i = 0; i < b.count; i++) { b.residents[i] = 0; b.workers[i] = 0; }
     this.pupilsBySchool.clear();
     const c = this.citizens.col;
+    this.popW = 0; this.aggRows = 0; this.hhW = 0;
+    for (let k = 0; k < this.households.count; k++) this.hhW += this.hhWeightOf(k);
     for (let i = 0; i < this.citizens.count; i++) {
+      const w = this.weightOf(i);
+      this.popW += w;
+      if (w > 1) this.aggRows++;
       const h = b.indexOf(c.home[i]!);
-      if (h >= 0) b.residents[h]!++;
+      if (h >= 0) b.residents[h]! += w;
       const j = b.indexOf(c.job[i]!);
-      if (j >= 0) b.workers[j]!++;
-      if (c.school[i]! >= 0) this.pupilsBySchool.set(c.school[i]!, (this.pupilsBySchool.get(c.school[i]!) ?? 0) + 1);
+      if (j >= 0) b.workers[j]! += w;
+      if (c.school[i]! >= 0) this.pupilsBySchool.set(c.school[i]!, (this.pupilsBySchool.get(c.school[i]!) ?? 0) + w);
     }
     this.coverageDirty = true;
   }
