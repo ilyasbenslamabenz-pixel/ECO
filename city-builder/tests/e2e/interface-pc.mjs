@@ -191,6 +191,46 @@ try {
   check(after === true, '« Tout marquer comme lu » vide le badge');
   check(errors.length === 0, `aucune erreur de page ${errors.slice(0, 3).join(' | ')}`);
   await ctx.close();
+
+  /* ---------- Captures en 1920×1080 (écran du joueur) : mêmes vues ---------- */
+  const big = await browser.newContext({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
+  const p2 = await big.newPage();
+  p2.setDefaultTimeout(240000);
+  const err2 = collectErrors(p2);
+  const shot2 = async (name) => { await p2.evaluate(() => window.__aube.renderNow(1)); const f = join(out, `interface-1080p-${name}.png`); await p2.screenshot({ path: f, timeout: 600000 }); if (extra) copyFileSync(f, join(extra, `1080p-${name}.png`)); };
+  await p2.goto(`${base}/index.html?autostart&seed=42&norender`, { timeout: 300000, waitUntil: 'domcontentloaded' });
+  await p2.waitForFunction(() => window.__aube?.ready && window.__aube.snapshotReceived && window.__aube.lastStats, null, { timeout: 300000, polling: 500 });
+  await p2.evaluate(async (data) => { await window.__aube.send('load', { data }); }, save);
+  await p2.waitForFunction(() => window.__aube.lastStats?.population > 0, null, { timeout: 60000, polling: 200 });
+  await p2.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
+  await p2.evaluate(() => window.__aube.lookAt(0, 0, 420, 0.8, 0.5));
+  await p2.evaluate(() => window.__aube.renderNow(4, 0.5));
+  await p2.click('#btn-layers');
+  await p2.click('#layers-pop [data-layer=unemployment]');
+  await p2.waitForFunction(() => window.__cartes?.visible() && window.__cartes.cells() > 0, null, { timeout: 20000, polling: 200 }).catch(() => undefined);
+  const popBig = await p2.evaluate(() => { const r = document.querySelector('#layers-pop').getBoundingClientRect(); const s = document.querySelector('#sidebar').getBoundingClientRect(); return { pop: r.left, side: s.right, top: r.top }; });
+  check(popBig.pop >= popBig.side && popBig.top > 0, `1920×1080 : menu Cartes à droite de la barre latérale (${Math.round(popBig.pop)} ≥ ${Math.round(popBig.side)} px)`);
+  await shot2('carte-chomage');
+  await p2.click('#layers-pop [data-layer=none]');
+  await p2.click('#btn-layers');
+  if (pick) {
+    await p2.evaluate((id) => window.__aube.selectBuilding(id), pick.id);
+    await p2.waitForFunction(() => document.querySelector('#info-why')?.childElementCount > 0, null, { timeout: 15000, polling: 200 }).catch(() => undefined);
+    await shot2('fiche-pourquoi');
+    await p2.click('#info-close').catch(() => undefined);
+  }
+  await p2.click('#btn-stats');
+  await p2.click('#dash-tabs [data-dtab=jobs]');
+  await p2.click('#dash-body .hist-ranges [data-range="1a"]');
+  await p2.waitForTimeout(600);
+  await shot2('graphique-jobs-1a');
+  await p2.click('#dash-close');
+  await p2.evaluate(() => { const t = window.__aube.toast; for (let i = 0; i < 8; i++) t(`Maison ${i + 1} construit (−40 000 ¢)`, 'ok'); for (let i = 0; i < 3; i++) t(`Réseau principal : ${10 + i} bâtiments coupés (logements). Construisez une centrale.`, 'error'); });
+  await p2.click('#btn-notif');
+  await p2.waitForTimeout(500);
+  await shot2('notifications');
+  check(err2.length === 0, `1920×1080 : aucune erreur de page ${err2.slice(0, 3).join(' | ')}`);
+  await big.close();
 } catch (e) {
   console.error(e);
   check(false, `exception : ${e instanceof Error ? e.message : String(e)}`);

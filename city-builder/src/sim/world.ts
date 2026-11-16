@@ -671,7 +671,7 @@ export class Simulation {
     if (a.dryRun) { restore(oldObb); return { ok: true, data: { buildingId: id, x, z, rot } }; }
     const o = this.obbFor(asset, x, z, rot);
     restore(o);
-    this.hydro.barrierDirty = true;
+    this.hydro.markBarrier();
     // Altitude : moyenne du terrain sous l'empreinte (comme à la pose).
     let hSum = 0, n = 0;
     const nx = Math.max(1, asset.footprint.tilesX), nz = Math.max(1, asset.footprint.tilesZ);
@@ -705,7 +705,7 @@ export class Simulation {
     const bb = obbAabb(o);
     this.buildingIndex.insert(r.id, bb.minX, bb.minZ, bb.maxX, bb.maxZ);
     this.buildings.roadAccess[bi] = this.computeRoadAccess(bi) ? 1 : 0;
-    this.hydro.barrierDirty = true;
+    this.hydro.markBarrier();
     // Bâtiment privé (promotion du zonage) : son entretien est à la charge de ses propriétaires, pas de la ville.
     if (!this.privateIds.has(r.id)) this.economy.addUpkeep(asset.upkeepPerMonth, 'buildings');
     this.demography?.onBuildingAdded(r.id, this.clock.totalMinutes);
@@ -754,7 +754,7 @@ export class Simulation {
     const asset = this.catalog!.assets[this.buildings.assetIndex[i]!]!;
     this.obbs.delete(a.buildingId);
     this.categoryOf.delete(a.buildingId);
-    this.hydro.barrierDirty = true;
+    this.hydro.markBarrier();
     const displaced = this.buildings.residents[i]!;
     this.demography?.onBuildingRemoved(a.buildingId, this.clock.totalMinutes);
     this.buildings.remove(a.buildingId);
@@ -901,7 +901,7 @@ export class Simulation {
    * nivellement du terrain, trafic et deltas pour le rendu. `withDelta` = faux au chargement.
    */
   private applyNetworkChanges(withDelta: boolean): void {
-    this.hydro.barrierDirty = true;
+    this.hydro.markBarrier();
     const ch = this.net.takeChanges();
     const t = this.terrain!;
     let bx0 = Infinity, bz0 = Infinity, bx1 = -Infinity, bz1 = -Infinity;

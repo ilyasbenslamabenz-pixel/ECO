@@ -17,8 +17,8 @@ import { DAM_FLOW_MAX, damGeometry, type DamGeometry, type EditPlan, type Terrai
 import { NO_WATER, type SampleRect, type WorldTerrain } from '../terrain/types';
 import { HydroSolver, type FeedResult, type HydroFeed, type HydroGrid } from './fill';
 
-/** Pas de temps du remplissage (minutes de jeu) : 2 min = 10 ticks (une image d'eau par seconde à ×1). */
-export const FILL_QUANTUM_MIN = 2;
+/** Pas de temps du remplissage (minutes de jeu) : 6 min = 6 ticks (≈ 1,7 image d'eau par seconde à ×1). */
+export const FILL_QUANTUM_MIN = 6;
 /** Distance maximale entre une centrale hydroélectrique et l'axe d'un barrage (m, en plus de sa demi-taille). */
 export const DAM_PLANT_REACH = 60;
 /** Rayon de recherche d'une source à retirer (m). */
@@ -153,6 +153,9 @@ export class HydroSystem {
     this.metrics.clear();
     this.ver++;
   }
+
+  /** Bâtiments ou routes modifiés : barrières à recalculer (et l'eau, si le module est actif : état déterministe). */
+  markBarrier(): void { this.barrierDirty = true; if (this.active) this.dirty = true; }
 
   get active(): boolean { return this.sources.length > 0 || this.dams.length > 0 || this.dug.length > 0; }
 

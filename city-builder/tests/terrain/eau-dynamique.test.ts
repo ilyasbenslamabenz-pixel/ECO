@@ -51,7 +51,7 @@ function carveValley(s: Simulation, cx: number, cz: number, floor0 = 40): void {
 function untilSteady(s: Simulation, maxH = 72): number {
   for (let i = 0; i < maxH * 6; i++) {
     s.tick(10);
-    if (s.hydro.steady && !s.hydro.dirty) return i * 10;
+    if (s.hydro.steady && !s.hydro.dirty) return (i + 1) * 10;
   }
   return -1;
 }
@@ -62,32 +62,32 @@ test('pinceaux : forme douce identique à l\'origine, forme dure plus large, for
   assert.equal(brushWeight(0.7, 0.75), 1, 'forme dure : plein effet jusqu\'à 75 %');
   const s = sim();
   const ed = { ...s.terrain!, heights: (s as unknown as Priv).naturalHeights, waterSurface: s.terrain!.waterSurface, forest: s.terrain!.forest };
-  const soft = planEdit(ed, { k: 'raise', x: 600, z: 600, r: 40, d: 4 });
-  const hard = planEdit(ed, { k: 'raise', x: 600, z: 600, r: 40, d: 4, s: 1 });
+  const soft = planEdit(ed, { k: 'raise', x: -450, z: 150, r: 40, d: 4 });
+  const hard = planEdit(ed, { k: 'raise', x: -450, z: 150, r: 40, d: 4, s: 1 });
   assert.ok(soft.ok && hard.ok);
   if (soft.ok && hard.ok) assert.ok(hard.plan.volume > soft.plan.volume * 1.4, `volume dur ${hard.plan.volume} > doux ${soft.plan.volume}`);
   // Niveler à une hauteur cible choisie, à 50 % de force : à mi-chemin au centre.
-  const h0 = nat(s, 600, 600);
-  const r = s.terrainEdit({ edit: { k: 'flatten', x: 600, z: 600, r: 30, h: h0 + 6, f: 0.5 } });
+  const h0 = nat(s, -450, 150);
+  const r = s.terrainEdit({ edit: { k: 'flatten', x: -450, z: 150, r: 30, h: h0 + 6, f: 0.5 } });
   assert.ok(r.ok, r.ok ? '' : r.error.message);
-  assert.ok(Math.abs(nat(s, 600, 600) - (h0 + 3)) < 0.05, 'mi-chemin vers la cible');
+  assert.ok(Math.abs(nat(s, -450, 150) - (h0 + 3)) < 0.05, 'mi-chemin vers la cible');
   // Adoucir : une marche s'atténue.
-  assert.ok(s.terrainEdit({ edit: { k: 'raise', x: 700, z: 700, r: 12, d: 8, s: 1 } }).ok);
-  const peak = nat(s, 700, 700) - nat(s, 724, 700);
-  assert.ok(s.terrainEdit({ edit: { k: 'smooth', x: 700, z: 700, r: 40 } }).ok);
-  assert.ok(nat(s, 700, 700) - nat(s, 724, 700) < peak * 0.8, 'bosse adoucie');
+  assert.ok(s.terrainEdit({ edit: { k: 'raise', x: -450, z: -150, r: 12, d: 8, s: 1 } }).ok);
+  const peak = nat(s, -450, -150) - nat(s, -426, -150);
+  assert.ok(s.terrainEdit({ edit: { k: 'smooth', x: -450, z: -150, r: 40 } }).ok);
+  assert.ok(nat(s, -450, -150) - nat(s, -426, -150) < peak * 0.8, 'bosse adoucie');
 });
 
 test('pente : rampe régulière entre les hauteurs des deux extrémités (fixées à la pose)', () => {
   const s = sim();
-  const ha = nat(s, 500, 500), hb = nat(s, 700, 500);
-  const r = s.terrainEdit({ edit: { k: 'slope', ax: 500, az: 500, bx: 700, bz: 500, w: 40 } });
+  const ha = nat(s, -600, -300), hb = nat(s, -400, -300);
+  const r = s.terrainEdit({ edit: { k: 'slope', ax: -600, az: -300, bx: -400, bz: -300, w: 40 } });
   assert.ok(r.ok, r.ok ? '' : r.error.message);
   if (!r.ok) return;
   assert.equal(r.data.ah, Math.round(ha * 100) / 100);
-  const mid = nat(s, 600, 500);
+  const mid = nat(s, -500, -300);
   assert.ok(Math.abs(mid - (ha + hb) / 2) < 0.2, `milieu ${mid} ≈ ${(ha + hb) / 2}`);
-  assert.ok(!s.terrainEdit({ edit: { k: 'slope', ax: 500, az: 500, bx: 505, bz: 500, w: 40 } }).ok, 'trop courte');
+  assert.ok(!s.terrainEdit({ edit: { k: 'slope', ax: -600, az: -300, bx: -595, bz: -300, w: 40 } }).ok, 'trop courte');
 });
 
 test('annulation : un geste de plusieurs passes est annulé d\'un coup (relief, coût remboursé) ; refus sous un bâtiment construit depuis', () => {
@@ -95,8 +95,8 @@ test('annulation : un geste de plusieurs passes est annulé d\'un coup (relief, 
   const N = (s as unknown as Priv).naturalHeights;
   const before = new Float32Array(N);
   const money = s.economy.money;
-  const a = s.terrainEdit({ edit: { k: 'raise', x: 600, z: 600, r: 30, d: 2 } });
-  const b = s.terrainEdit({ edit: { k: 'raise', x: 620, z: 600, r: 30, d: 2 } });
+  const a = s.terrainEdit({ edit: { k: 'raise', x: -450, z: 0, r: 30, d: 2 } });
+  const b = s.terrainEdit({ edit: { k: 'raise', x: -430, z: 0, r: 30, d: 2 } });
   assert.ok(a.ok && b.ok);
   if (!a.ok || !b.ok) return;
   assert.equal(a.data.seq, 0);
@@ -108,8 +108,8 @@ test('annulation : un geste de plusieurs passes est annulé d\'un coup (relief, 
   assert.ok(Math.abs(s.economy.money - money) < 1e-6, 'coût remboursé');
   assert.equal(s.terrainEditList.length, 0);
   // Bâtiment posé sur la zone : l'annulation est refusée clairement.
-  assert.ok(s.terrainEdit({ edit: { k: 'flatten', x: 600, z: 600, r: 40, h: nat(s, 600, 600) + 2 } }).ok);
-  const pb = s.placeBuilding({ assetId: s.catalog!.assets.find((x) => x.category === 'residential')!.id, x: 600, z: 600, rot: 0 });
+  assert.ok(s.terrainEdit({ edit: { k: 'flatten', x: -450, z: 0, r: 40, h: nat(s, -450, 0) + 2 } }).ok);
+  const pb = s.placeBuilding({ assetId: s.catalog!.assets.find((x) => x.category === 'house')!.id, x: -450, z: 0, rot: 0 });
   assert.ok(pb.ok, pb.ok ? '' : pb.error.message);
   const u2 = s.runExt('terrainUndo', { since: 0 });
   assert.ok(!u2.ok && /bâtiment/.test(u2.error.message));
@@ -160,8 +160,9 @@ test('barrage en travers d\'une vallée + source : la retenue monte jusqu\'à la
   const dry = s.terrainEdit({ edit: dam, dryRun: true });
   assert.ok(dry.ok, dry.ok ? '' : dry.error.message);
   if (!dry.ok) return;
-  const floor = nat(s, cx, cz);
-  assert.ok(Math.abs(dry.data.crest! - (floor + 15)) < 1, `crête ${dry.data.crest} ≈ fond ${floor} + 15`);
+  let floor = Infinity;
+  for (let z = cz - 90; z <= cz + 90; z += 2) floor = Math.min(floor, nat(s, cx, z));
+  assert.ok(Math.abs(dry.data.crest! - (floor + 15)) < 0.5, `crête ${dry.data.crest} ≈ fond ${floor} + 15`);
   assert.equal(dry.data.water?.flowM3s, 0, 'vallée sèche : aucun débit avant la source');
   const d = s.terrainEdit({ edit: dam });
   assert.ok(d.ok, d.ok ? '' : d.error.message);
@@ -172,7 +173,7 @@ test('barrage en travers d\'une vallée + source : la retenue monte jusqu\'à la
   assert.ok(pv.ok && pv.data.water, 'aperçu du lac');
   assert.ok(s.terrainEdit({ edit: src }).ok);
   // Remplissage progressif : le niveau monte avec le temps.
-  s.tick(10); s.tick(10);
+  s.tick(10);
   const early = ws(s, cx - 20, cz);
   const mins = untilSteady(s, 200);
   assert.ok(mins > 0, 'régime établi atteint');
@@ -191,7 +192,7 @@ test('barrage en travers d\'une vallée + source : la retenue monte jusqu\'à la
   assert.ok(hydroDamKw(30_000, m.headM, m.flowM3s, 'printemps') > hydroDamKw(30_000, m.headM / 2, m.flowM3s, 'printemps'));
   // Aval : de l'eau déborde par-dessus la crête (ruisseau).
   let downstream = false;
-  for (let x = cx + 16; x < cx + 190; x += 8) if (ws(s, x, cz) > nat(s, x, cz)) downstream = true;
+  for (let x = cx + 16; x < cx + 190; x += 8) for (const z of [cz - 8, cz, cz + 8]) if (ws(s, x, z) > nat(s, x, z)) downstream = true;
   assert.ok(downstream, 'débordement en aval');
   // Bâtiment interdit dans la retenue ; route au sol refusée.
   assert.ok(s.isWet(cx - 30, cz));
@@ -264,7 +265,7 @@ test('creux creusé au bord d\'une rivière : l\'eau le remplit jusqu\'à son ni
   assert.ok(ws(s, bank.x, bank.z) > nat(s, bank.x, bank.z) + 0.05, 'le creux est en eau');
   assert.ok(Math.abs(ws(s, bank.x, bank.z) - bank.lv) < 0.6, 'au niveau de la rivière voisine');
   // Source posée puis retirée (l'eau qu'elle donnait disparaît).
-  const sx = 600, sz = 600;
+  const sx = -450, sz = 300;
   assert.ok(s.terrainEdit({ edit: { k: 'source', x: sx, z: sz, q: 20 } }).ok);
   assert.equal(s.hydro.sources.length, 1);
   assert.ok(!s.terrainEdit({ edit: { k: 'unsource', x: sx + 200, z: sz } }).ok, 'aucune source ici');
@@ -285,12 +286,12 @@ test('centrale hydroélectrique au pied d\'un barrage : site validé par la rete
   const ctx = (s as unknown as { plugins: { contextOf(id: string): unknown } }).plugins.contextOf('electricite')!;
   const sys = (elec as unknown as { systemOf?(c: unknown): unknown }).systemOf?.(ctx) ?? (elec as unknown as { system: unknown }).system;
   const scan = (sys as { scanFacilities(c: unknown): Map<number, { kind: string; siteOk: boolean; siteReason: string; damId?: number }> });
-  let placed = 0;
-  for (const z of [cz - 70, cz + 70, cz - 60, cz + 60]) {
-    const r = s.placeBuilding({ assetId: 'barrage', x: cx + 40, z, rot: 0 });
-    if (r.ok) { placed = r.data.buildingId; break; }
-  }
-  assert.ok(placed > 0, 'centrale posée au pied du barrage');
+  // Plateforme nivelée sur le versant aval (pinceau Niveler, forme dure), puis la centrale.
+  const pad = { x: cx + 44, z: cz + 44 };
+  const fl = s.terrainEdit({ edit: { k: 'flatten', x: pad.x, z: pad.z, r: 34, s: 1 } });
+  assert.ok(fl.ok, fl.ok ? '' : fl.error.message);
+  const pr = s.placeBuilding({ assetId: 'barrage', x: pad.x, z: pad.z, rot: 0 });
+  assert.ok(pr.ok, pr.ok ? '' : pr.error.message);
   const f = [...scan.scanFacilities(ctx).values()].find((o) => o.kind === 'hydro')!;
   assert.ok(f.siteOk && f.damId !== undefined, f.siteReason);
   assert.match(f.siteReason, /chute/);
@@ -298,4 +299,36 @@ test('centrale hydroélectrique au pied d\'un barrage : site validé par la rete
   const season = (ctx as { clock: { season: string } }).clock.season;
   assert.ok(Math.abs(kw - hydroDamKw(30_000 * 0 + (f as unknown as { nominalKw: number }).nominalKw, m.headM, m.flowM3s, season)) < 1, `production ${kw} kW`);
   assert.ok(kw > 0);
+});
+
+test('barrage en travers d\'une rivière de la carte : la rivière remplit la retenue jusqu\'à la crête ; aval inchangé', () => {
+  const s = sim();
+  const t = s.terrain!;
+  const r = t.rivers[0]!;
+  const P = r.points;
+  const v = 18;
+  const x = P[v * 4]!, z = P[v * 4 + 2]!;
+  const dx = P[(v + 1) * 4]! - x, dz = P[(v + 1) * 4 + 2]! - z, L = Math.hypot(dx, dz);
+  const nx = -dz / L, nz = dx / L;
+  // Préparation : versants hauts (40 m) autour du cours amont, lit de la rivière intact.
+  const N = (s as unknown as Priv).naturalHeights;
+  for (let k = 0; k < N.length; k++) {
+    const px = t.originX + (k % t.samplesX) * t.spacing, pz = t.originZ + Math.floor(k / t.samplesX) * t.spacing;
+    if (px < x - 160 || px > x + 160 || pz < z - 230 || pz > z + 20) continue;
+    if (t.waterSurface[k]! > N[k]! + 0.05) continue;
+    N[k] = Math.max(N[k]!, 40); t.heights[k] = N[k]!;
+  }
+  // Aval (pour vérifier qu'il ne change pas) : surface de la rivière 100 m plus loin.
+  const downK = idx(s, P[(v + 12) * 4]!, P[(v + 12) * 4 + 2]!);
+  const downBefore = t.waterSurface[downK]!;
+  const dam: TerrainEdit = { k: 'dam', ax: x - nx * 30, az: z - nz * 30, bx: x + nx * 30, bz: z + nz * 30, hh: 6 };
+  const d = s.terrainEdit({ edit: dam });
+  assert.ok(d.ok, d.ok ? '' : d.error.message);
+  if (!d.ok) return;
+  assert.ok((d.data.flow ?? 0) > 0, `débit de la rivière barrée ${d.data.flow} m³/s`);
+  assert.ok(untilSteady(s, 400) > 0, 'retenue pleine');
+  const m = s.hydro.service.damNear(x, z, 30)!;
+  assert.ok(Math.abs(m.level - d.data.crest!) < 0.3, `retenue ${m.level} ≈ crête ${d.data.crest}`);
+  assert.ok(m.headM > 3, `chute ${m.headM} m`);
+  assert.equal(t.waterSurface[downK], downBefore, 'rivière aval inchangée');
 });

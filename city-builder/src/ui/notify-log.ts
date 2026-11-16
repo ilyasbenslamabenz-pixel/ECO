@@ -68,7 +68,7 @@ const RULES: readonly Rule[] = [
   { re: /déplacé \(gratuit\)/, key: 'deplacement', severity: 'info', summary: (n) => `${n0(n)} bâtiments déplacés` },
   { re: /refusée?\b|impossible|^Rien à/i, key: 'refus', severity: 'info', summary: (n, _m, last) => `${n0(n)} actions refusées (dernière : ${last})` },
   { re: /^Annulé|^Annulation/, key: 'annulation', severity: 'info', summary: (n) => `${n0(n)} annulations` },
-  { re: /^Partie sauvegardée/, key: 'sauvegarde', severity: 'info', summary: (n, _m, last) => `${n0(n)} sauvegardes (dernière : ${last.replace(/^Partie sauvegardée\s*/, '')})` },
+  { re: /^Partie sauvegardée/, key: 'sauvegarde', severity: 'info', summary: (n, _m, last) => `${n0(n)} sauvegardes (dernière : ${last.replace(/^Partie sauvegardée\s*\(?\s*/, '').replace(/\)\s*$/, '')})` },
   { re: /^(Nouvel objectif|Objectif accompli|Objectif atteint|Réalisation)/, key: 'objectifs', severity: 'info' },
   { re: /^Incendie maîtrisé|^Reconstruit par son promoteur/, key: 'incendie-fin', severity: 'info', summary: (n) => `${n0(n)} incendies maîtrisés ou bâtiments reconstruits` },
   { re: /^Emprunt|^Politique|^Recherche terminée|^Secteur créé|mis en service|amélioré au niveau/, key: '', severity: 'info' },

@@ -110,9 +110,12 @@ try {
   // Notifications : une vraie notification (sauvegarde) puis le centre de notifications.
   await page.evaluate(() => window.__aube.saveSlot('ui-e2e'));
   await page.waitForTimeout(300);
+  // Vague 5 : le badge ne compte que les notifications urgentes et importantes (la sauvegarde est une info).
+  await page.evaluate(() => window.__aube.toast('Panne : Éolienne n° 1 hors service (réparation ≈ 2 h)', 'error'));
   const badge = await page.evaluate(() => !document.querySelector('#notif-badge').classList.contains('hidden') && Number(document.querySelector('#notif-badge').textContent) > 0);
-  check(badge, `badge de notifications (${await text(page, '#notif-badge')} non lue(s))`);
+  check(badge, `badge de notifications (${await text(page, '#notif-badge')} importante(s) non lue(s))`);
   await page.click('#btn-notif');
+  await page.click('#dash-body [data-act=read-all]');
   const notifItems = await page.evaluate(() => [...document.querySelectorAll('.notif-list li')].map((l) => l.textContent));
   check(await visible(page, '#dash-panel') && notifItems.some((t) => /sauvegardée/.test(t)) && await page.evaluate(() => document.querySelector('#notif-badge').classList.contains('hidden')), `bouton Notifications → journal (${notifItems.length} entrée(s)), badge remis à zéro`);
   await page.click('#dash-close');

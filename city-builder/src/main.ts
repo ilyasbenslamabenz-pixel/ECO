@@ -448,6 +448,8 @@ async function boot(): Promise<void> {
     return p;
   }) as typeof b.send;
   debug.send = (name, args) => b.send(name as never, args as never);
+  // Commandes étendues (e2e : état de l'eau dynamique, annulation du terrain).
+  (debug as unknown as Record<string, unknown>).sendExt = (name: string, args: unknown) => b.sendExt(name as never, args as never);
   b.onLog((m) => { (m.level === 'error' ? console.error : console.log)(`[sim] ${m.message}`); if (m.level === 'error') debug.errors.push(m.message); });
 
   // Construction (miroir de la simulation, outils, aperçus) : branchée AVANT le premier instantané.
