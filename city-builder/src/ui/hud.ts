@@ -223,6 +223,8 @@ export function initUI(h: UIHandlers): UIHandle {
     if (ptr) ptr.value = o.pointer;
     const edge = optForm.elements.namedItem('edgeScroll') as HTMLInputElement | null;
     if (edge) edge.checked = o.edgeScroll;
+    const trees = optForm.elements.namedItem('streetTrees') as HTMLInputElement | null;
+    if (trees) trees.checked = o.streetTrees;
     const col = optForm.elements.namedItem('colors') as HTMLSelectElement | null;
     if (col) col.value = o.colors;
     distOut.textContent = `${fmt(o.viewDistance)} m`;
@@ -231,7 +233,7 @@ export function initUI(h: UIHandlers): UIHandle {
   optForm.addEventListener('input', (e) => {
     if ((e.target as HTMLElement | null)?.id === 'opt-tutorial') return; // case « Premiers pas » : gérée à part
     const f = new FormData(optForm);
-    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'], dynRes: String(f.get('dynRes') ?? 'auto') as GraphicsOptions['dynRes'], aa: String(f.get('aa') ?? 'auto') as GraphicsOptions['aa'], events: String(f.get('events') ?? 'normal') as GraphicsOptions['events'], pointer: String(f.get('pointer') ?? 'auto') as GraphicsOptions['pointer'], edgeScroll: f.get('edgeScroll') !== null, colors: String(f.get('colors') ?? 'vives') as GraphicsOptions['colors'] });
+    const o = sanitizeOptions({ quality: String(f.get('quality')) as GraphicsOptions['quality'], shadows: String(f.get('shadows')) as GraphicsOptions['shadows'], viewDistance: Number(f.get('viewDistance')), fps: String(f.get('fps')) as GraphicsOptions['fps'], theme: String(f.get('theme')) as GraphicsOptions['theme'], dynRes: String(f.get('dynRes') ?? 'auto') as GraphicsOptions['dynRes'], aa: String(f.get('aa') ?? 'auto') as GraphicsOptions['aa'], events: String(f.get('events') ?? 'normal') as GraphicsOptions['events'], pointer: String(f.get('pointer') ?? 'auto') as GraphicsOptions['pointer'], edgeScroll: f.get('edgeScroll') !== null, streetTrees: f.get('streetTrees') !== null, colors: String(f.get('colors') ?? 'vives') as GraphicsOptions['colors'] });
     distOut.textContent = `${fmt(o.viewDistance)} m`;
     saveOptions(o);
     sendEventsSetting(o.events);

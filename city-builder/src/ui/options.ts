@@ -39,11 +39,13 @@ export interface GraphicsOptions {
   pointer: 'auto' | 'touchpad' | 'mouse';
   /** Navigation : glissement de la carte quand le curseur touche le bord de la fenêtre (désactivé par défaut). */
   edgeScroll: boolean;
+  /** Arbres d'alignement le long des routes (désactivés par défaut : affichage plus léger ; appliqué au rechargement). */
+  streetTrees: boolean;
   /** Couleurs du rendu : vives (direction artistique actuelle, par défaut) ou naturelles (ancien rendu), src/render/palette.ts. */
   colors: 'vives' | 'naturelles';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal', pointer: 'auto', edgeScroll: false, colors: 'vives' };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal', pointer: 'auto', edgeScroll: false, streetTrees: false, colors: 'vives' };
 
 /** Applique le thème de l'interface (attribut lu par les feuilles de style). */
 export function applyTheme(t: GraphicsOptions['theme']): void {
@@ -66,6 +68,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     events: o?.events === 'normal' || o?.events === 'rares' || o?.events === 'off' ? o.events : DEFAULT_OPTIONS.events,
     pointer: o?.pointer === 'auto' || o?.pointer === 'touchpad' || o?.pointer === 'mouse' ? o.pointer : DEFAULT_OPTIONS.pointer,
     edgeScroll: typeof o?.edgeScroll === 'boolean' ? o.edgeScroll : DEFAULT_OPTIONS.edgeScroll,
+    streetTrees: typeof o?.streetTrees === 'boolean' ? o.streetTrees : DEFAULT_OPTIONS.streetTrees,
     colors: o?.colors === 'vives' || o?.colors === 'naturelles' ? o.colors : DEFAULT_OPTIONS.colors,
   };
 }

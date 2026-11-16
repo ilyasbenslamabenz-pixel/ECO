@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { RoadNetwork, commitRoadPlan, planRoad, networkRecords, type ProfileEnv, type RoadRequest } from '../../src/sim/roads';
-import { LAYERS, buildJunction, buildRoundaboutIsland, buildSegment, newOutput, talusFoot } from '../../src/render/roads/builder';
+import { LAYERS, buildJunction, buildRoundaboutIsland, buildSegment, newOutput, setStreetTrees, talusFoot } from '../../src/render/roads/builder';
 import { commitRoundabout, planRoundabout } from '../../src/sim/roads';
 import { RoadNetworkRenderer } from '../../src/render/roads/renderer';
 
@@ -35,6 +35,7 @@ function triNy(p: number[], a: number, b: number, c: number): number {
 }
 
 test('Maillage : couches attendues, aucune valeur invalide, surfaces de roulement orientées vers le haut', () => {
+  setStreetTrees(true); // option « Arbres le long des routes » activée pour ce test (désactivée par défaut)
   const net = new RoadNetwork(flat);
   build(net, R('boulevard', -200, 0, 200, 0));
   build(net, R('street', 0, -150, 0, 150));
@@ -65,6 +66,7 @@ test('Maillage : couches attendues, aucune valeur invalide, surfaces de roulemen
   const kinds = new Set(out.decor.map((d) => d.kind));
   for (const k of ['lamp', 'tree', 'bench', 'planter'] as const) assert.ok(kinds.has(k), `décor ${k}`);
   assert.ok(out.decor.every((d) => Number.isFinite(d.x + d.y + d.z + d.rot)));
+  setStreetTrees(false);
 });
 
 test('Maillage : la dalle de carrefour couvre le nœud, passages piétons peints sur les branches', () => {

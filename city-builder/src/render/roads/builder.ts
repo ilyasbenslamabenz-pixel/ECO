@@ -775,6 +775,10 @@ function arrow(P: LayerBuffer, sm: SegSampler, sCenter: number, off: number, for
   }
 }
 
+/** Arbres d'alignement des routes : désactivés par défaut (affichage plus léger), option « Arbres le long des routes ». */
+let streetTrees = false;
+export function setStreetTrees(on: boolean): void { streetTrees = on; }
+
 /** Décor d'un tronçon : lampadaires, arbres d'alignement, mobilier des rues piétonnes. */
 function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1: number, segId: number, avoid?: readonly number[]): void {
   const hc = carriagewayWidth(k) / 2;
@@ -826,7 +830,7 @@ function decor(out: BuildOutput, k: RoadKindDef, sm: SegSampler, s0: number, s1:
     }
   }
   // Arbres d'alignement : terre-plein planté, trottoirs larges des boulevards.
-  if (k.treeSpacing > 0) {
+  if (streetTrees && k.treeSpacing > 0) {
     const n = Math.max(1, Math.round(len / k.treeSpacing));
     for (let i = 0; i <= n; i++) {
       const s = a + (len * (i + 0.5)) / (n + 1);
