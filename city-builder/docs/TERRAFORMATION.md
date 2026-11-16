@@ -47,10 +47,32 @@ Quai / remblai), Défricher. La barre d'options n'affiche que les outils du grou
   d'abord »). Les éditions modifient les hauteurs NATURELLES ; le nivellement des routes est recalculé localement
   (routes proches de la zone seulement : même résultat que le nivellement complet).
 - L'eau ne recouvre jamais un bâtiment ni une chaussée (barrières du solveur) ; les bâtiments sont interdits sur l'eau
-  dynamique comme sur l'eau de la carte ; une route au sol ne traverse pas une retenue (refus : passez-la en viaduc ▲).
-  Les profils des routes ne voient que l'eau DE BASE (résultat identique au rechargement).
+  dynamique comme sur l'eau de la carte ; une route au sol ne traverse pas une retenue : l'outil Routes propose un
+  ouvrage (Pont, Viaduc, Tunnel ou **Digue**, voir §2 bis). Les profils des routes ne voient que l'eau DE BASE
+  (résultat identique au rechargement).
 - Coûts : terre 1,5 CHF/m³, barrage 18 CHF/m³ de béton (hauteur de l'ouvrage le long de l'axe × 10 m), source
   2 000 CHF + 150 CHF par m³/s.
+
+## 2 bis. Digue routière (ouvrage « Digue » de l'outil Routes)
+
+Choix `waterCrossing: 'digue'` de `buildRoad` (bouton **Digue** à côté de Pont / Viaduc / Tunnel) : au lieu d'un
+ouvrage d'art, la route est posée au sol sur un remblai qui coupe la retenue.
+
+- Le remblai est une édition du terrain `levee` (`src/sim/terrain/edits.ts`, `planLevee`) : axe = polyligne du tracé,
+  crête plate de la largeur de la route + 2 m de chaque côté, à la cote de l'eau dynamique la plus haute traversée +
+  1,5 m (`LEVEE_FREEBOARD`), rampes à 75 % de la pente maximale du type depuis le terrain des extrémités, talus à 1/2.
+  Ne fait que remblayer ; rien au-delà des extrémités. Remblai de 30 m au plus (sinon refus : Pont, Viaduc ou Tunnel).
+- Validation (`World.planLeveeFor`) : bâtiment, route ou talus sur l'emprise du remblai = refus ; la route est
+  re-planifiée sur le remblai appliqué provisoirement (à blanc, rien n'est modifié). À la construction, le remblai est
+  appliqué (relief naturel, re-nivellement local, eau recalculée) AVANT la route ; il est enregistré dans
+  `terrainEdits` (rejoué au chargement avant les routes : mêmes profils, même eau ; test).
+- Eau : plus d'eau sous la route ; des **buses** (`lk`, fixées à la pose : d'un pied de talus à l'autre tous les ~24 m)
+  relient les deux côtés pour le solveur (`HydroGrid.culvert`) : même niveau de part et d'autre, pas de lac perché
+  derrière la route (sans elles, la chaussée, barrière du solveur, ferait monter l'amont jusqu'au col suivant).
+- Coût : volume de remblai × 4 CHF/m³ (`EDIT_COSTS.leveePerM3`, remblai compacté et enroché) + défrichage éventuel,
+  ajouté au coût de la route (`cost` du résultat, aperçu compris).
+- Démolir la route laisse la digue (relief) ; elle s'annule ensuite comme une édition du terrain (Annuler du tiroir
+  Terrain, si c'est la dernière). Une digue ne se pose pas par la commande `terrainEdit` (refus explicite).
 
 ## 3. Barrage et électricité
 
@@ -70,7 +92,7 @@ parties en cours gardent leur production. Le site est réévalué quand une mesu
 
 ## 4. Sauvegarde
 
-Les pinceaux, pentes, barrages et sources sont des éditions (`terrainEdits`, rejouées au chargement) ; champs
+Les pinceaux, pentes, barrages, sources et digues sont des éditions (`terrainEdits`, rejouées au chargement) ; champs
 facultatifs (`s`, `f`, `ah`, `bh`, `h`, `up`, `q`, `t`) absents des anciennes éditions : une ancienne partie se charge à
 l'identique (test). Champ facultatif `hydro: { spreadFrom }` : index de la première édition dont les creux se
 remplissent d'eau voisine (absent = toutes les éditions sont antérieures : aucun remplissage nouveau). L'eau

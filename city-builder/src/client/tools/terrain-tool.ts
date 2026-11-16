@@ -405,7 +405,7 @@ export class TerrainTool {
 
 const LABELS: Record<TerrainEdit['k'], string> = {
   clear: 'Défrichage', quay: 'Quai / remblai', dig: 'Creusement', river: 'Rivière', raise: 'Élévation', lower: 'Abaissement', flatten: 'Nivellement',
-  smooth: 'Adoucissement', slope: 'Pente', dam: 'Barrage', source: 'Source d\'eau', unsource: 'Retrait de source',
+  smooth: 'Adoucissement', slope: 'Pente', dam: 'Barrage', source: 'Source d\'eau', unsource: 'Retrait de source', levee: 'Digue',
 };
 
 function label(e: TerrainEdit): string { return LABELS[e.k]; }

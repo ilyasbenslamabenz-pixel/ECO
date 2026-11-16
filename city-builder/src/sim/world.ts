@@ -64,6 +64,7 @@ import { PALIERS_SERVICE, type PaliersService } from '../shared/milestones';
 import { PluginHost, createSimPlugins, type PluginSaveField, type SimPlugin } from './plugins';
 import { HydroSystem, MAX_DAMS, MAX_SOURCES, type HydroHost } from './hydro/system';
 import { evalCubic } from './roads/bezier';
+import { EDIT_LIMITS, LEVEE_FREEBOARD } from './terrain/edits';
 
 /** Champ facultatif de la sauvegarde : éditions du terrain du joueur (src/sim/terrain/edits.ts), dans l'ordre. */
 export interface TerrainEditsSaveField { terrainEdits?: TerrainEdit[] }
@@ -865,27 +866,64 @@ export class Simulation {
     const reqs = this.roadRequests(a, kind);
     if (reqs.length === 0) return fail('INVALID_ARGS', 'Tracé trop court');
     const opts = this.planOptions();
-    // 1) Validation de chaque morceau sur le réseau actuel (dryRun : rien n'est modifié).
+    // 1) Validation de chaque morceau sur le réseau actuel (dryRun : rien n'est modifié). Digues : remblais appliqués
+    //    provisoirement (relief naturel et eau de base), dans l'ordre, puis annulés en fin de validation.
     let cost = 0;
     const path: number[] = [];
-    for (const r of reqs) {
-      let p = planRoad(this.net, r, opts);
-      if (!p.ok) return fail(p.error.code, p.error.message, p.error.phase);
-      if (!r.elevation) {
-        // Pont automatique au-dessus d'une retenue ou d'un lac : la route passe en viaduc (comme ▲), 3 m au-dessus de l'eau.
-        const depth = this.dynamicWaterDepth(p.plan.curve);
-        if (depth > 0) {
-          const mode = a.waterCrossing ?? 'pont';
-          const h = mode === 'tunnel' ? -8 : Math.ceil((depth + (mode === 'viaduc' ? 12 : 3)) / 4) * 4;
-          if (h > 40) return fail('UNDER_WATER', `Retenue trop profonde pour un ${mode} (${Math.round(depth)} m) : choisissez Tunnel ou contournez l'eau`);
-          r.elevation = h; r.startElevated = false; r.endElevated = false;
-          p = planRoad(this.net, r, opts);
-          if (!p.ok) return fail(p.error.code, `${mode === 'tunnel' ? 'Tunnel sous' : mode === 'viaduc' ? 'Viaduc au-dessus de' : 'Pont au-dessus de'} l'eau impossible : ${p.error.message}`, p.error.phase);
-        }
+    const levees: (TerrainEdit | null)[] = [];
+    const undoTemp: { idx: Int32Array; h: Float32Array; ws: Float32Array }[] = [];
+    const restoreTemp = (): void => {
+      const base = this.hydro.baseWater(this.terrain!);
+      for (let q = undoTemp.length - 1; q >= 0; q--) {
+        const u = undoTemp[q]!;
+        for (let n = 0; n < u.idx.length; n++) { this.naturalHeights[u.idx[n]!] = u.h[n]!; base[u.idx[n]!] = u.ws[n]!; }
       }
-      cost += p.plan.cost;
-      if (a.dryRun && (a.elevation || r.elevation)) path.push(...roadPreviewPath(this.net, p.plan));
+      undoTemp.length = 0;
+    };
+    try {
+      for (const r of reqs) {
+        let p = planRoad(this.net, r, opts);
+        if (!p.ok) return fail(p.error.code, p.error.message, p.error.phase);
+        let levee: TerrainEdit | null = null;
+        if (!r.elevation) {
+          // Ouvrage au-dessus d'une retenue ou d'un lac : pont (comme ▲, 3 m au-dessus de l'eau), viaduc, tunnel ou digue.
+          const depth = this.dynamicWaterDepth(p.plan.curve);
+          if (depth > 0) {
+            const mode = a.waterCrossing ?? 'pont';
+            if (mode === 'digue') {
+              const lv = this.planLeveeFor(p.plan.curve, kind);
+              if (!lv.ok) return fail(lv.code, lv.message);
+              cost += lv.plan.cost;
+              levee = lv.plan.edit;
+              // Remblai provisoire : la route est re-planifiée au sol sur la digue.
+              const base = this.hydro.baseWater(this.terrain!);
+              const u = { idx: lv.plan.idx, h: new Float32Array(lv.plan.idx.length), ws: new Float32Array(lv.plan.idx.length) };
+              for (let n = 0; n < u.idx.length; n++) {
+                const k = u.idx[n]!;
+                u.h[n] = this.naturalHeights[k]!; u.ws[n] = base[k]!;
+                this.naturalHeights[k] = lv.plan.h[n]!; base[k] = lv.plan.ws[n]!;
+              }
+              undoTemp.push(u);
+              p = planRoad(this.net, r, opts);
+              if (!p.ok) return fail(p.error.code, `Digue impossible : ${p.error.message}`, p.error.phase);
+              if (a.dryRun) path.push(...roadPreviewPath(this.net, p.plan));
+            } else {
+              const h = mode === 'tunnel' ? -8 : Math.ceil((depth + (mode === 'viaduc' ? 12 : 3)) / 4) * 4;
+              if (h > 40) return fail('UNDER_WATER', `Retenue trop profonde pour un ${mode} (${Math.round(depth)} m) : choisissez Tunnel ou contournez l'eau`);
+              r.elevation = h; r.startElevated = false; r.endElevated = false;
+              p = planRoad(this.net, r, opts);
+              if (!p.ok) return fail(p.error.code, `${mode === 'tunnel' ? 'Tunnel sous' : mode === 'viaduc' ? 'Viaduc au-dessus de' : 'Pont au-dessus de'} l'eau impossible : ${p.error.message}`, p.error.phase);
+            }
+          }
+        }
+        levees.push(levee);
+        cost += p.plan.cost;
+        if (a.dryRun && (a.elevation || r.elevation)) path.push(...roadPreviewPath(this.net, p.plan));
+      }
+    } finally {
+      restoreTemp();
     }
+    if (levees.some((l) => l) && this.terrainEdits.length + levees.length > EDIT_LIMITS.maxEdits) return fail('INVALID_ARGS', 'Trop d\'éditions du terrain dans cette partie');
     // Annulation d'une suppression de tronçon : la reconstruction coûte le remboursement perçu, pas le prix plein.
     const rc = a.restoreToken !== undefined ? this.restoreReceipts.get(a.restoreToken) : undefined;
     const receipt = rc && rc.what === 'road' && rc.kind === kind ? rc : undefined;
@@ -893,9 +931,20 @@ export class Simulation {
     if (this.economy.bankrupt && !(receipt && cost === 0)) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : constructions suspendues jusqu\'au retour d\'une trésorerie positive');
     if (!this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
     if (a.dryRun) return { ok: true, data: path.length ? { edgeIds: [], cost, path } : { edgeIds: [], cost } };
-    // 2) Construction : chaque morceau est re-planifié sur le réseau modifié par le précédent.
+    // 2) Construction. Digues d'abord (éditions du terrain rejouées au chargement AVANT les routes : mêmes profils),
+    //    dans l'ordre de la validation ; puis chaque morceau est re-planifié sur le réseau modifié par le précédent.
     const edgeIds: number[] = [];
-    let spent = 0;
+    let spent = 0, leveeSpent = 0;
+    for (const e of levees) {
+      if (!e) continue;
+      const lp = planEdit(this.editable(), e);
+      if (!lp.ok) return fail('INVALID_ARGS', `Digue impossible : ${lp.message}`);
+      const seq = this.terrainEdits.length;
+      this.applyEditPlan(lp.plan, true);
+      leveeSpent += lp.plan.cost;
+      const rec = this.editUndo[this.editUndo.length - 1];
+      if (rec && rec.seq === seq) rec.cost = lp.plan.cost;
+    }
     for (const r of reqs) {
       const p = planRoad(this.net, r, opts);
       if (!p.ok) {
@@ -908,9 +957,47 @@ export class Simulation {
       spent += p.plan.cost;
     }
     if (receipt) { spent = Math.min(spent, receipt.refund); this.restoreReceipts.delete(a.restoreToken!); }
+    spent += leveeSpent;
     this.economy.spend(spent);
     this.applyNetworkChanges(true);
     return { ok: true, data: { edgeIds, cost: spent } };
+  }
+
+  /**
+   * Digue sous le tracé `curve` (ouvrage « Digue ») : crête à la cote de l'eau dynamique la plus haute traversée +
+   * LEVEE_FREEBOARD, largeur de la route + 2 m de chaque côté, rampes à 75 % de la pente maximale du type depuis le
+   * terrain des extrémités. Plan validé (bâtiments, routes et talus, profondeur), rien n'est modifié.
+   */
+  private planLeveeFor(curve: Float64Array, kind: RoadKindId): { ok: true; plan: EditPlan } | { ok: false; code: CommandError['code']; message: string } {
+    const t = this.terrain!;
+    const base = this.hydro.base;
+    const ws = t.waterSurface, W = t.samplesX, sp = t.spacing;
+    const L = Math.hypot(curve[6]! - curve[0]!, curve[7]! - curve[1]!) + Math.hypot(curve[2]! - curve[0]!, curve[3]! - curve[1]!);
+    const n = Math.max(2, Math.ceil(L / 4));
+    const p = new Float64Array(2);
+    let top = -Infinity;
+    for (let s = 0; s <= n; s++) {
+      evalCubic(curve, s / n, p);
+      const i = Math.round((p[0]! - t.originX) / sp), j = Math.round((p[1]! - t.originZ) / sp);
+      if (i < 0 || j < 0 || i >= W || j >= t.samplesZ) continue;
+      const k = j * W + i;
+      if (base && ws[k] !== base[k] && ws[k]! > this.naturalHeights[k]! + 0.05) top = Math.max(top, ws[k]!);
+    }
+    if (!Number.isFinite(top)) return { ok: false, code: 'INVALID_ARGS', message: 'Aucune retenue sous le tracé' };
+    const pts = Array.from(polyline(curve, Math.min(EDIT_LIMITS.maxLeveePoints - 1, Math.max(2, Math.ceil(L / 8)))));
+    const nat = (x: number, z: number): number => {
+      const i = Math.min(W - 1, Math.max(0, Math.round((x - t.originX) / sp))), j = Math.min(t.samplesZ - 1, Math.max(0, Math.round((z - t.originZ) / sp)));
+      return this.naturalHeights[j * W + i]!;
+    };
+    const edit: TerrainEdit = {
+      k: 'levee', pts, w: 2 * halfWidth(kind) + 4, h: top + LEVEE_FREEBOARD,
+      ah: nat(curve[0]!, curve[1]!), bh: nat(curve[6]!, curve[7]!), g: ROAD_KINDS[kind].maxGrade * 0.75,
+    };
+    const r = planEdit(this.editable(), edit);
+    if (!r.ok) return { ok: false, code: 'INVALID_ARGS', message: `Digue impossible : ${r.message}` };
+    const hit = this.editObstacle(r.plan);
+    if (hit) return { ok: false, code: 'COLLISION', message: `Digue impossible : ${hit.replace('la zone', 'l\'emprise du remblai')}` };
+    return { ok: true, plan: r.plan };
   }
 
   /**
@@ -1459,6 +1546,7 @@ export class Simulation {
     if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
     if (this.terrainEdits.length >= 4000) return fail('INVALID_ARGS', 'Trop d\'éditions du terrain dans cette partie');
     const raw = a.edit;
+    if (raw.k === 'levee') return fail('INVALID_ARGS', 'Une digue se pose avec l\'outil Routes (ouvrage « Digue » sur une retenue)');
     if (raw.k === 'unsource' && !this.hydro.sourceNear(raw.x, raw.z)) return fail('INVALID_ARGS', 'Aucune source d\'eau ici : touchez une source posée (cercle bleu)');
     if (raw.k === 'source' && this.hydro.sources.length >= MAX_SOURCES) return fail('INVALID_ARGS', `${MAX_SOURCES} sources au plus : retirez-en une`);
     if (raw.k === 'dam' && this.hydro.dams.length >= MAX_DAMS) return fail('INVALID_ARGS', `${MAX_DAMS} barrages au plus`);

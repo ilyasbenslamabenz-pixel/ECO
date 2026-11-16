@@ -612,6 +612,7 @@ export class BuildBar {
         act('Pont', 'Sur un lac ou une retenue : pont bas, 3 m au-dessus de l\'eau', () => m.setWaterCrossing('pont'), wc === 'pont');
         act('Viaduc', 'Sur un lac ou une retenue : viaduc haut, 12 m au-dessus de l\'eau', () => m.setWaterCrossing('viaduc'), wc === 'viaduc');
         act('Tunnel', 'Sur un lac ou une retenue : tunnel sous le fond du lac', () => m.setWaterCrossing('tunnel'), wc === 'tunnel');
+        act('Digue', 'Sur un lac ou une retenue : route sur un remblai qui coupe la retenue (coût selon le volume de remblai, 30 m de profondeur au plus)', () => m.setWaterCrossing('digue'), wc === 'digue');
         // Giratoire : un bouton à trois états (petit Ø 36 m → grand Ø 56 m → retour au tracé droit).
         const rb = m.draft.mode === 'roundabout' ? m.draft.roundaboutSize : null;
         act(rb === 'large' ? 'Grand giratoire' : 'Giratoire', 'Giratoire posé d\'un clic sur un carrefour ou une route (cliquer à nouveau : grand modèle, puis tracé droit)',

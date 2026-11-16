@@ -10,6 +10,7 @@ import type { RoadKindId } from '../../shared/contracts';
 import { TILE_SIZE } from '../../shared/constants';
 import { polylineLength, sampleBezier2, snapAngle } from './geometry';
 import type { WorldMirror } from './mirror';
+import type { WaterCrossing } from '../../shared/protocol';
 
 /** Tracé droit, courbe, ou giratoire posé d'un clic sur un carrefour / une route (module routes). */
 export type RoadMode = 'straight' | 'curve' | 'roundabout';
@@ -245,7 +246,7 @@ export class RoadDraft {
   /** Hauteur imposée (m) : > 0 viaduc / passage supérieur, < 0 tranchée / tunnel. Conservée d'un tracé à l'autre. */
   elevation = 0;
   /** Ouvrage quand le tracé traverse une retenue ou un lac créé en jeu (choisi dans la barre d'options). */
-  waterCrossing: 'pont' | 'viaduc' | 'tunnel' = 'pont';
+  waterCrossing: WaterCrossing = 'pont';
   /** Taille du giratoire en mode 'roundabout'. */
   roundaboutSize: 'small' | 'large' = 'small';
 
@@ -302,7 +303,7 @@ export class RoadDraft {
    * Arguments de la commande buildRoad : en mode courbe, UNE vraie courbe (2 extrémités + point de
    * contrôle quadratique, convertie en Bézier cubique par la simulation) ; sinon un tronçon droit.
    */
-  command(): { points: number[]; control?: [number, number]; elevation?: number; waterCrossing?: 'pont' | 'viaduc' | 'tunnel' } | null {
+  command(): { points: number[]; control?: [number, number]; elevation?: number; waterCrossing?: WaterCrossing } | null {
     const a = this.start;
     const b = this.hover;
     if (!a || !b || this.phase === 'idle' || this.mode === 'roundabout' || Math.hypot(b.x - a.x, b.z - a.z) < 4) return null;
