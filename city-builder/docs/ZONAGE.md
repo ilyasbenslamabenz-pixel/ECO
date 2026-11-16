@@ -52,6 +52,9 @@ Chaque heure de jeu, pour chaque type de zone dont le secteur a une demande ≥ 
 2. prend un modèle du **niveau 1** de la zone (les modèles les moins présents dans la ville sont favorisés) ;
 3. l'oriente **façade vers la route**, exactement comme l'outil de pose du joueur (`src/client/tools/snapping.ts`) :
    façade perpendiculaire à la tangente locale (angle libre, routes courbes comprises), recul de 0,6 m après le trottoir ;
+   La position le long de la route est **recalée sur la trame locale de la route** (§2 bis) : côtés de l'emprise sur
+   les lignes du quadrillage affiché (case la plus proche puis ses voisines), positions d'origine en dernier recours ;
+   les rangées intérieures ont leur façade sur une ligne de la trame (0,6 m + k × 8 m depuis le trottoir) ;
 4. vérifie que l'emprise tient dans des cases de la même zone (ou dans la bande non zonable du bord de route) ;
 5. le pose par l'API d'écriture de la simulation de base (ci-dessous) : contrôles de collision, de route, de pente et
    d'eau de `placeBuilding`. Le module **chantiers**, s'il est actif, ouvre aussitôt un chantier sur le bâtiment.
@@ -67,6 +70,46 @@ industrie = industrie hors ouvrages de réseau (centrales, postes, château d'ea
 pas payée par la ville et la démolition ne rembourse rien et ne notifie pas. Le bâtiment est ensuite un bâtiment
 ordinaire (entretien mensuel, habitants, emplois, impôts, deltas, sauvegarde de base). Les commandes du joueur sont
 inchangées (même code, même coût).
+
+## 2 bis. Quadrillage local des routes (trame de construction)
+
+Retour joueur (PC 1280×800) : « le quadrillage de la map n'est pas assez précis et les bâtiments ont l'air de
+déborder ». **Mesure** (`tests/e2e/grille-captures.mjs` ; `docs/captures-grille/mesures-avant.json` pour le
+quadrillage d'origine, `mesures-apres.json` pour la pose rendue, dont le code n'a pas changé) sur une vingtaine de
+bâtiments (zonage et pose à la main, rue droite en z = 3 et rue en biais à 27°) :
+
+- modèle rendu ↔ emprise simulée : **aucun décalage** — angle identique (écart 0°), origine du modèle au centre de
+  l'emprise (sauf l'avancée voulue des maisons de ville vers la rue, 0,48 m, `frontShift`), modèle à l'intérieur de
+  l'emprise de 0,3 à 1,8 m ;
+- emprise ↔ quadrillage : le quadrillage était dessiné sur les **axes du monde** (multiples de 8 m) alors que les
+  bâtiments s'alignent sur la **route** (façade à demi-largeur + 0,6 m de l'axe, position libre le long de la voie) :
+  bords avant/arrière à **1,8 m et 3,8 m** des lignes (rue de 6,2 m de demi-largeur en z = 3 : façades en z = −3,8 et
+  9,8), côtés jusqu'à **4 m** (une demi-case) des lignes, et **27°** de biais sur la rue oblique : les lignes
+  traversaient les bâtiments.
+
+**Correction** (`src/shared/road-grid.ts`, pur TypeScript partagé) : avec l'outil Bâtiment, le quadrillage au sol
+suit la **route la plus proche du curseur** (à moins de 40 m de son bord ; au-delà, pose libre : axes du monde).
+Repère : T = tangente de la route (sens canonique, indépendant du sens de tracé), N = normale ; lignes en
+`|P·N − O·N| − (demi-largeur + 0,6 m) = k × 8 m` (la 1re est la ligne des façades, des deux côtés de la rue, rien sur
+la chaussée ni le trottoir) et en `P·T − phase = k × 8 m`. La trame le long de la route est mesurée depuis l'origine
+du monde (une rue droite coupée par des carrefours garde la même trame) ; sa `phase` est celle des côtés du
+**bâtiment parallèle à la route le plus proche** (façade sur une ligne de la trame, à moins de 48 m le long de la voie)
+— les bâtiments des **sauvegardes existantes** tombent donc sur les lignes affichées sans rien reconstruire — et 0
+sinon. Rendu : uniformes `uGridRoad` / `uGridRoad2` du matériau de terrain (`src/render/terrain/material.ts`),
+mis à jour par `src/main.ts` (`localRoadGrid`, `src/client/tools/road-grid.ts`) quand le curseur bouge.
+
+Ce que montre le quadrillage est l'endroit où l'on construit : l'**aimantation** de l'outil de pose (activée par
+défaut) recale le bâtiment sur la trame le long de la route (case la plus proche puis ses voisines ; le voisin aimanté
+garde la priorité ; sans place sur la trame, position du curseur) ; la croissance des zones fait de même (§2). Lignes
+redessinées : antialiasées, ≈ 1,6 px à l'écran mais jamais moins de 10 cm au sol (visibles de près), plus opaques,
+liseré sombre discret pour la lisibilité sur l'herbe claire. Après correction, écart des 20 bâtiments mesurés aux
+lignes affichées : **0,00 m** (≤ 0,01 m), `docs/captures-grille/mesures-apres.json`. Captures avant / après (même vue) :
+`docs/captures-grille/rue-{droite,biais}{,-dessus}-{avant,apres}.png`. Tests : `tests/construction/road-grid.test.ts`.
+
+Limites : les cases de **zonage** restent des cases de 8 m alignées sur les axes du monde (donnée sauvegardée,
+superposition de l'outil Zones) ; sur une route courbe, la trame est droite (tangente au point le plus proche du
+curseur) et n'est exacte qu'au voisinage du curseur ; les maisons individuelles gardent leur écart minimal de 1 m
+(`HOUSE_GAP`) : deux maisons côte à côte sur la trame laissent une case libre, ou se posent hors trame en repli.
 
 ## 3. Demande (modèle simple, prêt pour l'économie)
 

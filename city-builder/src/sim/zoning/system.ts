@@ -24,7 +24,8 @@
 import { governanceModifiers } from '../../shared/governance';
 import type { CatalogAsset } from '../../shared/catalog';
 import { TILE_SIZE } from '../../shared/constants';
-import { angleToRot, buildingGap, footprintObb, obbAabb, obbOverlap, obbToLocal, obbToWorld } from '../../shared/footprint';
+import { angleToRot, buildingGap, footprintObb, obbAabb, obbOverlap, obbToLocal, obbToWorld, type Obb } from '../../shared/footprint';
+import { FACADE_GAP, pickPhase, roadGridFrame, snapAlong } from '../../shared/road-grid';
 import {
   ZONE_COUNT, ZONE_TYPES, zoneOf,
   type DemandSector, type ZonageDelta, type ZonageDemand, type ZonageDemandInputs, type ZonageSnapshot, type ZonageStats, type ZoneCode, type ZoneType,
@@ -79,7 +80,7 @@ export type ZonageTuning = DemandTuning & GrowthTuning;
 const DEFAULT_TUNING: Readonly<ZonageTuning> = Object.freeze({ ...DEFAULT_DEMAND_TUNING, ...DEFAULT_GROWTH_TUNING });
 
 /** Recul (m) entre le bord du trottoir et la façade (même valeur que l'outil de pose du joueur). */
-export const FRONT_GAP = 0.6;
+export const FRONT_GAP = FACADE_GAP;
 /** Une case est « de première rangée » si son centre est à moins de cette distance du bord de la route. */
 const FRONT_ROW_M = TILE_SIZE + 1.5;
 /** Cases constructibles : centre à moins de cette distance du bord de la route (trois rangées, profondeur par défaut de l'outil). */
@@ -452,6 +453,35 @@ export class ZoningSystem {
     return { rot: angleToRot(Math.atan2(-nx, -nz) - Math.atan2(lx, lz)), nx, nz };
   }
 
+  /**
+   * Positions candidates d'un bâtiment dont le centre est près de (bx, bz) : d'abord recalées sur la trame locale de
+   * la route (src/shared/road-grid.ts : côtés de l'empreinte sur les lignes du quadrillage affiché, phase du voisin
+   * parallèle le plus proche), case la plus proche puis ses voisines ; ensuite les décalages bruts `shifts` (m) le
+   * long de la route (comportement d'origine, si rien ne tient sur la trame).
+   */
+  private candidates(ctx: PluginContext, hit: RoadHit, probe: Obb, bx: number, bz: number, shifts: readonly number[], gridSteps = 2): [number, number][] {
+    const out: [number, number][] = [];
+    const r2 = (v: number): number => Math.round(v * 100) / 100;
+    if (gridSteps > 0) {
+      const f = roadGridFrame(hit.x, hit.z, hit.tx, hit.tz, hit.half);
+      const st = ctx.buildings.store, obbs: Obb[] = [];
+      for (const id of ctx.buildings.query(bx - 90, bz - 90, bx + 90, bz + 90, this.q)) {
+        const k = ctx.buildings.indexOf(id);
+        if (k >= 0) obbs.push(footprintObb(st.tilesX[k]!, st.tilesZ[k]!, st.x[k]!, st.z[k]!, st.rot[k]!));
+      }
+      f.phase = pickPhase(f, obbs, bx, bz);
+      const halfAlong = extentAlong(probe, f.tx, f.tz);
+      const steps = [0];
+      for (let k = 1; k <= gridSteps; k++) steps.push(k, -k);
+      for (const step of steps) {
+        const [x, z] = snapAlong(f, bx, bz, halfAlong, step);
+        out.push([r2(x), r2(z)]);
+      }
+    }
+    for (const sh of shifts) out.push([r2(bx + hit.tx * sh), r2(bz + hit.tz * sh)]);
+    return out;
+  }
+
   /** Vrai si l'emprise tient dans des cases de la zone `code` (ou dans la bande non zonable du bord de route). */
   fits(a: CatalogAsset, x: number, z: number, rot: number, code: number, segId: number): boolean {
     const o = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, x, z, rot);
@@ -478,9 +508,7 @@ export class ZoningSystem {
     const probe = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, 0, 0, rot);
     const halfDepth = extentAlong(probe, nx, nz);
     const s = hit.half + halfDepth + FRONT_GAP;
-    for (const shift of [0, 4, -4, 8, -8]) {
-      const x = Math.round((hit.x + hit.tx * shift + nx * s) * 100) / 100;
-      const z = Math.round((hit.z + hit.tz * shift + nz * s) * 100) / 100;
+    for (const [x, z] of this.candidates(ctx, hit, probe, hit.x + nx * s, hit.z + nz * s, [0, 4, -4, 8, -8])) {
       if (!this.fits(a, x, z, rot, code, hit.segId)) continue;
       const variant = a.variants.length > 0 ? Math.floor(ctx.rng.next() * a.variants.length) : -1;
       const r = ctx.development!.place({ assetId: a.id, x, z, rot, variant });
@@ -499,11 +527,16 @@ export class ZoningSystem {
     const probe = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, 0, 0, rot);
     const halfDepth = extentAlong(probe, nx, nz);
     const front0 = Math.max(FRONT_GAP, edge - TILE_SIZE / 2);
-    for (const df of [0, 1.2, 2.4]) {
-      const s = hit.half + front0 + df + halfDepth;
-      for (const shift of [0, 4, -4]) {
-        const x = Math.round((hit.x + hit.tx * shift + nx * s) * 100) / 100;
-        const z = Math.round((hit.z + hit.tz * shift + nz * s) * 100) / 100;
+    // Façade sur une ligne de la trame de la route (FRONT_GAP + k × 8 m depuis le bord), puis reculs d'origine.
+    // (rangée la plus proche, la suivante, puis la ligne des façades si la rangée de devant est encore libre).
+    const k0 = Math.max(1, Math.round((front0 - FRONT_GAP) / TILE_SIZE));
+    const fronts = [k0, k0 + 1, k0 - 1].map((k) => FRONT_GAP + k * TILE_SIZE);
+    const nGrid = fronts.length;
+    fronts.push(front0, front0 + 1.2, front0 + 2.4);
+    for (let fi = 0; fi < fronts.length; fi++) {
+      const s = hit.half + fronts[fi]! + halfDepth;
+      const onGrid = fi < nGrid;
+      for (const [x, z] of this.candidates(ctx, hit, probe, hit.x + nx * s, hit.z + nz * s, onGrid ? [] : [0, 4, -4], onGrid ? 2 : 0)) {
         if (!this.fits(a, x, z, rot, code, hit.segId)) continue;
         if (this.collidesOthers(ctx, a, x, z, rot, -1)) continue;
         const variant = a.variants.length > 0 ? Math.floor(ctx.rng.next() * a.variants.length) : -1;

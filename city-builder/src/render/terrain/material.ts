@@ -315,7 +315,10 @@ const FRAG_MAIN = /* glsl */ `
 
 export interface TerrainMaterialHandle {
   material: THREE.MeshStandardMaterial;
-  uniforms: { uWaterLevel: { value: number }; uMacroStrength: { value: number }; uGrid: { value: number }; uGridFocus: { value: THREE.Vector3 } };
+  uniforms: {
+    uWaterLevel: { value: number }; uMacroStrength: { value: number }; uGrid: { value: number }; uGridFocus: { value: THREE.Vector3 };
+    uGridRoad: { value: THREE.Vector4 }; uGridRoad2: { value: THREE.Vector4 };
+  };
 }
 
 /** Crée le matériau de terrain (partagé par tous les chunks). */
@@ -333,6 +336,12 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
     uGrid: { value: 0 },
     /** Centre (x, z) et rayon (m) de la grille autour du curseur ; rayon 0 = grille sur toute la carte. */
     uGridFocus: { value: new THREE.Vector3(0, 0, 0) },
+    /**
+     * Trame locale de la route la plus proche du curseur (src/shared/road-grid.ts) : (tx, tz, cn, offset) et
+     * (phase, actif 0/1, –, –). Inactive : quadrillage du monde (axes X/Z).
+     */
+    uGridRoad: { value: new THREE.Vector4(1, 0, 0, 0) },
+    uGridRoad2: { value: new THREE.Vector4(0, 0, 0, 0) },
     uGrassDry: { value: new THREE.Color(0.9, 0.9, 0.64) },
     uGrassLush: { value: new THREE.Color(0.66, 0.88, 0.5) },
     uGrassRemap: { value: 0 },
@@ -362,7 +371,7 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
   applyPalette(palette());
   onPaletteChange(applyPalette);
   const material = new THREE.MeshStandardMaterial({ name: 'terrain_pbr', roughness: 1, metalness: 0 });
-  material.customProgramCacheKey = (): string => `aube-terrain-v5-${ab.terrainOpt ? 1 : 0}`;
+  material.customProgramCacheKey = (): string => `aube-terrain-v6-${ab.terrainOpt ? 1 : 0}`;
   material.onBeforeCompile = (shader): void => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -370,20 +379,38 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\n${VERT_MAIN}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n#define AUBE_TERRAIN_OPT ${ab.terrainOpt ? 1 : 0}\n${FRAG_DECL}`)
-      .replace('#include <common>', `#include <common>\nuniform float uGrid;\nuniform vec3 uGridFocus;`)
+      .replace('#include <common>', `#include <common>\nuniform float uGrid;\nuniform vec3 uGridFocus;\nuniform vec4 uGridRoad;\nuniform vec4 uGridRoad2;`)
       .replace('#include <map_fragment>', `${FRAG_MAIN}
         if (uGrid > 0.001) {
+          // Coordonnées de la trame (en cases) : axes du monde, ou repère local de la route (u le long, v en profondeur
+          // depuis la ligne des façades ; rien sur la chaussée ni le trottoir, v < 0).
           vec2 gp = vTWorld.xz / ${TILE_SIZE.toFixed(1)};
-          vec2 gw = fwidth(gp);
-          vec2 gl = abs(fract(gp - 0.5) - 0.5) / max(gw, vec2(1e-4));
-          float line = 1.0 - min(min(gl.x, gl.y), 1.0);
-          vec2 gp5 = gp / 5.0; vec2 gw5 = fwidth(gp5);
-          vec2 gl5 = abs(fract(gp5 - 0.5) - 0.5) / max(gw5 * 1.6, vec2(1e-4));
-          float major = 1.0 - min(min(gl5.x, gl5.y), 1.0);
+          float onRoad = 1.0;
+          if (uGridRoad2.y > 0.5) {
+            vec2 T = uGridRoad.xy, N = vec2(-T.y, T.x);
+            float v = abs(dot(vTWorld.xz, N) - uGridRoad.z) - uGridRoad.w;
+            gp = vec2(dot(vTWorld.xz, T) - uGridRoad2.x, v) / ${TILE_SIZE.toFixed(1)};
+            onRoad = smoothstep(-0.02, 0.0, gp.y);
+          }
+          // Lignes antialiasées d'épaisseur constante à l'écran (≈ 1,6 px) mais jamais plus fines que 10 cm au sol :
+          // nettes de près comme de loin (la version précédente faisait 1 px et s'effaçait de près).
+          vec2 gw = max(fwidth(gp), vec2(1e-5));
+          vec2 dpx = abs(fract(gp - 0.5) - 0.5) / gw;
+          vec2 hw = max(vec2(0.8), vec2(0.05 / ${TILE_SIZE.toFixed(1)}) / gw);
+          vec2 l2 = 1.0 - smoothstep(hw - 0.6, hw + 0.6, dpx);
+          float line = max(l2.x, l2.y);
+          vec2 gp5 = gp / 5.0; vec2 gw5 = max(fwidth(gp5), vec2(1e-5));
+          vec2 d5 = abs(fract(gp5 - 0.5) - 0.5) / gw5;
+          vec2 m2 = 1.0 - smoothstep(vec2(0.9), vec2(2.1), d5);
+          float major = max(m2.x, m2.y) * (1.0 - uGridRoad2.y);
           float fade = 1.0 - smoothstep(0.25, 0.6, max(gw.x, gw.y));
           float near = uGridFocus.z > 0.0 ? 1.0 - smoothstep(uGridFocus.z * 0.55, uGridFocus.z, distance(vTWorld.xz, uGridFocus.xy)) : 1.0;
-          float g = max(line * 0.35 * fade, major * 0.6) * uGrid * near;
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), g * 0.55);
+          float g = max(line * 0.6 * fade, major * 0.6) * uGrid * near * onRoad;
+          // Liseré sombre très léger autour de la ligne blanche : lisible sur l'herbe claire comme sur la terre.
+          vec2 e2 = 1.0 - smoothstep(hw + 0.4, hw + 1.8, dpx);
+          float edge = max(e2.x, e2.y) * (1.0 - line) * fade * uGrid * near * onRoad;
+          diffuseColor.rgb *= 1.0 - 0.18 * edge;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), g * 0.75);
         }`)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = tRough;')
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = 0.0;')

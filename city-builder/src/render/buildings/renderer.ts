@@ -287,6 +287,17 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
 
   get count(): number { return this.idToBatch.size; }
 
+  /** Diagnostic : pose rendue d'un bâtiment (origine du modèle en monde, angle autour de Y, dimensions du catalogue). */
+  instancePose(id: number): { x: number; y: number; z: number; rotY: number; width: number; depth: number } | null {
+    const b = this.idToBatch.get(id);
+    if (!b) return null;
+    const i = b.ids.indexOf(id);
+    if (i < 0) return null;
+    const m = b.mats;
+    // Colonne 0 de la matrice (échelle 1 en x) : (cosθ, 0, −sinθ).
+    return { x: m[i * 16 + 12]!, y: m[i * 16 + 13]!, z: m[i * 16 + 14]!, rotY: Math.atan2(-m[i * 16 + 2]!, m[i * 16]!), width: b.asset.dimensions.width, depth: b.asset.dimensions.depth };
+  }
+
   /** Caméra pour le culling par instance (facultatif). */
   attachCamera(camera: THREE.Camera | null): void { this.camera = camera; this.forceUpdate = true; }
 

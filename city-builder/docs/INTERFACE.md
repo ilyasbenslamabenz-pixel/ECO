@@ -72,6 +72,13 @@ points au plus (pas de 4 jours, doublé à chaque compaction), 480 soldes mensue
 juste au-dessus de `#tool-options` : l'étiquette ne chevauche jamais `#tool-options` ni `#toolbar`, « Terminer » est au
 premier plan et le clic ramène à l'outil Sélection. Le correctif de `hud.ts` tient ; aucune modification nécessaire.
 
+## 5 bis. Quadrillage de construction aligné sur les routes
+
+Outil Bâtiments : près d'une route (moins de 40 m de son bord), le quadrillage au sol tourne avec la route la plus
+proche du curseur et se cale sur la ligne des façades (0,6 m derrière le trottoir) et sur les côtés du bâtiment
+voisin ; loin des routes, il reprend les axes du monde (pose libre). Les lignes sont antialiasées et restent nettes de
+près. L'aimantation pose le bâtiment sur ces lignes. Détails, mesures et captures : `docs/ZONAGE.md` §2 bis.
+
 ## 6. Coût
 
 Ville de charge (`buildCity stress`, 500 bâtiments, ≈ 22 000 habitants, Node 22, conteneur partagé très chargé) :
