@@ -13,7 +13,7 @@ let overlay: ZoningOverlay | null = null;
 
 declare global {
   interface Window {
-    __zonage?: { view: typeof zoningView; instances(): number; visible(): boolean };
+    __zonage?: { view: typeof zoningView; instances(): number; visible(): boolean; cellFrameAt(x: number, z: number): unknown };
   }
 }
 
@@ -22,7 +22,7 @@ export const zonageRenderPlugin: RenderPlugin = {
   init(ctx) {
     overlay = new ZoningOverlay(ctx.scene, zoningView, ctx.heightAt);
     if (typeof window !== 'undefined') {
-      window.__zonage = { view: zoningView, instances: () => overlay?.instances ?? 0, visible: () => overlay?.mesh.visible ?? false };
+      window.__zonage = { view: zoningView, instances: () => overlay?.instances ?? 0, visible: () => overlay?.mesh.visible ?? false, cellFrameAt: (x, z) => overlay?.cellFrameAt(x, z) ?? null };
     }
   },
   applySnapshotExt(payload) { zoningView.reset(payload as ZonageDelta | undefined); },

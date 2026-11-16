@@ -1,0 +1,1804 @@
+{
+ "suffix": "apres",
+ "site": {
+  "x": 0,
+  "z": 3,
+  "ew": [
+   -150,
+   3,
+   60,
+   3
+  ],
+  "dg": [
+   130,
+   -57,
+   281.56660899320593,
+   19.99066851444161
+  ],
+  "cv": {
+   "points": [
+    -150,
+    153,
+    40,
+    173
+   ],
+   "control": [
+    -50,
+    93
+   ]
+  }
+ },
+ "tools": {
+  "batiment-sur": {
+   "buildings": 57,
+   "aligned": 45,
+   "alignedPct": 78.9,
+   "angleMax": 30.42,
+   "angleMean": 2.93,
+   "gapMax": 3.8,
+   "biais": 7,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 3,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 4,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 5,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 6,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 1.8,
+     "kind": "monde"
+    },
+    {
+     "id": 8,
+     "angle": 28.16,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 9,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 2.8,
+     "kind": "monde"
+    },
+    {
+     "id": 11,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 12,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 14,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 15,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 16,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 17,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 19,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 20,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 21,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 22,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 23,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 24,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 25,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 26,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 27,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 28,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 29,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 32,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 33,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 34,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 35,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 36,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 37,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment+route"
+    },
+    {
+     "id": 38,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 39,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 40,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 41,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment"
+    },
+    {
+     "id": 42,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 43,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 44,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 45,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 46,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 47,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 48,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 49,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 50,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 51,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 52,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 53,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 54,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 55,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    }
+   ]
+  },
+  "batiment-loin": {
+   "buildings": 57,
+   "aligned": 34,
+   "alignedPct": 59.6,
+   "angleMax": 30.42,
+   "angleMean": 5.59,
+   "gapMax": 3.8,
+   "biais": 18,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 3,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 4,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 5,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 6,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 1.8,
+     "kind": "monde"
+    },
+    {
+     "id": 8,
+     "angle": 28.16,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 9,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 2.8,
+     "kind": "monde"
+    },
+    {
+     "id": 11,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 12,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 14,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 15,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 16,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 17,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 19,
+     "angle": 1.96,
+     "gap": null,
+     "kind": "route+batiment+monde"
+    },
+    {
+     "id": 20,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 21,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 22,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 23,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 24,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 25,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 26,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 27,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 28,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 29,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 32,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 33,
+     "angle": 23.28,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 34,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 35,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 36,
+     "angle": 2.86,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 37,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment+route"
+    },
+    {
+     "id": 38,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 39,
+     "angle": 25.79,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 40,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 41,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment"
+    },
+    {
+     "id": 42,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 43,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 44,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 45,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "route+monde+batiment"
+    },
+    {
+     "id": 46,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "route+monde+batiment"
+    },
+    {
+     "id": 47,
+     "angle": 16.54,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 48,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 49,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 50,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 51,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 52,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 53,
+     "angle": 9.13,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 54,
+     "angle": 22,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 55,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    }
+   ]
+  },
+  "routes": {
+   "buildings": 57,
+   "aligned": 34,
+   "alignedPct": 59.6,
+   "angleMax": 30.42,
+   "angleMean": 5.59,
+   "gapMax": 3.8,
+   "biais": 18,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 3,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 4,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 5,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 6,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 1.8,
+     "kind": "monde"
+    },
+    {
+     "id": 8,
+     "angle": 28.16,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 9,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 2.8,
+     "kind": "monde"
+    },
+    {
+     "id": 11,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 12,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 14,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 15,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 16,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 17,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 19,
+     "angle": 1.96,
+     "gap": null,
+     "kind": "route+batiment+monde"
+    },
+    {
+     "id": 20,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 21,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 22,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 23,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 24,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 25,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 26,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 27,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 28,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 29,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 32,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 33,
+     "angle": 23.28,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 34,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 35,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 36,
+     "angle": 2.86,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 37,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment+route"
+    },
+    {
+     "id": 38,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 39,
+     "angle": 25.79,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 40,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 41,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment"
+    },
+    {
+     "id": 42,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 43,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 44,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 45,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "route+monde+batiment"
+    },
+    {
+     "id": 46,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "route+monde+batiment"
+    },
+    {
+     "id": 47,
+     "angle": 16.54,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 48,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 49,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 50,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 51,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 52,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 53,
+     "angle": 9.13,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 54,
+     "angle": 22,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 55,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    }
+   ]
+  },
+  "terrain": {
+   "buildings": 57,
+   "aligned": 34,
+   "alignedPct": 59.6,
+   "angleMax": 30.42,
+   "angleMean": 5.59,
+   "gapMax": 3.8,
+   "biais": 18,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 3,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 4,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 5,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 6,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 1.8,
+     "kind": "monde"
+    },
+    {
+     "id": 8,
+     "angle": 28.16,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 9,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 2.8,
+     "kind": "monde"
+    },
+    {
+     "id": 11,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 12,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 14,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 15,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 16,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 17,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 19,
+     "angle": 1.96,
+     "gap": null,
+     "kind": "route+batiment+monde"
+    },
+    {
+     "id": 20,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 21,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 22,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 23,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 24,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 25,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 26,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 27,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 28,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 29,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 32,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 33,
+     "angle": 23.28,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 34,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 35,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 36,
+     "angle": 2.86,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 37,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment+route"
+    },
+    {
+     "id": 38,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 39,
+     "angle": 25.79,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 40,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 41,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment"
+    },
+    {
+     "id": 42,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 43,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 44,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 45,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "route+monde+batiment"
+    },
+    {
+     "id": 46,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "route+monde+batiment"
+    },
+    {
+     "id": 47,
+     "angle": 16.54,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 48,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 49,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 50,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 51,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 52,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 53,
+     "angle": 9.13,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 54,
+     "angle": 22,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 55,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    }
+   ]
+  },
+  "zones": {
+   "buildings": 57,
+   "aligned": 57,
+   "alignedPct": 100,
+   "angleMax": 0,
+   "angleMean": 0,
+   "gapMax": 0,
+   "biais": 0,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 3,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 4,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 5,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 6,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 8,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 9,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 11,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 12,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 14,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 15,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 16,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 17,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 19,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 20,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 21,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 22,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 23,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 24,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 25,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 26,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 27,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 28,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 29,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 30,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 31,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 32,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 33,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 34,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 35,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 36,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 37,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment+route"
+    },
+    {
+     "id": 38,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 39,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 40,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 41,
+     "angle": 0,
+     "gap": 0,
+     "kind": "batiment"
+    },
+    {
+     "id": 42,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 43,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 44,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 45,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 46,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 47,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 48,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route"
+    },
+    {
+     "id": 49,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 50,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 51,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 52,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 53,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 54,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 55,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 56,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    },
+    {
+     "id": 57,
+     "angle": 0,
+     "gap": 0,
+     "kind": "route+batiment"
+    }
+   ]
+  }
+ },
+ "ref": {
+  "id": 1,
+  "x": 186.08999633789062,
+  "z": -0.23999999463558197,
+  "n": 25.203025954356793
+ }
+}

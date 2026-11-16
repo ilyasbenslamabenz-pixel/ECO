@@ -8,6 +8,9 @@
  *
  * Peindre : les cases dont le centre est à moins de `radius` m du tracé ET dans la bande de `depth` cases
  * le long d'une route desservante (hors chaussée, hors eau) prennent la zone. Effacer : toutes les cases du tracé.
+ * Cases de la TRAME DES ROUTES (`paintRoadCells`, src/shared/grid-field.ts) : on peint les cases du quadrillage
+ * affiché (alignées sur la route) ; chacune écrit la case du monde qui contient son centre — la superposition dessine
+ * une case de la trame avec la zone de la case du monde sous son centre (même règle) : affichage = donnée.
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
 import { TILE_SIZE } from '../../shared/constants';
@@ -15,6 +18,7 @@ import {
   CELL_CONNECTED, ZONE_COUNT, ZONE_DEPTH_MAX, ZONE_DEPTH_MIN, rleDecode, rleEncode, type ZoneCode, type ZoneGridInfo,
 } from '../../shared/protocol-ext/zonage';
 import type { RoadGeometry } from './roads';
+import type { GridField } from '../../shared/grid-field';
 
 /** Les cases dont le centre est à moins de cette distance du bord de la chaussée ne sont jamais zonées. */
 export const MIN_EDGE_M = 1;
@@ -149,6 +153,78 @@ export class ZoneGrid {
             this.refreshCell(idx, roads);
           }
         }
+      }
+    }
+    return changed;
+  }
+
+  /**
+   * Peinture dans la TRAME DES ROUTES : les cases du quadrillage affiché (champ `field`) dont le centre est à moins de
+   * `radius` m du tracé et dans la bande de `depth` cases d'une route desservante (hors chaussée, hors eau, `allow`)
+   * prennent la zone, écrite dans la case du monde qui contient leur centre. Effacer : voir `paint`.
+   */
+  paintRoadCells(
+    points: readonly number[], code: ZoneCode, depth: number, radius: number, roads: RoadGeometry, field: GridField,
+    isWet: (x: number, z: number) => boolean, allow?: (x: number, z: number) => boolean,
+  ): number {
+    const g = this.info;
+    if (!g || points.length < 2) return 0;
+    if (code === 0) return this.paint(points, code, depth, radius, roads, isWet, allow);
+    const dep = Math.max(ZONE_DEPTH_MIN, Math.min(ZONE_DEPTH_MAX, Math.round(depth)));
+    const maxEdge = dep * g.cell;
+    const r = Math.max(2, Math.min(80, radius));
+    const n = Math.floor(points.length / 2);
+    const distToStroke = (x: number, z: number): number => {
+      let best = Infinity;
+      for (let k = 0; k < Math.max(1, n - 1); k++) {
+        const ax = points[2 * k]!, az = points[2 * k + 1]!;
+        const bx = k + 1 < n ? points[2 * k + 2]! : ax, bz = k + 1 < n ? points[2 * k + 3]! : az;
+        const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+        let t = l2 > 1e-9 ? ((x - ax) * dx + (z - az) * dz) / l2 : 0;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        best = Math.min(best, Math.hypot(x - ax - dx * t, z - az - dz * t));
+      }
+      return best;
+    };
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+    for (let k = 0; k < n; k++) { minX = Math.min(minX, points[2 * k]!); maxX = Math.max(maxX, points[2 * k]!); minZ = Math.min(minZ, points[2 * k + 1]!); maxZ = Math.max(maxZ, points[2 * k + 1]!); }
+    // Cases du monde dont une case de la trame peut avoir son centre dans le pinceau (marge : demi-diagonale).
+    const pad = r + g.cell;
+    const i0 = Math.max(0, Math.floor((minX - pad - g.originX) / g.cell)), i1 = Math.min(g.w - 1, Math.floor((maxX + pad - g.originX) / g.cell));
+    const j0 = Math.max(0, Math.floor((minZ - pad - g.originZ) / g.cell)), j1 = Math.min(g.h - 1, Math.floor((maxZ + pad - g.originZ) / g.cell));
+    const off = [0.0625, 0.5, 0.9375];
+    let changed = 0;
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const idx = j * g.w + i;
+        const x0 = g.originX + i * g.cell, z0 = g.originZ + j * g.cell;
+        if (distToStroke(x0 + g.cell / 2, z0 + g.cell / 2) > r + g.cell) continue;
+        const L = field.linesAt(x0 + g.cell / 2, z0 + g.cell / 2);
+        let ok = false;
+        const seen: string[] = [];
+        for (const a of off) {
+          for (const b of off) {
+            if (ok) break;
+            const c = field.ownCell(field.cellAt(x0 + a * g.cell, z0 + b * g.cell, L));
+            if (!c || this.index(c.cx, c.cz) !== idx) continue;
+            const key = `${c.cx.toFixed(2)},${c.cz.toFixed(2)}`;
+            if (seen.includes(key)) continue;
+            seen.push(key);
+            if (distToStroke(c.cx, c.cz) > r) continue;
+            const hit = roads.nearest(c.cx, c.cz, maxEdge);
+            if (!hit) continue;
+            const edge = hit.d - hit.half;
+            if (edge < MIN_EDGE_M || edge > maxEdge || isWet(c.cx, c.cz)) continue;
+            if (allow && !allow(c.cx, c.cz)) continue;
+            ok = true;
+          }
+        }
+        if (!ok) continue;
+        // La case du monde écrite porte aussi les conditions de terrain (modules qui lisent son centre : ressources).
+        const wx = x0 + g.cell / 2, wz = z0 + g.cell / 2;
+        if (isWet(wx, wz) || (allow && !allow(wx, wz))) continue;
+        if (this.set(idx, code)) changed++;
+        this.refreshCell(idx, roads);
       }
     }
     return changed;

@@ -1,0 +1,1804 @@
+{
+ "suffix": "avant",
+ "site": {
+  "x": 0,
+  "z": 3,
+  "ew": [
+   -150,
+   3,
+   60,
+   3
+  ],
+  "dg": [
+   130,
+   -57,
+   281.56660899320593,
+   19.99066851444161
+  ],
+  "cv": {
+   "points": [
+    -150,
+    153,
+    40,
+    173
+   ],
+   "control": [
+    -50,
+    93
+   ]
+  }
+ },
+ "tools": {
+  "batiment-sur": {
+   "buildings": 57,
+   "aligned": 0,
+   "alignedPct": 0,
+   "angleMax": 42.4,
+   "angleMean": 20.13,
+   "gapMax": 3.74,
+   "biais": 48,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 0,
+     "gap": 3.36,
+     "kind": "route"
+    },
+    {
+     "id": 2,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 3,
+     "angle": 3.72,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 4,
+     "angle": 0,
+     "gap": 2.34,
+     "kind": "route"
+    },
+    {
+     "id": 5,
+     "angle": 3.72,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 6,
+     "angle": 0,
+     "gap": 1.1,
+     "kind": "route"
+    },
+    {
+     "id": 7,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 8,
+     "angle": 34.91,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 9,
+     "angle": 0,
+     "gap": 1.22,
+     "kind": "route"
+    },
+    {
+     "id": 10,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 11,
+     "angle": 42.4,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 12,
+     "angle": 0,
+     "gap": 2.38,
+     "kind": "route"
+    },
+    {
+     "id": 13,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 14,
+     "angle": 0,
+     "gap": 3.74,
+     "kind": "route"
+    },
+    {
+     "id": 15,
+     "angle": 15.29,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 16,
+     "angle": 0,
+     "gap": 0.18,
+     "kind": "route"
+    },
+    {
+     "id": 17,
+     "angle": 32.65,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 18,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 19,
+     "angle": 24.97,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 20,
+     "angle": 0,
+     "gap": 1.07,
+     "kind": "route"
+    },
+    {
+     "id": 21,
+     "angle": 14.19,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 22,
+     "angle": 0,
+     "gap": 2.72,
+     "kind": "route"
+    },
+    {
+     "id": 23,
+     "angle": 39.1,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 24,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 25,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 26,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 27,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 28,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 29,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 32,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 33,
+     "angle": 23.28,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 34,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 35,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 36,
+     "angle": 2.86,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 37,
+     "angle": 17.9,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 38,
+     "angle": 3.83,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 39,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 40,
+     "angle": 13.67,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 41,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 42,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 43,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 44,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 45,
+     "angle": 33.45,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 46,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 47,
+     "angle": 16.54,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 48,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 49,
+     "angle": 30.74,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 50,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 51,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 52,
+     "angle": 3.69,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 53,
+     "angle": 9.13,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 54,
+     "angle": 7.87,
+     "gap": null,
+     "kind": "route"
+    },
+    {
+     "id": 55,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    }
+   ]
+  },
+  "batiment-loin": {
+   "buildings": 57,
+   "aligned": 0,
+   "alignedPct": 0,
+   "angleMax": 41.12,
+   "angleMean": 22.13,
+   "gapMax": 3.8,
+   "biais": 52,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 3,
+     "angle": 30.65,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 4,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 5,
+     "angle": 30.65,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 6,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 1.8,
+     "kind": "monde"
+    },
+    {
+     "id": 8,
+     "angle": 28.16,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 9,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 2.8,
+     "kind": "monde"
+    },
+    {
+     "id": 11,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 12,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 14,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 15,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 16,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 17,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 19,
+     "angle": 1.96,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 20,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 21,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 22,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 23,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 24,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 25,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 26,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 27,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 28,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 29,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 32,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 33,
+     "angle": 23.28,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 34,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 35,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 36,
+     "angle": 2.86,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 37,
+     "angle": 5.2,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 38,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 39,
+     "angle": 25.79,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 40,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 41,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 42,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 43,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 44,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 45,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 46,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 47,
+     "angle": 16.54,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 48,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 49,
+     "angle": 22.37,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 50,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 51,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 52,
+     "angle": 19.4,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 53,
+     "angle": 9.13,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 54,
+     "angle": 22,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 55,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    }
+   ]
+  },
+  "routes": {
+   "buildings": 57,
+   "aligned": 0,
+   "alignedPct": 0,
+   "angleMax": 41.12,
+   "angleMean": 22.13,
+   "gapMax": 3.8,
+   "biais": 52,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 3,
+     "angle": 30.65,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 4,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 5,
+     "angle": 30.65,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 6,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 1.8,
+     "kind": "monde"
+    },
+    {
+     "id": 8,
+     "angle": 28.16,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 9,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 2.8,
+     "kind": "monde"
+    },
+    {
+     "id": 11,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 12,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 14,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 15,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 16,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 17,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 19,
+     "angle": 1.96,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 20,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 21,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 22,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 23,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 24,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 25,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 26,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 27,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 28,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 29,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 32,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 33,
+     "angle": 23.28,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 34,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 35,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 36,
+     "angle": 2.86,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 37,
+     "angle": 5.2,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 38,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 39,
+     "angle": 25.79,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 40,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 41,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 42,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 43,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 44,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 45,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 46,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 47,
+     "angle": 16.54,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 48,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 49,
+     "angle": 22.37,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 50,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 51,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 52,
+     "angle": 19.4,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 53,
+     "angle": 9.13,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 54,
+     "angle": 22,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 55,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    }
+   ]
+  },
+  "terrain": {
+   "buildings": 57,
+   "aligned": 0,
+   "alignedPct": 0,
+   "angleMax": 41.12,
+   "angleMean": 22.13,
+   "gapMax": 3.8,
+   "biais": 52,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 3,
+     "angle": 30.65,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 4,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 5,
+     "angle": 30.65,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 6,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 1.8,
+     "kind": "monde"
+    },
+    {
+     "id": 8,
+     "angle": 28.16,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 9,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 2.8,
+     "kind": "monde"
+    },
+    {
+     "id": 11,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 12,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 14,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 15,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 16,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 17,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 19,
+     "angle": 1.96,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 20,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 21,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 22,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 23,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 24,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 25,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 26,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 27,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 28,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 29,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 32,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 33,
+     "angle": 23.28,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 34,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 35,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 36,
+     "angle": 2.86,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 37,
+     "angle": 5.2,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 38,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 39,
+     "angle": 25.79,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 40,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 41,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 42,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 43,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 44,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 45,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 46,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 47,
+     "angle": 16.54,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 48,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 49,
+     "angle": 22.37,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 50,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 51,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 52,
+     "angle": 19.4,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 53,
+     "angle": 9.13,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 54,
+     "angle": 22,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 55,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    }
+   ]
+  },
+  "zones": {
+   "buildings": 57,
+   "aligned": 0,
+   "alignedPct": 0,
+   "angleMax": 41.12,
+   "angleMean": 22.13,
+   "gapMax": 3.8,
+   "biais": 52,
+   "rows": [
+    {
+     "id": 1,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 2,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 3,
+     "angle": 30.65,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 4,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 5,
+     "angle": 30.65,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 6,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 7,
+     "angle": 0,
+     "gap": 1.8,
+     "kind": "monde"
+    },
+    {
+     "id": 8,
+     "angle": 28.16,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 9,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 10,
+     "angle": 0,
+     "gap": 2.8,
+     "kind": "monde"
+    },
+    {
+     "id": 11,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 12,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 13,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 14,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 15,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 16,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 17,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 18,
+     "angle": 0,
+     "gap": 3.8,
+     "kind": "monde"
+    },
+    {
+     "id": 19,
+     "angle": 1.96,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 20,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 21,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 22,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 23,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 24,
+     "angle": 12.17,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 25,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 26,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 27,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 28,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 29,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 30,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 31,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 32,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 33,
+     "angle": 23.28,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 34,
+     "angle": 30.42,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 35,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 36,
+     "angle": 2.86,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 37,
+     "angle": 5.2,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 38,
+     "angle": 26.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 39,
+     "angle": 25.79,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 40,
+     "angle": 36.77,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 41,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 42,
+     "angle": 20.67,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 43,
+     "angle": 20.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 44,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 45,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 46,
+     "angle": 3.58,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 47,
+     "angle": 16.54,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 48,
+     "angle": 41.12,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 49,
+     "angle": 22.37,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 50,
+     "angle": 31.93,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 51,
+     "angle": 11.64,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 52,
+     "angle": 19.4,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 53,
+     "angle": 9.13,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 54,
+     "angle": 22,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 55,
+     "angle": 37.9,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 56,
+     "angle": 24.55,
+     "gap": null,
+     "kind": "monde"
+    },
+    {
+     "id": 57,
+     "angle": 28.01,
+     "gap": null,
+     "kind": "monde"
+    }
+   ]
+  }
+ },
+ "ref": {
+  "id": 1,
+  "x": 186.08999633789062,
+  "z": -0.23999999463558197,
+  "n": 25.203025954356793
+ }
+}

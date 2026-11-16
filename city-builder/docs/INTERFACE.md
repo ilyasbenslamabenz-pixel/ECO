@@ -74,10 +74,13 @@ premier plan et le clic ramène à l'outil Sélection. Le correctif de `hud.ts` 
 
 ## 5 bis. Quadrillage de construction aligné sur les routes
 
-Outil Bâtiments : près d'une route (moins de 40 m de son bord), le quadrillage au sol tourne avec la route la plus
-proche du curseur et se cale sur la ligne des façades (0,6 m derrière le trottoir) et sur les côtés du bâtiment
-voisin ; loin des routes, il reprend les axes du monde (pose libre). Les lignes sont antialiasées et restent nettes de
-près. L'aimantation pose le bâtiment sur ces lignes. Détails, mesures et captures : `docs/ZONAGE.md` §2 bis.
+Outils Routes, Bâtiments, Terrain et Zones : le quadrillage au sol suit **en chaque point** la route la plus proche
+(jusqu'à 64 m de son bord : toutes les rangées de zonage), calé sur la ligne des façades (0,6 m derrière le trottoir)
+et sur les côtés des bâtiments voisins — y compris ceux des anciennes parties posés hors trame ; loin des routes, le
+repère du bâtiment le plus proche, sinon les axes du monde. Entre deux routes, la plus proche gagne et les lignes
+s'estompent sur 3 m à la limite. Les cases colorées de l'outil Zones sont dessinées dans la même trame (attachées aux
+routes). Les lignes sont antialiasées et restent nettes de près. L'aimantation pose le bâtiment sur ces lignes.
+Détails, mesures et captures : `docs/ZONAGE.md` §2 bis et §2 ter.
 
 ## 6. Coût
 

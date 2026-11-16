@@ -7,8 +7,9 @@ import {
   rleDecode, ZONE_DEPTH_DEFAULT,
   type ZonageDelta, type ZonageDemand, type ZonageDemandInputs, type ZonageSettings, type ZonageStats, type ZoneGridInfo, type ZoneType,
 } from '../shared/protocol-ext/zonage';
+import type { GridField } from '../shared/grid-field';
 
-export type ZoningChange = { kind: 'all' } | { kind: 'cells'; cells: number[] } | { kind: 'info' } | { kind: 'tool' } | { kind: 'cursor' };
+export type ZoningChange = { kind: 'all' } | { kind: 'cells'; cells: number[] } | { kind: 'info' } | { kind: 'tool' } | { kind: 'cursor' } | { kind: 'field' };
 
 export class ZoningView {
   grid: ZoneGridInfo | null = null;
@@ -27,7 +28,17 @@ export class ZoningView {
   depth = ZONE_DEPTH_DEFAULT;
   /** Pinceau sous le pointeur (cercle au sol), null = masqué. */
   cursor: { x: number; z: number; r: number } | null = null;
+  /**
+   * Champ de trames du quadrillage (src/shared/grid-field.ts, fourni par src/main.ts) : les cases de zonage sont
+   * dessinées dans la trame de la route (comme le quadrillage au sol), null = cases du monde.
+   */
+  fieldSource: (() => GridField | null) | null = null;
   private readonly listeners = new Set<(c: ZoningChange) => void>();
+
+  get field(): GridField | null { try { return this.fieldSource?.() ?? null; } catch { return null; } }
+
+  /** Routes ou bâtiments modifiés : les cases dessinées dans la trame des routes sont à recalculer. */
+  fieldChanged(): void { this.emit({ kind: 'field' }); }
 
   on(fn: (c: ZoningChange) => void): () => void { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   private emit(c: ZoningChange): void { for (const fn of this.listeners) { try { fn(c); } catch (e) { console.error('[zonage] écouteur :', e); } } }

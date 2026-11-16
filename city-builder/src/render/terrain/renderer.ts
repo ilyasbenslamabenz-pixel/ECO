@@ -10,7 +10,6 @@ import { CHUNK_SIZE } from '../../shared/constants';
 import type { IRenderTerrain, TerrainData } from '../../shared/contracts';
 import type { AssetCatalog } from '../../shared/catalog';
 import { terrainHeightAt } from '../../shared/terrain-gen';
-import type { RoadGridFrame } from '../../shared/road-grid';
 import { applyPatch as applyPatchData } from '../../sim/terrain/terraform';
 import { isWorldTerrain, type TerrainPatch, type WorldTerrain } from '../../sim/terrain/index';
 import { chunkIndices, type ChunkMesh, type MeshSource } from './mesher';
@@ -145,7 +144,7 @@ export class TerrainSystem implements IRenderTerrain {
       this.textures = tex;
       this.matHandle = createTerrainMaterial(tex, this.data?.waterLevel ?? 2);
       this.matHandle.uniforms.uGrid.value = this.gridOn ? this.gridStrength : 0;
-      this.setGridFrame(this.gridFrame);
+      this.setGridField(this.gridFieldTex, this.gridFieldBox);
       for (const c of this.chunks) if (c.mesh) c.mesh.material = this.matHandle.material;
       this.group.visible = true;
     });
@@ -169,19 +168,22 @@ export class TerrainSystem implements IRenderTerrain {
     if (this.gridFocus) u.value.set(this.gridFocus.x, this.gridFocus.z, this.gridFocusRadius);
     else u.value.set(0, 0, 0); // aucun point encore survolé : grille entière (comportement d'origine)
   }
-  private gridFrame: RoadGridFrame | null = null;
+  private gridFieldBox: { x0: number; z0: number; size: number } | null = null;
+  private gridFieldTex: THREE.Texture | null = null;
   /**
-   * Trame locale de la route la plus proche du curseur (src/shared/road-grid.ts) : le quadrillage tourne et se recale
-   * sur la ligne des façades et les côtés des bâtiments de cette route ; null = quadrillage du monde (axes X/Z).
+   * Champ de trames du quadrillage (src/shared/grid-field.ts, texture de src/render/terrain/grid-field-texture.ts) :
+   * le quadrillage suit en chaque point la route la plus proche et les bâtiments voisins ; null = axes du monde.
    */
-  setGridFrame(f: RoadGridFrame | null): void {
-    this.gridFrame = f;
+  setGridField(tex: THREE.Texture | null, box: { x0: number; z0: number; size: number } | null): void {
+    this.gridFieldTex = tex;
+    this.gridFieldBox = tex && box ? { ...box } : null;
     const h = this.matHandle;
     if (!h) return;
-    if (f) { h.uniforms.uGridRoad.value.set(f.tx, f.tz, f.cn, f.offset); h.uniforms.uGridRoad2.value.set(f.phase, 1, 0, 0); }
-    else h.uniforms.uGridRoad2.value.set(0, 0, 0, 0);
+    h.uniforms.uGridField.value = tex;
+    if (tex && box) h.uniforms.uGridFieldBox.value.set(box.x0, box.z0, box.size, 1);
+    else h.uniforms.uGridFieldBox.value.set(0, 0, 1, 0);
   }
-  get gridRoadFrame(): RoadGridFrame | null { return this.gridFrame; }
+  get gridField(): { x0: number; z0: number; size: number } | null { return this.gridFieldBox; }
   get terrainTextures(): TerrainTextures | null { return this.textures; }
   get terrain(): (TerrainData & Partial<WorldTerrain>) | null { return this.data; }
 

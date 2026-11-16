@@ -29,7 +29,8 @@ spécialisées, §8), **Retirer**, la **profondeur** des bandes (1 à 4 cases de
 pause**, et la jauge de demande R / C / B / I dans l'en-tête. La zone « Spécial » reste affichée comme prévue (grisée).
 
 - **Peindre** : souris (clic-glisser) ou un doigt. Le pinceau est un cercle de rayon `(profondeur + 1) × 8 m` ; en
-  suivant l'axe d'une rue on zone les deux côtés sur toute la profondeur. Seules les cases dont le centre est à
+  suivant l'axe d'une rue on zone les deux côtés sur toute la profondeur. Les cases peintes et affichées sont celles
+  de la **trame de la route** (alignées sur la voie, §2 ter). Seules les cases dont le centre est à
   1 m au moins du bord de la chaussée et à `profondeur × 8 m` au plus d'une route **desservante** prennent la zone :
   jamais sur la chaussée, jamais sur l'eau, jamais le long d'une autoroute (aucun accès riverain) ni d'une rue
   piétonne. Deux doigts déplacent / zooment la caméra pendant que l'outil est ouvert.
@@ -55,7 +56,8 @@ Chaque heure de jeu, pour chaque type de zone dont le secteur a une demande ≥ 
    La position le long de la route est **recalée sur la trame locale de la route** (§2 bis) : côtés de l'emprise sur
    les lignes du quadrillage affiché (case la plus proche puis ses voisines), positions d'origine en dernier recours ;
    les rangées intérieures ont leur façade sur une ligne de la trame (0,6 m + k × 8 m depuis le trottoir) ;
-4. vérifie que l'emprise tient dans des cases de la même zone (ou dans la bande non zonable du bord de route) ;
+4. vérifie que l'emprise tient dans des cases de la même zone — cases de la trame des routes, comme l'affichage (§2 ter) —
+   (ou dans la bande non zonable du bord de route) ;
 5. le pose par l'API d'écriture de la simulation de base (ci-dessous) : contrôles de collision, de route, de pente et
    d'eau de `placeBuilding`. Le module **chantiers**, s'il est actif, ouvre aussitôt un chantier sur le bâtiment.
 
@@ -106,10 +108,74 @@ liseré sombre discret pour la lisibilité sur l'herbe claire. Après correction
 lignes affichées : **0,00 m** (≤ 0,01 m), `docs/captures-grille/mesures-apres.json`. Captures avant / après (même vue) :
 `docs/captures-grille/rue-{droite,biais}{,-dessus}-{avant,apres}.png`. Tests : `tests/construction/road-grid.test.ts`.
 
-Limites : les cases de **zonage** restent des cases de 8 m alignées sur les axes du monde (donnée sauvegardée,
-superposition de l'outil Zones) ; sur une route courbe, la trame est droite (tangente au point le plus proche du
-curseur) et n'est exacte qu'au voisinage du curseur ; les maisons individuelles gardent leur écart minimal de 1 m
+Limites de cette première version (levées au §2 ter) : quadrillage local seulement avec l'outil Bâtiment, à moins de
+40 m d'une route, une seule trame pour tout l'écran ; cases de zonage alignées sur les axes du monde ; routes courbes
+approchées par une trame droite. Toujours vrai : les maisons individuelles gardent leur écart minimal de 1 m
 (`HOUSE_GAP`) : deux maisons côte à côte sur la trame laissent une case libre, ou se posent hors trame en repli.
+
+## 2 ter. Champ de trames : quadrillage et cases de zonage attachés aux routes, partout
+
+Retour joueur suivant (PC, vue rasante, capture) : « c'est pas du tout corrigé » — deux immeubles d'une partie
+existante, route loin derrière, cases du quadrillage en biais par rapport aux façades. **Cause** (reproduite,
+`tests/e2e/grille-partout.mjs` sur une partie fabriquée par l'ANCIENNE version, rangées intérieures comprises) :
+le quadrillage local n'existait qu'avec l'outil Bâtiment ET le curseur à moins de 40 m du bord d'une route ; dès
+que le curseur passait plus loin (rangées intérieures, arrière du quartier), et dans les outils Routes, Terrain et
+Zones (cases colorées), on revenait aux **axes du monde** : à 27° de la rue en biais, lignes à 3,8 m des façades sur
+la rue droite. De plus une seule trame (celle du point sous le curseur) valait pour tout l'écran : les bâtiments d'une
+autre rue, et les **rangées intérieures des anciennes parties** (façade posée à « bord de case − 4 m », hors trame)
+n'étaient pas sur les lignes même près de la route.
+
+**Correction** : `src/shared/grid-field.ts` (pur TypeScript, partagé client / simulation) calcule les lignes **en
+chaque point** (`GridField.linesAt`) :
+
+1. route la plus proche (bord à moins de 64 m : toutes les rangées de zonage et au-delà) — tangente locale (routes
+   courbes : tangente interpolée entre les sommets, phase le long de la voie en abscisse curviligne, donc lignes
+   continues qui suivent la courbe), ligne des façades et rangées tous les 8 m, phase le long de la voie du bâtiment
+   parallèle voisin ; à moins de 6 m d'un bâtiment, **ses côtés** (parallèle : phases recalées sur lui, rangées
+   intérieures hors trame comprises ; en biais : son propre repère) ;
+2. sinon, repère du bâtiment le plus proche (40 m) ; 3. sinon, axes du monde.
+
+Plusieurs routes : la plus proche gagne ; là où deux trames différentes se touchent, les lignes **s'estompent sur
+3 m** (aucune ligne en biais qui traverse une case). Rendu : texture flottante 256 × 256 texels de 2 m autour du
+curseur (`src/render/terrain/grid-field-texture.ts`, calcul étalé sur plusieurs images, tampon de réserve),
+lue par le shader du terrain (`uGridField`, `uGridFieldBox`) dans **tous les outils où le quadrillage apparaît**
+(Routes, Bâtiment, Terrain, et désormais Zones). L'aimantation (`src/client/tools/road-grid.ts`) et la croissance
+(`ZoningSystem.field`, `gridFrame`) utilisent le même champ.
+
+**Zonage dans la trame des routes (CS2)** : la donnée sauvegardée reste la grille du monde (aucune migration, les
+anciennes sauvegardes se chargent telles quelles) ; une **couche de conversion** fait la correspondance : une case de
+la trame (route) porte la zone de la case du monde qui contient son centre.
+- Affichage (`src/render/zoning/overlay.ts`) : cases de la trame (orientées, épousant la pente), couleur de la case
+  du monde sous leur centre ; cases à cheval sur deux trames (carrefours) non dessinées.
+- Peinture (`ZoneGrid.paintRoadCells`) : les cases de la trame sous le pinceau, dans la bande de profondeur d'une
+  route desservante, écrivent la case du monde qui contient leur centre. Effacer : inchangé.
+- Croissance (`fits`) : l'emprise doit couvrir des cases de la trame zonées (même règle que l'affichage).
+
+Les anciennes parties sont donc **affichées alignées** (cases de la trame dessinées sur les zones du monde) sans
+rien reconstruire. Mesures avant / après (même partie, ancienne version, 57 bâtiments ; pour chaque bâtiment, lignes
+affichées au centre et 1,5 m devant chaque côté ; « alignés » = angle < 0,5° et côtés à ≤ 0,1 m d'une ligne) :
+`docs/captures-grille/partout-mesures-{avant,apres}.json`, captures `partout-<outil>-{rasante,dessus}-{avant,apres}.png`
+(vue rasante proche comme celle du joueur, et vue de dessus). 
+
+| Outil (curseur) | Avant : alignés / angle max / écart max | Après (bâtiments dans la zone visible du quadrillage) |
+|---|---|---|
+| Bâtiment, curseur sur chaque bâtiment | 0 / 57 · 42,4° · 3,74 m (25 sur les axes du monde, les autres sur la trame d'une autre rue ou hors trame en profondeur) | 45 / 45 · 0° · 0,00 m |
+| Bâtiment, curseur à ≈ 45 m de la route | 0 / 57 · 41,1° · 3,8 m (axes du monde) | 34 / 34 · 0° · 0,00 m |
+| Routes, Terrain | 0 / 57 · 41,1° · 3,8 m (axes du monde) | 34 / 34 · 0° · 0,00 m |
+| Zones (cases colorées) | 0 / 57 · 41,1° · 3,8 m (cases du monde) | 57 / 57 · 0° · 0,00 m |
+
+Les bâtiments non comptés « après » sont à plus de 256 m du curseur (hors de la texture, où le quadrillage n'est de
+toute façon plus visible : il s'estompe au-delà de 220 m) ; le script les classe en « monde ». Le relevé reprend,
+pour chaque bâtiment, seulement les points dont il est le bâtiment le plus proche : entre deux bâtiments d'une
+ancienne partie décalés le long de la rue, aucune trame commune n'existe, chacun impose la sienne jusqu'à mi-chemin.
+
+Tests : `tests/construction/grid-field.test.ts` (rangées intérieures hors trame à 45 m de la route, loin des routes,
+route courbe continue, fondu entre deux routes, cases, coût du calcul, zonage peint et bâtiments nés dans la trame).
+
+Limites : la texture couvre 512 m autour du curseur (le quadrillage n'est visible qu'à 220 m) ; un bâtiment en biais
+près d'une route impose son repère à 6 m autour de lui ; une case de la trame dont le centre tombe dans la même case
+du monde qu'une voisine est peinte avec elle (rare, rues en biais) ; l'aimantation pose toujours la façade sur la
+ligne des façades de la route (pas sur les lignes recalées d'un ancien bâtiment intérieur voisin).
 
 ## 3. Demande (modèle simple, prêt pour l'économie)
 

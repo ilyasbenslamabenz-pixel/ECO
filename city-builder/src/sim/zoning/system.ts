@@ -25,7 +25,8 @@ import { governanceModifiers } from '../../shared/governance';
 import type { CatalogAsset } from '../../shared/catalog';
 import { TILE_SIZE } from '../../shared/constants';
 import { angleToRot, buildingGap, footprintObb, obbAabb, obbOverlap, obbToLocal, obbToWorld, type Obb } from '../../shared/footprint';
-import { FACADE_GAP, pickPhase, roadGridFrame, snapAlong } from '../../shared/road-grid';
+import { FACADE_GAP, pickPhase, roadGridFrame, snapAlong, type RoadGridFrame } from '../../shared/road-grid';
+import { GridField, type ObbQuery } from '../../shared/grid-field';
 import {
   ZONE_COUNT, ZONE_TYPES, zoneOf,
   type DemandSector, type ZonageDelta, type ZonageDemand, type ZonageDemandInputs, type ZonageSnapshot, type ZonageStats, type ZoneCode, type ZoneType,
@@ -172,6 +173,9 @@ export class ZoningSystem {
   private statsDirty = false;
   private settingsDirty = false;
   private readonly q: number[] = [];
+  private readonly qf: number[] = [];
+  /** Champ de trames du quadrillage (src/shared/grid-field.ts) : mêmes lignes que l'affichage du client. */
+  private fieldCache: { gen: number; buildings: unknown; field: GridField } | null = null;
 
   /* ------------------------------ Cycle de vie ------------------------------ */
 
@@ -200,6 +204,30 @@ export class ZoningSystem {
     if (this.active) return;
     this.active = true;
     this.demandDirty = this.statsDirty = this.settingsDirty = true;
+  }
+
+  /**
+   * Champ de trames du quadrillage affiché (routes de la simulation, empreintes lues en direct dans l'index des
+   * bâtiments) : cases de la trame des routes pour la peinture, l'emprise des zones et la pose.
+   */
+  field(ctx: PluginContext): GridField {
+    this.syncRoads(ctx);
+    const b = ctx.buildings;
+    const c = this.fieldCache;
+    if (c && c.gen === this.roads.generation && c.buildings === b) return c.field;
+    const ids = this.qf;
+    const query: ObbQuery = (x0, z0, x1, z1, out) => {
+      out.length = 0;
+      const st = b.store;
+      for (const id of b.query(x0, z0, x1, z1, ids)) {
+        const k = b.indexOf(id);
+        if (k >= 0) out.push(footprintObb(st.tilesX[k]!, st.tilesZ[k]!, st.x[k]!, st.z[k]!, st.rot[k]!));
+      }
+      return out;
+    };
+    const field = new GridField(this.roads.fieldRoads, query);
+    this.fieldCache = { gen: this.roads.generation, buildings: b, field };
+    return field;
   }
 
   /** Synchronise la géométrie des routes ; met à jour la desserte des cases si le réseau a changé. */
@@ -350,7 +378,8 @@ export class ZoningSystem {
     if (!this.grid.info) this.grid.reset(ctx.terrain.bounds());
     this.syncRoads(ctx);
     const code = (zone ? ZONE_TYPES.indexOf(zone) + 1 : 0) as ZoneCode;
-    const n = this.grid.paint(points, code, depth, radius, this.roads, (x, z) => ctx.terrain.isWet(x, z), this.terrainRule(ctx, zone));
+    // Cases du quadrillage affiché (trame des routes), écrites dans la grille du monde sauvegardée.
+    const n = this.grid.paintRoadCells(points, code, depth, radius, this.roads, this.field(ctx), (x, z) => ctx.terrain.isWet(x, z), this.terrainRule(ctx, zone));
     if (n > 0 || code !== 0) this.activate();
     if (n > 0) this.statsDirty = true;
     if (this.active && !this.inputs) this.updateDemand(ctx);
@@ -463,13 +492,7 @@ export class ZoningSystem {
     const out: [number, number][] = [];
     const r2 = (v: number): number => Math.round(v * 100) / 100;
     if (gridSteps > 0) {
-      const f = roadGridFrame(hit.x, hit.z, hit.tx, hit.tz, hit.half);
-      const st = ctx.buildings.store, obbs: Obb[] = [];
-      for (const id of ctx.buildings.query(bx - 90, bz - 90, bx + 90, bz + 90, this.q)) {
-        const k = ctx.buildings.indexOf(id);
-        if (k >= 0) obbs.push(footprintObb(st.tilesX[k]!, st.tilesZ[k]!, st.x[k]!, st.z[k]!, st.rot[k]!));
-      }
-      f.phase = pickPhase(f, obbs, bx, bz);
+      const f = this.gridFrame(ctx, hit, bx, bz);
       const halfAlong = extentAlong(probe, f.tx, f.tz);
       const steps = [0];
       for (let k = 1; k <= gridSteps; k++) steps.push(k, -k);
@@ -482,14 +505,52 @@ export class ZoningSystem {
     return out;
   }
 
-  /** Vrai si l'emprise tient dans des cases de la zone `code` (ou dans la bande non zonable du bord de route). */
-  fits(a: CatalogAsset, x: number, z: number, rot: number, code: number, segId: number): boolean {
+  /**
+   * Trame de la route `hit` en (x, z) : celle du champ (quadrillage affiché) si elle suit cette route, sinon la trame
+   * de la route recalée sur le voisin parallèle (comportement précédent).
+   */
+  private gridFrame(ctx: PluginContext, hit: RoadHit, x: number, z: number): RoadGridFrame {
+    const f = roadGridFrame(hit.x, hit.z, hit.tx, hit.tz, hit.half);
+    const g = this.field(ctx).roadFrameAt(x, z);
+    const s = g && g.tx * f.tx + g.tz * f.tz > 0 ? 1 : -1;
+    if (g && Math.abs(g.tx * f.tx + g.tz * f.tz) > 0.9995 && Math.abs(g.cn - s * f.cn) < 0.6 && Math.abs(g.offset - f.offset) < 0.01) {
+      f.phase = ((s * g.phase) % f.cell + f.cell) % f.cell;
+      return f;
+    }
+    const st = ctx.buildings.store, obbs: Obb[] = [];
+    for (const id of ctx.buildings.query(x - 90, z - 90, x + 90, z + 90, this.q)) {
+      const k = ctx.buildings.indexOf(id);
+      if (k >= 0) obbs.push(footprintObb(st.tilesX[k]!, st.tilesZ[k]!, st.x[k]!, st.z[k]!, st.rot[k]!));
+    }
+    f.phase = pickPhase(f, obbs, x, z);
+    return f;
+  }
+
+  /** Zone affichée au point (x, z) : celle de la case du monde sous le centre de la case de la trame qui le contient. */
+  private zoneUnder(field: GridField, x: number, z: number): { idx: number; cx: number; cz: number } {
+    const c = field.cellAt(x, z);
+    return { idx: this.grid.index(c.cx, c.cz), cx: c.cx, cz: c.cz };
+  }
+
+  /**
+   * Vrai si l'emprise tient dans des cases de la zone `code` (ou dans la bande non zonable du bord de route) : cases
+   * de la trame des routes, comme l'affichage de l'outil Zones (zone de la case du monde sous leur centre).
+   */
+  fits(a: CatalogAsset, x: number, z: number, rot: number, code: number, segId: number, field?: GridField): boolean {
     const o = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, x, z, rot);
     const ix = Math.max(0, o.hx - SAMPLE_INSET), iz = Math.max(0, o.hz - SAMPLE_INSET);
     const nxs = Math.max(2, a.footprint.tilesX + 1), nzs = Math.max(2, a.footprint.tilesZ + 1);
     for (let j = 0; j < nzs; j++) {
       for (let i = 0; i < nxs; i++) {
         const [sx, sz] = obbToWorld(o, -ix + (2 * ix * i) / (nxs - 1), -iz + (2 * iz * j) / (nzs - 1));
+        if (field) {
+          const u = this.zoneUnder(field, sx, sz);
+          if (u.idx < 0) return false;
+          if (this.grid.zone[u.idx] === code) continue;
+          // Case de bord de route (jamais zonée) : tolérée côté façade.
+          if (this.grid.zone[u.idx] === 0 && this.roads.edgeDistance(segId, u.cx, u.cz) < MIN_EDGE_M + 0.5) continue;
+          return false;
+        }
         const idx = this.grid.index(sx, sz);
         if (idx < 0) return false;
         if (this.grid.zone[idx] === code) continue;
@@ -504,12 +565,13 @@ export class ZoningSystem {
   /** Pose `e` face à la route près de la case (cx, cz) ; identifiant du bâtiment, 0 si impossible. */
   private placeFacing(ctx: PluginContext, e: ZoneAsset, code: ZoneCode, hit: RoadHit, cx: number, cz: number): number {
     const a = e.asset;
+    const field = this.field(ctx);
     const { rot, nx, nz } = this.orient(a, hit, cx, cz);
     const probe = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, 0, 0, rot);
     const halfDepth = extentAlong(probe, nx, nz);
     const s = hit.half + halfDepth + FRONT_GAP;
     for (const [x, z] of this.candidates(ctx, hit, probe, hit.x + nx * s, hit.z + nz * s, [0, 4, -4, 8, -8])) {
-      if (!this.fits(a, x, z, rot, code, hit.segId)) continue;
+      if (!this.fits(a, x, z, rot, code, hit.segId, field)) continue;
       const variant = a.variants.length > 0 ? Math.floor(ctx.rng.next() * a.variants.length) : -1;
       const r = ctx.development!.place({ assetId: a.id, x, z, rot, variant });
       if (r.ok) return r.data.buildingId;
@@ -523,6 +585,7 @@ export class ZoningSystem {
    */
   private placeBehind(ctx: PluginContext, e: ZoneAsset, code: ZoneCode, hit: RoadHit, cx: number, cz: number, edge: number): number {
     const a = e.asset;
+    const field = this.field(ctx);
     const { rot, nx, nz } = this.orient(a, hit, cx, cz);
     const probe = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, 0, 0, rot);
     const halfDepth = extentAlong(probe, nx, nz);
@@ -537,7 +600,7 @@ export class ZoningSystem {
       const s = hit.half + fronts[fi]! + halfDepth;
       const onGrid = fi < nGrid;
       for (const [x, z] of this.candidates(ctx, hit, probe, hit.x + nx * s, hit.z + nz * s, onGrid ? [] : [0, 4, -4], onGrid ? 2 : 0)) {
-        if (!this.fits(a, x, z, rot, code, hit.segId)) continue;
+        if (!this.fits(a, x, z, rot, code, hit.segId, field)) continue;
         if (this.collidesOthers(ctx, a, x, z, rot, -1)) continue;
         const variant = a.variants.length > 0 ? Math.floor(ctx.rng.next() * a.variants.length) : -1;
         const r = ctx.development!.place({ assetId: a.id, x, z, rot, variant });
@@ -636,7 +699,7 @@ export class ZoningSystem {
       const probe = footprintObb(a.footprint.tilesX, a.footprint.tilesZ, 0, 0, rot);
       const half = extentAlong(probe, fx, fz);
       const x = Math.round((frontX - fx * half) * 100) / 100, z = Math.round((frontZ - fz * half) * 100) / 100;
-      if (!this.fits(a, x, z, rot, o.zone, segId)) continue;
+      if (!this.fits(a, x, z, rot, o.zone, segId, this.field(ctx))) continue;
       if (this.collidesOthers(ctx, a, x, z, rot, id)) continue;
       if (!dev.demolish(id).ok) return false;
       this.owned.delete(id);

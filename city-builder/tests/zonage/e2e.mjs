@@ -141,7 +141,8 @@ try {
   check(cells0 > 100 && Object.values(st.stats.cells).every((n) => n > 0), `zones peintes à la souris : ${JSON.stringify(st.stats.cells)}`);
   check(st.stats.connected === cells0, `toutes les cases peintes sont desservies (${st.stats.connected}/${cells0})`);
   const inst = await page.evaluate(() => ({ n: window.__zonage.instances(), vis: window.__zonage.visible() }));
-  check(inst.vis && inst.n === cells0, `superposition visible avec l'outil : ${inst.n} cases dessinées`);
+  // Cases dessinées dans la trame des routes (une case de la trame par case du monde sous son centre) : nombre voisin.
+  check(inst.vis && Math.abs(inst.n - cells0) <= Math.max(4, cells0 * 0.15), `superposition visible avec l'outil : ${inst.n} cases dessinées (${cells0} cases zonées)`);
   // Aucune case sur la chaussée.
   const onRoad = await zon('cellAt', { x: X - 100, z: Z });
   check(onRoad.ok && onRoad.data.zone === null, `axe de la rue non zoné (${JSON.stringify(onRoad.data)})`);
@@ -153,7 +154,7 @@ try {
   await dragWorld(page, screen, [[X + 120, Z - 4], [X + 170, Z - 4]]);
   st = (await zon('state')).data;
   check(zoneCount(st) < cells0 && st.stats.cells.commerce > 0, `retrait du zonage : ${cells0} → ${zoneCount(st)} cases (commerces ${st.stats.cells.commerce})`);
-  check(await page.evaluate(() => window.__zonage.instances()) === zoneCount(st), 'superposition à jour après retrait');
+  { const n = await page.evaluate(() => window.__zonage.instances()), z = zoneCount(st); check(Math.abs(n - z) <= Math.max(4, z * 0.15), `superposition à jour après retrait (${n} cases dessinées, ${z} zonées)`); }
 
   // Jauge = demande de la simulation.
   const gauge = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll('#build-drawer .zn-col')].map((c) => [c.dataset.sector, Number(c.dataset.value)])));

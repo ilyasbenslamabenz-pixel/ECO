@@ -6,6 +6,7 @@
  */
 import { ROAD_KINDS, halfWidth, polyline, type RoadKindId } from '../roads';
 import type { PluginRoads } from '../plugins/types';
+import type { FieldRoad } from '../../shared/grid-field';
 
 /** Vrai si un type de route peut desservir des bâtiments nés du zonage. */
 export function servesZoning(kind: RoadKindId): boolean {
@@ -35,9 +36,16 @@ export class RoadGeometry {
   private readonly q: number[] = [];
   /** Plus grande demi-largeur des voies desservantes (rayon de recherche). */
   maxHalf = 0;
+  /**
+   * TOUTES les routes (desservantes ou non) pour le champ de trames du quadrillage (src/shared/grid-field.ts),
+   * échantillonnées comme le miroir du client (≈ 8 m) : mêmes lignes côté simulation et côté affichage.
+   */
+  fieldRoads: FieldRoad[] = [];
+  /** Incrémenté à chaque rechargement du réseau. */
+  generation = 0;
 
   /** Oublie le cache (nouvelle partie : le réseau est un nouvel objet dont la version peut coïncider). */
-  invalidate(): void { this.roads = null; this.version = -1; this.segs.clear(); this.maxHalf = 0; }
+  invalidate(): void { this.roads = null; this.version = -1; this.segs.clear(); this.maxHalf = 0; this.fieldRoads = []; this.generation++; }
 
   /** Recharge le cache si le réseau a changé ; renvoie vrai dans ce cas. */
   sync(roads: PluginRoads): boolean {
@@ -46,8 +54,11 @@ export class RoadGeometry {
     this.version = roads.version;
     this.segs.clear();
     this.maxHalf = 0;
+    this.fieldRoads = [];
+    this.generation++;
     for (const id of roads.segmentIds()) {
       const kind = roads.kindOf(id);
+      this.fieldRoads.push({ id, poly: polyline(roads.curve(id), Math.max(2, Math.ceil(roads.length(id) / 8))), half: halfWidth(kind) });
       if (!servesZoning(kind)) continue;
       const n = Math.max(2, Math.min(64, Math.ceil(roads.length(id) / 4)));
       const half = halfWidth(kind);

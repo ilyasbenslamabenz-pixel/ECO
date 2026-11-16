@@ -24,7 +24,9 @@ import type { SimNotice, SimReport } from './sim/sim-protocol';
 import type { SnapshotMessage } from './shared/protocol';
 import { SimBridge, SimCommandError } from './client/sim-bridge';
 import { createClientState } from './client/state';
-import { localRoadGrid } from './client/tools/road-grid';
+import { fieldFor, localRoadGrid } from './client/tools/road-grid';
+import { zoningView } from './client/zoning-view';
+import { GridFieldTexture } from './render/terrain/grid-field-texture';
 import { AssetLibrary, fetchCatalog } from './render/assets';
 import { initRender, type RenderStats } from './render';
 import { PropLayer } from './render/props';
@@ -463,27 +465,35 @@ async function boot(): Promise<void> {
   render.ctx.onFrame.push((dt) => cons.update(dt));
   // La grille de construction s'estompe autour du curseur (au lieu de couvrir toute la carte jusqu'à l'horizon).
   render.ctx.onFrame.push(() => render.terrain.setGridFocus(cons.machine.hoverGround));
-  // Outil Bâtiment : quadrillage LOCAL aligné sur la route la plus proche du curseur (rotation, ligne des façades,
-  // côtés des bâtiments voisins), comme les cases de zonage — pose libre loin des routes : axes du monde.
-  {
-    let gridKey = '';
-    render.ctx.onFrame.push(() => {
-      const mc = cons.machine, g = mc.hoverGround, pv = mc.preview;
-      const free = mc.tool !== 'building' || !g || (pv.kind === 'building' && !pv.proposal.snapped);
-      if (free) { if (render.terrain.gridRoadFrame) render.terrain.setGridFrame(null); gridKey = ''; return; }
-      const key = `${g.x.toFixed(1)},${g.z.toFixed(1)},${mc.mirror.buildings.size},${mc.mirror.edges.size}`;
-      if (key === gridKey) return;
-      gridKey = key;
-      render.terrain.setGridFrame(localRoadGrid(mc.mirror, g.x, g.z)?.frame ?? null);
-    });
-  }
+  // Quadrillage LOCAL dans tous les outils où il apparaît (Routes, Bâtiment, Terrain, Zones) : en chaque point, trame
+  // de la route la plus proche (rangées intérieures comprises), des bâtiments voisins, sinon axes du monde
+  // (src/shared/grid-field.ts) — comme les cases de zonage attachées aux routes. Texture calculée par morceaux.
+  const gridTex = new GridFieldTexture();
+  let gridVisible = false;
+  const updateGridField = (budget: number): void => {
+    if (!gridVisible) return;
+    const mc = cons.machine, g = mc.hoverGround;
+    const p = input.camera.getPose();
+    const cx = g?.x ?? p.targetX, cz = g?.z ?? p.targetZ;
+    if (gridTex.update(fieldFor(mc.mirror), mc.mirror.version, cx, cz, budget)) render.terrain.setGridField(gridTex.texture, gridTex.box);
+  };
+  render.ctx.onFrame.push(() => updateGridField(4));
+  // Le champ suit aussi les modifications du réseau et des bâtiments : les cases de l'outil Zones sont redessinées.
+  cons.machine.mirror.onChange(() => zoningView.fieldChanged());
+  zoningView.fieldSource = () => fieldFor(cons.machine.mirror);
   // Grille de construction au sol (cases de 8 m) pendant le tracé des routes, la pose et le terrassement.
   // Calques des réseaux affichés automatiquement pendant la pose (électricité : ligne HT ou installation ;
   // eau : installation d'eau), retirés ensuite s'ils avaient été ouverts ainsi.
   let autoPower = false, autoWater = false;
+  const syncGrid = (): void => {
+    const t = cons.machine.tool;
+    gridVisible = t === 'road' || t === 'building' || t === 'terraform' || zoningView.toolActive;
+    render.terrain.setGrid(gridVisible);
+  };
+  zoningView.on((c) => { if (c.kind === 'tool') syncGrid(); });
   cons.machine.onToolChange((t) => {
     traceStep(`outil ${t}`);
-    render.terrain.setGrid(t === 'road' || t === 'building' || t === 'terraform');
+    syncGrid();
     const id = t === 'building' ? cons.machine.asset?.id ?? '' : '';
     const wantPower = t === 'powerline' || id.startsWith('elec_');
     const wantWater = id.startsWith('eau_');
@@ -518,7 +528,16 @@ async function boot(): Promise<void> {
   (debug as unknown as Record<string, unknown>).buildingPose = (id: number) => render.buildings.instancePose(id);
   // Diagnostic (e2e) : trame locale du quadrillage en (x, z) (null : axes du monde) et trame affichée en ce moment.
   (debug as unknown as Record<string, unknown>).roadGridAt = (x: number, z: number) => localRoadGrid(cons.machine.mirror, x, z)?.frame ?? null;
-  (debug as unknown as Record<string, unknown>).gridFrame = () => render.terrain.gridRoadFrame;
+  (debug as unknown as Record<string, unknown>).gridFrame = () => { const g = cons.machine.hoverGround; return g ? localRoadGrid(cons.machine.mirror, g.x, g.z)?.frame ?? null : null; };
+  // Lignes du quadrillage affichées en (x, z) (champ de trames) ; calcul complet immédiat de la texture (captures).
+  (debug as unknown as Record<string, unknown>).gridLinesAt = (x: number, z: number) => {
+    if (!gridVisible) return null;
+    const box = gridTex.box;
+    if (!box || x < box.x0 || z < box.z0 || x >= box.x0 + box.size || z >= box.z0 + box.size) return { tx: 1, tz: 0, pu: 0, pv: 0, weight: 1, kind: 'monde' };
+    const L = fieldFor(cons.machine.mirror).linesAt(x, z);
+    return { tx: L.tx, tz: L.tz, pu: L.pu, pv: L.pv, weight: L.weight, kind: L.kind };
+  };
+  (debug as unknown as Record<string, unknown>).gridFieldFlush = () => { for (let k = 0; k < 4; k++) updateGridField(1e6); return gridTex.box; };
   debug.worldToScreen = (x, z) => {
     const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);
     const r = canvas.getBoundingClientRect();
