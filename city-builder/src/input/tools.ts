@@ -613,7 +613,7 @@ export class ToolController implements IToolController, PointerToolSink {
       }
       case 'terrain': {
         this.terrainPrev?.show(p);
-        const head = p.removing ? 'Retirer une source' : terrainLabel(p.mode);
+        const head = p.removing ? 'Retirer une source' : p.edgeSource ? 'Source de rivière (bord de la carte)' : terrainLabel(p.mode);
         if (!isBrushMode(p.mode) && !isPointMode(p.mode) && !p.start) tag(`${head}\n${p.message}`, 'info');
         else if (!p.hover) tag(null, 'info');
         else if (p.validity === 'error') tag(`${head}${p.length ? ` · ${fmt(p.length)} m` : ''}\n${p.message}`, 'error');

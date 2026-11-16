@@ -198,6 +198,7 @@ export class ConstructionTools {
     this.terrain = new TerrainTool({
       terrainEdit: (args) => (sim.sendExt ? sim.sendExt('terrainEdit', args) : Promise.reject(new Error('Éditions du terrain indisponibles'))),
       hydroState: () => (sim.sendExt ? sim.sendExt('hydroState', {}) : Promise.reject(new Error('Eau indisponible'))),
+      grid: () => this.mirror.terrain ?? null,
     }, notify, () => { if (this.tool === 'terraform') this.refresh(); });
   }
 

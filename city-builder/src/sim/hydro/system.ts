@@ -13,9 +13,10 @@
  * calcul n'est refait que lorsqu'un quantum passe ET qu'une alimentation n'a pas atteint son régime établi, ou
  * qu'une édition / un bâtiment / une route a changé.
  */
-import { DAM_FLOW_MAX, damGeometry, type DamGeometry, type EditPlan, type TerrainEdit } from '../terrain/edits';
+import { clamp } from '../../shared/math';
+import { DAM_FLOW_MAX, DAM_FLOW_PER_M, damGeometry, EDIT_LIMITS, type DamGeometry, type EditPlan, type TerrainEdit } from '../terrain/edits';
 import { NO_WATER, type SampleRect, type WorldTerrain } from '../terrain/types';
-import { HydroSolver, STREAM_DEPTH, type FeedResult, type HydroFeed, type HydroGrid } from './fill';
+import { HydroSolver, MinHeap, STREAM_DEPTH, type FeedResult, type HydroFeed, type HydroGrid } from './fill';
 
 /** Profondeur minimale d'une retenue contre un barrage (m) : un ruisseau de débordement n'en est pas une. */
 const LAKE_MIN_DEPTH = STREAM_DEPTH + 0.15;
@@ -29,8 +30,17 @@ export const SOURCE_PICK_RADIUS = 30;
 /** Nombre maximal de sources et de barrages actifs. */
 export const MAX_SOURCES = 48;
 export const MAX_DAMS = 24;
+/** Nombre maximal de sources de rivière (bord de la carte) : comptées à part des sources ordinaires. */
+export const MAX_EDGE_SOURCES = 12;
+/** Cases d'eau de base parcourues au plus pour suivre un cours d'eau vers l'aval (par arrivée). */
+const ROUTE_MAX_CELLS = 60_000;
 
-export interface HydroSource { id: number; x: number; z: number; q: number; t: number; cell: number }
+/**
+ * Source : posée par le joueur (`id` = rang de l'édition), ou ARRIVÉE d'une rivière de la carte (`auto`, `id` < 0,
+ * dérivée du terrain généré : jamais sauvegardée). `edge` : source de rivière au bord de la carte (l'eau entre par ce
+ * bord, débit constant).
+ */
+export interface HydroSource { id: number; x: number; z: number; q: number; t: number; cell: number; edge?: boolean; auto?: boolean }
 
 export interface HydroDam {
   id: number;
@@ -54,13 +64,18 @@ export interface DamMetrics {
   tail: number;
   /** Hauteur de chute = retenue − aval (m, ≥ 0). */
   headM: number;
-  /** Débit entrant : rivière barrée + sources qui alimentent la retenue (m³/s). */
+  /**
+   * Débit qui traverse l'ouvrage : rivière barrée (débit de ses arrivées suivi vers l'aval, sinon estimé à la pose)
+   * + sources qui alimentent la retenue (m³/s).
+   */
   flowM3s: number;
   crest: number;
   lengthM: number;
   /** Retenue pleine (l'eau atteint la crête ou s'écoule par un col). */
   full: boolean;
   x: number; z: number;
+  /** Extrémités de l'axe (raccordement de la centrale du barrage au réseau électrique). */
+  ax: number; az: number; bx: number; bz: number;
 }
 
 /** Service inter-modules `hydro` (publié pour l'électricité). */
@@ -71,6 +86,38 @@ export interface HydroService {
   damNear(x: number, z: number, reach: number): DamMetrics | null;
   dam(id: number): DamMetrics | null;
   dams(): DamMetrics[];
+}
+
+/**
+ * Arrivées des rivières de la carte (génération) : une par cours d'eau, à son extrémité AMONT (au bord de la carte
+ * quand la rivière le touche, sinon à sa tête), sur l'eau de base. Débit constant = largeur du lit × DAM_FLOW_PER_M
+ * (borné aux débits d'une source). Dérivées du terrain généré seul : identiques à chaque chargement.
+ */
+export function riverInlets(t: WorldTerrain): HydroSource[] {
+  const out: HydroSource[] = [];
+  const W = t.samplesX, H = t.samplesZ, sp = t.spacing;
+  const maxX = t.originX + (W - 1) * sp, maxZ = t.originZ + (H - 1) * sp;
+  const wet = (k: number): boolean => { const w = t.waterSurface[k]!; return w !== NO_WATER && w > t.heights[k]! + 0.05 && w > t.waterLevel + 0.02; };
+  t.rivers.forEach((r, ri) => {
+    const P = r.points;
+    if (P.length < 4) return;
+    const x = P[0]!, z = P[2]!, w = P[3]!;
+    const ci = Math.round((x - t.originX) / sp), cj = Math.round((z - t.originZ) / sp);
+    // Case d'eau la plus proche de la tête (rayon 3 cases).
+    let best = -1, bd = Infinity;
+    for (let dj = -3; dj <= 3; dj++) for (let di = -3; di <= 3; di++) {
+      const i = ci + di, j = cj + dj;
+      if (i < 0 || j < 0 || i >= W || j >= H) continue;
+      const k = j * W + i;
+      const d = di * di + dj * dj;
+      if (d < bd && wet(k)) { bd = d; best = k; }
+    }
+    if (best < 0) return;
+    const edge = Math.min(x - t.originX, maxX - x, z - t.originZ, maxZ - z) <= 2 * sp;
+    const q = Math.round(clamp(w * DAM_FLOW_PER_M, EDIT_LIMITS.minSourceFlow, EDIT_LIMITS.maxSourceFlow));
+    out.push({ id: -(ri + 1), x: t.originX + (best % W) * sp, z: t.originZ + ((best / W) | 0) * sp, q, t: 0, cell: best, auto: true, ...(edge ? { edge: true } : {}) });
+  });
+  return out;
 }
 
 /** Ce que le module lit / écrit dans la simulation. */
@@ -95,6 +142,14 @@ export interface HydroPreview {
   flowM3s?: number;
 }
 
+/** Alimentations d'un calcul et ce qu'il faut pour mesurer les débits des barrages. */
+interface FeedSet {
+  feeds: HydroFeed[];
+  q: number[];
+  /** Alimentations déjà suivies vers l'aval avant le calcul (source posée sur l'eau de base). */
+  onBase: boolean[];
+}
+
 const segDist = (px: number, pz: number, ax: number, az: number, bx: number, bz: number): number => {
   const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
   const u = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / L2));
@@ -105,6 +160,8 @@ export class HydroSystem {
   /** Eau de base séparée (null tant que le module est inactif : `terrain.waterSurface` en tient lieu). */
   base: Float32Array | null = null;
   sources: HydroSource[] = [];
+  /** Arrivées des rivières de la carte (`riverInlets`) : conservées par `reset` (dérivées du terrain). */
+  inlets: HydroSource[] = [];
   dams: HydroDam[] = [];
   /** Cases creusées par le joueur depuis `spreadFrom` (remplies par l'eau voisine). */
   dug: number[] = [];
@@ -186,7 +243,7 @@ export class HydroSystem {
   onEdit(e: TerrainEdit, index: number, t: WorldTerrain): void {
     if (e.k === 'source') {
       const i = Math.round((e.x - t.originX) / t.spacing), j = Math.round((e.z - t.originZ) / t.spacing);
-      this.sources.push({ id: index, x: e.x, z: e.z, q: e.q, t: e.t ?? 0, cell: j * t.samplesX + i });
+      this.sources.push({ id: index, x: e.x, z: e.z, q: e.q, t: e.t ?? 0, cell: j * t.samplesX + i, ...(e.e === 1 ? { edge: true } : {}) });
     } else if (e.k === 'unsource') {
       const s = this.sourceNear(e.x, e.z);
       if (s) this.sources = this.sources.filter((o) => o !== s);
@@ -221,6 +278,10 @@ export class HydroSystem {
     edits.forEach((e, i) => { if (e.k === 'source' || e.k === 'unsource' || e.k === 'dam' || e.k === 'levee') this.onEdit(e, i, t); });
     this.dirty = true;
   }
+
+  /** Sources ordinaires et sources de rivière (bord de la carte), comptées séparément. */
+  get plainSourceCount(): number { return this.sources.reduce((n, s) => n + (s.edge ? 0 : 1), 0); }
+  get edgeSourceCount(): number { return this.sources.length - this.plainSourceCount; }
 
   /** Source la plus proche de (x, z) à moins de SOURCE_PICK_RADIUS m ; null sinon. */
   sourceNear(x: number, z: number): HydroSource | null {
@@ -273,16 +334,105 @@ export class HydroSystem {
     return best;
   }
 
-  /** Alimentations ordonnées (ordre des éditions) avec leur volume à la minute `tq`. */
-  private feeds(tq: number, ground: Float32Array, base: Float32Array, infinite: boolean): { feeds: HydroFeed[]; q: number[] } {
-    const items: { id: number; feed: HydroFeed; q: number }[] = [];
-    this.sources.forEach((s, i) => items.push({ id: s.id, q: s.q, feed: { cell: s.cell, volume: infinite ? Infinity : s.q * Math.max(0, tq - s.t) * 60, tag: i } }));
+  /**
+   * Suit l'eau DE BASE vers l'aval (file de priorité sur la cote : le plus bas d'abord) depuis chaque arrivée et
+   * ajoute son débit à chaque barrage dont la face amont est atteinte ; après un barrage, la suite repart de sa face
+   * aval (barrages en cascade). Arrêt à la mer, au bord de la carte ou après ROUTE_MAX_CELLS cases. Ne dépend que de
+   * l'eau de base, du relief et des barrières : déterministe.
+   */
+  private route(g: HydroGrid, starts: readonly { cell: number; q: number }[], out: Float64Array, seaLevel: number): void {
+    if (!starts.length || !this.dams.length || !g.touchMask) return;
+    const W = g.samplesX, H = g.samplesZ, n = W * H;
+    if (!this.routeMark || this.routeMark.length !== n) { this.routeMark = new Int32Array(n); this.routeStamp = 0; }
+    const mark = this.routeMark, heap = this.routeHeap, tm = g.touchMask, bar = g.barrier, base = g.base, ground = g.ground;
+    const wet = (k: number): boolean => { const b = base[k]!; return b !== NO_WATER && b > ground[k]! + 0.05 && !(bar && bar[k]); };
+    const reached = new Uint8Array(this.dams.length);
+    for (const st of starts) {
+      if (st.cell < 0 || st.cell >= n || !(st.q > 0) || !wet(st.cell)) continue;
+      if (++this.routeStamp > 0x7ffffff0) { mark.fill(0); this.routeStamp = 1; }
+      const stamp = this.routeStamp;
+      const si = st.cell % W, sj = (st.cell / W) | 0;
+      reached.fill(0);
+      heap.clear();
+      heap.push(base[st.cell]!, st.cell);
+      mark[st.cell] = stamp;
+      let seen = 0;
+      while (heap.size && seen++ < ROUTE_MAX_CELLS) {
+        const c = heap.pop();
+        if (heap.lastKey <= seaLevel + 0.02) break; // la mer
+        const i = c % W, j = (c / W) | 0;
+        // Bord de la carte (hors de la portion d'arrivée) : l'eau quitte la carte.
+        if ((i === 0 || j === 0 || i === W - 1 || j === H - 1) && Math.abs(i - si) + Math.abs(j - sj) > 6) break;
+        const v = tm[c]!;
+        if (v > 0 && !reached[v - 1]) {
+          reached[v - 1] = 1;
+          out[v - 1] = out[v - 1]! + st.q;
+          // Suite en aval du barrage : case d'eau de base la plus basse de sa face aval.
+          let nb = -1, nl = Infinity;
+          for (const k of this.dams[v - 1]!.geom.downFace) if (wet(k) && mark[k] !== stamp && base[k]! < nl) { nl = base[k]!; nb = k; }
+          if (nb >= 0) { mark[nb] = stamp; heap.push(nl, nb); }
+        }
+        if (i > 0 && mark[c - 1] !== stamp && wet(c - 1)) { mark[c - 1] = stamp; heap.push(base[c - 1]!, c - 1); }
+        if (i < W - 1 && mark[c + 1] !== stamp && wet(c + 1)) { mark[c + 1] = stamp; heap.push(base[c + 1]!, c + 1); }
+        if (j > 0 && mark[c - W] !== stamp && wet(c - W)) { mark[c - W] = stamp; heap.push(base[c - W]!, c - W); }
+        if (j < H - 1 && mark[c + W] !== stamp && wet(c + W)) { mark[c + W] = stamp; heap.push(base[c + W]!, c + W); }
+      }
+    }
+  }
+
+  private routeMark: Int32Array | null = null;
+  private routeStamp = 0;
+  private readonly routeHeap = new MinHeap();
+
+  /**
+   * Alimentations ordonnées (ordre des éditions) avec leur volume à la minute `tq`. Rivière barrée : débit de ses
+   * arrivées (rivières de la carte, sources posées sur l'eau de base) suivi jusqu'au barrage, sinon débit estimé à
+   * la pose (`q` de l'édition).
+   */
+  private feeds(tq: number, g: HydroGrid, seaLevel: number, infinite: boolean): FeedSet {
+    const { ground, base } = g;
+    const isBase = (k: number): boolean => k >= 0 && k < base.length && base[k]! !== NO_WATER && base[k]! > ground[k]! + 0.05;
+    const starts: { cell: number; q: number }[] = [];
+    for (const s of this.inlets) starts.push({ cell: s.cell, q: s.q });
+    const onBaseSrc = this.sources.map((s) => isBase(s.cell));
+    this.sources.forEach((s, i) => { if (onBaseSrc[i]) starts.push({ cell: s.cell, q: s.q }); });
+    const routed = new Float64Array(this.dams.length);
+    this.route(g, starts, routed, seaLevel);
+    const items: { id: number; feed: HydroFeed; q: number; onBase: boolean }[] = [];
+    this.sources.forEach((s, i) => items.push({ id: s.id, q: s.q, onBase: onBaseSrc[i]!, feed: { cell: s.cell, volume: infinite ? Infinity : s.q * Math.max(0, tq - s.t) * 60, tag: i, ...(s.edge ? { inlet: true } : {}) } }));
     this.dams.forEach((d, i) => {
-      d.seed = d.q > 0 ? this.damSeed(d, ground, base) : -1;
-      if (d.seed >= 0) items.push({ id: d.id, q: d.q, feed: { cell: d.seed, volume: infinite ? Infinity : d.q * Math.max(0, tq - d.t) * 60, tag: -(i + 1) } });
+      const q = routed[i]! > 0 ? Math.min(DAM_FLOW_MAX, Math.round(routed[i]! * 100) / 100) : d.q;
+      d.seed = q > 0 ? this.damSeed(d, ground, base) : -1;
+      if (d.seed >= 0) items.push({ id: d.id, q, onBase: false, feed: { cell: d.seed, volume: infinite ? Infinity : q * Math.max(0, tq - d.t) * 60, tag: -(i + 1) } });
     });
     items.sort((a, b) => a.id - b.id);
-    return { feeds: items.map((o) => o.feed), q: items.map((o) => o.q) };
+    return { feeds: items.map((o) => o.feed), q: items.map((o) => o.q), onBase: items.map((o) => o.onBase) };
+  }
+
+  /**
+   * Débit qui traverse chaque barrage : sa rivière (alimentation propre), les alimentations dont l'eau mouille sa
+   * face amont, et les sources posées à terre dont le ruisseau rejoint une rivière qui mène au barrage. `full` : une
+   * alimentation qui l'atteint est en régime établi.
+   */
+  private damFlows(g: HydroGrid, fs: FeedSet, res: FeedResult[], seaLevel: number): { flow: number[]; full: boolean[] } {
+    const nd = this.dams.length;
+    const flow = new Array<number>(nd).fill(0), full = new Array<boolean>(nd).fill(false);
+    const post = new Float64Array(nd);
+    const starts: { cell: number; q: number }[] = [];
+    fs.feeds.forEach((f, fi) => { if (f.tag >= 0 && !fs.onBase[fi] && res[fi]!.join >= 0) starts.push({ cell: res[fi]!.join, q: fs.q[fi]! }); });
+    this.route(g, starts, post, seaLevel);
+    for (let i = 0; i < nd; i++) {
+      let f = post[i]!;
+      fs.feeds.forEach((fd, fi) => {
+        const r = res[fi]!;
+        if (fd.tag === -(i + 1) || r.touched.includes(i + 1)) {
+          f += fs.q[fi]!;
+          if (r.status !== 'partial') full[i] = true;
+        }
+      });
+      flow[i] = f;
+    }
+    return { flow, full };
   }
 
   /**
@@ -302,11 +452,11 @@ export class HydroSystem {
     const base = this.ensureBase(t);
     const ground = host.natural;
     const g = this.grid(host, ground, base);
-    const { feeds, q } = this.feeds(quantum * FILL_QUANTUM_MIN, ground, base, false);
-    const res = this.solver.solve(g, feeds);
+    const fs = this.feeds(quantum * FILL_QUANTUM_MIN, g, t.waterLevel, false);
+    const res = this.solver.solve(g, fs.feeds);
     this.steady = res.every((r) => r.status !== 'partial');
     const rect = this.writeCombined(t, this.solver.water);
-    this.measureDams(t, ground, feeds, res, q);
+    this.measureDams(t, ground, this.damFlows(g, fs, res, t.waterLevel));
     this.lastQuantum = quantum;
     this.dirty = false;
     this.lastMs = performance.now() - t0;
@@ -333,20 +483,12 @@ export class HydroSystem {
     return i1 < 0 ? null : { i0, j0, i1, j1 };
   }
 
-  private measureDams(t: WorldTerrain, ground: Float32Array, feeds: HydroFeed[], res: FeedResult[], q: number[]): void {
+  private measureDams(t: WorldTerrain, ground: Float32Array, df: { flow: number[]; full: boolean[] }): void {
     const ws = t.waterSurface;
     const next = new Map<number, DamMetrics>();
     let changed = this.metrics.size !== this.dams.length;
     this.dams.forEach((d, i) => {
-      let flow = 0, full = false;
-      feeds.forEach((f, fi) => {
-        const r = res[fi]!;
-        const own = f.tag === -(i + 1);
-        if (own || r.touched.includes(i + 1)) {
-          flow += q[fi]!;
-          if (r.status !== 'partial') full = true;
-        }
-      });
+      const flow = df.flow[i]!, full = df.full[i]!;
       let level = -Infinity, tail = Infinity;
       // Retenue : eau d'un lac (plus profonde qu'un ruisseau) contre la face amont, sous la crête.
       for (const k of d.geom.upFace) if (ground[k]! < d.crest && ws[k]! !== NO_WATER && ws[k]! > ground[k]! + LAKE_MIN_DEPTH) level = Math.max(level, ws[k]!);
@@ -354,7 +496,7 @@ export class HydroSystem {
       if (!Number.isFinite(tail)) tail = d.crest;
       const lv = Number.isFinite(level) ? level : NaN;
       const headM = Number.isFinite(level) ? Math.max(0, Math.round((level - tail) * 10) / 10) : 0;
-      const m: DamMetrics = { id: d.id, level: lv, tail, headM, flowM3s: Math.round(flow * 10) / 10, crest: d.crest, lengthM: Math.round(d.geom.length), full: full && headM > 0, x: (d.ax + d.bx) / 2, z: (d.az + d.bz) / 2 };
+      const m: DamMetrics = { id: d.id, level: lv, tail, headM, flowM3s: Math.round(flow * 10) / 10, crest: d.crest, lengthM: Math.round(d.geom.length), full: full && headM > 0, x: (d.ax + d.bx) / 2, z: (d.az + d.bz) / 2, ax: d.ax, az: d.az, bx: d.bx, bz: d.bz };
       const old = this.metrics.get(d.id);
       if (!old || old.headM !== m.headM || old.flowM3s !== m.flowM3s || old.full !== m.full) changed = true;
       next.set(d.id, m);
@@ -367,7 +509,7 @@ export class HydroSystem {
    * Aperçu en régime établi d'une source ou d'un barrage planifié (sans rien modifier). `plan` : barrage (relief
    * de l'axe appliqué sur une copie), `source` : position et débit.
    */
-  preview(host: HydroHost, add: { source?: { x: number; z: number; q: number }; dam?: { plan: EditPlan } }): HydroPreview {
+  preview(host: HydroHost, add: { source?: { x: number; z: number; q: number; edge?: boolean }; dam?: { plan: EditPlan } }): HydroPreview {
     const t = host.terrain;
     const W = t.samplesX;
     const baseLive = this.base ?? t.waterSurface;
@@ -386,19 +528,20 @@ export class HydroSystem {
     }
     if (add.source) {
       const i = Math.round((add.source.x - t.originX) / t.spacing), j = Math.round((add.source.z - t.originZ) / t.spacing);
-      this.sources = [...sources, { id: Number.MAX_SAFE_INTEGER, x: add.source.x, z: add.source.z, q: add.source.q, t: 0, cell: j * W + i }];
+      this.sources = [...sources, { id: Number.MAX_SAFE_INTEGER, x: add.source.x, z: add.source.z, q: add.source.q, t: 0, cell: j * W + i, ...(add.source.edge ? { edge: true } : {}) }];
     }
     this.touchMask = null;
     try {
       const g = this.grid(host, ground, base);
-      const { feeds, q } = this.feeds(0, ground, base, true);
-      const res = this.previewSolver.solve(g, feeds);
-      const last = res[res.length - 1];
+      const fs = this.feeds(0, g, t.waterLevel, true);
+      const res = this.previewSolver.solve(g, fs.feeds);
+      // Source : résultat de sa propre alimentation (la dernière posée).
+      const si = add.source ? fs.feeds.findIndex((f) => f.tag === this.sources.length - 1) : -1;
+      const last = si >= 0 ? res[si] : res[res.length - 1];
       const out: HydroPreview = last ? { level: last.level, area: Math.round(last.area), stored: Math.round(last.stored), outlet: last.outlet, status: last.status } : { level: NaN, area: 0, stored: 0, outlet: '', status: 'none' };
       if (newDam) {
         const di = this.dams.length;
-        let flow = 0;
-        feeds.forEach((f, fi) => { if (f.tag === -di || res[fi]!.touched.includes(di)) flow += q[fi]!; });
+        const flow = this.damFlows(g, fs, res, t.waterLevel).flow[di - 1]!;
         const water = this.previewSolver.water;
         let level = -Infinity, tail = Infinity;
         for (const k of newDam.geom.upFace) {

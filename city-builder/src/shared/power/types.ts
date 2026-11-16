@@ -91,6 +91,11 @@ export interface FacilityView {
    * « Reliez la centrale à une route ». Vrai seulement quand c'est le cas.
    */
   isolated?: boolean;
+  /**
+   * Barrage hydroélectrique : l'ouvrage lui-même (identifiant négatif, pas un bâtiment) ; chute (m) et débit (m³/s)
+   * qui fixent sa production. Absent pour les bâtiments.
+   */
+  dam?: { headM: number; flowM3s: number };
 }
 
 /** Bilan des batteries de stockage (absent sans batterie). */
@@ -247,6 +252,8 @@ export interface ElectriciteBudget {
   upkeepActual: number;
   /** Entretien des centrales et postes facturé par la simulation de base (catalogue), en centimes comme les autres montants. */
   facilitiesUpkeep: number;
+  /** Entretien mensuel des barrages hydroélectriques (ouvrages, payé par le module), en centimes ; absent sans barrage. */
+  damsUpkeep?: number;
   /** Recettes du mois passé (vente d'électricité). */
   lastIncome: number;
   lastExpense: number;

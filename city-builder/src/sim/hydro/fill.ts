@@ -55,7 +55,15 @@ export interface HydroFeed {
   volume: number;
   /** Repère libre (index de l'alimentation, ou du barrage pour une rivière barrée). */
   tag: number;
+  /**
+   * Source de rivière posée au bord de la carte : l'eau ENTRE par ce bord ; les cases du bord à moins de
+   * INLET_GUARD cases de l'arrivée ne sont pas un exutoire (l'eau ne ressort pas aussitôt par où elle entre).
+   */
+  inlet?: boolean;
 }
+
+/** Demi-largeur (cases) de la portion de bord qui n'est pas un exutoire autour d'une source de rivière. */
+export const INLET_GUARD = 6;
 
 export type FeedStatus = 'sink' | 'partial' | 'capped' | 'none';
 
@@ -70,10 +78,12 @@ export interface FeedResult {
   outlet: '' | 'eau' | 'bord';
   /** Repères de `touchMask` atteints (sans doublon). */
   touched: number[];
+  /** Case d'eau DE BASE rejointe (exutoire 'eau') ; -1 sinon. */
+  join: number;
 }
 
 /** Tas binaire min (clé flottante, valeur entière) réutilisable, sans allocation en régime établi. */
-class MinHeap {
+export class MinHeap {
   private keys = new Float64Array(1024);
   private vals = new Int32Array(1024);
   size = 0;
@@ -198,14 +208,20 @@ export class HydroSolver {
     const E = this.E, water = this.water, mark = this.mark, bar = g.barrier;
     const cul = g.culvert ?? null;
     const A = g.spacing * g.spacing;
-    const res: FeedResult = { status: 'none', level: NaN, area: 0, stored: 0, outlet: '', touched: [] };
+    const res: FeedResult = { status: 'none', level: NaN, area: 0, stored: 0, outlet: '', touched: [], join: -1 };
     const tm = g.touchMask ?? null;
     const touch = (k: number): void => { const v = tm ? tm[k]! : 0; if (v > 0 && !res.touched.includes(v)) res.touched.push(v); };
     if (f.cell < 0 || f.cell >= W * H || (bar && bar[f.cell])) return res;
     let V = f.volume;
     let cur = f.cell;
     const heap = this.heap, cells = this.cells;
-    const border = (k: number): boolean => { const i = k % W, j = (k / W) | 0; return i === 0 || j === 0 || i === W - 1 || j === H - 1; };
+    // Source de rivière (bord) : la portion de bord autour de l'arrivée n'est pas un exutoire.
+    const fi = f.cell % W, fj = (f.cell / W) | 0;
+    const border = (k: number): boolean => {
+      const i = k % W, j = (k / W) | 0;
+      if (!(i === 0 || j === 0 || i === W - 1 || j === H - 1)) return false;
+      return !(f.inlet && Math.abs(i - fi) <= INLET_GUARD && Math.abs(j - fj) <= INLET_GUARD);
+    };
     for (let lake = 0; lake < MAX_LAKES; lake++) {
       this.stamp++;
       if (this.stamp > 0x7ffffff0) { mark.fill(0); this.stamp = 1; }
@@ -265,6 +281,7 @@ export class HydroSolver {
           // Eau de base ou eau dynamique plus basse déjà posée : exutoire.
           res.status = 'sink';
           res.outlet = res.outlet || 'eau';
+          if (this.baseWet(g, c)) res.join = c;
           return res;
         }
         if (border(c)) { res.status = 'sink'; res.outlet = 'bord'; return res; }

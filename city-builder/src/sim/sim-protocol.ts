@@ -44,14 +44,23 @@ export interface TerrainEditResult {
     /** Barrage : hauteur de chute et débit entrant en régime établi. */
     headM?: number;
     flowM3s?: number;
+    /** Barrage : puissance prévue de l'ouvrage (MW, saison `season`), injectée dans le réseau électrique. */
+    powerMW?: number;
+    season?: string;
   };
+  /** Source de rivière : position aimantée sur le bord de la carte. */
+  x?: number;
+  z?: number;
   /** Édition appliquée (hors dryRun) : son rang dans la liste des éditions (annulation `terrainUndo`). */
   seq?: number;
 }
 
 /** État de l'eau dynamique (commande `hydroState`). */
 export interface HydroStateResult {
-  sources: { id: number; x: number; z: number; q: number }[];
+  /** Sources posées ; `edge` : source de rivière au bord de la carte. */
+  sources: { id: number; x: number; z: number; q: number; edge?: boolean }[];
+  /** Arrivées des rivières de la carte (débit constant, dérivées du terrain) ; absent des anciens messages. */
+  inlets?: { x: number; z: number; q: number; edge?: boolean }[];
   dams: { id: number; level: number; tail: number; headM: number; flowM3s: number; crest: number; lengthM: number; full: boolean; x: number; z: number }[];
   /** Toutes les alimentations ont atteint leur régime établi. */
   steady: boolean;

@@ -81,7 +81,7 @@ export function createElectricitePlugin(): ElectricitePlugin {
       ctx.economy.setMonthlyEstimate?.('electricite', (frac) => {
         const mo = system.state.month;
         const flow = (mo.deliveredKwh * TARIFF_CENTS_PER_KWH - (mo.importedKwh ?? 0) * IMPORT_SPEC.priceCentsPerKwh) / frac;
-        return centsToChf(flow - system.upkeepNominal() * system.state.settings.funding);
+        return centsToChf(flow - system.upkeepNominal() * system.state.settings.funding) - system.damsUpkeepChf();
       });
       muni.scheduler.add({ id: 'electricite:heure', every: 'hour', run: () => { if (ensureActive(ctx)) system.hour(ctx); } });
       muni.scheduler.add({ id: 'electricite:jour', every: 'day', run: () => { if (active) system.day(ctx); } });

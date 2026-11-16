@@ -38,7 +38,7 @@ import {
 } from '../shared/contracts';
 import type { CommandArgs, CommandName, CommandResult, DeltaMessage, SignalFrame, SnapshotMessage } from '../shared/protocol';
 import { dist2 } from '../shared/math';
-import { facilityKindOf } from '../shared/power/model';
+import { damPlantKw, facilityKindOf } from '../shared/power/model';
 import { WIND_MIN_SPACING_M } from '../shared/power/render-spec';
 import { buildingGap, distSegmentObb, footprintObb, HOUSE_GAP, makeObb, normRot, obbAabb, obbOverlap, obbToWorld, pointInObb, type Obb } from '../shared/footprint';
 import { terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
@@ -65,7 +65,7 @@ import type { ExtCommandArgs, ExtCommandName, ExtCommandResult, SimNotice, SimRe
 import { NEUTRAL_MODIFIERS, governanceModifiers, type Modifiers } from '../shared/governance';
 import { PALIERS_SERVICE, type PaliersService } from '../shared/milestones';
 import { PluginHost, createSimPlugins, type PluginSaveField, type SimPlugin } from './plugins';
-import { HydroSystem, MAX_DAMS, MAX_SOURCES, type HydroHost } from './hydro/system';
+import { HydroSystem, MAX_DAMS, MAX_EDGE_SOURCES, MAX_SOURCES, riverInlets, type HydroHost } from './hydro/system';
 import { evalCubic } from './roads/bezier';
 import { EDIT_LIMITS, LEVEE_FREEBOARD } from './terrain/edits';
 
@@ -386,6 +386,9 @@ export class Simulation {
     this.pendingQuays = false;
     this.pendingCleared = [];
     this.hydro.reset(0);
+    // Arrivées des rivières de la carte (débit constant à leur extrémité amont) : dérivées du terrain généré, jamais
+    // sauvegardées (identiques au rechargement, conservées par `hydro.reset`).
+    this.hydro.inlets = riverInlets(this.terrain);
     this.editUndo = [];
     this.pendingWaterOnly = false;
     this.tilesPerSide = this.terrain.samplesX - 1;
@@ -1698,7 +1701,8 @@ export class Simulation {
     const raw = a.edit;
     if (raw.k === 'levee') return fail('INVALID_ARGS', 'Une digue se pose avec l\'outil Routes (ouvrage « Digue » sur une retenue)');
     if (raw.k === 'unsource' && !this.hydro.sourceNear(raw.x, raw.z)) return fail('INVALID_ARGS', 'Aucune source d\'eau ici : touchez une source posée (cercle bleu)');
-    if (raw.k === 'source' && this.hydro.sources.length >= MAX_SOURCES) return fail('INVALID_ARGS', `${MAX_SOURCES} sources au plus : retirez-en une`);
+    if (raw.k === 'source' && raw.e !== 1 && this.hydro.plainSourceCount >= MAX_SOURCES) return fail('INVALID_ARGS', `${MAX_SOURCES} sources au plus : retirez-en une`);
+    if (raw.k === 'source' && raw.e === 1 && this.hydro.edgeSourceCount >= MAX_EDGE_SOURCES) return fail('INVALID_ARGS', `${MAX_EDGE_SOURCES} sources de rivière au plus : retirez-en une`);
     if (raw.k === 'dam' && this.hydro.dams.length >= MAX_DAMS) return fail('INVALID_ARGS', `${MAX_DAMS} barrages au plus`);
     const r = planEdit(this.editable(), raw);
     if (!r.ok) return fail('INVALID_ARGS', r.message);
@@ -1713,10 +1717,16 @@ export class Simulation {
     if (plan.edit.k === 'dam') { data.crest = plan.edit.h; data.flow = plan.edit.q; }
     // Aperçu de l'eau en régime établi (source, barrage) : lac ou retenue prévus.
     if (plan.edit.k === 'source' || plan.edit.k === 'dam') {
-      const pv = this.hydro.preview(this.hostForHydro(), plan.edit.k === 'source' ? { source: { x: plan.edit.x, z: plan.edit.z, q: plan.edit.q } } : { dam: { plan } });
+      const pv = this.hydro.preview(this.hostForHydro(), plan.edit.k === 'source' ? { source: { x: plan.edit.x, z: plan.edit.z, q: plan.edit.q, edge: plan.edit.e === 1 } } : { dam: { plan } });
       data.water = { level: Number.isFinite(pv.level) ? Math.round(pv.level * 10) / 10 : null, areaM2: pv.area, storedM3: pv.stored, outlet: pv.outlet, status: pv.status };
       if (pv.headM !== undefined) data.water.headM = pv.headM;
       if (pv.flowM3s !== undefined) data.water.flowM3s = pv.flowM3s;
+      // Barrage : puissance prévue de l'ouvrage (centrale du barrage), saison en cours.
+      if (plan.edit.k === 'dam') {
+        data.water.powerMW = Math.round(damPlantKw(pv.headM ?? 0, pv.flowM3s ?? 0, this.clock.season) / 100) / 10;
+        data.water.season = this.clock.season;
+      }
+      if (plan.edit.k === 'source' && plan.edit.e === 1) { data.x = plan.edit.x; data.z = plan.edit.z; }
     }
     if (this.economy.bankrupt && plan.cost > 0) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : travaux suspendus jusqu\'au retour d\'une trésorerie positive');
     if (!this.economy.canAfford(plan.cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${plan.cost} crédits requis)`);
@@ -1913,7 +1923,8 @@ export class Simulation {
   hydroState(): ExtCommandResult<'hydroState'> {
     const h = this.hydro;
     return {
-      sources: h.sources.map((s) => ({ id: s.id, x: s.x, z: s.z, q: s.q })),
+      sources: h.sources.map((s) => ({ id: s.id, x: s.x, z: s.z, q: s.q, ...(s.edge ? { edge: true } : {}) })),
+      inlets: h.inlets.map((s) => ({ x: s.x, z: s.z, q: s.q, ...(s.edge ? { edge: true } : {}) })),
       dams: h.damMetrics(),
       steady: h.steady,
       active: h.active,
