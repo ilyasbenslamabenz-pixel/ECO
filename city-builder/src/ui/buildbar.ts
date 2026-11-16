@@ -423,7 +423,7 @@ export class BuildBar {
     if (lockAt) {
       // Déblocages progressifs : modèle encore verrouillé (la simulation refuse aussi la pose).
       b.classList.add('locked');
-      thumb.append(el('span', { cls: 'lock-badge', text: `🔒 ${lockAt}` }));
+      thumb.append(el('span', { cls: 'lock-badge' }, iconEl('lock'), lockAt));
       b.dataset['tip'] = `${a.nameFr} — débloqué au palier « ${lockAt} » (Progression › Paliers)`;
       b.addEventListener('click', () => this.d.notify(`${a.nameFr} : débloqué au palier « ${lockAt} » — voir Progression › Paliers`, 'info'));
     } else if (!placeable) {
