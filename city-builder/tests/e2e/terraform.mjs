@@ -107,6 +107,8 @@ try {
     return ok;
   }, [VX, VZ]);
   check(sculpt >= 36, 'vallon sculpté (passes du pinceau Élever)', sculpt);
+  const exact = await page.evaluate(([a, b]) => window.__aube.sendExt('terrainEdit', { edit: { k: 'dam', ax: a.x, az: a.z, bx: b.x, bz: b.z }, dryRun: true }).then((r) => r.crest, (e) => String(e?.error?.message ?? e)), [DAM_A, DAM_B]);
+  console.log('crête attendue (coordonnées exactes)', exact);
 
   // 3. Source d'eau au fond du vallon (un clic).
   await pick('source');
@@ -135,6 +137,7 @@ try {
   check(good.validity === 'ok' && /chute/.test(good.message) && /MW/.test(good.message), 'aperçu vert : chute, débit et production possible', good.message);
   await page.evaluate(() => window.__aube.renderNow(1));
   await page.screenshot({ path: join(outDir, 'barrage-apercu.png') });
+  console.log('tracé du barrage (clics)', JSON.stringify(await page.evaluate(() => { const p = window.__aube.toolPreview(); return p.start; })));
   await clickWorld(DAM_B);
   const st2 = await waitHydro((st) => st.dams.length === 1);
   check(st2.dams.length === 1, 'barrage posé', st2.dams);
