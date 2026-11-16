@@ -27,6 +27,8 @@ export interface ExtPort {
 
 type Sector = 'residential' | 'commercial' | 'industrial' | 'office';
 const SECTORS: readonly Sector[] = ['residential', 'commercial', 'industrial', 'office'];
+/** Niveaux d'éducation de l'impôt résidentiel (noms de repli si le rapport ne les fournit pas). */
+const EDU_LEVELS_FR = ['Sans diplôme', 'Primaire', 'Brevet / CAP', 'Baccalauréat', 'Études supérieures'];
 const SECTOR_FR: Record<Sector, string> = { residential: 'Résidentiel', commercial: 'Commerces', industrial: 'Industrie', office: 'Bureaux' };
 const INCOME_FR: Record<Sector, string> = { residential: 'Impôts résidentiels', commercial: 'Impôts commerciaux', industrial: 'Impôts industriels', office: 'Impôts des bureaux' };
 const INCOME_ICON: Record<Sector, string> = { residential: 'house', commercial: 'shop', industrial: 'factory', office: 'office' };
@@ -89,6 +91,8 @@ export class CityPanels {
   readonly finPanel = $('finance-panel');
   readonly popPanel = $('pop-panel');
   private readonly taxInputs = new Map<Sector, { input: HTMLInputElement; rate: HTMLElement; inc: HTMLElement }>();
+  /** Impôt résidentiel par niveau d'éducation : un curseur par niveau. */
+  private readonly eduInputs: { input: HTMLInputElement; rate: HTMLElement; inc: HTMLElement; name: HTMLElement }[] = [];
   private offerSeq = 0;
   private dragging = false;
   private finTab = 'overview';
@@ -107,8 +111,22 @@ export class CityPanels {
       const inc = el('span', { cls: 'inc', text: '' });
       input.addEventListener('input', () => { this.dragging = true; rate.textContent = pct(Number(input.value) / 100, 1); });
       input.addEventListener('change', () => { this.dragging = false; void this.setTax(s, Number(input.value) / 100); });
-      body.append(el('span', { cls: 'sec', text: SECTOR_FR[s] }), input, rate, inc);
+      body.append(el('span', { cls: 'sec', text: s === 'residential' ? 'Résidentiel (tous)' : SECTOR_FR[s] }), input, rate, inc);
       this.taxInputs.set(s, { input, rate, inc });
+      if (s === 'residential') {
+        // Taux résidentiels par niveau d'éducation (le curseur « tous » ci-dessus les règle d'un coup).
+        body.append(el('span', { cls: 'edu-head muted', text: 'Par niveau d’éducation des habitants (un taux élevé sur un niveau en fait venir moins et le rend moins satisfait) :' }));
+        EDU_LEVELS_FR.forEach((label, k) => {
+          const ei = el('input', { attrs: { type: 'range', min: '0', max: '25', step: '0.5', value: '9', 'aria-label': `Taux résidentiel ${label}`, 'data-edu': String(k) } }) as HTMLInputElement;
+          const er = el('span', { cls: 'rate', text: '9 %' });
+          const einc = el('span', { cls: 'inc', text: '' });
+          const name = el('span', { cls: 'sec edu', text: label });
+          ei.addEventListener('input', () => { this.dragging = true; er.textContent = pct(Number(ei.value) / 100, 1); });
+          ei.addEventListener('change', () => { this.dragging = false; void this.setEduTax(k, Number(ei.value) / 100); });
+          body.append(name, ei, er, einc);
+          this.eduInputs.push({ input: ei, rate: er, inc: einc, name });
+        });
+      }
     }
     this.selectFinTab = wireTabs(this.finPanel, 'ftab', 'fpage', (id) => { this.finTab = id; if (id === 'debt') void this.refreshOffer(); this.renderFinance(); });
     this.selectPopTab = wireTabs(this.popPanel, 'ptab', 'ppage', (id) => { this.popTab = id; this.renderPop(); });
@@ -220,8 +238,19 @@ export class CityPanels {
         t.input.value = String(Math.round(rate * 1000) / 10);
         t.rate.textContent = pct(rate, 1);
       }
-      t.inc.textContent = `recettes prévues : +${money(f.income[s] ?? 0)} / mois`;
+      t.inc.textContent = s === 'residential' ? `taux effectif ${pct(rate, 1)} · recettes prévues : +${money(f.income[s] ?? 0)} / mois` : `recettes prévues : +${money(f.income[s] ?? 0)} / mois`;
     }
+    const rates = e.eduTaxRates ?? EDU_LEVELS_FR.map(() => e.taxRates.residential ?? 0);
+    this.eduInputs.forEach((t, k) => {
+      const rate = rates[k] ?? 0;
+      if (e.eduTaxNames?.[k]) t.name.textContent = e.eduTaxNames[k]!;
+      if (!this.dragging && document.activeElement !== t.input) {
+        t.input.value = String(Math.round(rate * 1000) / 10);
+        t.rate.textContent = pct(rate, 1);
+      }
+      const share = e.eduTaxShares?.[k];
+      t.inc.textContent = `${share !== undefined ? `${pct(share, 0)} de l’assiette · ` : ''}+${money(e.eduTaxIncome?.[k] ?? 0)} / mois`;
+    });
   }
 
   private renderBudget(): void {
@@ -353,6 +382,17 @@ export class CityPanels {
       if (this.report) this.report.economy.taxRates[r.sector] = r.rate;
       this.d.toast(`Impôt ${SECTOR_FR[s].toLowerCase()} : ${pct(r.rate, 1)}`, 'ok');
       // Rafraîchit la prévision immédiatement.
+      const rep = await this.port.sendExt('getReport', {});
+      this.update(rep);
+    } catch (e) { this.d.toast(`Impôts : ${errMsg(e)}`, 'error'); }
+  }
+
+  private async setEduTax(level: number, rate: number): Promise<void> {
+    if (!this.port) return;
+    try {
+      const r = await this.port.sendExt('setEduTaxRate', { level, rate });
+      if (this.report) { this.report.economy.taxRates.residential = r.residential; this.report.economy.eduTaxRates = r.eduTaxRates; }
+      this.d.toast(`Impôt résidentiel (${(this.report?.economy.eduTaxNames?.[level] ?? EDU_LEVELS_FR[level] ?? '').toLowerCase()}) : ${pct(r.rate, 1)}`, 'ok');
       const rep = await this.port.sendExt('getReport', {});
       this.update(rep);
     } catch (e) { this.d.toast(`Impôts : ${errMsg(e)}`, 'error'); }

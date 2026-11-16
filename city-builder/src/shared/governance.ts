@@ -115,10 +115,12 @@ export const POLICY_SERVICE = 'politiques';
 export const RESEARCH_SERVICE = 'recherche';
 /** Effets temporaires des événements (canicule, épidémie, grève…), publiés par le module `evenements`. */
 export const EVENTS_SERVICE = 'evenements';
+/** Arbres de développement (module `developpement`, src/shared/development.ts) : mêmes modificateurs combinés. */
+export const DEVELOPMENT_MODIFIERS_SERVICE = 'developpement';
 
 /** Modificateurs combinés à partir des services publiés (absents = neutre). */
 export function governanceModifiers(use: <T>(name: string) => T | undefined): Modifiers {
   const deltas: ModifierDelta[] = [];
-  for (const id of [POLICY_SERVICE, RESEARCH_SERVICE, EVENTS_SERVICE]) { const s = use<GovernanceService>(id); if (s) deltas.push(s.modifiers()); }
+  for (const id of [POLICY_SERVICE, RESEARCH_SERVICE, EVENTS_SERVICE, DEVELOPMENT_MODIFIERS_SERVICE]) { const s = use<GovernanceService>(id); if (s) deltas.push(s.modifiers()); }
   return combine(deltas);
 }

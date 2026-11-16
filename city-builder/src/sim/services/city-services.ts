@@ -125,6 +125,8 @@ export class CityServices {
   /** Événements (canicule, épidémie : module `evenements`) : multiplicateurs du risque de feu et de maladie (1 = aucun effet). */
   eventFireFactor = 1;
   eventSickFactor = 1;
+  /** Arbres de développement (police) : criminalité cible (×, 1 = neutre). */
+  devCrimeFactor = 1;
   private assets: AssetInfo[] = [];
   private recs = new Map<number, Rec>();
   /** Bâtiments en feu / endommagés / en ruine (petits ensembles : parcours horaires bornés). */
@@ -282,7 +284,7 @@ export class CityServices {
         let target = 0;
         if (own >= 0) {
           const key = Math.floor(b.x[bi]! / cell) * 100_003 + Math.floor(b.z[bi]! / cell);
-          target = crimeTarget(t, own, sum.get(key)! / cnt.get(key)!, h.coverageQuality(SVC.Police, bi), ramp);
+          target = crimeTarget(t, own, sum.get(key)! / cnt.get(key)!, h.coverageQuality(SVC.Police, bi), ramp) * this.devCrimeFactor;
         }
         r.crime += (target - r.crime) * t.crimeInertie;
         // Quantifiée (millièmes) : la sauvegarde la restitue exactement.

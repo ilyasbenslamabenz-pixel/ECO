@@ -13,6 +13,7 @@ import {
   computeLocks, loanBonus, MILESTONES, PALIERS_SERVICE, milestoneForAsset, milestoneForBusLines, milestoneForLevel, milestoneForPolicy, milestoneForZone,
   type MilestoneDef, type PaliersLocks, type PaliersService, type PaliersState,
 } from '../../shared/milestones';
+import { DEVELOPMENT_SERVICE, type DevelopmentService } from '../../shared/development';
 import type { DemographyReport } from '../demography';
 import { runMigrations } from '../save-sections/types';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
@@ -77,12 +78,20 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
   let ctxRef: PluginContext | null = null;
   let locksCache: { key: string; locks: PaliersLocks } | null = null;
   let loanCache = { n: -1, v: 0 };
+  let lastDevVersion = 0;
   let dayRep: { at: number; r: DemographyReport } | null = null;
   const pop = (ctx: PluginContext | null): number => ctx?.demography?.population ?? 0;
   const reachedSet = (): Set<string> => new Set(s.reached);
+  /** Arbres de développement (module `developpement`) : bâtiments débloqués avant leur palier. */
+  const dev = (): DevelopmentService | undefined => ctxRef?.use<DevelopmentService>(DEVELOPMENT_SERVICE);
   const locks = (): PaliersLocks => {
-    const key = s.reached.join(',');
-    if (!locksCache || locksCache.key !== key) locksCache = { key, locks: computeLocks(reachedSet()) };
+    const d = dev();
+    const key = `${s.reached.join(',')}|${d?.version() ?? 0}`;
+    if (!locksCache || locksCache.key !== key) {
+      const l = computeLocks(reachedSet());
+      if (d) for (const id of Object.keys(l.assets)) if (d.assetUnlocked(id)) delete l.assets[id];
+      locksCache = { key, locks: l };
+    }
     return locksCache.locks;
   };
   const lastReached = (): MilestoneDef | null => [...MILESTONES].reverse().find((m) => s.reached.includes(m.id)) ?? null;
@@ -110,7 +119,7 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
     return `${what} : débloqué au palier « ${m.nameFr} » (${m.xp.toLocaleString('fr-FR')} points d'expansion ; ${Math.floor(s.xp).toLocaleString('fr-FR')} acquis)`;
   };
   const service: PaliersService = {
-    assetLock: (id) => lockMsg(ctxRef?.getAsset(id)?.nameFr ?? 'Bâtiment', milestoneForAsset(id)),
+    assetLock: (id) => (dev()?.assetUnlocked(id) ? null : lockMsg(ctxRef?.getAsset(id)?.nameFr ?? 'Bâtiment', milestoneForAsset(id))),
     zoneLock: (zone) => lockMsg('Cette zone', milestoneForZone(zone)),
     policyLock: (id) => lockMsg('Cette politique', milestoneForPolicy(id)),
     levelLock: (level) => (s.locked && level > locks().maxLevel ? lockMsg(`Niveau ${level}`, milestoneForLevel(level)) : null),
@@ -189,6 +198,9 @@ export function createPaliersPlugin(): SimPlugin & { readonly state: () => Palie
       checkReach(ctx);
     },
     takeDelta(ctx) {
+      // Un déblocage des arbres de développement retire des cadenas : verrous renvoyés à l'interface.
+      const dv = dev()?.version() ?? 0;
+      if (dv !== lastDevVersion) { lastDevVersion = dv; if (s.locked) version++; }
       if (version === sent) return undefined;
       sent = version;
       return active(ctx) ? view(ctx) : undefined;

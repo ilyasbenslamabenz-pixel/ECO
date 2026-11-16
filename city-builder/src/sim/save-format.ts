@@ -11,7 +11,7 @@
  */
 import type { SaveFile } from '../shared/contracts';
 import { ROAD_TYPES } from '../shared/contracts';
-import { DEFAULT_TAX_RATE, MAX_TAX_RATE, TAX_SECTORS, type EconomyJSON } from './economy';
+import { DEFAULT_TAX_RATE, EDU_TAX_LEVELS, MAX_TAX_RATE, TAX_SECTORS, type EconomyJSON } from './economy';
 import type { DemographyJSON } from './demography';
 import { CITIZEN_SCHEMA, COMPANY_SCHEMA, HOUSEHOLD_SCHEMA, OPTIONAL_COLUMNS } from './population';
 import type { ScheduledEvent } from './scheduler';
@@ -150,6 +150,12 @@ function validateV2(s: Record<string, unknown>): SaveFileV2 {
   need(isObj(eco) && fin(eco.money), 'Trésorerie invalide');
   need(isObj(eco.taxRates), 'Taux d\'imposition absents');
   for (const k of TAX_SECTORS) { const v = eco.taxRates[k]; need(fin(v) && v >= 0 && v <= MAX_TAX_RATE, `Taux d'imposition invalide (${k})`); }
+  // Impôt par niveau d'éducation (facultatif : absent des anciennes sauvegardes, taux unique appliqué à tous).
+  if (eco.eduTaxRates !== undefined) {
+    need(Array.isArray(eco.eduTaxRates) && eco.eduTaxRates.length === EDU_TAX_LEVELS, 'Taux d\'imposition par niveau d\'éducation invalides');
+    for (const v of eco.eduTaxRates) need(fin(v) && v >= 0 && v <= MAX_TAX_RATE, 'Taux d\'imposition par niveau d\'éducation invalide');
+  }
+  if (eco.resBaseByEdu !== undefined) need(Array.isArray(eco.resBaseByEdu) && eco.resBaseByEdu.length === EDU_TAX_LEVELS && eco.resBaseByEdu.every((v) => fin(v) && v >= 0), 'Assiette résidentielle par niveau invalide');
   need(Array.isArray(eco.loans) && eco.loans.length <= 100, 'Emprunts invalides');
   const loanIds = new Set<number>();
   for (const l of eco.loans) {

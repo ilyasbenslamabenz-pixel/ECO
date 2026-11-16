@@ -141,3 +141,23 @@ par citoyen, une boucle par bâtiment par jour (bacs pleins).
 - La première notification d'une partie n'est jamais affichée (règle existante de `main.ts`) ; elle reste dans l'onglet.
 - Pas d'achat de cases de carte (ce système n'existe pas dans le jeu).
 - Réglages (fréquences, récompenses) non sauvegardés : constantes du code.
+
+## 8. Arbres de développement (module `developpement`)
+
+Chaque palier franchi rapporte des **points de développement** (Hameau 1, Village 2, Bourg 2, Petite ville 3, Ville 3,
+Grande ville 4, Cité 4, Agglomération 5, Métropole 5, Mégapole 6 : 35 au total), déduits des paliers atteints (rien à
+sauvegarder : une ancienne partie dispose aussitôt des points de ses paliers). Ils se dépensent dans six arbres
+(électricité, eau, transports, santé, éducation, police ; 4 nœuds chacun, 1 à 3 points, prérequis dans l'arbre ;
+42 points pour tout : il faut choisir). Effets permanents (`src/shared/development.ts`) :
+
+- modificateurs combinés avec politiques, recherche et événements (`governanceModifiers`, service `developpement`) :
+  demande d'électricité et d'eau, production renouvelable, raccordement, entretien des routes, demande de zones,
+  maladies, bonheur ;
+- équipements de santé, d'éducation et de police : rayon et capacité (×, `demography.devRadius` / `devCapacity`) ;
+  criminalité cible (`services.devCrimeFactor`) ; études supérieures et formation (`demography.educationFactor`) ;
+- bâtiments spéciaux débloqués avant leur palier (déblocages progressifs) : centrale au gaz, barrage, gare, hôpital,
+  médiathèque, musée et bibliothèque (`paliers.assetLock` et cadenas de l'interface).
+
+Commandes `state`, `unlock { id, dryRun? }` ; notification à chaque palier qui apporte des points. Interface : onglet
+**Développement** du tableau de bord Progression (`src/ui/panels/developpement.ts`). Sauvegarde : section
+`developpement` v1 (`unlocked`), absente sans déblocage. Tests : `tests/jeu/developpement.test.ts`.

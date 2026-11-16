@@ -9,6 +9,7 @@
  * TypeScript pur : AUCUN import de three ni du DOM.
  */
 import { ROAD_TYPES, type RoadTypeId } from '../shared/contracts';
+import { EDUCATION_NAMES_FR } from './population';
 
 export const DEMOLISH_REFUND_RATE = 0.25;
 
@@ -20,6 +21,15 @@ export const TAX_SECTOR_NAMES_FR: Record<TaxSector, string> = {
 export const DEFAULT_TAX_RATE = 0.09;
 export const MIN_TAX_RATE = 0;
 export const MAX_TAX_RATE = 0.25;
+
+/**
+ * Impôt résidentiel par niveau d'éducation (0 = sans diplôme … 4 = études supérieures, cf. `Education`) : un taux par
+ * niveau, appliqué aux revenus des habitants de ce niveau. `taxRates.residential` reste le taux résidentiel EFFECTIF
+ * (moyenne des taux pondérée par l'assiette de chaque niveau) : recettes, prévisions et lectures existantes inchangées.
+ * Taux tous égaux (défaut, anciennes sauvegardes) : comportement identique au taux unique.
+ */
+export const EDU_TAX_LEVELS = 5;
+export const EDU_TAX_NAMES_FR: readonly string[] = EDUCATION_NAMES_FR;
 
 /** Salaire mensuel moyen d'un agent public (crédits) et part prise en charge par la commune. */
 export const SERVICE_WAGE = 2300;
@@ -137,6 +147,10 @@ export interface EconomyJSON {
    */
   taxBase?: Record<TaxSector, number>;
   serviceWorkers?: number;
+  /** Taux résidentiels par niveau d'éducation (absent : taux unique `taxRates.residential` pour tous). */
+  eduTaxRates?: number[];
+  /** Assiette résidentielle par niveau d'éducation (absente : recalculée par la démographie). */
+  resBaseByEdu?: number[];
 }
 
 const zeroSectors = (): Record<TaxSector, number> => ({ residential: 0, commercial: 0, industrial: 0, office: 0 });
@@ -158,6 +172,10 @@ export class Economy {
   readonly taxBase: Record<TaxSector, number> = zeroSectors();
   /** Agents publics effectivement employés (fournis par la démographie). */
   serviceWorkers = 0;
+  /** Taux résidentiels par niveau d'éducation (`EDU_TAX_LEVELS`). */
+  readonly eduTaxRates: number[] = new Array<number>(EDU_TAX_LEVELS).fill(DEFAULT_TAX_RATE);
+  /** Assiette résidentielle par niveau d'éducation (revenus imposables, fournie par la démographie). */
+  readonly resBaseByEdu: number[] = new Array<number>(EDU_TAX_LEVELS).fill(0);
   loans: Loan[] = [];
   nextLoanId = 1;
   history: MonthRecord[] = [];
@@ -185,6 +203,8 @@ export class Economy {
     this.buildingUpkeep = 0;
     this.roadUpkeep = 0;
     for (const s of TAX_SECTORS) { this.taxRates[s] = DEFAULT_TAX_RATE; this.taxBase[s] = 0; }
+    this.eduTaxRates.fill(DEFAULT_TAX_RATE);
+    this.resBaseByEdu.fill(0);
     this.serviceWorkers = 0;
     this.loans = [];
     this.nextLoanId = 1;
@@ -257,10 +277,62 @@ export class Economy {
     if (this.buildingUpkeep < 1e-6) this.buildingUpkeep = 0;
   }
 
+  /** Taux d'un secteur. Résidentiel : le même taux est appliqué à TOUS les niveaux d'éducation. */
   setTaxRate(sector: TaxSector, rate: number): number {
-    const r = Math.min(MAX_TAX_RATE, Math.max(MIN_TAX_RATE, rate));
-    this.taxRates[sector] = Math.round(r * 1000) / 1000;
+    const r = Math.round(Math.min(MAX_TAX_RATE, Math.max(MIN_TAX_RATE, rate)) * 1000) / 1000;
+    this.taxRates[sector] = r;
+    if (sector === 'residential') this.eduTaxRates.fill(r);
     return this.taxRates[sector];
+  }
+
+  /** Taux résidentiel d'un niveau d'éducation (0..4) ; renvoie le taux retenu (borné, au dixième de point). */
+  setEduTaxRate(level: number, rate: number): number {
+    if (!Number.isInteger(level) || level < 0 || level >= EDU_TAX_LEVELS) throw new RangeError(`Niveau d'éducation inconnu : ${level}`);
+    this.eduTaxRates[level] = Math.round(Math.min(MAX_TAX_RATE, Math.max(MIN_TAX_RATE, rate)) * 1000) / 1000;
+    this.syncResidentialRate();
+    return this.eduTaxRates[level]!;
+  }
+
+  /** Vrai si tous les niveaux d'éducation ont le même taux (cas du taux unique historique). */
+  eduTaxUniform(): boolean {
+    const r = this.eduTaxRates[0]!;
+    for (let k = 1; k < EDU_TAX_LEVELS; k++) if (this.eduTaxRates[k] !== r) return false;
+    return true;
+  }
+
+  /** Assiette résidentielle par niveau (démographie) : le taux résidentiel effectif est recalculé. */
+  setResidentialEduBase(base: readonly number[] | undefined): void {
+    if (!base) return;
+    for (let k = 0; k < EDU_TAX_LEVELS; k++) { const v = base[k]; this.resBaseByEdu[k] = typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0; }
+    this.syncResidentialRate();
+  }
+
+  /** Parts de l'assiette résidentielle par niveau (somme 1) ; sans assiette : parts égales. */
+  residentialEduShares(): number[] {
+    let tot = 0;
+    for (const v of this.resBaseByEdu) tot += v;
+    return this.resBaseByEdu.map((v) => (tot > 0 ? v / tot : 1 / EDU_TAX_LEVELS));
+  }
+
+  /** `taxRates.residential` = moyenne des taux par niveau pondérée par l'assiette (exacte si les taux sont égaux). */
+  private syncResidentialRate(): void {
+    if (this.eduTaxUniform()) { this.taxRates.residential = this.eduTaxRates[0]!; return; }
+    const sh = this.residentialEduShares();
+    let r = 0;
+    for (let k = 0; k < EDU_TAX_LEVELS; k++) r += sh[k]! * this.eduTaxRates[k]!;
+    this.taxRates.residential = Math.round(r * 1e6) / 1e6;
+  }
+
+  /** Recettes résidentielles prévues par niveau d'éducation (somme = `taxIncome('residential')`). */
+  residentialIncomeByEdu(): number[] {
+    const sh = this.residentialEduShares();
+    const rate = this.taxRates.residential;
+    const total = this.taxIncome('residential');
+    if (rate <= 0) return sh.map(() => 0);
+    // Part de chaque niveau : assiette × taux du niveau, normalisée sur la recette totale (cohérence au centime).
+    let w = 0;
+    for (let k = 0; k < EDU_TAX_LEVELS; k++) w += sh[k]! * this.eduTaxRates[k]!;
+    return sh.map((s, k) => (w > 0 ? r2((total * s * this.eduTaxRates[k]!) / w) : 0));
   }
 
   taxIncome(sector: TaxSector): number { return this.taxBase[sector] * this.taxRates[sector]; }
@@ -480,6 +552,7 @@ export class Economy {
       monthsInDeficit: this.monthsInDeficit, bankrupt: this.bankrupt,
       month: { construction: this.monthConstruction, refunds: this.monthRefunds, loansTaken: this.monthLoans, operating: this.monthOperating, hours: this.monthHours, acc: { ...this.acc, income: { ...this.acc.income } }, services: this.monthServices, lastServices: this.lastServices, servicesRecurring: this.monthServicesRecurring, lastServicesRecurring: this.lastServicesRecurring },
       taxBase: { ...this.taxBase }, serviceWorkers: this.serviceWorkers,
+      eduTaxRates: [...this.eduTaxRates], resBaseByEdu: [...this.resBaseByEdu],
     };
   }
 
@@ -507,6 +580,15 @@ export class Economy {
     const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
     for (const s of TAX_SECTORS) this.taxBase[s] = fin(j.taxBase?.[s]) ? j.taxBase[s] : 0;
     this.serviceWorkers = fin(j.serviceWorkers) ? j.serviceWorkers : 0;
+    // Impôt par niveau d'éducation : absent des anciennes sauvegardes (taux unique) → le taux résidentiel appliqué à
+    // tous les niveaux (déjà fait par setTaxRate ci-dessus).
+    if (Array.isArray(j.eduTaxRates) && j.eduTaxRates.length === EDU_TAX_LEVELS && j.eduTaxRates.every(fin)) {
+      for (let k = 0; k < EDU_TAX_LEVELS; k++) this.eduTaxRates[k] = Math.round(Math.min(MAX_TAX_RATE, Math.max(MIN_TAX_RATE, j.eduTaxRates[k]!)) * 1000) / 1000;
+    }
+    this.resBaseByEdu.fill(0);
+    if (Array.isArray(j.resBaseByEdu)) this.setResidentialEduBase(j.resBaseByEdu);
+    // Taux effectif recalculé (identique au taux sauvegardé quand les niveaux ont le même taux).
+    this.syncResidentialRate();
   }
 
   /** Vrai si la sauvegarde relue contenait les assiettes (sinon le monde les recalcule depuis la population). */

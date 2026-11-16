@@ -10,7 +10,7 @@
 import type { CommandError, GameDate } from '../shared/contracts';
 import type { DeltaMessage } from '../shared/protocol';
 import type { BuildingOccupancy, CitizenInfo, DemographyReport } from './demography';
-import { TAX_SECTORS, type Forecast, type Loan, type LoanOffer, type MonthRecord, type TaxSector } from './economy';
+import { EDU_TAX_LEVELS, TAX_SECTORS, type Forecast, type Loan, type LoanOffer, type MonthRecord, type TaxSector } from './economy';
 import type { Season } from './clock';
 import type { CityBuildResult } from './city-builder';
 import { editShapeError, type TerrainEdit } from './terrain/edits';
@@ -74,6 +74,14 @@ export interface SimNotice {
 export interface EconomyReport {
   money: number;
   taxRates: Record<TaxSector, number>;
+  /**
+   * Impôt résidentiel par niveau d'éducation (0 = sans diplôme … 4 = études supérieures) : taux, noms, recettes
+   * mensuelles prévues et parts de l'assiette. `taxRates.residential` = taux effectif (moyenne pondérée).
+   */
+  eduTaxRates?: number[];
+  eduTaxNames?: string[];
+  eduTaxIncome?: number[];
+  eduTaxShares?: number[];
   forecast: Forecast;
   loans: Loan[];
   debt: number;
@@ -108,6 +116,8 @@ export interface SimReport {
 
 export interface ExtCommandMap {
   setTaxRate: { args: { sector: TaxSector; rate: number }; result: { sector: TaxSector; rate: number } };
+  /** Taux résidentiel d'un niveau d'éducation (0..4) ; renvoie le taux retenu et le taux résidentiel effectif. */
+  setEduTaxRate: { args: { level: number; rate: number }; result: { level: number; rate: number; residential: number; eduTaxRates: number[] } };
   loanOffer: { args: { amount: number; months: number }; result: LoanOffer };
   takeLoan: { args: { amount: number; months: number }; result: { loan: Loan; money: number } };
   repayLoan: { args: { loanId: number }; result: { paid: number; money: number } };
@@ -149,7 +159,7 @@ export type ExtCommandMessage = { [K in ExtCommandName]: { kind: 'cmd'; reqId: n
 /** Delta enrichi : `report` présent environ une fois par seconde. */
 export type DeltaMessageExt = DeltaMessage & { report?: SimReport };
 
-export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout', 'terrainEdit', 'moveBuilding', 'terrainUndo', 'hydroState'];
+export const EXT_COMMANDS: readonly ExtCommandName[] = ['setTaxRate', 'setEduTaxRate', 'loanOffer', 'takeLoan', 'repayLoan', 'getReport', 'inspectBuilding', 'inspectCitizen', 'setFocus', 'settle', 'buildCity', 'buildRoundabout', 'terrainEdit', 'moveBuilding', 'terrainUndo', 'hydroState'];
 
 export function isExtCommandName(name: unknown): name is ExtCommandName {
   return typeof name === 'string' && (EXT_COMMANDS as readonly string[]).includes(name);
@@ -167,6 +177,9 @@ export function validateExtCommand(msg: unknown): CommandError | null {
   switch (msg.name) {
     case 'setTaxRate':
       if (typeof a.sector !== 'string' || !(TAX_SECTORS as readonly string[]).includes(a.sector)) return bad('Secteur fiscal inconnu');
+      return isNum(a.rate) ? null : bad('Taux invalide');
+    case 'setEduTaxRate':
+      if (!isNum(a.level) || !Number.isInteger(a.level) || a.level < 0 || a.level >= EDU_TAX_LEVELS) return bad('Niveau d\'éducation inconnu');
       return isNum(a.rate) ? null : bad('Taux invalide');
     case 'loanOffer':
     case 'takeLoan':

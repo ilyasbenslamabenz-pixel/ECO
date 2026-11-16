@@ -99,6 +99,32 @@ export function residentialTaxAttraction(rate: number): number {
   return (rate - 0.09) * 2 + Math.max(0, rate - 0.12) * 6;
 }
 
+/** Niveau d'éducation des adultes qui arrivent en ville (poids par niveau, `Education`). */
+export const IMMIGRANT_EDU_WEIGHTS: readonly number[] = [0.08, 0.12, 0.3, 0.25, 0.25];
+/** Sensibilité des arrivants au taux de leur niveau : poids × (1 − k × écart au taux moyen), borné. */
+export const EDU_TAX_MIGRATION_SENSITIVITY = 6;
+export const EDU_TAX_MIGRATION_MIN = 0.25;
+export const EDU_TAX_MIGRATION_MAX = 2;
+
+/**
+ * Poids des niveaux d'éducation des arrivants selon les taux résidentiels par niveau : un niveau imposé au-dessus de la
+ * moyenne (pondérée par ces mêmes poids) attire moins de ménages de ce niveau, un niveau allégé en attire davantage.
+ */
+export function immigrantEduWeights(rates: readonly number[] | null): number[] {
+  const base = IMMIGRANT_EDU_WEIGHTS;
+  if (!rates) return [...base];
+  const avg = immigrantTaxRate(rates, 0);
+  return base.map((w, k) => w * Math.min(EDU_TAX_MIGRATION_MAX, Math.max(EDU_TAX_MIGRATION_MIN, 1 - EDU_TAX_MIGRATION_SENSITIVITY * ((rates[k] ?? avg) - avg))));
+}
+
+/** Taux résidentiel perçu par les candidats à l'installation (moyenne pondérée par leur niveau d'éducation). */
+export function immigrantTaxRate(rates: readonly number[] | null, fallback: number): number {
+  if (!rates) return fallback;
+  let r = 0, w = 0;
+  for (let k = 0; k < IMMIGRANT_EDU_WEIGHTS.length; k++) { const x = rates[k]; if (typeof x !== 'number') continue; r += IMMIGRANT_EDU_WEIGHTS[k]! * x; w += IMMIGRANT_EDU_WEIGHTS[k]!; }
+  return w > 0 ? r / w : fallback;
+}
+
 /** Facteurs de satisfaction détaillés (rapport `satisfactionFactors`), dans l'ordre d'affichage. */
 export const SATISFACTION_FACTORS = [
   ['emploi', 'Emploi'], ['loyer', 'Coût du logement'], ['logement', 'Accès routier'], ['electricite', 'Électricité'], ['eau', 'Eau'], ['dechets', 'Déchets'],
@@ -527,7 +553,7 @@ export class DemographySystem {
       const affects = m.service >= 0 || m.attract > 0 || m.pollution > 0 || m.leisureVenue;
       if (!affects) continue;
       const lvl = m.service >= 0 ? this.serviceLevel(b.id[s]!) : 1;
-      const rad = m.radius * (1 + 0.25 * (lvl - 1));
+      const rad = m.radius * (1 + 0.25 * (lvl - 1)) * (m.service >= 0 ? this.devRadius[m.service]! : 1);
       const R = Math.max(m.service >= 0 ? rad : 0, m.attract > 0 ? Math.max(m.radius, 800) : 0, m.pollution > 0 ? 400 : 0, m.leisureVenue ? 1500 : 0);
       this.ctx.buildingIndex.query(sx - R, sz - R, sx + R, sz + R, this.tmp);
       // Capacité (lits, patrouilles, engins) : habitants couverts au plus, logements les plus proches d'abord.
@@ -548,7 +574,7 @@ export class DemographySystem {
         if (m.leisureVenue && j !== s && d <= 1500 && d < bestLeisure[j]!) { bestLeisure[j] = d; this.leisureTarget[j] = b.id[s]!; }
       }
       if (capped) {
-        let room = m.serviceCapacity * (1 + 0.5 * (lvl - 1)) * perUnit;
+        let room = m.serviceCapacity * (1 + 0.5 * (lvl - 1)) * this.devCapacity[m.service]! * perUnit;
         const order = near.map((_, k) => k).sort((p, q) => nearD[p]! - nearD[q]! || near[p]! - near[q]!);
         const cov = this.coverage[m.service]!;
         const cq = this.coverageQ[m.service]!;
@@ -585,6 +611,13 @@ export class DemographySystem {
   pollutionFactorOf: (buildingId: number) => number = () => 1;
   /** Niveau d'un équipement de service (améliorations, 1 à 3) : rayon +25 % et capacité +50 % par niveau. */
   serviceLevel: (buildingId: number) => number = () => 1;
+  /**
+   * Arbres de développement (module `developpement`) : rayon et capacité (×) des équipements par service (index
+   * `Service`), probabilités d'études supérieures et de formation (×). Neutres (1) sans déblocage.
+   */
+  readonly devRadius = new Float64Array(SERVICE_COUNT).fill(1);
+  readonly devCapacity = new Float64Array(SERVICE_COUNT).fill(1);
+  educationFactor = 1;
   /** Filtres de croissance des modules (eau, électricité) : faux = le bâtiment n'accueille pas de nouveaux ménages. */
   growthGates: ((buildingId: number) => boolean)[] = [];
   /** État des réseaux d'un bâtiment (branchés par la simulation) : 0 desservi, 1 coupé (raccordé mais délesté), 2 hors de tout réseau. */
@@ -625,6 +658,16 @@ export class DemographySystem {
   isPrivate: (buildingId: number) => boolean = () => false;
   /** Taux d'imposition d'un secteur d'entreprise (1 commerce, 2 industrie, 3 bureaux) ; 9 % par défaut. */
   companyTaxRate: (sector: number) => number = () => 0.09;
+  /**
+   * Taux résidentiels par niveau d'éducation (économie), fixés par la simulation à chaque tick ; null quand tous les
+   * niveaux ont le même taux : le taux résidentiel unique s'applique alors partout (comportement historique).
+   */
+  eduTaxRates: readonly number[] | null = null;
+  /** Pénalité de satisfaction des impôts d'un adulte selon son niveau (taux par niveau, sinon `fallback`). */
+  private eduTaxPenalties(fallback: number): number[] {
+    const r = this.eduTaxRates;
+    return [0, 1, 2, 3, 4].map((k) => (r && typeof r[k] === 'number' ? residentialTaxPenalty(r[k]!) : fallback));
+  }
   /** Somme des points de satisfaction par facteur (dernier calcul quotidien) et habitants comptés. */
   private factorSum = new Float64Array(FACTOR_COUNT);
   private factorCount = 0;
@@ -676,7 +719,7 @@ export class DemographySystem {
       const id = b.id[i]!;
       if (this.services.blocked(id)) continue;
       const lvl = this.serviceLevel(id);
-      out.push({ id, x: b.x[i]!, z: b.z[i]!, radius: m.radius * (1 + 0.25 * (lvl - 1)), units: Math.max(1, m.serviceCapacity) * (1 + 0.5 * (lvl - 1)) });
+      out.push({ id, x: b.x[i]!, z: b.z[i]!, radius: m.radius * (1 + 0.25 * (lvl - 1)) * this.devRadius[service]!, units: Math.max(1, m.serviceCapacity) * (1 + 0.5 * (lvl - 1)) * this.devCapacity[service]! });
     }
     return out;
   }
@@ -907,11 +950,11 @@ export class DemographySystem {
       const m = this.metaOfIndex(j);
       if (!m || m.service !== Service.Education) continue;
       const lvl = this.serviceLevel(id);
-      const cap = (m.serviceCapacity > 0 ? m.serviceCapacity : 300) * (1 + 0.5 * (lvl - 1));
+      const cap = (m.serviceCapacity > 0 ? m.serviceCapacity : 300) * (1 + 0.5 * (lvl - 1)) * this.devCapacity[Service.Education]!;
       if ((this.pupilsBySchool.get(id) ?? 0) >= cap) continue;
       const dx = b.x[j]! - hx, dz = b.z[j]! - hz;
       const d = Math.sqrt(dx * dx + dz * dz);
-      if (d <= m.radius * (1 + 0.25 * (lvl - 1)) && d < bestD) { bestD = d; best = id; }
+      if (d <= m.radius * (1 + 0.25 * (lvl - 1)) * this.devRadius[Service.Education]! && d < bestD) { bestD = d; best = id; }
     }
     return best;
   }
@@ -989,10 +1032,10 @@ export class DemographySystem {
       // formation continue des adultes sans emploi (moins de 45 ans, quartier couvert).
       if (crossed(21) && c.education[i] === Education.Baccalaureate) {
         const hb = b.indexOf(c.home[i]!);
-        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.chance(this.living.tuning.probaSuperieur)) { c.education[i] = Education.Higher; this.living.month.graduates++; }
+        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.chance(this.living.tuning.probaSuperieur * this.educationFactor)) { c.education[i] = Education.Higher; this.living.month.graduates++; }
       } else if (c.job[i]! < 0 && c.school[i]! < 0 && age >= WORKING_AGE_MIN && age < 45 && c.education[i]! < Education.Baccalaureate) {
         const hb = b.indexOf(c.home[i]!);
-        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.next() < this.living.tuning.probaFormationAn / DAYS_PER_YEAR) {
+        if (hb >= 0 && this.coverage[Service.Education]![hb] === 1 && rng.next() < (this.living.tuning.probaFormationAn * this.educationFactor) / DAYS_PER_YEAR) {
           c.education[i] = Math.max(Education.Secondary, c.education[i]! + 1);
           this.living.month.graduates++;
         }
@@ -1019,6 +1062,9 @@ export class DemographySystem {
     const nh = this.households.count;
     this.hhAdults.fill(0, 0, nh); this.hhFertile.fill(0, 0, nh); this.hhHappy.fill(0, 0, nh); this.hhMembers.fill(0, 0, nh);
     const taxPenalty = residentialTaxPenalty(residentialTaxRate);
+    // Impôt par niveau d'éducation : chaque adulte ressent le taux de son niveau (les enfants, le taux moyen).
+    const eduPen = this.eduTaxPenalties(taxPenalty);
+    this.lastEduRates = this.eduTaxRates ? [...this.eduTaxRates] : null;
     const pending: number[] = [];
     // Détail par facteur (rapport) ; états des réseaux et satisfaction des modules calculés une fois par logement.
     const fs = this.factorSum;
@@ -1038,7 +1084,7 @@ export class DemographySystem {
       const age = this.ageOf(i, now);
       const bi = b.indexOf(c.home[i]!);
       const hkr = this.households.indexOf(c.household[i]!);
-      let t = this.scoreCitizen(i, age, bi, hkr, ramp, taxPenalty, homeParts, fs);
+      let t = this.scoreCitizen(i, age, bi, hkr, ramp, age >= 18 ? eduPen[c.education[i]!] ?? taxPenalty : taxPenalty, homeParts, fs);
       t = t < 0 ? 0 : t > 100 ? 100 : t;
       c.happiness[i] = c.happiness[i]! * 0.8 + t * 0.2;
       const hk = hkr;
@@ -1098,6 +1144,7 @@ export class DemographySystem {
 
   /** Taux de l'impôt résidentiel du dernier calcul quotidien (fiche « Pourquoi » d'un bâtiment). */
   private lastTaxRate = 0;
+  private lastEduRates: number[] | null = null;
 
   /**
    * Satisfaction apportée au logement d'index `bi` par les modules : électricité, eau, déchets, bruit, politiques, total
@@ -1207,7 +1254,7 @@ export class DemographySystem {
     // Services qui comptent : criminalité moyenne et part de malades.
     const st = this.services.tuning;
     const safety = st.crimeAttractivite * this.services.averageCrime() / 100 + st.maladieAttractivite * (s.population ? this.services.sickCount / s.population : 0);
-    const a = 0.3 + 0.25 * jobAvail + 0.2 * ((happy - 50) / 50) + 0.15 * services + Math.min(0.1, s.attractSum * 0.01) - residentialTaxAttraction(residentialTaxRate) - 0.1 * distress - safety;
+    const a = 0.3 + 0.25 * jobAvail + 0.2 * ((happy - 50) / 50) + 0.15 * services + Math.min(0.1, s.attractSum * 0.01) - residentialTaxAttraction(immigrantTaxRate(this.eduTaxRates, residentialTaxRate)) - 0.1 * distress - safety;
     return clamp01(a);
   }
 
@@ -1236,6 +1283,8 @@ export class DemographySystem {
     let arrivals = Math.floor(expected) + (rng.next() < expected - Math.floor(expected) ? 1 : 0);
     arrivals = Math.min(arrivals, MAX_ARRIVALS_PER_WAVE);
     let placed = 0;
+    // Niveau d'éducation des arrivants : infléchi par les taux résidentiels par niveau (poids d'origine si taux égaux).
+    const eduWeights = immigrantEduWeights(this.eduTaxRates);
     for (let k = 0; k < arrivals; k++) {
       // Composition du ménage.
       const kind = rng.weighted([0.3, 0.25, 0.32, 0.06, 0.07]);
@@ -1252,7 +1301,7 @@ export class DemographySystem {
       for (let a = 0; a < adults; a++) {
         const sex = adults === 2 ? a : rng.int(0, 1);
         const age = Math.max(18, baseAge + (a === 0 ? 0 : rng.int(-4, 4)));
-        const edu = rng.weighted([0.08, 0.12, 0.3, 0.25, 0.25]);
+        const edu = rng.weighted(eduWeights);
         this.addCitizen(hid, target, sex, age, edu, Role.Adult, now);
         this.addMember(hid);
       }
@@ -1274,7 +1323,7 @@ export class DemographySystem {
    * Clôture mensuelle démographique : émigration des ménages durablement mécontents,
    * comptes des entreprises, assiettes fiscales. Renvoie les assiettes pour l'économie.
    */
-  monthly(now: number): { taxBase: Record<TaxSector, number>; serviceWorkers: number } {
+  monthly(now: number): { taxBase: Record<TaxSector, number>; serviceWorkers: number; residentialByEdu: number[] } {
     const c = this.citizens.col;
     // Émigration.
     this.ensureHouseholdBuffers();
@@ -1310,13 +1359,20 @@ export class DemographySystem {
    * (évaluée à chaque clôture) ; le bénéfice déduit le loyer du local. À la clôture (`commit`), les entreprises
    * déficitaires depuis longtemps ferment et les locaux vacants peuvent être repris (`LivingEconomy.monthlyCompanies`).
    */
-  computeTaxBase(commit = false, now = this.lastNow): { taxBase: Record<TaxSector, number>; serviceWorkers: number } {
+  computeTaxBase(commit = false, now = this.lastNow): { taxBase: Record<TaxSector, number>; serviceWorkers: number; residentialByEdu: number[] } {
     const b = this.ctx.buildings;
     const c = this.citizens.col;
     const L = this.living, t = L.tuning;
     const taxBase: Record<TaxSector, number> = { residential: 0, commercial: 0, industrial: 0, office: 0 };
     let householdIncome = 0;
-    for (let i = 0; i < this.citizens.count; i++) householdIncome += c.income[i]!;
+    // Assiette résidentielle par niveau d'éducation (impôt par niveau, économie).
+    const residentialByEdu = [0, 0, 0, 0, 0];
+    for (let i = 0; i < this.citizens.count; i++) {
+      const inc = c.income[i]!;
+      householdIncome += inc;
+      const e = c.education[i]!;
+      if (inc > 0 && e < 5) residentialByEdu[e]! += inc * RES_TAXABLE_SHARE;
+    }
     taxBase.residential = householdIncome * RES_TAXABLE_SHARE;
     let commercialWorkers = 0, serviceWorkers = 0, employedTotal = 0;
     for (let i = 0; i < b.count; i++) {
@@ -1397,7 +1453,7 @@ export class DemographySystem {
         return cc.sector[k] === Sector.Office ? qualifiedUnemployed() >= need : s.unemployed >= need;
       });
     }
-    return { taxBase, serviceWorkers };
+    return { taxBase, serviceWorkers, residentialByEdu };
   }
 
   /* --------------------------- Emploi du temps --------------------------- */
@@ -1715,12 +1771,13 @@ export class DemographySystem {
     const fsum = new Float64Array(FACTOR_COUNT);
     const hp = this.homePartsOf(bi, ramp, new Float64Array(7));
     const taxPenalty = residentialTaxPenalty(this.lastTaxRate);
+    const eduPen = this.lastEduRates ? this.lastEduRates.map((r) => residentialTaxPenalty(r)) : null;
     let scored = 0, labor = 0, unemployed = 0, under = 0;
     for (let i = 0; i < this.citizens.count; i++) {
       if (c.home[i] === id) {
         if (occupants.length < limit) occupants.push(this.citizenInfo(i, now));
         const age = this.ageOf(i, now);
-        this.scoreCitizen(i, age, bi, this.households.indexOf(c.household[i]!), ramp, taxPenalty, () => hp, fsum);
+        this.scoreCitizen(i, age, bi, this.households.indexOf(c.household[i]!), ramp, eduPen && age >= 18 ? eduPen[c.education[i]!] ?? taxPenalty : taxPenalty, () => hp, fsum);
         scored++;
         if (age >= WORKING_AGE_MIN && age < RETIREMENT_AGE && c.school[i]! < 0) { labor++; if (c.job[i]! < 0) unemployed++; }
       }

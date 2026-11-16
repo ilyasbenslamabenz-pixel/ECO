@@ -70,6 +70,19 @@ Les écoles existantes élèvent le niveau des jeunes (brevet à 16 ans, bac à 
 **supérieur** à 21 ans pour `probaSuperieur` des bacheliers dont le logement est couvert par une école ; **formation
 continue** des adultes sans emploi de moins de 45 ans en quartier couvert (`probaFormationAn` par an, un niveau).
 
+### 5 bis. Impôt résidentiel par niveau d'éducation
+
+Un taux par niveau (sans diplôme, primaire, brevet / CAP, baccalauréat, études supérieures), réglé dans Finances ›
+Impôts (le curseur « Résidentiel (tous) » règle les cinq d'un coup). Chaque niveau paie son taux sur ses revenus
+imposables (`computeTaxBase` → `residentialByEdu`) ; `taxRates.residential` devient le taux EFFECTIF (moyenne pondérée
+par l'assiette de chaque niveau), d'où des recettes, prévisions et lectures existantes inchangées. Effets : chaque adulte
+ressent dans sa satisfaction le taux de son niveau (`residentialTaxPenalty`, les enfants le taux effectif) ;
+l'attractivité utilise le taux moyen perçu par les arrivants (`immigrantTaxRate`, pondéré par leur niveau) ; le niveau
+des arrivants est infléchi : poids × (1 − 6 × écart au taux moyen), borné entre 0,25 et 2 (`immigrantEduWeights`).
+Commande étendue `setEduTaxRate { level, rate }` ; rapport : `economy.eduTaxRates`, `eduTaxIncome`, `eduTaxShares`.
+Taux tous égaux (défaut) : comportement identique au taux unique. Sauvegarde : `economy.eduTaxRates` et `resBaseByEdu`
+(facultatifs) ; une sauvegarde à taux unique applique ce taux aux cinq niveaux. Tests : `tests/jeu/impot-education.test.ts`.
+
 ## 6. Entreprises
 
 ```

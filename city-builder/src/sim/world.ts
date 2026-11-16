@@ -10,6 +10,7 @@
  */
 import type { SecteursService } from './plugins/secteurs';
 import type { AmeliorationsService } from './plugins/ameliorations';
+import { DEVELOPMENT_SERVICE, type DevelopmentService } from '../shared/development';
 import type { ZonagePlugin } from './plugins/zonage';
 import { ZONAGE_ID } from '../shared/protocol-ext/zonage';
 import {
@@ -40,9 +41,9 @@ import { dist2 } from '../shared/math';
 import { buildingGap, distSegmentObb, footprintObb, HOUSE_GAP, makeObb, normRot, obbAabb, obbOverlap, obbToWorld, pointInObb, type Obb } from '../shared/footprint';
 import { terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
 import { GameClock, MINUTES_PER_DAY, MINUTES_PER_MONTH, MINUTES_PER_YEAR, formatDateFr } from './clock';
-import { DEMOLISH_REFUND_RATE, Economy } from './economy';
+import { DEMOLISH_REFUND_RATE, EDU_TAX_NAMES_FR, Economy } from './economy';
 import { BuildingStore, ChunkIndex, VehicleStore } from './ecs';
-import { DemographySystem, ROAD_ACCESS_MARGIN_M } from './demography';
+import { DemographySystem, ROAD_ACCESS_MARGIN_M, Service } from './demography';
 import { TrafficSystem, inputFromRoadNetwork, buildingsFromStore } from './traffic';
 import {
   ROAD_KINDS, RoadNetwork, commitRoadPlan, cubic, cubicBounds, gradeTerrainForRoads, halfWidth, isRoadKind,
@@ -1048,6 +1049,7 @@ export class Simulation {
           const tb = demo.computeTaxBase(false);
           Object.assign(this.economy.taxBase, tb.taxBase);
           this.economy.serviceWorkers = tb.serviceWorkers;
+          this.economy.setResidentialEduBase(tb.residentialByEdu);
           this.trafficBuildingsDirty = true;
         }
         this.plugins.onDayStart();
@@ -1064,6 +1066,7 @@ export class Simulation {
           const tb = demo.monthly(now);
           Object.assign(this.economy.taxBase, tb.taxBase);
           this.economy.serviceWorkers = tb.serviceWorkers;
+          this.economy.setResidentialEduBase(tb.residentialByEdu);
           const r = demo.report(now, this.economy.taxRates.residential);
           ctx = { ...ctx, population: r.population, jobs: r.jobsTotal, unemploymentRate: r.unemploymentRate, happiness: r.happiness };
         }
@@ -1118,6 +1121,8 @@ export class Simulation {
     // Paliers : capacité d'emprunt supplémentaire ; événements : feux, maladies, arrivées (1 = aucun effet).
     this.economy.loanBonus = this.plugins.service<PaliersService>(PALIERS_SERVICE)?.loanBonus() ?? 0;
     if (this.demography) {
+      // Impôt résidentiel par niveau d'éducation (null : taux unique, comportement historique).
+      this.demography.eduTaxRates = this.economy.eduTaxUniform() ? null : this.economy.eduTaxRates;
       this.demography.pollutionFactor = m.pollutionFactor;
       this.demography.immigrationFactor = m.immigrationFactor;
       this.demography.services.eventFireFactor = m.fireRiskFactor;
@@ -1126,7 +1131,24 @@ export class Simulation {
     // Politiques locales des secteurs : la pollution subie est recalculée quand elles changent.
     const sv = (this.plugins.service<SecteursService>('secteurs')?.version() ?? 0) * 100_003 + (this.plugins.service<AmeliorationsService>('ameliorations')?.version() ?? 0);
     if (sv !== this.secteursVersion) { this.secteursVersion = sv; this.demography?.markCoverageDirty(); }
+    // Arbres de développement : rayon / capacité des équipements, criminalité, réussite scolaire (relus au déblocage).
+    const dev = this.plugins.service<DevelopmentService>(DEVELOPMENT_SERVICE);
+    const dv = dev?.version() ?? 0;
+    if (this.demography && dev && (dv !== this.devVersion || this.demography !== this.devDemo)) {
+      this.devVersion = dv;
+      this.devDemo = this.demography;
+      const f = dev.factors();
+      const d = this.demography;
+      const before = [...d.devRadius, ...d.devCapacity].join(',');
+      d.devRadius[Service.Education] = f.radius.education; d.devRadius[Service.Health] = f.radius.sante; d.devRadius[Service.Police] = f.radius.police;
+      d.devCapacity[Service.Education] = f.capacity.education; d.devCapacity[Service.Health] = f.capacity.sante; d.devCapacity[Service.Police] = f.capacity.police;
+      d.educationFactor = f.educationFactor;
+      d.services.devCrimeFactor = f.crimeFactor;
+      if ([...d.devRadius, ...d.devCapacity].join(',') !== before) d.markCoverageDirty();
+    }
   }
+  private devVersion = -1;
+  private devDemo: DemographySystem | null = null;
   private secteursVersion = 0;
 
   tick(minutes: number = GAME_MINUTES_PER_TICK): void {
@@ -1319,7 +1341,9 @@ export class Simulation {
     return {
       date, season: this.clock.season, weekday: this.clock.weekday, dateFr: formatDateFr(date),
       economy: {
-        money: Math.round(e.money), taxRates: { ...e.taxRates }, forecast: e.forecast(), loans: e.loans.map((l) => ({ ...l })),
+        money: Math.round(e.money), taxRates: { ...e.taxRates },
+        eduTaxRates: [...e.eduTaxRates], eduTaxNames: [...EDU_TAX_NAMES_FR], eduTaxIncome: e.residentialIncomeByEdu(), eduTaxShares: e.residentialEduShares().map((v) => Math.round(v * 1000) / 1000),
+        forecast: e.forecast(), loans: e.loans.map((l) => ({ ...l })),
         debt: Math.round(e.debt()), loanCapacity: Math.floor(e.loanCapacity()), currentLoanRate: e.currentLoanRate(),
         monthsInDeficit: e.monthsInDeficit, bankrupt: e.bankrupt,
         history: (fullHistory ? e.history : e.history.slice(-24)).map((h) => ({ ...h, income: { ...h.income }, expenses: { ...h.expenses } })),
@@ -1341,6 +1365,14 @@ export class Simulation {
           const a = args as ExtCommandArgs<'setTaxRate'>;
           const rate = e.setTaxRate(a.sector, a.rate);
           return ok({ sector: a.sector, rate });
+        }
+        case 'setEduTaxRate': {
+          const a = args as ExtCommandArgs<'setEduTaxRate'>;
+          if (!Number.isInteger(a.level) || a.level < 0 || a.level >= e.eduTaxRates.length) return fail('INVALID_ARGS', 'Niveau d\'éducation inconnu');
+          if (!Number.isFinite(a.rate)) return fail('INVALID_ARGS', 'Taux invalide');
+          const rate = e.setEduTaxRate(a.level, a.rate);
+          if (this.demography) this.demography.eduTaxRates = e.eduTaxUniform() ? null : e.eduTaxRates;
+          return ok({ level: a.level, rate, residential: e.taxRates.residential, eduTaxRates: [...e.eduTaxRates] });
         }
         case 'loanOffer': {
           const a = args as ExtCommandArgs<'loanOffer'>;
@@ -1387,6 +1419,7 @@ export class Simulation {
           const tb = this.demo.computeTaxBase(false);
           Object.assign(e.taxBase, tb.taxBase);
           e.serviceWorkers = tb.serviceWorkers;
+          e.setResidentialEduBase(tb.residentialByEdu);
           this.demo.updateLod();
           this.trafficBuildingsDirty = true;
           return ok({ population: this.demo.population, households: this.demo.households.count });
@@ -1827,6 +1860,7 @@ export class Simulation {
       const tb = this.demo.computeTaxBase(false);
       Object.assign(this.economy.taxBase, tb.taxBase);
       this.economy.serviceWorkers = tb.serviceWorkers;
+      this.economy.setResidentialEduBase(tb.residentialByEdu);
     }
     this.trafficBuildingsDirty = true;
     this.jobsDirty = true;

@@ -109,7 +109,8 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
   // Zonage (tests/zonage) : enregistré partout, inerte sans zone, testé à part.
   const late = [...ELECTRICITE_MODULES, ...LATE_MODULES, ...ZONAGE_MODULES];
   // Politiques et recherche (phase 2C, tests/gouvernance) : simulation, sauvegarde et panneau ; pas de rendu.
-  const gov = ['politiques', 'recherche', 'paliers', 'secteurs', 'ameliorations'];
+  // Arbres de développement (tests/jeu/developpement.test.ts) : simulation, section de sauvegarde, panneau Progression.
+  const gov = ['politiques', 'recherche', 'paliers', 'developpement', 'secteurs', 'ameliorations'];
   // Services (criminalité, incendies, santé : tests/jeu/services.test.ts) : simulation et rendu (cartes), état
   // sauvegardé avec la démographie, onglet du tableau de bord Population (pas de panneau de module).
   // Alertes (icônes de problèmes) : simulation et rendu, rien de sauvegardé, pas de panneau.
