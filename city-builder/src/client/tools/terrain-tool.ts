@@ -21,9 +21,9 @@
  * Comme les autres outils, rien n'est appliqué localement : chaque aperçu est validé par la simulation
  * (commande étendue `terrainEdit` en dryRun, la plus récente gagne), qui renvoie coût, contour et refus éventuel.
  */
-import { EDIT_LIMITS, riverCenterline, type TerrainEdit } from '../../sim/terrain/edits';
+import { EDIT_LIMITS, edgeSnap, riverCenterline, type TerrainEdit } from '../../sim/terrain/edits';
 import type { HydroStateResult, TerrainEditResult } from '../../sim/sim-protocol';
-import { FACILITY_SPECS, hydroDamKw } from '../../shared/power/model';
+import { damPlantKw } from '../../shared/power/model';
 
 export type TerrainToolMode = 'clear' | 'quay' | 'dig' | 'river' | 'raise' | 'lower' | 'flatten' | 'smooth' | 'slope' | 'source' | 'dam';
 
@@ -47,8 +47,8 @@ export const TERRAIN_MODES: readonly { id: TerrainToolMode; nameFr: string; tip:
   { id: 'flatten', nameFr: 'Niveler', tip: 'Niveler : aplanit à la hauteur du premier point touché (ou à la hauteur cible choisie) ; glissez pour étendre le plat' },
   { id: 'smooth', nameFr: 'Adoucir', tip: 'Adoucir : lisse les bosses et les marches sous le pinceau ; appuyez et glissez' },
   { id: 'slope', nameFr: 'Pente', tip: 'Pente : clic au point bas (ou haut), clic à l\'autre bout : rampe régulière entre les deux hauteurs' },
-  { id: 'source', nameFr: 'Source d\'eau', tip: 'Source d\'eau : un clic pose une source (débit réglable) ; l\'eau remplit les creux jusqu\'au col le plus bas puis s\'écoule. « Retirer » : un clic sur une source' },
-  { id: 'dam', nameFr: 'Barrage', tip: 'Barrage : tracez-le EN TRAVERS d\'une vallée ou d\'une rivière, d\'une rive haute à l\'autre ; l\'eau monte en amont jusqu\'à la crête. Centrale hydroélectrique (Énergie) au pied du barrage : production selon la chute et le débit' },
+  { id: 'source', nameFr: 'Source d\'eau', tip: 'Source d\'eau : un clic pose une source (débit réglable) ; l\'eau remplit les creux jusqu\'au col le plus bas puis s\'écoule. Près du bord de la carte, le clic s\'aimante sur le bord : « Source de rivière », l\'eau entre par ce bord à débit constant et coule vers l\'aval. « Retirer » : un clic sur une source' },
+  { id: 'dam', nameFr: 'Barrage', tip: 'Barrage hydroélectrique : tracez-le EN TRAVERS d\'une rivière ou d\'une vallée où l\'eau coule, d\'une rive haute à l\'autre ; l\'eau monte en amont jusqu\'à la crête et l\'ouvrage produit de l\'électricité selon la chute et le débit (raccordé au réseau par une route proche d\'une rive)' },
 ];
 
 /** Rayons du pinceau Défricher et largeurs de canal proposés (m). */
@@ -93,11 +93,16 @@ export interface TerrainPreview {
   innerRadius: number;
   /** Geste pinceau en cours : passes appliquées et coût cumulé. */
   stroke: { n: number; cost: number } | null;
-  /** Sources et barrages existants (modes Source et Barrage). */
-  sources: { x: number; z: number; q: number }[];
+  /**
+   * Sources et barrages existants (modes Source et Barrage) : sources posées, sources de rivière (`edge`) et arrivées
+   * des rivières de la carte (`auto`) — là où l'eau coule.
+   */
+  sources: { x: number; z: number; q: number; edge?: boolean; auto?: boolean }[];
   dams: { x: number; z: number; headM: number }[];
   /** Mode Source : retrait. */
   removing: boolean;
+  /** Mode Source : le point visé est aimanté sur le bord de la carte (source de rivière). */
+  edgeSource: boolean;
 }
 
 /** Ce dont l'outil a besoin de la simulation. */
@@ -105,7 +110,11 @@ export interface TerrainEditPort {
   terrainEdit(args: { edit: TerrainEdit; dryRun?: boolean }): Promise<TerrainEditResult>;
   /** État de l'eau dynamique (sources, barrages) ; facultatif (tests). */
   hydroState?(): Promise<HydroStateResult>;
+  /** Grille de la carte (bords) : aimantation des sources de rivière ; facultatif. */
+  grid?(): EdgeGrid | null;
 }
+
+type EdgeGrid = Parameters<typeof edgeSnap>[0];
 
 const fmt = (n: number): string => new Intl.NumberFormat('fr-FR').format(Math.round(n));
 
@@ -127,7 +136,9 @@ export class TerrainTool {
   sourceRemove = false;
   damHeight: number = DAM_HEIGHTS[0];
   /** Sources et barrages connus (rafraîchis après chaque pose et à l'entrée dans un mode d'eau). */
-  private hydro: { sources: { x: number; z: number; q: number }[]; dams: { x: number; z: number; headM: number }[] } = { sources: [], dams: [] };
+  private hydro: { sources: { x: number; z: number; q: number; edge?: boolean; auto?: boolean }[]; dams: { x: number; z: number; headM: number }[] } = { sources: [], dams: [] };
+  /** Point visé aimanté sur le bord de la carte (mode Source, source de rivière). */
+  private edgeHover = false;
   /** Dernière action appliquée (premier rang d'édition, libellé) : reprise par la pile d'annulation. */
   private applied: { since: number; label: string } | null = null;
   /** Rivière : points de passage posés (x, z alternés). */
@@ -165,7 +176,13 @@ export class TerrainTool {
     if (!this.port.hydroState) return;
     try {
       const st = await this.port.hydroState();
-      this.hydro = { sources: st.sources.map((s) => ({ x: s.x, z: s.z, q: s.q })), dams: st.dams.map((d) => ({ x: d.x, z: d.z, headM: d.headM })) };
+      this.hydro = {
+        sources: [
+          ...st.sources.map((s) => ({ x: s.x, z: s.z, q: s.q, ...(s.edge ? { edge: true } : {}) })),
+          ...(st.inlets ?? []).map((s) => ({ x: s.x, z: s.z, q: s.q, auto: true, ...(s.edge ? { edge: true } : {}) })),
+        ],
+        dams: st.dams.map((d) => ({ x: d.x, z: d.z, headM: d.headM })),
+      };
       this.changed();
     } catch { /* sans partie */ }
   }
@@ -226,6 +243,13 @@ export class TerrainTool {
 
   /** Survol : point au sol. */
   setHover(g: { x: number; z: number } | null): void {
+    this.edgeHover = false;
+    // Source d'eau : près du bord de la carte, le point s'aimante sur le bord (source de rivière).
+    if (g && this.mode === 'source' && !this.sourceRemove) {
+      const grid = this.port.grid?.() ?? null;
+      const e = grid ? edgeSnap(grid, g.x, g.z) : null;
+      if (e) { this.hover = { x: e.x, z: e.z }; this.edgeHover = true; return; }
+    }
     this.hover = g ? this.snap(g) : null;
   }
 
@@ -253,7 +277,7 @@ export class TerrainTool {
     if (this.mode === 'raise' || this.mode === 'lower') return { k: this.mode, x: h.x, z: h.z, r: this.radius, d: this.step, ...hard };
     if (this.mode === 'flatten') return { k: 'flatten', x: h.x, z: h.z, r: this.radius, ...(this.flattenTarget !== null ? { h: this.flattenTarget } : {}), ...force, ...hard };
     if (this.mode === 'smooth') return { k: 'smooth', x: h.x, z: h.z, r: this.radius, ...force, ...hard };
-    if (this.mode === 'source') return this.sourceRemove ? { k: 'unsource', x: h.x, z: h.z } : { k: 'source', x: h.x, z: h.z, q: this.sourceFlow };
+    if (this.mode === 'source') return this.sourceRemove ? { k: 'unsource', x: h.x, z: h.z } : { k: 'source', x: h.x, z: h.z, q: this.sourceFlow, ...(this.edgeHover ? { e: 1 as const } : {}) };
     if (this.mode === 'river') {
       if (this.pts.length < 2) return null;
       const n = this.pts.length;
@@ -287,7 +311,7 @@ export class TerrainTool {
     const idleMsg = this.mode === 'quay' ? 'Cliquez dans l\'eau, le long de la rive, pour le début du quai'
       : this.mode === 'river' ? 'Cliquez pour la source de la rivière (ou au bord d\'un lac, d\'une rivière, de la mer)'
         : this.mode === 'slope' ? 'Cliquez au premier bout de la pente (sa hauteur est reprise)'
-          : this.mode === 'dam' ? 'Cliquez sur une rive, puis sur la rive d\'en face : le barrage barre la vallée'
+          : this.mode === 'dam' ? `Cliquez sur une rive, puis sur la rive d'en face : le barrage barre la vallée. ${this.flowHint()}`
             : 'Cliquez pour le début du bassin ou du canal';
     const plateau = this.mode === 'flatten' ? (this.hard ? 0.85 : 0.6) : this.hard ? 0.75 : 0;
     return {
@@ -297,7 +321,20 @@ export class TerrainTool {
       hard: this.hard, innerRadius: this.radius * plateau, stroke: st ? { n: st.n, cost: st.cost } : null,
       sources: this.mode === 'source' || this.mode === 'dam' ? this.hydro.sources : [], dams: this.mode === 'source' || this.mode === 'dam' ? this.hydro.dams : [],
       removing: this.mode === 'source' && this.sourceRemove,
+      edgeSource: this.mode === 'source' && this.edgeHover,
     };
+  }
+
+  /** Où l'eau coule (outil Barrage) : rivières de la carte, sources de rivière, sources posées, avec leurs débits. */
+  flowHint(): string {
+    const s = this.hydro.sources;
+    const rivers = s.filter((o) => o.auto), edge = s.filter((o) => o.edge && !o.auto), plain = s.filter((o) => !o.edge && !o.auto);
+    const parts: string[] = [];
+    const sum = (l: { q: number }[]): string => fmt(l.reduce((t, o) => t + o.q, 0));
+    if (rivers.length) parts.push(`${rivers.length} rivière${rivers.length > 1 ? 's' : ''} de la carte (${sum(rivers)} m³/s)`);
+    if (edge.length) parts.push(`${edge.length} source${edge.length > 1 ? 's' : ''} de rivière (${sum(edge)} m³/s)`);
+    if (plain.length) parts.push(`${plain.length} source${plain.length > 1 ? 's' : ''} (${sum(plain)} m³/s)`);
+    return parts.length ? `L'eau coule depuis les cercles bleus : ${parts.join(', ')} ; barrez-la en aval.` : 'Aucune eau ne coule encore : posez une source (au bord de la carte : source de rivière).';
   }
 
   private validate(e: TerrainEdit, key: string): void {
@@ -408,11 +445,15 @@ const LABELS: Record<TerrainEdit['k'], string> = {
   smooth: 'Adoucissement', slope: 'Pente', dam: 'Barrage', source: 'Source d\'eau', unsource: 'Retrait de source', levee: 'Digue',
 };
 
-function label(e: TerrainEdit): string { return LABELS[e.k]; }
+function label(e: TerrainEdit): string { return e.k === 'source' && e.e === 1 ? 'Source de rivière' : LABELS[e.k]; }
 
 const m1 = (v: number): string => v.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 /** Surface lisible (m² ou ha). */
 const area = (m2: number): string => (m2 >= 10_000 ? `${m1(m2 / 10_000)} ha` : `${fmt(m2)} m²`);
+
+/** Barrage sans débit en amont. */
+export const NO_FLOW_MSG = 'Aucun débit ici : posez d\'abord une source (ou une source de rivière au bord de la carte) ou choisissez la rivière';
+const SEASON_FR: Record<string, string> = { printemps: 'au printemps', ete: 'en été', automne: 'en automne', hiver: 'en hiver' };
 
 /** Eau prévue (source, barrage) en clair. */
 function describeWater(e: TerrainEdit, r: TerrainEditResult): string[] {
@@ -421,17 +462,18 @@ function describeWater(e: TerrainEdit, r: TerrainEditResult): string[] {
   const out: string[] = [];
   const where = w.outlet === 'eau' ? 'puis rejoint l\'eau voisine' : w.outlet === 'bord' ? 'puis s\'écoule hors de la carte' : '';
   if (e.k === 'source') {
-    if (w.level === null) out.push('l\'eau rejoint aussitôt une eau existante');
+    if (e.e === 1) out.push(`source de rivière : ${fmt(e.q)} m³/s entrent par le bord de la carte`);
+    if (w.level === null) out.push(w.outlet === 'bord' ? 'l\'eau ressort aussitôt par le bord : choisissez un bord plus haut que l\'intérieur' : 'l\'eau rejoint aussitôt une eau existante');
     else out.push(`lac prévu ${area(w.areaM2)} au niveau ${m1(w.level)} m${where ? `, ${where}` : ''}`);
     return out;
   }
   if (e.k === 'dam') {
     if (r.crest !== undefined) out.push(`crête ${m1(r.crest)} m`);
-    if ((w.flowM3s ?? 0) <= 0) { out.push('aucune eau en amont : posez une source pour remplir la retenue'); return out; }
+    if ((w.flowM3s ?? 0) <= 0) { out.push(NO_FLOW_MSG); return out; }
     if (w.level !== null) out.push(`retenue ${area(w.areaM2)} au niveau ${m1(w.level)} m`);
     out.push(`chute ${m1(w.headM ?? 0)} m · débit ${m1(w.flowM3s ?? 0)} m³/s`);
-    const mw = hydroDamKw(FACILITY_SPECS.hydro.nominalKw, w.headM ?? 0, w.flowM3s ?? 0, 'printemps') / 1000;
-    out.push(mw > 0 ? `jusqu'à ${m1(mw)} MW avec une centrale hydroélectrique au pied du barrage` : 'chute nulle : l\'eau contourne l\'ouvrage (prolongez-le jusqu\'aux rives hautes)');
+    const mw = w.powerMW ?? damPlantKw(w.headM ?? 0, w.flowM3s ?? 0, 'printemps') / 1000;
+    out.push(mw > 0 ? `puissance prévue ${m1(mw)} MW${w.season ? ` (${SEASON_FR[w.season] ?? w.season})` : ''}, raccordée au réseau électrique` : 'chute nulle : l\'eau contourne l\'ouvrage (prolongez-le jusqu\'aux rives hautes)');
     if (w.level !== null && r.crest !== undefined && w.level < r.crest - 0.5) out.push(`l'eau déborde par un col à ${m1(w.level)} m, sous la crête`);
   }
   return out;

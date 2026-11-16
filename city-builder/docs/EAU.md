@@ -143,6 +143,30 @@ Distinct du service eau potable ci-dessus : module `src/sim/hydro` (détails et 
 - **Barrage** : l'axe relevé jusqu'à la crête est une barrière continue ; la retenue monte jusqu'à la crête puis
   déborde ; la rivière aval reste à son niveau d'origine (test). Mesures : niveau de la retenue, aval, chute, débit
   entrant (service `hydro` pour l'électricité).
+- **Sources de rivière (bord de la carte, mécanique inspirée de CS2)** :
+  - *Rivières de la carte* : `riverInlets(terrain)` (`hydro/system.ts`) place une arrivée par rivière générée à son
+    extrémité amont (marquée `edge` quand elle touche le bord), débit constant = largeur du lit × `DAM_FLOW_PER_M`,
+    borné aux débits d'une source. Dérivées du terrain généré seul, jamais sauvegardées : identiques au rechargement,
+    parties neuves et existantes (aucune édition ajoutée, rejeu inchangé). Elles ne versent pas d'eau en plus (la
+    rivière est déjà de l'eau de base) : leur débit est SUIVI vers l'aval sur l'eau de base (`route`, file de priorité
+    sur la cote) et compté par chaque barrage traversé, en cascade.
+  - *Posées par le joueur* : outil Source d'eau, un clic à 64 m au plus du bord s'aimante sur l'échantillon du bord
+    (`edgeSnap`, partagé par l'outil et la simulation) ; édition `{ k: 'source', …, e: 1 }`, débit réglable. Les cases
+    du bord à moins de `INLET_GUARD` (6) cases de l'arrivée ne sont pas un exutoire : l'eau ne ressort pas par où elle
+    entre. 12 sources de rivière au plus, comptées à part des 48 sources ordinaires. Refus en mer.
+  - Anciennes sauvegardes : une source sans `e` reste une source ordinaire.
+- **Barrage hydroélectrique** : l'ouvrage EST la centrale (`damPlantKw` = loi de la centrale au pied d'un barrage,
+  `hydroDamKw` avec la puissance nominale du type : proportionnelle à chute × débit, saison, plafonnée). Chaque barrage
+  traversé par un débit devient une installation du réseau électrique (identifiant négatif, `scanFacilities`),
+  raccordée par une route proche de son milieu ou d'une culée. Une centrale (bâtiment) posée au pied du barrage le
+  remplace : pas de double comptage. Entretien mensuel au prorata de la puissance au débit de printemps (5 000 CHF
+  pour la puissance nominale, 1 000 CHF au moins, 0 sans débit), ligne `entretien:barrages_hydro`. L'aperçu de
+  l'outil Barrage donne la puissance prévue (MW, saison en cours) ; sans débit : « Aucun débit ici : posez d'abord
+  une source (ou une source de rivière au bord de la carte) ou choisissez la rivière ».
+- **Mesures (tests `tests/terrain/sources-riviere.test.ts`, carte seed 7)** : barrage de vallée + source 60 m³/s :
+  chute 14,1 m → 36,0 MW (hiver), aperçu à vide 0 MW ; barrage sur la rivière 0 de la carte : débit suivi 29 m³/s,
+  chute 4,6 m → 5,7 MW ; source de rivière 40 m³/s dans une vallée fermée partant du bord : eau à 240 m en aval
+  dès le premier jour, niveau stable sur 3 jours (lac plein, 77 m).
 - **Rendu** : patchs de terrain existants (`terrainPatch`, drapeau `waterOnly` pendant un remplissage : pas de
   remaillage) ; le maillage des eaux intérieures de `WaterSystem` affiche lacs et retenues tels quels.
 - **Coût** (ville de charge, Node) : 2,9 ms par calcul pendant un remplissage (un calcul toutes les 6 minutes de jeu),

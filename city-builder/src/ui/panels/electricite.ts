@@ -35,6 +35,8 @@ const hhmm = (min: number): string => {
   return `j${d} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 };
 const KIND_FR: Record<FacilityView['kind'], string> = { thermique: 'Thermique', eolien: 'Éolienne', solaire: 'Solaire', hydro: 'Barrage', poste: 'Poste', batterie: 'Batteries' };
+/** Nom d'une installation : bâtiment « Type n° id », barrage-centrale (identifiant négatif) « Barrage (ouvrage n) ». */
+const facName = (f: FacilityView): string => (f.id < 0 ? `Barrage hydroélectrique (ouvrage ${-f.id})` : `${KIND_FR[f.kind]} n° ${f.id}`);
 
 const SOURCE_COLORS: Record<string, string> = { thermique: '#d0743c', eolien: '#5ab0e8', solaire: '#f2c230', hydro: '#3c7fd0', toitures: '#e8e070' };
 
@@ -102,6 +104,7 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
   <table>
     <tr><td>Entretien du réseau (mois)</td><td>${fmtChf(bud.upkeepActual)} <span class="muted">/ ${fmtChf(bud.upkeepNominal)} nominal</span></td></tr>
     <tr><td>Entretien des installations (catalogue)</td><td>${fmtChf(bud.facilitiesUpkeep)}</td></tr>
+    ${bud.damsUpkeep ? `<tr><td>Entretien des barrages hydroélectriques (mois)</td><td data-k="barrages-budget">${fmtChf(bud.damsUpkeep)}</td></tr>` : ''}
     <tr><td>Mois passé : recettes / dépenses</td><td>${fmtChf(bud.lastIncome)} / ${fmtChf(bud.lastExpense)}</td></tr>
     ${bud.monthExportIncome !== undefined ? `<tr><td>Vente d'électricité (aux villes voisines)</td><td data-k="vente-budget" class="ok">ce mois ${fmtChf(bud.monthExportIncome)} <span class="muted">(${fmtEnergy(bud.monthExportedKwh ?? 0)}) · mois passé ${fmtChf(bud.lastExportIncome ?? 0)}</span></td></tr>` : ''}
     <tr><td>Investissements (lignes, toitures)</td><td>${fmtChf(bud.investments)}</td></tr>
@@ -142,7 +145,7 @@ function zeroReason(s: ElectriciteSummary, st: ElectriciteDelta): string {
 function isolatedWarning(s: ElectriciteSummary, st: ElectriciteDelta): string {
   const iso = (st.facilities ?? []).filter((f) => f.isolated);
   if (!iso.length) return '';
-  const names = iso.slice(0, 4).map((f) => `${KIND_FR[f.kind]} n° ${f.id}`).join(', ') + (iso.length > 4 ? '…' : '');
+  const names = iso.slice(0, 4).map((f) => facName(f)).join(', ') + (iso.length > 4 ? '…' : '');
   const roads = typeof s.roadsUnpowered === 'number' && s.roadsUnpowered > 0 ? ` ${s.roadsUnpowered} tronçon${s.roadsUnpowered > 1 ? 's' : ''} de route sans courant (rouge sur le calque).` : '';
   return `<p class="warn" data-k="isolee" style="margin:4px 0 8px">⚠ Reliez la centrale à une route : ${esc(names)} ${iso.length > 1 ? 'ne touchent' : 'ne touche'} aucune route.
     Le courant suit les routes : une installation à moins de 80 m d'une route alimente tout le réseau routier connecté (une éolienne d'un parc suffit).${esc(roads)}</p>`;
@@ -220,13 +223,13 @@ function renderNetwork(st: ElectriciteDelta): string {
     const out = f.kind === 'poste' ? `<span class="muted">${fmtPower(f.nominalKw)}</span>`
       : f.kind === 'batterie' ? `${f.capacityKwh ? Math.round((100 * (f.storedKwh ?? 0)) / f.capacityKwh) : 0} % <span class="muted">${(f.storageKw ?? 0) > 0 ? '+' : ''}${fmtPower(f.storageKw ?? 0)}</span>`
       : fmtPower(f.outputKw);
-    return `<tr><td>${esc(KIND_FR[f.kind])} n° ${f.id}</td><td>${out}</td><td>${state}</td>
+    return `<tr><td>${esc(facName(f))}${f.dam ? ` <span class="muted">(chute ${nf1.format(f.dam.headM)} m, ${nf0.format(f.dam.flowM3s)} m³/s)</span>` : ''}</td><td>${out}</td><td>${state}</td>
       <td><button data-act="auto" data-id="${f.id}" title="Facultatif : ligne HT vers l'installation la plus proche (le courant suit déjà les routes)">Relier</button></td></tr>`;
   }).join('');
   const lRows = lines.map((l) => `<tr><td>Ligne n° ${l.id} <span class="muted">(${l.a} – ${l.b})</span></td><td>${nf1.format(l.lengthM / 1000)} km</td>
       <td class="${l.failedUntil > 0 ? 'warn' : l.load > 0.9 ? 'warn' : ''}">${l.failedUntil > 0 ? 'panne' : `${Math.round(l.load * 100)} %`}</td>
       <td><button data-act="rm-line" data-id="${l.id}">Démolir</button></td></tr>`).join('');
-  const opts = facs.map((f) => `<option value="${f.id}">${esc(KIND_FR[f.kind])} n° ${f.id}</option>`).join('');
+  const opts = facs.map((f) => `<option value="${f.id}">${esc(facName(f))}</option>`).join('');
   const cables = st.cables ?? [];
   const cRows = cables.map((c) => `<tr><td>Câble n° ${c.id} <span class="muted">(${c.a} – ${c.b > 0 ? c.b : 'route'})</span></td><td>${nf0.format(c.lengthM)} m</td>
       <td class="${c.active ? '' : 'warn'}">${c.active ? (c.b > 0 ? `${Math.round(c.load * 100)} %` : 'raccordé') : 'route démolie'}</td>

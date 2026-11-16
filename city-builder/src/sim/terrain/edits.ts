@@ -55,8 +55,12 @@ export type TerrainEdit =
    * (+1 : côté de la normale (-uz, ux), -1 : l'autre), `q` débit de la rivière barrée (m³/s), `t` minute de jeu.
    */
   | { k: 'dam'; ax: number; az: number; bx: number; bz: number; hh?: number; h?: number; up?: 1 | -1; q?: number; t?: number }
-  /** Source d'eau : débit `q` (m³/s) ; `t` minute de jeu de la pose (fixée par la simulation). */
-  | { k: 'source'; x: number; z: number; q: number; t?: number }
+  /**
+   * Source d'eau : débit `q` (m³/s) ; `t` minute de jeu de la pose (fixée par la simulation). `e` = 1 : SOURCE DE
+   * RIVIÈRE au bord de la carte (l'eau entre par ce bord à débit constant) ; la position est aimantée sur le bord le
+   * plus proche par la simulation (à EDGE_SOURCE_SNAP m au plus).
+   */
+  | { k: 'source'; x: number; z: number; q: number; t?: number; e?: 1 }
   /** Retire la source la plus proche de (x, z) (la simulation vérifie qu'il y en a une). */
   | { k: 'unsource'; x: number; z: number }
   /**
@@ -200,7 +204,7 @@ export function editShapeError(e: unknown): string | null {
   if (o.k === 'smooth') return fin(o.x) && fin(o.z) && fin(o.r) && optF(o.f) && optS ? null : 'Adoucissement invalide';
   if (o.k === 'slope') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) && fin(o.w) && optF(o.ah) && optF(o.bh) && optS ? null : 'Pente invalide';
   if (o.k === 'dam') return fin(o.ax) && fin(o.az) && fin(o.bx) && fin(o.bz) && optF(o.hh) && optF(o.h) && (o.up === undefined || o.up === 1 || o.up === -1) && optF(o.q) && optF(o.t) ? null : 'Tracé de barrage invalide';
-  if (o.k === 'source') return fin(o.x) && fin(o.z) && fin(o.q) && optF(o.t) ? null : 'Source d\'eau invalide';
+  if (o.k === 'source') return fin(o.x) && fin(o.z) && fin(o.q) && optF(o.t) && (o.e === undefined || o.e === 1) ? null : 'Source d\'eau invalide';
   if (o.k === 'unsource') return fin(o.x) && fin(o.z) ? null : 'Retrait de source invalide';
   if (o.k === 'levee') return Array.isArray(o.pts) && o.pts.length >= 4 && o.pts.length % 2 === 0 && o.pts.length <= EDIT_LIMITS.maxLeveePoints * 2 && o.pts.every(fin) && fin(o.w) && fin(o.h) && fin(o.ah) && fin(o.bh) && fin(o.g) && o.g > 0 && (o.lk === undefined || (Array.isArray(o.lk) && o.lk.length % 4 === 0 && o.lk.length <= EDIT_LIMITS.maxLeveePoints * 4 && o.lk.every(fin))) ? null : 'Tracé de digue invalide';
   if (o.k === 'river') return Array.isArray(o.pts) && o.pts.length >= 4 && o.pts.length % 2 === 0 && o.pts.length <= EDIT_LIMITS.maxRiverPoints * 2 && o.pts.every(fin) && fin(o.w) ? null : 'Tracé de rivière invalide';
@@ -245,6 +249,7 @@ export function normalizeEdit(e: TerrainEdit): TerrainEdit {
     case 'source': {
       const o: Extract<TerrainEdit, { k: 'source' }> = { k: 'source', x: r2(e.x), z: r2(e.z), q: r2(clamp(e.q, L.minSourceFlow, L.maxSourceFlow)) };
       if (e.t !== undefined) o.t = r2(e.t);
+      if (e.e === 1) o.e = 1;
       return o;
     }
     case 'unsource': return { k: 'unsource', x: r2(e.x), z: r2(e.z) };
@@ -460,9 +465,20 @@ export function planEdit(t: EditableTerrain, raw: TerrainEdit): PlanOutcome {
     return p ? { ok: true, plan: p } : bad(e.k === 'flatten' ? 'Déjà plat ici' : e.k === 'smooth' ? 'Déjà doux ici' : 'Rien à modifier ici');
   }
 
+  if (e.k === 'source' && e.e === 1) {
+    // Source de rivière : aimantée sur l'échantillon du bord le plus proche.
+    const snap = edgeSnap(t, e.x, e.z);
+    if (!snap) return bad(`Une source de rivière se pose au bord de la carte (à ${EDGE_SOURCE_SNAP} m au plus du bord)`);
+    const k = snap.j * W + snap.i;
+    if (wetK(t, k) && Math.abs(t.waterSurface[k]! - t.waterLevel) < 0.02) return bad('Une source de rivière ne se pose pas en mer : choisissez un bord à terre');
+    const edit: TerrainEdit = { ...e, x: snap.x, z: snap.z };
+    const cost = Math.round(EDIT_COSTS.sourceBase + EDIT_COSTS.sourcePerM3s * e.q);
+    return { ok: true, plan: { edit, rect: { i0: snap.i, j0: snap.j, i1: snap.i, j1: snap.j }, idx: new Int32Array(0), h: new Float32Array(0), ws: new Float32Array(0), volume: 0, forestM2: 0, walls: [], wallLength: 0, cost, outline: circle(snap.x, snap.z, 14) } };
+  }
+
   if (e.k === 'source' || e.k === 'unsource') {
     const i = Math.round((e.x - t.originX) / sp), j = Math.round((e.z - t.originZ) / sp);
-    if (i < 1 || j < 1 || i >= t.samplesX - 1 || j >= t.samplesZ - 1) return bad('Source hors de la carte');
+    if (i < 1 || j < 1 || i >= t.samplesX - 1 || j >= t.samplesZ - 1) return bad(e.k === 'source' ? 'Source hors de la carte (au bord : choisissez « Source de rivière »)' : 'Source hors de la carte');
     const k = j * W + i;
     if (e.k === 'source' && wetK(t, k) && Math.abs(t.waterSurface[k]! - t.waterLevel) < 0.02) return bad('Une source ne se pose pas en mer');
     const cost = e.k === 'source' ? Math.round(EDIT_COSTS.sourceBase + EDIT_COSTS.sourcePerM3s * e.q) : 0;
@@ -717,6 +733,27 @@ export function brushWeight(u: number, plateau: number): number {
   if (u >= 1) return 0;
   const v = plateau > 0 ? clamp((u - plateau) / (1 - plateau), 0, 1) : u;
   return 0.5 + 0.5 * Math.cos(Math.PI * v);
+}
+
+/** Source de rivière : distance maximale (m) entre le point visé et le bord de la carte (aimantation). */
+export const EDGE_SOURCE_SNAP = 64;
+
+/**
+ * Échantillon du bord de la carte le plus proche de (x, z) (coin exclu : une case à l'intérieur du coin), avec sa
+ * position ; null si le point est à plus de EDGE_SOURCE_SNAP m du bord ou hors de la carte. Partagé avec l'outil.
+ */
+export function edgeSnap(t: Pick<TerrainData, 'originX' | 'originZ' | 'spacing' | 'samplesX' | 'samplesZ'>, x: number, z: number): { i: number; j: number; x: number; z: number } | null {
+  const W = t.samplesX, H = t.samplesZ, sp = t.spacing;
+  const fi = (x - t.originX) / sp, fj = (z - t.originZ) / sp;
+  if (fi < -EDGE_SOURCE_SNAP / sp || fj < -EDGE_SOURCE_SNAP / sp || fi > W - 1 + EDGE_SOURCE_SNAP / sp || fj > H - 1 + EDGE_SOURCE_SNAP / sp) return null;
+  const d = [fi, W - 1 - fi, fj, H - 1 - fj];
+  let side = 0;
+  for (let s = 1; s < 4; s++) if (d[s]! < d[side]!) side = s;
+  if (d[side]! * sp > EDGE_SOURCE_SNAP) return null;
+  const ci = clamp(Math.round(fi), 1, W - 2), cj = clamp(Math.round(fj), 1, H - 2);
+  const i = side === 0 ? 0 : side === 1 ? W - 1 : ci;
+  const j = side === 2 ? 0 : side === 3 ? H - 1 : cj;
+  return { i, j, x: t.originX + i * sp, z: t.originZ + j * sp };
 }
 
 function circle(x: number, z: number, r: number): number[] {

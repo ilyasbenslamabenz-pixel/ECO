@@ -299,6 +299,30 @@ export function hydroDamKw(nominalKw: number, headM: number, flowM3s: number, se
   return nominalKw * Math.min(HYDRO_MAX_FACTOR, k);
 }
 
+/**
+ * Barrage hydroélectrique (l'ouvrage tiré d'une rive à l'autre EST la centrale) : même loi que la centrale au pied
+ * d'un barrage (`hydroDamKw` avec la puissance nominale du type), soit DAM_PLANT_KW_PER_M4 kW par m³/s et par mètre de
+ * chute × débit saisonnier, plafonnée à DAM_PLANT_MAX_KW (turbines). Proportionnelle à chute × débit sous le plafond.
+ */
+export const DAM_PLANT_KW_PER_M4 = FACILITY_SPECS.hydro.nominalKw / (HYDRO_REF_FLOW * HYDRO_REF_HEAD);
+export const DAM_PLANT_MAX_KW = FACILITY_SPECS.hydro.nominalKw * HYDRO_MAX_FACTOR;
+
+export function damPlantKw(headM: number, flowM3s: number, season: string): number {
+  return hydroDamKw(FACILITY_SPECS.hydro.nominalKw, headM, flowM3s, season);
+}
+
+/**
+ * Entretien mensuel (CHF) d'un barrage qui produit : au prorata de sa puissance au débit de référence saisonnier
+ * (printemps), comme la centrale du catalogue (`elec_barrage` : 5 000 CHF/mois pour 30 MW, soit ≈ 167 CHF/MW),
+ * 1 000 CHF au moins ; 0 pour un barrage sans débit ni chute (simple retenue).
+ */
+export const DAM_PLANT_UPKEEP = { chfPerMonthAtNominal: 5_000, minChf: 1_000 } as const;
+export function damPlantUpkeepChf(headM: number, flowM3s: number): number {
+  const kw = damPlantKw(headM, flowM3s, 'printemps');
+  if (!(kw > 0)) return 0;
+  return Math.max(DAM_PLANT_UPKEEP.minChf, Math.round((kw / FACILITY_SPECS.hydro.nominalKw) * DAM_PLANT_UPKEEP.chfPerMonthAtNominal));
+}
+
 /** Site d'une centrale au pied d'un barrage : raison affichée (chute, débit) ; non valide si la retenue est vide. */
 export function hydroDamSiteCheck(dam: { headM: number; flowM3s: number; full: boolean }): { ok: boolean; reason: string } {
   if (!(dam.flowM3s > 0)) return { ok: false, reason: 'Barrage sans arrivée d\'eau : posez une source en amont ou barrez une rivière' };

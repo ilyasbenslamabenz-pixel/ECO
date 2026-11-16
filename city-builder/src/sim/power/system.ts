@@ -23,7 +23,7 @@ import { governanceModifiers } from '../../shared/governance';
 import {
   BATTERY_ONE_WAY, BATTERY_SPEC, batteryStep, capacityKwhOf,
   baseDemandKw, centsToChf, consumerClassOf, FACILITY_SPECS, facilityKindOf, failureMultiplier, hourlyFactor, hydroShare,
-  hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, CABLE_SPEC, cableCost, EXPORT_SPEC, clampExportPrice, exportDemandShare, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
+  damPlantKw, damPlantUpkeepChf, hydroDamKw, hydroDamSiteCheck, hydroSiteCheck, CABLE_SPEC, cableCost, EXPORT_SPEC, clampExportPrice, exportDemandShare, IMPORT_SPEC, LINE_SPEC, lineCost, nominalKwOf, repairMultiplier, ROOFTOP_SPEC, seasonDemandFactor, solarShare,
   TARIFF_CENTS_PER_KWH, windPowerShare, windProfile,
 } from '../../shared/power/model';
 import {
@@ -148,6 +148,8 @@ const PENALTY_RECOVER = 2;
 const PENALTY_MAX = 12;
 /** Pseudo-installation « réseau extérieur » (identifiant de bâtiment jamais attribué : les ids commencent à 1). */
 const IMPORT_HUB = 0;
+/** Consommateur sans installation de distribution (les identifiants négatifs sont ceux des barrages). */
+const NO_HUB = Number.NEGATIVE_INFINITY;
 
 interface Facility {
   id: number;
@@ -166,14 +168,27 @@ interface Facility {
   damId?: number;
   /** Version du service `hydro` lors de la validation du site. */
   hydroVer?: number;
+  /**
+   * Barrage hydroélectrique : l'OUVRAGE lui-même (pas un bâtiment), identifiant négatif `damFacilityId(damId)`.
+   * `attach` : points (x, z alternés) par lesquels il se raccorde à une route (extrémités de l'axe, milieu).
+   */
+  dam?: boolean;
+  attach?: number[];
+  damStat?: { headM: number; flowM3s: number };
 }
 
+interface DamInfo { id: number; headM: number; flowM3s: number; full: boolean; x: number; z: number; crest: number; lengthM: number; ax: number; az: number; bx: number; bz: number }
 /** Service `hydro` publié par le cœur de la simulation (barrages et retenues, src/sim/hydro/system.ts). */
 interface HydroDamService {
   version(): number;
-  damNear(x: number, z: number, reach: number): { id: number; headM: number; flowM3s: number; full: boolean } | null;
-  dam(id: number): { id: number; headM: number; flowM3s: number; full: boolean } | null;
+  damNear(x: number, z: number, reach: number): DamInfo | null;
+  dam(id: number): DamInfo | null;
+  dams?(): DamInfo[];
 }
+/** Identifiant (négatif, jamais attribué à un bâtiment) de la centrale d'un barrage. */
+export const damFacilityId = (damId: number): number => -(damId + 1);
+/** Nom affiché d'une installation (bâtiment : « … n° id » ; barrage : « Barrage hydroélectrique (ouvrage n) »). */
+const facLabel = (f: { id: number; nameFr: string }): string => (f.id < 0 ? `${f.nameFr} (ouvrage ${-f.id})` : `${f.nameFr} n° ${f.id}`);
 /** Distance maximale entre une centrale et l'axe d'un barrage (m, en plus de sa demi-taille). */
 const DAM_PLANT_REACH = 60;
 
@@ -184,7 +199,7 @@ interface Consumer {
   demandKw: number;
   residents: number;
   jobs: number;
-  hub: number; // identifiant de l'installation de distribution, -1 = non raccordé
+  hub: number; // identifiant de l'installation de distribution, NO_HUB = non raccordé (les barrages ont des identifiants négatifs)
   cell: number;
 }
 
@@ -348,6 +363,27 @@ export class PowerSystem {
         ...(damId !== undefined ? { damId } : {}), ...(hydroVer !== undefined ? { hydroVer } : {}),
       });
     }
+    // Barrages hydroélectriques (façon CS2 : l'ouvrage est la centrale) : chaque barrage traversé par un débit produit
+    // selon sa chute et son débit, sauf s'il a déjà une centrale (bâtiment) à son pied, qui le remplace (même loi de
+    // production : pas de double comptage).
+    const hs = ctx.use<HydroDamService>('hydro');
+    const dams = hs?.dams?.() ?? [];
+    if (dams.length) {
+      const equipped = new Set<number>();
+      for (const f of out.values()) if (f.damId !== undefined && f.siteOk) equipped.add(f.damId);
+      for (const d of [...dams].sort((a, b) => a.id - b.id)) {
+        if (equipped.has(d.id) || !(d.flowM3s > 0)) continue;
+        const id = damFacilityId(d.id);
+        out.set(id, {
+          id, kind: 'hydro', nameFr: 'Barrage hydroélectrique', x: d.x, y: d.crest, z: d.z, rot: 0,
+          nominalKw: Math.round(damPlantKw(d.headM, d.flowM3s, 'printemps')), radius: FACILITY_SPECS.hydro.radius,
+          halfSize: d.lengthM / 2, siteOk: true,
+          siteReason: d.headM > 0 ? `centrale du barrage en service : chute ${d.headM.toLocaleString('fr-FR')} m, débit ${Math.round(d.flowM3s)} m³/s` : `retenue en remplissage (débit ${Math.round(d.flowM3s)} m³/s) : la production commence avec la chute`,
+          upkeep: damPlantUpkeepChf(d.headM, d.flowM3s), capacityKwh: 0, damId: d.id, dam: true,
+          attach: [d.ax, d.az, d.bx, d.bz], damStat: { headM: d.headM, flowM3s: d.flowM3s },
+        });
+      }
+    }
     return out;
   }
 
@@ -358,7 +394,7 @@ export class PowerSystem {
       if (!this.facilities.has(id) && !(String(id) in this.state.facilities)) {
         this.state.facilities[String(id)] = { failedUntil: 0, failures: 0 };
         if (f.kind === 'hydro') {
-          this.event(ctx, 'site', `${f.nameFr} n° ${id} : ${f.siteReason}`, id);
+          this.event(ctx, 'site', `${facLabel(f)} : ${f.siteReason}`, id);
           if (!f.siteOk) ctx.notify('warn', `${f.nameFr} : ${f.siteReason}.`);
         }
       }
@@ -517,7 +553,7 @@ export class PowerSystem {
     if (!fresh.length) return;
     const f0 = this.facilities.get(fresh[0]!)!;
     const msg = fresh.length === 1
-      ? `${f0.nameFr} n° ${f0.id} isolée : ${isolatedHint(f0.kind)}`
+      ? `${facLabel(f0)} isolée : ${isolatedHint(f0.kind)}`
       : `${fresh.length} installations électriques isolées : ${isolatedHint('thermique')}`;
     this.event(ctx, 'site', msg, f0.id);
     ctx.notify('warn', msg);
@@ -586,8 +622,13 @@ export class PowerSystem {
     if ('error' in A) return { ok: false, ...A.error };
     if ('error' in B) return { ok: false, ...B.error };
     if (!('f' in A)) { if (!('f' in B)) return { ok: false, code: 'INVALID_ARGS', message: 'Un câble souterrain relie une installation électrique à une route ou à une autre installation (pas deux routes)' }; [A, B] = [B, A]; }
-    const fa = (A as { f: Facility }).f;
-    const fb = 'f' in B ? B.f : null;
+    let fa = (A as { f: Facility }).f;
+    let fb = 'f' in B ? B.f : null;
+    // Barrage (identifiant négatif) : toujours en extrémité `a` (b > 0 : installation, b = 0 : route).
+    if (fb && fb.id < 0) {
+      if (fa.id < 0) return { ok: false, code: 'INVALID_ARGS', message: 'Reliez un barrage à une route ou à une installation (pas à un autre barrage)' };
+      [fa, fb] = [fb, fa];
+    }
     if (fb && fb.id === fa.id) return { ok: false, code: 'INVALID_ARGS', message: 'Un câble relie deux extrémités différentes' };
     const bx = fb ? fb.x : (B as { x: number }).x, bz = fb ? fb.z : (B as { z: number }).z;
     const L = Math.hypot(bx - fa.x, bz - fa.z);
@@ -810,7 +851,7 @@ export class PowerSystem {
       const fs = this.facilityState(id);
       if (fs.failedUntil > 0 && now >= fs.failedUntil) {
         fs.failedUntil = 0;
-        this.event(ctx, 'reparation', `${f.nameFr} n° ${id} réparée`, id);
+        this.event(ctx, 'reparation', `${facLabel(f)} réparée`, id);
       }
       const spec = FACILITY_SPECS[f.kind];
       const draw = ctx.rng.next();
@@ -822,7 +863,7 @@ export class PowerSystem {
         fs.failures++;
         n++;
         this.state.month.failures++;
-        const msg = `Panne : ${f.nameFr} n° ${id} hors service (réparation ≈ ${hours} h)`;
+        const msg = `Panne : ${facLabel(f)} hors service (réparation ≈ ${hours} h)`;
         this.event(ctx, 'panne', msg, id);
         ctx.notify('warn', msg);
         if (m) {
@@ -865,7 +906,9 @@ export class PowerSystem {
         if (!f.siteOk) return 0;
         if (f.damId !== undefined) {
           const d = ctx.use<HydroDamService>('hydro')?.dam(f.damId);
-          return d ? hydroDamKw(f.nominalKw, d.headM, d.flowM3s, ctx.clock.season) : 0;
+          if (!d) return 0;
+          // Barrage-centrale : loi du type (chute × débit), sinon centrale au pied du barrage (sa puissance nominale).
+          return f.dam ? damPlantKw(d.headM, d.flowM3s, ctx.clock.season) : hydroDamKw(f.nominalKw, d.headM, d.flowM3s, ctx.clock.season);
         }
         return f.nominalKw * hydroShare(ctx.clock.season);
       }
@@ -1000,7 +1043,9 @@ export class PowerSystem {
     this.applyCables(ctx, facs);
     this.facComp.clear();
     for (const f of facs) {
-      const c = this.compAt(ctx, f.x, f.z, ROAD_ATTACH_M);
+      let c = this.compAt(ctx, f.x, f.z, ROAD_ATTACH_M);
+      // Barrage : raccordé par l'une de ses culées (route sur une rive) s'il n'y a pas de route près de son milieu.
+      if (c < 0 && f.attach) for (let q = 0; q + 1 < f.attach.length && c < 0; q += 2) c = this.compAt(ctx, f.attach[q]!, f.attach[q + 1]!, ROAD_ATTACH_M);
       // Installation loin des routes reliée par un câble souterrain : elle rejoint le réseau routier du câble.
       this.facComp.set(f.id, c >= 0 ? c : this.canonComp(this.cableAnchor.get(f.id) ?? -1));
     }
@@ -1022,7 +1067,7 @@ export class PowerSystem {
       const residents = st.residents[i]!, workers = st.workers[i]!;
       const demand = baseDemandKw(cls, tiles, residents, workers, a.capacity.jobs) * hourlyFactor(cls, hourOfDay) * seasonF * govDemand;
       const x = st.x[i]!, z = st.z[i]!;
-      let hub = -1, best = Infinity, fedHub = -1, fedBest = Infinity;
+      let hub = NO_HUB, best = Infinity, fedHub = NO_HUB, fedBest = Infinity;
       const comp = this.compAt(ctx, x, z, ROAD_ATTACH_M);
       for (const f of facs) {
         const d = Math.hypot(f.x - x, f.z - z);
@@ -1033,9 +1078,9 @@ export class PowerSystem {
         if (usable && d < fedBest) { fedBest = d; fedHub = f.id; }
       }
       // Priorité à l'installation alimentée la plus proche ; repli : la plus proche (réseau isolé, coupé).
-      if (fedHub >= 0) hub = fedHub;
+      if (fedHub !== NO_HUB) hub = fedHub;
       // Aucune installation : réseau extérieur (raccordement) le long de la voirie.
-      if (hub < 0 && imp && comp >= 0) hub = IMPORT_HUB;
+      if (hub === NO_HUB && imp && comp >= 0) hub = IMPORT_HUB;
       let cell = -1;
       if (geom) {
         const ci = Math.min(geom.cols - 1, Math.max(0, Math.floor((x - geom.originX) / geom.cellSize)));
@@ -1053,7 +1098,7 @@ export class PowerSystem {
         if (!this.rooftopSet.has(c.id)) continue;
         rooftopCount++;
         rooftopNominal += ROOFTOP_SPEC.peakKwPerBuilding;
-        if (c.hub < 0) continue;
+        if (c.hub === NO_HUB) continue;
         const kw = ROOFTOP_SPEC.peakKwPerBuilding * sun;
         rooftopKw += kw;
         rooftopByHub.set(c.hub, (rooftopByHub.get(c.hub) ?? 0) + kw);
@@ -1064,14 +1109,14 @@ export class PowerSystem {
     const prio: Record<ConsumerClass, number> = {} as Record<ConsumerClass, number>;
     for (const c of CONSUMER_CLASSES) prio[c] = this.priorityOf(c);
     const demandBy = new Map<string, number>(); // `${hub}|${cls}`
-    for (const c of consumers) if (c.hub >= 0) demandBy.set(`${c.hub}|${c.cls}`, (demandBy.get(`${c.hub}|${c.cls}`) ?? 0) + c.demandKw);
+    for (const c of consumers) if (c.hub !== NO_HUB) demandBy.set(`${c.hub}|${c.cls}`, (demandBy.get(`${c.hub}|${c.cls}`) ?? 0) + c.demandKw);
 
     // 5. Répartition puis choix des bâtiments servis (ordre tournant dans chaque (installation, classe)).
     //    L'énergie attribuée à une classe mais inutilisable (le bâtiment suivant ne tient pas dans le reliquat)
     //    est rendue : la demande de la classe est ramenée à la part utilisable et la répartition est refaite,
     //    ce qui libère le reliquat pour les classes moins prioritaires (2 à 3 itérations en pratique).
     const groups = new Map<string, Consumer[]>();
-    for (const c of consumers) if (c.hub >= 0) (groups.get(`${c.hub}|${c.cls}`) ?? groups.set(`${c.hub}|${c.cls}`, []).get(`${c.hub}|${c.cls}`)!).push(c);
+    for (const c of consumers) if (c.hub !== NO_HUB) (groups.get(`${c.hub}|${c.cls}`) ?? groups.set(`${c.hub}|${c.cls}`, []).get(`${c.hub}|${c.cls}`)!).push(c);
     // Délestage progressif : les bâtiments les plus anciens (identifiant croissant) gardent le courant, les derniers
     // raccordés sont coupés d'abord (et non toute la ville à tour de rôle).
     for (const list of groups.values()) list.sort((p, q) => p.id - q.id);
@@ -1097,7 +1142,7 @@ export class PowerSystem {
     }
     this.served.clear();
     this.noService.clear();
-    for (const c of consumers) if (c.hub < 0) { this.served.set(c.id, 0); this.noService.add(c.id); }
+    for (const c of consumers) if (c.hub === NO_HUB) { this.served.set(c.id, 0); this.noService.add(c.id); }
     for (const [key, list] of groups) {
       const pk = picks.get(key)!;
       for (const c of list) this.served.set(c.id, pk.on.has(c.id) ? 1 : 0);
@@ -1116,7 +1161,7 @@ export class PowerSystem {
       const on = this.served.get(c.id) === 1;
       if (on) b.deliveredKw += c.demandKw;
       else {
-        if (c.hub < 0) { unlinked++; b.unlinked++; unlinkedKw += c.demandKw; } else { cut++; b.cut++; this.cutList.push(c.id); }
+        if (c.hub === NO_HUB) { unlinked++; b.unlinked++; unlinkedKw += c.demandKw; } else { cut++; b.cut++; this.cutList.push(c.id); }
         jobsOff += c.jobs; resOff += c.residents;
       }
     }
@@ -1195,7 +1240,7 @@ export class PowerSystem {
       id: f.id, kind: f.kind, nameFr: f.nameFr, x: f.x, y: f.y, z: f.z, rot: f.rot,
       availableKw: avail.get(f.id)!, nominalKw: f.nominalKw, outputKw: report.outputOf.get(f.id) ?? 0,
       failedUntil: this.facilityState(f.id).failedUntil, siteOk: f.siteOk, energized: energized.has(f.id), radius: f.radius,
-      roadLinked: (this.facComp.get(f.id) ?? -1) >= 0, ...(isolated.has(f.id) ? { isolated: true } : {}),
+      roadLinked: (this.facComp.get(f.id) ?? -1) >= 0, ...(isolated.has(f.id) ? { isolated: true } : {}), ...(f.dam && f.damStat ? { dam: { ...f.damStat } } : {}),
       ...(f.kind === 'batterie' ? {
         storedKwh: Math.round(this.facilityState(f.id).storedKwh ?? 0), capacityKwh: f.capacityKwh,
         storageKw: Math.round(((charge.get(f.id) ?? 0) - (report.outputOf.get(f.id) ?? 0)) * 10) / 10,
@@ -1428,7 +1473,7 @@ export class PowerSystem {
     for (const c of consumers) {
       if (c.cell < 0) continue;
       const s = this.served.get(c.id) === 1;
-      if (s) on[c.cell]!++; else if (c.hub < 0) unl[c.cell]!++; else off[c.cell]!++;
+      if (s) on[c.cell]!++; else if (c.hub === NO_HUB) unl[c.cell]!++; else off[c.cell]!++;
     }
     const cells = new Uint8Array(n);
     for (let k = 0; k < n; k++) {
@@ -1460,7 +1505,7 @@ export class PowerSystem {
     let anyCut = false;
     // Seuls les logements RACCORDÉS et coupés sont pénalisés ici ; ceux qu'aucun réseau ne dessert relèvent de la
     // pénalité « sans service » de la démographie (progressive, comme avant la première installation).
-    for (const c of consumers) if (c.cell >= 0 && c.residents > 0 && c.hub >= 0 && this.served.get(c.id) !== 1) { cutCells[c.cell] = 1; anyCut = true; }
+    for (const c of consumers) if (c.cell >= 0 && c.residents > 0 && c.hub !== NO_HUB && this.served.get(c.id) !== 1) { cutCells[c.cell] = 1; anyCut = true; }
     if (anyCut || this.penaltyGrid) {
       const pen = (this.penaltyGrid ??= new Float32Array(n));
       const sat = m.grids.ensure('satisfaction');
@@ -1549,6 +1594,13 @@ export class PowerSystem {
     return s;
   }
 
+  /** Entretien mensuel des barrages hydroélectriques en service (CHF). */
+  damsUpkeepChf(): number {
+    let s = 0;
+    for (const f of this.facilities.values()) if (f.dam) s += f.upkeep;
+    return s;
+  }
+
   /** Clôture mensuelle : lignes budgétaires du service (entretien selon le financement, vente d'électricité). */
   month(ctx: PluginContext): void {
     const m = this.getMunicipal();
@@ -1563,6 +1615,9 @@ export class PowerSystem {
       if (income > 0) m.budget.post('income', 'vente:electricite', centsToChf(income), 'electricite');
       // Vente aux voisins : déjà versée heure par heure à la trésorerie, inscrite au grand livre seulement.
       if (exportIncome > 0) m.budget.record('income', 'vente:electricite_exterieure', centsToChf(exportIncome), 'electricite');
+      // Barrages hydroélectriques (ouvrages, pas des bâtiments du catalogue) : entretien payé par le module.
+      const dams = this.damsUpkeepChf();
+      if (dams > 0) m.budget.post('expense', 'entretien:barrages_hydro', dams, 'electricite');
     }
     this.state.lastMonth = { income, expense, failures: this.state.month.failures };
     if (importCost > 0 || this.importOn) this.state.lastMonth.importCost = importCost;
@@ -1575,10 +1630,11 @@ export class PowerSystem {
   budget(): ElectriciteBudget {
     let fac = 0;
     // Entretien catalogue (CHF, débité par la simulation de base) exprimé en centimes comme les autres champs.
-    for (const f of this.facilities.values()) fac += f.upkeep * 100;
+    for (const f of this.facilities.values()) if (!f.dam) fac += f.upkeep * 100;
+    const dams = this.damsUpkeepChf();
     const nominal = this.upkeepNominal();
     return {
-      upkeepNominal: nominal, upkeepActual: Math.round(nominal * this.state.settings.funding), facilitiesUpkeep: fac,
+      upkeepNominal: nominal, upkeepActual: Math.round(nominal * this.state.settings.funding), facilitiesUpkeep: fac, ...(dams > 0 ? { damsUpkeep: dams * 100 } : {}),
       lastIncome: this.state.lastMonth.income, lastExpense: this.state.lastMonth.expense, investments: this.state.investments,
       monthProducedKwh: Math.round(this.state.month.producedKwh), monthDeliveredKwh: Math.round(this.state.month.deliveredKwh),
       monthShedKwh: Math.round(this.state.month.shedKwh), monthFailures: this.state.month.failures, lastMonthFailures: this.state.lastMonth.failures,
