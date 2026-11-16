@@ -18,7 +18,7 @@ import { ELECTRICITE_SAVE_VERSION, migrateElectricite, type ElectriciteSave } fr
 import {
   type CableEnd, CONSUMER_CLASSES, type ConsumerClass, ELECTRICITE_ID, ELECTRICITE_SERVICE, type ElectriciteService, type FacilityKind,
 } from '../../shared/power/types';
-import { FACILITY_SPECS, hydroDamSiteCheck, hydroSiteCheck } from '../../shared/power/model';
+import { centsToChf, FACILITY_SPECS, hydroDamSiteCheck, hydroSiteCheck, IMPORT_SPEC, TARIFF_CENTS_PER_KWH } from '../../shared/power/model';
 import { TILE_SIZE } from '../../shared/constants';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 
@@ -77,6 +77,12 @@ export function createElectricitePlugin(): ElectricitePlugin {
         system.municipalMode = 'integre';
       }
       ctx.provide(ELECTRICITE_SERVICE, service);
+      // Solde prévu du premier mois : vente aux habitants − achat au voisin (au rythme du mois) − entretien du réseau.
+      ctx.economy.setMonthlyEstimate?.('electricite', (frac) => {
+        const mo = system.state.month;
+        const flow = (mo.deliveredKwh * TARIFF_CENTS_PER_KWH - (mo.importedKwh ?? 0) * IMPORT_SPEC.priceCentsPerKwh) / frac;
+        return centsToChf(flow - system.upkeepNominal() * system.state.settings.funding);
+      });
       muni.scheduler.add({ id: 'electricite:heure', every: 'hour', run: () => { if (ensureActive(ctx)) system.hour(ctx); } });
       muni.scheduler.add({ id: 'electricite:jour', every: 'day', run: () => { if (active) system.day(ctx); } });
       muni.scheduler.add({ id: 'electricite:mois', every: 'month', run: () => { if (active) system.month(ctx); } });

@@ -13,7 +13,7 @@ import { DEFAULT_WASTE_SETTINGS, WASTE_PARAMS } from '../../shared/waste/types';
 import { MUNICIPAL_SERVICE, type Municipal } from '../municipal/municipal';
 import { ROAD_KINDS } from '../roads/types';
 import { DECHETS_SAVE_VERSION, loadWaste, migrateDechets, saveWaste } from '../waste/save';
-import { NUISANCE_ID, WasteSystem } from '../waste/system';
+import { monthlyTruckBudget, NUISANCE_ID, WasteSystem } from '../waste/system';
 import type { PluginCommandResult, PluginContext, SimPlugin } from './types';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -90,6 +90,8 @@ export function createDechetsPlugin(): SimPlugin & { readonly waste: WasteSystem
         satisfactionCell: (k: number): number => waste.appliedSat?.[k] ?? 0,
       });
       muni = ctx.use<Municipal>(MUNICIPAL_SERVICE);
+      // Solde prévu du premier mois : exploitation des camions, facturée à la clôture.
+      ctx.economy.setMonthlyEstimate?.('dechets', () => -monthlyTruckBudget(waste.connectedFleet() || waste.fleet(), waste.settings.funding));
       if (!muni) return;
       const s = muni.scheduler;
       if (s.has('dechets:production')) return; // instance du registre partagée entre plusieurs simulations (tests)

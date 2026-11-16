@@ -148,6 +148,7 @@ export class PluginHost {
     };
     const economy: PluginEconomy = {
       applyService: (amount, oneOff, line) => sim.economy.applyService(amount, oneOff === true, line),
+      setMonthlyEstimate: (id, fn) => sim.economy.setMonthlyEstimate(id, fn),
       get money() { return sim.economy.money; },
       get bankrupt() { return sim.economy.bankrupt; },
       get taxRates() { return { ...sim.economy.taxRates }; },

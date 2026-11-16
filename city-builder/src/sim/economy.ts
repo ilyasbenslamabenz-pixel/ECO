@@ -257,7 +257,19 @@ export class Economy {
    */
   servicesForecast(): number {
     if (this.lastServicesRecurring !== null) return this.lastServicesRecurring;
-    return this.monthHours > 0 ? (this.monthServicesRecurring * HOURS_PER_MONTH) / this.monthHours : 0;
+    const frac = this.monthHours / HOURS_PER_MONTH;
+    const hourly = this.monthHours > 0 ? this.monthServicesRecurring / frac : 0;
+    // Avant la première clôture : les factures mensuelles des modules (achat d'électricité, camions…) ne sont pas
+    // encore tombées ; chaque module en donne une estimation pour un mois complet (docs/EQUILIBRE_ECONOMIE.md R4).
+    let monthly = 0;
+    for (const fn of this.monthlyEstimators.values()) { try { const v = fn(Math.max(frac, 1 / HOURS_PER_MONTH)); if (Number.isFinite(v)) monthly += v; } catch { /* estimation facultative */ } }
+    return hourly + monthly;
+  }
+
+  /** Estimateurs des factures mensuelles des modules (CHF signés, mois complet), utilisés avant la première clôture. */
+  private readonly monthlyEstimators = new Map<string, (monthFraction: number) => number>();
+  setMonthlyEstimate(id: string, fn: ((monthFraction: number) => number) | null): void {
+    if (fn) this.monthlyEstimators.set(id, fn); else this.monthlyEstimators.delete(id);
   }
 
   canAfford(cost: number): boolean { return !this.bankrupt && this.money >= cost; }

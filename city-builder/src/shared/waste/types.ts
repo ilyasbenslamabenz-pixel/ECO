@@ -48,9 +48,9 @@ export const WASTE_PARAMS = {
   /** Stockage local (bacs) : jours de production tenus, minimum en kg. */
   storageDays: 4,
   storageMinKg: 30,
-  /** Camion-benne : charge utile (kg), coût de fonctionnement mensuel (¢, salaires + carburant + entretien). */
+  /** Camion-benne : charge utile (kg), coût de fonctionnement mensuel (CHF, salaires + carburant + entretien ; 1 800 → 900, docs/EQUILIBRE_ECONOMIE.md R3). */
   truckCapacityKg: 8000,
-  truckCostPerMonth: 1800,
+  truckCostPerMonth: 900,
   /** Tournée : départ du dépôt (minute du jour), durée maximale (min), service par arrêt, vidage. */
   departureMinute: 6 * 60,
   shiftMinutes: 7 * 60,

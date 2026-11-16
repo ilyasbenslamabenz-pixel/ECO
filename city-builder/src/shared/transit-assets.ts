@@ -35,7 +35,7 @@ export function withTransitAssets(cat: AssetCatalog): AssetCatalog {
   return { ...cat, assets: [...cat.assets, tramDepotFrom(bus)] };
 }
 
-/** Prix des logements posés à la main divisé par ce facteur (choix du joueur) ; le zonage reste gratuit pour la ville. */
+/** Prix ET entretien mensuel des logements posés à la main divisés par ce facteur (choix du joueur, étude docs/EQUILIBRE_ECONOMIE.md R2) ; le zonage reste gratuit. */
 export const RESIDENTIAL_PRICE_DIVISOR = 4;
 
 /**
@@ -47,7 +47,7 @@ export function withResidentialPricing(cat: AssetCatalog): AssetCatalog {
   return {
     ...cat,
     assets: cat.assets.map((a) => (a.capacity?.residents > 0 && a.cost > 0
-      ? { ...a, cost: Math.max(100, Math.round(a.cost / RESIDENTIAL_PRICE_DIVISOR / 100) * 100), tags: [...(a.tags ?? []), 'prix:logement'] }
+      ? { ...a, cost: Math.max(100, Math.round(a.cost / RESIDENTIAL_PRICE_DIVISOR / 100) * 100), upkeepPerMonth: Math.round((a.upkeepPerMonth ?? 0) / RESIDENTIAL_PRICE_DIVISOR), tags: [...(a.tags ?? []), 'prix:logement'] }
       : a)),
   };
 }

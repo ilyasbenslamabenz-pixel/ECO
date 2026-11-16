@@ -128,6 +128,11 @@ export interface PluginEconomy {
    * `line` (facultatif) : poste détaillé au bilan mensuel (`MonthRecord.serviceLines`, ex. vente aux villes voisines).
    */
   applyService(amount: number, oneOff?: boolean, line?: string): void;
+  /**
+   * Estimation (CHF signés, mois complet) d'une facture mensuelle du module, réglée à la clôture : intégrée au solde
+   * prévu avant la première clôture. `monthFraction` : part du mois écoulée. Facultatif (façades de test).
+   */
+  setMonthlyEstimate?(id: string, fn: ((monthFraction: number) => number) | null): void;
 }
 
 /** Résultat d'une écriture de promotion privée (`PluginDevelopment`). */
