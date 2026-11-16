@@ -16,6 +16,7 @@ Simulation TypeScript pur dans le worker, déterministe (aucun tirage), sauvegar
 | `src/render/water-network/overlay.ts`, `view.ts`, `src/render/plugins/eau.ts` | calque souterrain, bouton « Eau » |
 | `src/ui/panels/eau.ts` | panneau « Eau & égouts » |
 | `tools/water-network/{models,build}.ts` | 5 modèles GLB originaux LOD0/1/2 (kit procédural) |
+| `src/sim/hydro/fill.ts`, `src/sim/hydro/system.ts` | eau de surface dynamique : sources, retenues des barrages, creux remplis (§8) |
 | `tests/eau/*.test.ts`, `tests/eau/capture.mjs` | 19 tests (modèle, hydrographie, module, sauvegarde, 4 tests d'effet) ; captures du vrai jeu (`npm run eau:captures`) |
 
 ## 1. Installations (bâtiments `public` du catalogue)
@@ -103,7 +104,29 @@ part et d'autre de l'axe des voies, pastilles de desserte des bâtiments ; modes
 - Pas de pompage hors composante : l'eau brute ne rejoint une usine que par la même composante routière.
 - Débit des rivières approximé par l'accumulation de cellules en eau (le tracé réel n'est pas exposé aux modules).
 
-## 8. Mesures et preuves (2026-11-13)
+## 8. Eau de surface dynamique : sources, retenues, creux (2026-11-16)
+
+Distinct du service eau potable ci-dessus : module `src/sim/hydro` (détails et utilisation : `docs/TERRAFORMATION.md`).
+
+- **Couches** : eau DE BASE (mer, lacs et rivières de la carte, canaux et rivières creusés : jamais modifiée par le
+  module) et surface COMBINÉE `terrain.waterSurface` = max(base, eau dynamique), celle que voient le rendu, `isWet`, la
+  pose des bâtiments et les modules (dont `RiverRouter`). Tant qu'aucune source, aucun barrage ni creux relié à l'eau
+  n'existe, il n'y a qu'une couche : parties existantes identiques.
+- **Modèle « remplir puis déborder »** (`fill.ts`, file de priorité sur la cote du fond) : chaque alimentation (source,
+  rivière barrée) remplit sa cuvette par niveaux ; le volume délivré (débit × temps de jeu écoulé, quantifié à
+  6 minutes) fait monter le niveau ; au col le plus bas l'eau déborde, suit la plus grande pente (ruisseau d'une case,
+  0,35 m) jusqu'au creux suivant, une eau de base (exutoire) ou le bord de la carte. Une case CREUSÉE sèche plus basse
+  qu'une eau voisine se remplit à son niveau. Bâtiments et chaussées : barrières. Déterministe : l'état ne dépend que
+  des éditions et de la minute de jeu.
+- **Barrage** : l'axe relevé jusqu'à la crête est une barrière continue ; la retenue monte jusqu'à la crête puis
+  déborde ; la rivière aval reste à son niveau d'origine (test). Mesures : niveau de la retenue, aval, chute, débit
+  entrant (service `hydro` pour l'électricité).
+- **Rendu** : patchs de terrain existants (`terrainPatch`, drapeau `waterOnly` pendant un remplissage : pas de
+  remaillage) ; le maillage des eaux intérieures de `WaterSystem` affiche lacs et retenues tels quels.
+- **Coût** (ville de charge, Node) : 2,9 ms par calcul pendant un remplissage (un calcul toutes les 6 minutes de jeu),
+  rien en régime établi.
+
+## 9. Mesures et preuves (2026-11-13)
 
 - Pas horaire, ville « stress » (500 bâtiments, 166 tronçons, Node, conteneur cloud) : 29 ms en moyenne sur 30 h,
   122 ms au premier pas (construction de la topologie et de l'hydrographie) ; pas journalier 3,4 ms.

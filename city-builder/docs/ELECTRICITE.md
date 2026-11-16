@@ -102,7 +102,9 @@ entre 3 et 12 %).
 
 Barrage : `hydroSiteCheck` échantillonne deux anneaux autour de l'ouvrage ; 8 % à 90 % de points dans l'eau = site
 valide. Hors site, le barrage ne produit rien, le joueur est notifié et le panneau affiche « site invalide ». La
-commande `checkSite` permet de vérifier avant de construire.
+commande `checkSite` permet de vérifier avant de construire. **Au pied d'un barrage** (outil Terrain › Barrage,
+`docs/TERRAFORMATION.md` §3) : site validé par la retenue, production = nominale × saison × (débit / 60 m³/s) ×
+(chute / 10 m), plafonnée à 4 × nominale (`hydroDamKw`) ; ailleurs, règle ci-dessus inchangée.
 
 ## 2. Réseau et répartition (chaque heure de jeu)
 

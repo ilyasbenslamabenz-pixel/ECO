@@ -25,7 +25,7 @@ const browser = await launch();
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = collectErrors(page);
-  await page.goto(`${base}/index.html?autostart&norender&seed=7`);
+  await page.goto(`${base}/index.html?autostart&norender&seed=7&chunks=8`);
   await page.waitForFunction(() => window.__aube?.ready === true && window.__aube.snapshotReceived, null, { timeout: 300000 });
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
   const hydro = () => page.evaluate(() => window.__aube.sendExt('hydroState', {}));
@@ -108,8 +108,7 @@ try {
   }, [VX, VZ]);
   check(sculpt >= 36, 'vallon sculpté (passes du pinceau Élever)', sculpt);
   const exact = await page.evaluate(([a, b]) => window.__aube.sendExt('terrainEdit', { edit: { k: 'dam', ax: a.x, az: a.z, bx: b.x, bz: b.z }, dryRun: true }).then((r) => r.crest, (e) => String(e?.error?.message ?? e)), [DAM_A, DAM_B]);
-  console.log('crête attendue (coordonnées exactes)', exact);
-  console.log('hauteurs', JSON.stringify(await page.evaluate(async () => { const out = []; for (const [x, z] of [[-430, 70], [-430, 230], [-430, 150], [-520, 150], [-450, 80], [-300, -450]]) { try { out.push((await window.__aube.sendExt('terrainEdit', { edit: { k: 'flatten', x, z, r: 8 }, dryRun: true })).h); } catch (e) { out.push(String(e?.error?.message ?? e)); } } return out; })));
+  check(typeof exact === 'number' && exact > 30, 'barrage planifiable en travers du vallon (crête)', exact);
 
   // 3. Source d'eau au fond du vallon (un clic).
   await pick('source');
@@ -138,7 +137,6 @@ try {
   check(good.validity === 'ok' && /chute/.test(good.message) && /MW/.test(good.message), 'aperçu vert : chute, débit et production possible', good.message);
   await page.evaluate(() => window.__aube.renderNow(1));
   await page.screenshot({ path: join(outDir, 'barrage-apercu.png') });
-  console.log('tracé du barrage (clics)', JSON.stringify(await page.evaluate(() => { const p = window.__aube.toolPreview(); return p.start; })));
   await clickWorld(DAM_B);
   const st2 = await waitHydro((st) => st.dams.length === 1);
   check(st2.dams.length === 1, 'barrage posé', st2.dams);
