@@ -10,11 +10,14 @@ import { capModelTextures, imageLimits, liteTextureUrl } from './image-cap';
 import { traceStep } from '../boot-trace';
 import type { AssetCatalog, CatalogAsset } from '../shared/catalog';
 import type { IAssetLibrary } from '../shared/contracts';
+import { withTransitAssets } from '../shared/transit-assets';
 
 export async function fetchCatalog(assetsBase: URL): Promise<AssetCatalog> {
   const res = await fetch(new URL('catalog.json', assetsBase));
   if (!res.ok) throw new Error(`Catalogue d'assets introuvable (${res.status})`);
-  return (await res.json()) as AssetCatalog;
+  // Entrées dérivées (dépôt de tram copié du dépôt de bus) : aucun fichier du catalogue n'est modifié.
+  return withTransitAssets((await res.json()) as AssetCatalog);
+
 }
 
 /**

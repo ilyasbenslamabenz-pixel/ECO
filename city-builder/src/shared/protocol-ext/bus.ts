@@ -11,6 +11,15 @@ export const BUS_PLUGIN = 'bus';
 export const BUS_EXT_VERSION = 1;
 /** Étiquette du catalogue d'un dépôt de bus (et capacité `bus:N`). */
 export const BUS_DEPOT_TAG = 'depot_bus';
+/**
+ * Tramway (même système de lignes que le bus) : mode d'une ligne, dépôt (étiquette `depot_tram`, capacité `tram:N`).
+ * Les rames ne roulent que sur les tronçons équipés de voies de tram (posées sur une route existante, en voie partagée
+ * avec les voitures ou en site propre).
+ */
+export type TransitMode = 'bus' | 'tram';
+export const TRAM_DEPOT_TAG = 'depot_tram';
+/** Identifiant du dépôt de tram dérivé du dépôt de bus (`withTransitAssets`, src/shared/transit-assets.ts). */
+export const TRAM_DEPOT_ASSET = 'depot_tram';
 /** Limites d'édition. */
 export const BUS_MAX_LINES = 32;
 export const BUS_MAX_STOPS_PER_LINE = 40;
@@ -59,6 +68,19 @@ export interface BusTuning {
   jobReachBonusM: number;
   /** Satisfaction maximale apportée par une bonne desserte (points). */
   satisfactionBonus: number;
+  /** Tramway : places par rame, vitesse commerciale sans encombrement (km/h), entretien d'une rame (CHF/mois), quai (CHF). */
+  tramCapacity: number;
+  tramSpeedKmh: number;
+  tramUpkeepMonth: number;
+  tramStopCost: number;
+  /** Rames par dépôt de tram sans étiquette `tram:N`. */
+  tramDepotDefaultCapacity: number;
+  /** Confort du tram par rapport au bus (CHF retranchés du coût généralisé d'un trajet). */
+  tramComfortChf: number;
+  /** Voies de tram : pose au mètre (voie partagée / site propre), entretien au mètre par mois. */
+  trackCostPerM: number;
+  dedicatedTrackCostPerM: number;
+  trackUpkeepPerMMonth: number;
 }
 
 export const DEFAULT_BUS_TUNING: BusTuning = {
@@ -83,6 +105,15 @@ export const DEFAULT_BUS_TUNING: BusTuning = {
   depotDefaultCapacity: 20,
   jobReachBonusM: 3000,
   satisfactionBonus: 4,
+  tramCapacity: 180,
+  tramSpeedKmh: 26,
+  tramUpkeepMonth: 4200,
+  tramStopCost: 1800,
+  tramDepotDefaultCapacity: 10,
+  tramComfortChf: 0.4,
+  trackCostPerM: 260,
+  dedicatedTrackCostPerM: 420,
+  trackUpkeepPerMMonth: 0.8,
 };
 
 /** Arrêt tel que vu par le rendu et l'interface. */
@@ -121,6 +152,8 @@ export interface BusLineStats {
 
 export interface BusLineView {
   id: number;
+  /** Mode de la ligne (absent des anciennes vues : bus). */
+  mode?: TransitMode;
   name: string;
   color: string;
   /** Bus demandés par le joueur ; bus réellement en service (dépôts). */
@@ -139,6 +172,7 @@ export interface BusLineView {
 /** Géométrie d'une ligne pour le rendu : polyligne x, y, z (décalée sur la voie de droite) et abscisses cumulées. */
 export interface BusLineGeometry {
   id: number;
+  mode?: TransitMode;
   color: string;
   points: number[];
   cum: number[];
@@ -180,7 +214,35 @@ export interface BusSummary {
   transitHiresMonth: number;
   /** Durée du dernier calcul quotidien (ms, diagnostic). */
   costMs: number;
+  /** Tramway (les chiffres ci-dessus comptent bus ET tram ; `modal.bus` = part des transports en commun). */
+  tram?: TramSummary;
 }
+
+export interface TramSummary {
+  lines: number;
+  depots: number;
+  depotCapacity: number;
+  vehiclesRequested: number;
+  vehiclesActive: number;
+  ridersDay: number;
+  /** Longueur des voies posées (m), dont en site propre. */
+  trackM: number;
+  dedicatedM: number;
+}
+
+/** Tronçon équipé de voies de tram (rendu) : axe x, y, z de la chaussée, décalage des voies, site propre. */
+export interface TramTrackGeometry {
+  segId: number;
+  points: number[];
+  /** Décalage latéral (m) du centre de la voie de chaque sens par rapport à l'axe. */
+  offset: number;
+  /** Sens unique : une seule voie, à droite du sens de l'axe. */
+  oneway: boolean;
+  dedicated: boolean;
+}
+
+/** Voies de tram sérialisées (sauvegarde) : échantillons x, z le long de l'axe (relocalisés sur le réseau au chargement). */
+export interface TramTrackRecord { p: number[]; d: 0 | 1 }
 
 export interface BusState { summary: BusSummary; lines: BusLineView[]; stops: BusStopView[] }
 
@@ -205,6 +267,8 @@ export interface BusDelta {
   phys: number;
   speed: number;
   layer?: BusLayer | null;
+  /** Voies de tram (remplacent tout l'affichage des voies quand présentes). */
+  tracks?: TramTrackGeometry[];
 }
 
 /** Fiche d'arrêt (commande `stop`). */
@@ -223,6 +287,8 @@ export interface BusStopCard {
 /** Ligne sérialisée (sauvegarde, annulation d'une suppression). */
 export interface BusLineRecord {
   id: number;
+  /** Absent : bus (anciennes sauvegardes). */
+  mode?: TransitMode;
   name: string;
   color: string;
   buses: number;

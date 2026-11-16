@@ -1,4 +1,4 @@
-# Transports en commun : lignes de bus (vague 3)
+# Transports en commun : lignes de bus (vague 3) et tramway
 
 Le joueur trace ses lignes de bus ; les habitants choisissent entre voiture, marche et bus. Mécaniques inspirées des
 city-builders modernes ; formules, textes et valeurs propres au jeu.
@@ -116,3 +116,33 @@ Limites : bus non simulés dans le trafic (ils
 ne bloquent ni ne subissent individuellement les carrefours ; leur vitesse suit la vitesse moyenne des voitures) ; un
 arrêt appartient à une seule ligne (pas de correspondances) ; au plus 32 lignes de 40 arrêts ; la portée d'embauche ne
 change rien tant que la ville tient dans un rayon de 4 km ; réglages non sauvegardés.
+
+## 9. Tramway
+
+Même système de lignes que le bus (arrêts, véhicules, demande, fréquentation, effets, annulation) : chaque ligne porte
+un mode (`mode: 'tram'`, absent = bus).
+
+- **Voies** (`src/sim/transit/tracks.ts`, `TramTracks`) : posées tronçon par tronçon sur une route existante (ni rue
+  piétonne, ni autoroute), en **voie partagée** (260 CHF/m) ou en **site propre** (420 CHF/m, passage de l'une à l'autre :
+  la différence) ; retrait sans remboursement ; entretien 0,8 CHF/m/mois. Commandes `track { segId | x, z, on?,
+  dedicated?, dryRun? }` (renvoie l'état précédent : inverse d'annulation) et `tracks`. Chaque voie garde des
+  échantillons de son axe : quand le réseau change (découpe par un carrefour, changement de type), les tronçons qui
+  suivent un axe équipé héritent des rails.
+- **Tracé** : même planificateur (`LineRouter`) restreint aux tronçons équipés ; arrêts accrochés seulement à ces
+  tronçons (« plus de voie de tram à proximité », « injoignable par les voies de tram »).
+- **Dépôt de tram** : entrée de catalogue DÉRIVÉE `depot_tram` (`src/shared/transit-assets.ts`, ajoutée au chargement du
+  catalogue côté client ; assets/ n'est pas modifié) : modèle du dépôt de bus, livrée verte, 480 000 CHF, 2 200 CHF/mois,
+  45 emplois, 10 rames (`tram:10`). Capacités par mode : les rames ne viennent que des dépôts de tram.
+- **Valeurs** : 180 places par rame (bus : 60), 26 km/h (bus : 22), 4 200 CHF/mois par rame, quai 1 800 CHF, confort
+  0,4 CHF retranché du coût généralisé. Vitesse : en site propre la rame ignore les bouchons, en voie partagée elle
+  ralentit comme le bus (moyenne pondérée par la longueur en site propre).
+- **Rendu** : deux rails par sens (sur la voie de droite), bande verte en site propre (un maillage fusionné), rames =
+  caisse allongée de 30 m colorée + bandeau vitré (2 `InstancedMesh`), animées comme les bus.
+- **Interface** : « + Ligne de tram » et outil « Voies de tram » (voie partagée / site propre / retirer) dans l'éditeur ;
+  lignes Tram dans le panneau Bus ; `summary.tram` (lignes, dépôts, rames, voies, voyages). La part modale « bus » du
+  résumé compte tous les transports en commun.
+- **Sauvegarde** : section `bus` v1 inchangée, champs facultatifs `mode` (lignes de tram) et `tracks` ; anciennes
+  sauvegardes chargées telles quelles. Tests : `tests/jeu/tram.test.ts`.
+- **Limites** : les rames ne sont pas simulées dans le trafic (comme les bus) ; le site propre ne retire pas de voie aux
+  voitures ; pas de correspondances entre lignes.
+

@@ -24,9 +24,12 @@ export interface StopSnap { segId: number; s: number; len: number; x: number; z:
 /** Un bus peut s'y arrêter : véhicules ET piétons admis (ni rue piétonne, ni autoroute). */
 export function stopAllowed(kind: RoadKindDef): boolean { return kind.vehicles && kind.pedestrians; }
 
-/** Accroche le point (x, z) à la route praticable la plus proche ; null si aucune à portée. */
-export function snapStop(roads: PluginRoads, x: number, z: number, radius = STOP_SNAP_RADIUS, arcs?: ArcCache): StopSnap | null {
-  const hit = roads.segmentNear(x, z, radius, (id) => !stopAllowed(ROAD_KINDS[roads.kindOf(id)]));
+/**
+ * Accroche le point (x, z) à la route praticable la plus proche ; null si aucune à portée. `allow` restreint les
+ * tronçons admis (tramway : seulement ceux équipés de voies).
+ */
+export function snapStop(roads: PluginRoads, x: number, z: number, radius = STOP_SNAP_RADIUS, arcs?: ArcCache, allow?: (segId: number) => boolean): StopSnap | null {
+  const hit = roads.segmentNear(x, z, radius, (id) => !stopAllowed(ROAD_KINDS[roads.kindOf(id)]) || (!!allow && !allow(id)));
   if (!hit) return null;
   const arc = arcs ? arcs.get(roads, hit.segId) : new ArcTable(roads.curve(hit.segId));
   return { segId: hit.segId, s: arc.sAt(hit.t), len: arc.length, x: hit.x, z: hit.z };
@@ -58,14 +61,17 @@ export interface LineRoute {
   stopS: number[];
   /** Temps de parcours à vitesse libre (s) : somme longueur / vitesse du type de route. */
   freeTimeS: number;
+  /** Tronçons empruntés et longueur parcourue sur chacun (m), par ordre de première apparition. */
+  segs: number[];
+  segLens: number[];
 }
 
 export type RouteFailure = { ok: false; stopIndex: number; reason: 'offroad' | 'unreachable' | 'few' };
 export type RouteResult = { ok: true; route: LineRoute } | RouteFailure;
 
 /** Vue « réseau » minimale lue par `RoutingGraph`, construite depuis la façade des modules. */
-function networkView(roads: PluginRoads): RoadNetwork {
-  const nodeIds = roads.nodeIds(), segIds = roads.segmentIds();
+function networkView(roads: PluginRoads, allow?: ((segId: number) => boolean) | null): RoadNetwork {
+  const nodeIds = roads.nodeIds(), segIds = allow ? roads.segmentIds().filter(allow) : roads.segmentIds();
   const n = nodeIds.length, m = segIds.length;
   const nodeId = Int32Array.from(nodeIds), nodeX = new Float64Array(n), nodeZ = new Float64Array(n);
   for (let i = 0; i < n; i++) { const p = roads.nodePos(nodeIds[i]!); nodeX[i] = p.x; nodeZ[i] = p.z; }
@@ -76,7 +82,7 @@ function networkView(roads: PluginRoads): RoadNetwork {
 }
 
 /** Décalage vers la droite du sens de marche (m) : voie la plus à droite. */
-function rightOffset(k: RoadKindDef, forward: boolean): number {
+export function rightOffset(k: RoadKindDef, forward: boolean): number {
   if (k.lanesBackward === 0 || k.lanesForward === 0) {
     const nl = k.lanesForward + k.lanesBackward;
     return k.laneWidth * (nl / 2 - 0.5);
@@ -90,14 +96,22 @@ const speedOf = (k: RoadKindDef): number => Math.max(1, k.speedKmh / 3.6);
 /** Planificateur des lignes : graphe de circulation et A* partagés, reconstruits à chaque version du réseau. */
 export class LineRouter {
   private version = -1;
+  private key = -1;
   private graph: RoutingGraph | null = null;
   private astar: AStar | null = null;
   readonly arcs = new ArcCache();
+  /**
+   * Restriction facultative des tronçons (tramway : voies posées) et sa clé de version (le graphe est reconstruit quand
+   * la version du réseau OU la clé change).
+   */
+  allow: ((segId: number) => boolean) | null = null;
+  allowKey = 0;
 
   private ensure(roads: PluginRoads): RoutingGraph {
-    if (!this.graph || this.version !== roads.version) {
+    if (!this.graph || this.version !== roads.version || this.key !== this.allowKey) {
       this.version = roads.version;
-      this.graph = new RoutingGraph(networkView(roads), 'vehicle');
+      this.key = this.allowKey;
+      this.graph = new RoutingGraph(networkView(roads, this.allow), 'vehicle');
       this.astar = new AStar(this.graph);
     }
     return this.graph;
@@ -164,6 +178,8 @@ export class LineRouter {
     if (n < 2) return { ok: false, stopIndex: 0, reason: 'few' };
     const points: number[] = [], cum: number[] = [], stopS: number[] = [];
     let length = 0, freeTimeS = 0;
+    const segs: number[] = [], segLens: number[] = [];
+    const segAt = new Map<number, number>();
     let lx = NaN, lz = NaN;
     const push = (x: number, y: number, z: number): void => {
       if (Number.isFinite(lx)) { const d = Math.hypot(x - lx, z - lz); if (d < 0.05) return; length += d; }
@@ -179,6 +195,8 @@ export class LineRouter {
       for (const pc of lg.pieces) {
         const span = Math.abs(pc.s1 - pc.s0);
         if (span < 0.01) continue;
+        const si = segAt.get(pc.seg);
+        if (si === undefined) { segAt.set(pc.seg, segs.length); segs.push(pc.seg); segLens.push(span); } else segLens[si]! += span;
         const arc = this.arcs.get(roads, pc.seg);
         const curve = roads.curve(pc.seg);
         const prof = roads.profile(pc.seg);
@@ -204,6 +222,6 @@ export class LineRouter {
     }
     // Fermeture de la boucle sur le premier point.
     if (points.length >= 3) push(points[0]!, points[1]!, points[2]!);
-    return { ok: true, route: { points, cum, length, stopS, freeTimeS } };
+    return { ok: true, route: { points, cum, length, stopS, freeTimeS, segs, segLens } };
   }
 }

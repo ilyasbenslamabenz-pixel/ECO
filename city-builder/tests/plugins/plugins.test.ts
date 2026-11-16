@@ -124,11 +124,14 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
   const progression = ['objectifs', 'evenements'];
   // Interface (vague 5) : cartes d'information (simulation, rendu) et historique des graphiques (simulation, sauvegarde).
   const ui = ['cartes', 'historique'];
+  // Connexions extérieures (tests/jeu/connexions.test.ts) : simulation, rendu, panneau, section de sauvegarde ; sans
+  // connexion, aucun effet (contrôle « modules vides » ci-dessous).
+  const ext = ['connexions'];
   assert.deepEqual([...PHASE2_MODULES].sort(), [...ids, ...LATE_MODULES].sort());
-  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit, ...progression, ...ui]);
-  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late, 'alertes', 'secteurs', 'services', ...transit, 'cartes']);
-  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov.filter((g) => g !== 'ameliorations'), ...transit, ...progression]);
-  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late, ...gov, ...transit, ...progression, 'historique']);
+  assert.deepEqual(SIM_PLUGINS.map((p) => p.id), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit, ...progression, ...ui, ...ext]);
+  assert.deepEqual(RENDER_PLUGINS.map((p) => p.id), [...all, ...late, 'alertes', 'secteurs', 'services', ...transit, 'cartes', ...ext]);
+  assert.deepEqual(UI_PANELS.map((p) => p.id), [...ids, ...late, ...gov.filter((g) => g !== 'ameliorations'), ...transit, ...ext, ...progression]);
+  assert.deepEqual(SAVE_SECTIONS.map((p) => p.id), [...ids, ...SIM_ONLY, ...late, ...gov, ...transit, ...progression, 'historique', ...ext]);
   // Modules remplis : on vérifie la FORME du contrat (crochets connus, fonctions), pas la vacuité.
   const HOOKS = ['init', 'onNewGame', 'onTick', 'onDayStart', 'onMonthStart', 'takeDelta', 'snapshot', 'command', 'save', 'load', 'onBuildingAdded', 'onBuildingRemoved'];
   for (const p of SIM_PLUGINS) {
@@ -143,7 +146,8 @@ test('registres : les modules sont enregistrés partout, avec leur section de sa
     assert.throws(() => sec.migrate({}, sec.version + 1), /plus récente/);
     assert.throws(() => sec.migrate('texte', 1), /objet attendu/);
   }
-  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit, ...progression, ...ui]);
+  assert.deepEqual(new Simulation().plugins.ids(), [...all, ...SIM_ONLY, ...late, ...gov, ...alerts, ...transit, ...progression, ...ui, ...ext]);
+
   assert.throws(() => new Simulation([{ id: 'a' }, { id: 'a' }]), /double/);
 });
 
