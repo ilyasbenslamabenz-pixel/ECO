@@ -194,10 +194,12 @@ test('barrage en travers d\'une vallée + source : la retenue monte jusqu\'à la
   let downstream = false;
   for (let x = cx + 16; x < cx + 190; x += 8) for (const z of [cz - 8, cz, cz + 8]) if (ws(s, x, z) > nat(s, x, z)) downstream = true;
   assert.ok(downstream, 'débordement en aval');
-  // Bâtiment interdit dans la retenue ; route au sol refusée.
+  // Bâtiment interdit dans la retenue ; une route tracée au sol passe automatiquement en pont au-dessus de l'eau.
   assert.ok(s.isWet(cx - 30, cz));
   const road = s.buildRoad({ type: 'street', points: [cx - 30, cz - 100, cx - 30, cz + 100] });
-  assert.ok(!road.ok);
+  assert.ok(road.ok, road.ok ? '' : road.error.message);
+  const rec = s.roadRecords().edges.find((e) => road.ok && e.id === road.data.edgeIds[0]);
+  assert.ok(rec && (rec.bridgeRuns?.length ?? 0) > 0, 'la route franchit la retenue en pont');
 });
 
 test('sauvegarde : sources, barrage et retenue identiques après rechargement ; ancienne partie inchangée', () => {

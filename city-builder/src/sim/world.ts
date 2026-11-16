@@ -808,9 +808,15 @@ export class Simulation {
 
   /** Vrai si la courbe passe sur de l'eau dynamique (retenue, lac d'une source, creux rempli). */
   private crossesDynamicWater(curve: Float64Array): boolean {
+    return this.dynamicWaterDepth(curve) > 0;
+  }
+
+  /** Profondeur maximale (m) de l'eau dynamique sous la courbe ; 0 si elle n'en traverse pas. */
+  private dynamicWaterDepth(curve: Float64Array): number {
     const t = this.terrain!;
     const base = this.hydro.base;
-    if (!base) return false;
+    if (!base) return 0;
+    let depth = 0;
     const ws = t.waterSurface, W = t.samplesX, sp = t.spacing;
     const L = Math.hypot(curve[6]! - curve[0]!, curve[7]! - curve[1]!) + Math.hypot(curve[2]! - curve[0]!, curve[3]! - curve[1]!);
     const n = Math.max(2, Math.ceil(L / 4));
@@ -820,9 +826,9 @@ export class Simulation {
       const i = Math.round((p[0]! - t.originX) / sp), j = Math.round((p[1]! - t.originZ) / sp);
       if (i < 0 || j < 0 || i >= W || j >= t.samplesZ) continue;
       const k = j * W + i;
-      if (ws[k] !== base[k] && ws[k]! > this.naturalHeights[k]! + 0.05) return true;
+      if (ws[k] !== base[k] && ws[k]! > this.naturalHeights[k]! + 0.05) depth = Math.max(depth, ws[k]! - this.naturalHeights[k]!);
     }
-    return false;
+    return depth;
   }
 
   private planOptions(): { bounds: { minX: number; minZ: number; maxX: number; maxZ: number }; blocked: (c: Float64Array, h: number) => string | null } {
@@ -863,11 +869,21 @@ export class Simulation {
     let cost = 0;
     const path: number[] = [];
     for (const r of reqs) {
-      const p = planRoad(this.net, r, opts);
+      let p = planRoad(this.net, r, opts);
       if (!p.ok) return fail(p.error.code, p.error.message, p.error.phase);
-      if (!r.elevation && this.crossesDynamicWater(p.plan.curve)) return fail('UNDER_WATER', 'La route passerait au fond d\'une retenue ou d\'un lac : passez-la en viaduc (▲) ou contournez l\'eau');
+      if (!r.elevation) {
+        // Pont automatique au-dessus d'une retenue ou d'un lac : la route passe en viaduc (comme ▲), 3 m au-dessus de l'eau.
+        const depth = this.dynamicWaterDepth(p.plan.curve);
+        if (depth > 0) {
+          const h = Math.ceil((depth + 3) / 4) * 4;
+          if (h > 40) return fail('UNDER_WATER', 'Retenue trop profonde pour un pont automatique (> 37 m) : contournez l\'eau');
+          r.elevation = h; r.startElevated = false; r.endElevated = false;
+          p = planRoad(this.net, r, opts);
+          if (!p.ok) return fail(p.error.code, `Pont au-dessus de l'eau impossible : ${p.error.message}`, p.error.phase);
+        }
+      }
       cost += p.plan.cost;
-      if (a.dryRun && a.elevation) path.push(...roadPreviewPath(this.net, p.plan));
+      if (a.dryRun && (a.elevation || r.elevation)) path.push(...roadPreviewPath(this.net, p.plan));
     }
     // Annulation d'une suppression de tronçon : la reconstruction coûte le remboursement perçu, pas le prix plein.
     const rc = a.restoreToken !== undefined ? this.restoreReceipts.get(a.restoreToken) : undefined;
