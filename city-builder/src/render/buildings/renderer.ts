@@ -186,6 +186,8 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   private readonly waiters: (() => void)[] = [];
   private forceUpdate = true;
   private readonly lodBias: number;
+  /** Multiplicateur des distances de LOD imposé par le palier de qualité automatique (src/render/quality-tiers.ts). */
+  private lodScale = 1;
   private readonly castShadow: boolean;
   /** Ombres fusionnées (null : chaque sous-maillage projette sa propre ombre). */
   private readonly shadows: BuildingShadowLayer | null;
@@ -316,6 +318,9 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     }
     return this.uploads.length;
   }
+
+  /** Palier de qualité : distances de LOD multipliées par `s` (recalcul à la prochaine mise à jour). */
+  setLodScale(s: number): void { if (s !== this.lodScale) { this.lodScale = s; this.forceUpdate = true; } }
 
   /** Force le recalcul des LOD à la prochaine mise à jour. */
   invalidate(): void { this.forceUpdate = true; }
@@ -618,8 +623,9 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       const b = this.batchList[bi]!;
       const nl = b.lods.length;
       for (let l = 0; l < nl; l++) { _prevCount[l] = b.lods[l]!.count; _changed[l] = 0; b.lods[l]!.count = 0; }
-      const d0 = b.asset.lods[0]!.maxDistance * this.lodBias;
-      const d1 = nl > 1 ? b.asset.lods[1]!.maxDistance * this.lodBias : Infinity;
+      const bias = this.lodBias * this.lodScale;
+      const d0 = b.asset.lods[0]!.maxDistance * bias;
+      const d1 = nl > 1 ? b.asset.lods[1]!.maxDistance * bias : Infinity;
       const sh = this.shadows !== null;
       const pool = this.pool !== null;
       for (let i = 0; i < b.ids.length; i++) {

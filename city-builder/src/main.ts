@@ -203,7 +203,7 @@ async function boot(): Promise<void> {
       state.inGame = false;
       void refreshMenu();
     },
-    onOptions: (o) => { if (o.quality !== 'auto') setSafeMode(false); applyGraphicsOptions(o, { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf }); },
+    onOptions: (o) => { if (o.quality !== 'auto') setSafeMode(false); applyGraphicsOptions(o, { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf }); render.onOptionsApplied(); },
     onSpeed: (speed) => { void needBridge().send('setSpeed', { speed }).catch((e: unknown) => ui.toast(errText(e), 'error')); },
     onToggleCamera: () => {
       if (input.camera.mode === 'aerial') {
@@ -256,10 +256,13 @@ async function boot(): Promise<void> {
   ui.setLoading(0.2, 'Préparation du rendu 3D (ciel, terrain, végétation)…');
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const render = await initRender(canvas, lib, catalog, assetsBase, undefined, ui.currentOptions().quality,
-    wantMsaa(ui.currentOptions(), window.devicePixelRatio || 1, bootProfile.lite, bootProfile.maxPixelRatio));
+    wantMsaa(ui.currentOptions(), window.devicePixelRatio || 1, bootProfile.lite, bootProfile.maxPixelRatio, bootProfile.autoPixelRatio));
   if (bench) { benchWatchRenderer(render.ctx.renderer); if (ab.trace) render.ctx.perf.trace = benchTrace; }
   debug.frames = () => render.ctx.frames;
   debug.renderStats = () => render.stats();
+  // Diagnostic (docs/PERFORMANCE_PC.md) : palier de qualité automatique, densité de rendu, GPU intégré.
+  (debug as unknown as Record<string, unknown>).qualityTier = () => ({ tier: render.ctx.perf.tier ?? 0, auto: !!render.ctx.perf.tiersEnabled, igpu: render.profile.igpu });
+  (debug as unknown as Record<string, unknown>).pixelRatio = () => render.ctx.renderer.getPixelRatio();
   debug.gpuMemory = () => estimateGpuMemory(render.ctx.scene, render.ctx.renderer);
   debug.memStats = () => {
     const r = render.ctx.renderer;
@@ -423,7 +426,7 @@ async function boot(): Promise<void> {
     for (const o of render.ctx.scene.children) { names.push(o.name || o.type); if (o.name === name) o.visible = visible; }
     return names;
   };
-  applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf });
+  applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf }); render.onOptionsApplied();
 
   // LOD de simulation : point focal envoyé quand la caméra s'est déplacée de plus de 50 m.
   let focusX = Infinity, focusZ = Infinity;
@@ -675,7 +678,7 @@ async function boot(): Promise<void> {
     // (Le plafond de textures du mode allégé est réappliqué par rebuildGpu : three recrée ses `capabilities`.)
     try {
       render.rebuildGpu();
-      applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf });
+      applyGraphicsOptions(ui.currentOptions(), { renderer: render.ctx.renderer, scene: render.ctx.scene, sun: render.ctx.sun, camera: input.camera, perf: render.ctx.perf }); render.onOptionsApplied();
     } catch (err) { console.warn('Reconstruction après perte du contexte WebGL :', err); }
     startLoop();
     if (params.has('norender')) render.ctx.renderNow(1 / 60);
@@ -940,6 +943,7 @@ async function boot(): Promise<void> {
       shadowSize: () => (render.ctx.sun.castShadow ? render.ctx.sun.shadow.mapSize.x : 0),
       dynamicRange: () => render.ctx.perf.adaptive,
       scene: render.ctx.scene, camera: render.ctx.camera, pauseRender: (p) => { if (p) render.ctx.stop(); else render.ctx.start(); },
+      tier: () => { const st = render.stats(); return { tier: st.tier, name: st.tierName, auto: !!render.ctx.perf.tiersEnabled }; }, igpu: render.profile.igpu,
     }, bench, readyAt).catch((e: unknown) => debug.errors.push(`bench: ${errText(e)}`));
   }
   else if (params.has('demo')) await startDemo();

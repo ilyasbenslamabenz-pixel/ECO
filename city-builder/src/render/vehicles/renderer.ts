@@ -481,6 +481,15 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
 
   /* ----------------------------- mise à jour ----------------------------- */
 
+  /** Palier de qualité (src/render/quality-tiers.ts) : véhicules dessinés au plus et distance d'affichage (m). */
+  maxDrawn = Infinity;
+  maxDist = Infinity;
+  /**
+   * Distance de coupure courante quand le plafond `maxDrawn` est atteint : ajustée en douceur d'une image à l'autre
+   * (les plus proches sont gardés, sans tri ni scintillement : seuls les véhicules lointains, au bord, apparaissent).
+   */
+  private capDist = Infinity;
+
   update(_dt: number): void {
     this.blinkUniform.value = (performance.now() / 1000 * 1.5) % 1 < 0.55 ? 1 : 0;
     const t = this.now();
@@ -498,6 +507,8 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     this.drawn[0] = this.drawn[1] = this.drawn[2] = 0;
     let beams = 0;
     const night = this.night > 0.05;
+    const limit = Math.min(this.maxDist, this.capDist);
+    let inRange = 0, drawnTotal = 0;
     for (let i = 0; i < this.curCount; i++) {
       const model = this.models[this.curAsset[i]!];
       if (!model) continue;
@@ -509,6 +520,9 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
         if (!_frustum.intersectsSphere(_sphere)) continue;
       }
       const d = Math.hypot(x - cx, y - cy, z - cz);
+      if (d > limit) continue;
+      inRange++;
+      if (drawnTotal >= this.maxDrawn) continue;
       let lod = 0;
       if (this.forceLod !== null) lod = Math.min(this.forceLod, model.lods.length - 1);
       else while (lod < model.maxDist.length - 1 && d > model.maxDist[lod]!) lod++;
@@ -541,6 +555,7 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
       lot.plates[lot.count] = this.curPlates ? this.curPlates[i]! % this.plateRows : hash32(this.curIds[i]! * 2654435761 + 11) % this.plateRows;
       lot.lights[lot.count] = this.curFlags[i]! & 7;
       lot.count++;
+      drawnTotal++;
       this.drawn[use]!++;
       if (night && d < 260) {
         if (beams >= this.beamCap) this.growBeams(beams + 1);
@@ -574,6 +589,10 @@ export class InstancedVehicleRenderer implements IVehicleRenderer {
     }
     this.beams.count = beams;
     if (beams) this.beams.instanceMatrix.needsUpdate = true;
+    // Plafond : la distance de coupure se resserre s'il y a trop de candidats, se relâche s'il y a de la marge.
+    if (!Number.isFinite(this.maxDrawn)) this.capDist = Infinity;
+    else if (inRange > this.maxDrawn) this.capDist = Math.max(60, Math.min(this.capDist, this.maxDist, 2000) * 0.94);
+    else if (inRange < this.maxDrawn * 0.85 && this.capDist < this.maxDist) this.capDist = this.capDist * 1.03 > 2000 ? Infinity : this.capDist * 1.03;
   }
 
   private growBeams(need: number): void {

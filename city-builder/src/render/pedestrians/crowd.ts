@@ -23,6 +23,8 @@ import { bakeSkeleton, paletteTexture, patchPedMaterial, type BakedSkeleton, typ
 /** Distances de bascule (m) : LOD0 → LOD1 → LOD2 → imposteur ; au-delà : rien. */
 export const PED_LOD_DIST = [35, 110, 320] as const;
 export const PED_MAX_DIST = 1400;
+/** Distance d'affichage imposée par le palier de qualité automatique (src/render/quality-tiers.ts). */
+export const pedRenderBudget = { maxDist: PED_MAX_DIST };
 
 interface Ped {
   model: number;
@@ -335,7 +337,7 @@ export class PedestrianCrowdRenderer {
       sphere.center.set(p.x, p.y + 0.9, p.z);
       if (!frustum.intersectsSphere(sphere)) continue;
       const d = Math.hypot(p.x - cx, p.y - cy, p.z - cz);
-      if (d > PED_MAX_DIST) continue;
+      if (d > Math.min(PED_MAX_DIST, pedRenderBudget.maxDist)) continue;
       const lod = d < PED_LOD_DIST[0] ? 0 : d < PED_LOD_DIST[1] ? 1 : d < PED_LOD_DIST[2] ? 2 : 3;
       lodCount[lod]++;
       const mr = models[p.model]!;

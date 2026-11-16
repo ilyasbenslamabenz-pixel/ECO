@@ -1,0 +1,190 @@
+{
+  "label": "avant-haute",
+  "date": "2026-11-16T11:56:21.160Z",
+  "viewport": "1280x800@1.5",
+  "extra": "&qualite=haute",
+  "scenes": [
+    {
+      "scene": "demo",
+      "readyS": 52.6,
+      "views": [
+        {
+          "calls": 908,
+          "triangles": 1115054,
+          "cpuUpdateMs": 0.5,
+          "cpuRenderMs": 33.8,
+          "cpuMovingUpdateMs": 1,
+          "cpuMovingRenderMs": 38.7,
+          "vehiclesDrawn": 125,
+          "buildings": 125,
+          "vegetation": 8826,
+          "pixelRatio": null,
+          "tier": null,
+          "staticDrawsTop": [
+            "batiments:482/3",
+            "roads:116/51",
+            "terrain:81/44",
+            "vehicules:48/0",
+            "vegetation:23/4",
+            "decor_urbain:14/14",
+            "feux_tricolores:7/4",
+            "dechets-conteneurs:6/6"
+          ],
+          "view": "aerienne",
+          "swiftshaderLoopFps": 0.3
+        },
+        {
+          "calls": 746,
+          "triangles": 1757915,
+          "cpuUpdateMs": 0.4,
+          "cpuRenderMs": 14.1,
+          "cpuMovingUpdateMs": 0.3,
+          "cpuMovingRenderMs": 17.9,
+          "vehiclesDrawn": 30,
+          "buildings": 125,
+          "vegetation": 8826,
+          "pixelRatio": null,
+          "tier": null,
+          "staticDrawsTop": [
+            "batiments:266/3",
+            "roads:149/84",
+            "terrain:120/31",
+            "vehicules:44/8",
+            "vegetation:36/17",
+            "pietons:19/0",
+            "decor_urbain:14/0",
+            "dechets-installations:9/0"
+          ],
+          "view": "rue",
+          "swiftshaderLoopFps": 0.2
+        },
+        {
+          "calls": 850,
+          "triangles": 835272,
+          "cpuUpdateMs": 0.3,
+          "cpuRenderMs": 18,
+          "cpuMovingUpdateMs": 0.6,
+          "cpuMovingRenderMs": 25.1,
+          "vehiclesDrawn": 73,
+          "buildings": 125,
+          "vegetation": 8826,
+          "pixelRatio": null,
+          "tier": null,
+          "staticDrawsTop": [
+            "batiments:435/3",
+            "roads:116/51",
+            "terrain:99/53",
+            "vehicules:28/0",
+            "decor_urbain:14/0",
+            "dechets-installations:9/0",
+            "vegetation:8/2",
+            "feux_tricolores:7/0"
+          ],
+          "view": "large",
+          "swiftshaderLoopFps": 0.2
+        }
+      ],
+      "sim": {
+        "vehicles": 52,
+        "buildings": 125,
+        "population": 2835
+      },
+      "env": {
+        "canvas": "1920x1200",
+        "dpr": 1.5
+      },
+      "errors": []
+    },
+    {
+      "scene": "stress",
+      "readyS": 23.8,
+      "views": [
+        {
+          "calls": 1091,
+          "triangles": 2135198,
+          "cpuUpdateMs": 0.8,
+          "cpuRenderMs": 40.3,
+          "cpuMovingUpdateMs": 1.5,
+          "cpuMovingRenderMs": 44.6,
+          "vehiclesDrawn": 639,
+          "buildings": 500,
+          "vegetation": 17180,
+          "pixelRatio": null,
+          "tier": null,
+          "staticDrawsTop": [
+            "batiments:498/3",
+            "roads:354/146",
+            "terrain:89/19",
+            "vehicules:44/0",
+            "vegetation:21/2",
+            "feux_tricolores:7/4",
+            "dechets-conteneurs:6/6",
+            "eau:4/0"
+          ],
+          "view": "aerienne",
+          "swiftshaderLoopFps": 0.2
+        },
+        {
+          "calls": 1163,
+          "triangles": 2923185,
+          "cpuUpdateMs": 0.8,
+          "cpuRenderMs": 21.5,
+          "cpuMovingUpdateMs": 0.8,
+          "cpuMovingRenderMs": 32.9,
+          "vehiclesDrawn": 186,
+          "buildings": 500,
+          "vegetation": 17180,
+          "pixelRatio": null,
+          "tier": null,
+          "staticDrawsTop": [
+            "batiments:406/3",
+            "roads:387/179",
+            "terrain:114/26",
+            "vehicules:100/28",
+            "vegetation:53/34",
+            "pietons:17/0",
+            "feux_tricolores:8/0",
+            "dechets-conteneurs:6/0"
+          ],
+          "view": "rue",
+          "swiftshaderLoopFps": 0.1
+        },
+        {
+          "calls": 1216,
+          "triangles": 1793819,
+          "cpuUpdateMs": 0.8,
+          "cpuRenderMs": 20.2,
+          "cpuMovingUpdateMs": 1.3,
+          "cpuMovingRenderMs": 32.6,
+          "vehiclesDrawn": 352,
+          "buildings": 500,
+          "vegetation": 17180,
+          "pixelRatio": null,
+          "tier": null,
+          "staticDrawsTop": [
+            "batiments:520/3",
+            "roads:354/146",
+            "terrain:97/52",
+            "vehicules:36/0",
+            "vegetation:8/2",
+            "feux_tricolores:7/0",
+            "dechets-conteneurs:6/0",
+            "eau:4/0"
+          ],
+          "view": "large",
+          "swiftshaderLoopFps": 0.2
+        }
+      ],
+      "sim": {
+        "vehicles": 331,
+        "buildings": 500,
+        "population": 10759
+      },
+      "env": {
+        "canvas": "1920x1200",
+        "dpr": 1.5
+      },
+      "errors": []
+    }
+  ]
+}

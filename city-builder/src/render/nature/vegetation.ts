@@ -601,6 +601,21 @@ export class VegetationSystem {
     this.lastCam.set(1e9, 0, 0); // force la mise à jour des instances
   }
 
+  /** Distances de référence (avant palier de qualité). */
+  private baseDistances: [number, number, number, number] | null = null;
+  /** Dernier LOD qui projette une ombre (palier de qualité ; Infinity : tous). */
+  private shadowMaxLod = Infinity;
+  /** Palier de qualité : distances multipliées par `scale`, ombres limitées aux LOD ≤ `shadowMaxLod`. */
+  setQuality(scale: number, shadowMaxLod: number): void {
+    const base = this.baseDistances ?? (this.baseDistances = [...this.o.distances] as [number, number, number, number]);
+    const next = base.map((d) => d * scale) as [number, number, number, number];
+    if (next.some((d, i) => d !== this.o.distances[i]) || shadowMaxLod !== this.shadowMaxLod) {
+      this.o.distances = next;
+      this.shadowMaxLod = shadowMaxLod;
+      this.lastCam.set(1e9, 0, 0); // recalcul des instances à la prochaine image
+    }
+  }
+
   /** Mise à jour LOD / culling (sans allocation hors reconstruction). */
   private readonly wideProj = new THREE.Matrix4();
 
@@ -689,7 +704,7 @@ export class VegetationSystem {
     for (const r of this.renders) {
       for (let li = 0; li < r.lods.length; li++) {
         const l = r.lods[li]!;
-        for (let mi = 0; mi < l.meshes.length; mi++) { const m = l.meshes[mi]!; m.count = l.count; m.visible = l.count > 0; m.castShadow = li <= 1 || r.sp.role !== 'arbuste'; }
+        for (let mi = 0; mi < l.meshes.length; mi++) { const m = l.meshes[mi]!; m.count = l.count; m.visible = l.count > 0; m.castShadow = li <= this.shadowMaxLod && (li <= 1 || r.sp.role !== 'arbuste'); }
         // (masqué à 0 instance : three préparerait quand même programme, uniformes et tampons pour un appel vide)
         // Aucun envoi pour un LOD vide : une plage de longueur 0 fait envoyer par WebGL 2 TOUT le tampon
         // (bufferSubData : longueur 0 = jusqu'à la fin), soit ≈ 10 Mo par recalcul pour les espèces non visibles.

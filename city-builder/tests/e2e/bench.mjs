@@ -53,6 +53,11 @@ async function run(label, path) {
   check(rows === 4, `[${label}] tableau : ${rows} lignes`);
   check(r?.breakdown?.length === 1 && r.breakdown.every((b) => b.totalMs > 0 && b.layers.length > 0), `[${label}] coût GPU par calque (${r?.breakdown?.map((b) => `${b.view} : ${b.totalMs} ms, ${b.layers.slice(0, 3).map((l) => `${l.layer} ${l.share} %`).join(', ')}`).join(' | ')})`);
   check(await page.isVisible('#bench-copy'), `[${label}] bouton « Copier les résultats » visible`);
+  // Rapport court à envoyer (docs/PERFORMANCE_PC.md) : img/s moyennes, 1 % bas, appels, triangles, palier.
+  const short = await page.textContent('#bench-short-text');
+  check(await page.isVisible('#bench-copy-short') && /1 % bas/.test(short ?? '') && /palier/.test(short ?? '') && (short ?? '').split('\n').length >= 8,
+    `[${label}] rapport court copiable (${(short ?? '').split('\n').length} lignes)`);
+  check(r?.scenes.every((s) => s.low1 > 0 && Number.isInteger(s.tierMin) && Number.isInteger(s.tierMax)), `[${label}] 1 % bas et palier relevés (${r?.scenes.map((s) => `${s.low1} img/s, palier ${s.tierMin}–${s.tierMax}`).join(' ; ')})`);
   const links = await page.$$eval('#bench-results a', (as) => as.map((a) => a.getAttribute('href')));
   check(links.some((h) => /[?&]qualite=haute/.test(h)) && links.some((h) => /[?&]lots=0/.test(h)) && links.every((h) => /[?&]bench(=court)?(&|$)/.test(h)),
     `[${label}] liens de relance (Haute, Moyenne, Auto, ?lots=0) : ${links.length}`);
