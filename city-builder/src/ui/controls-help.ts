@@ -20,9 +20,9 @@ const COL_TITLES: Record<Col, string> = { keyboard: 'Clavier', mouse: 'Souris', 
 /** Contenu de la fiche : [action, commande] par colonne. */
 export const CONTROLS: Record<Col, [string, string][]> = {
   keyboard: [
-    ['Déplacer', 'Z Q S D (W A S D en QWERTY) ou flèches ; Maj = plus vite'],
-    ['Pivoter', 'A / E (Q / E en QWERTY)'],
-    ['Incliner', 'R / F ou Page↑ / Page↓'],
+    ['Déplacer', 'Z Q S D (W A S D en QWERTY) ; Maj = plus vite'],
+    ['Pivoter', '← / → ou A / E (Q / E en QWERTY)'],
+    ['Incliner', '↑ / ↓, R / F ou Page↑ / Page↓'],
     ['Zoom', '+ / −'],
     ['Vue de dessus · nord en haut', 'T · N'],
     ['Retour au départ · survol', 'H · C'],

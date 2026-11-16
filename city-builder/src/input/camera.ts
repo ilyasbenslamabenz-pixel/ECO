@@ -12,8 +12,8 @@
  *              Détection pavé tactile / molette : `WheelClassifier` (deltas fractionnaires, deltaX, rythme, crans
  *              de ~100 px, deltaMode), décision « collante » le temps d'une session de défilement ; réglage
  *              Options › Navigation « Auto / Pavé tactile / Souris » (`inputPref`).
- *   clavier  : ZQSD (AZERTY) / WASD (QWERTY) / flèches = déplacer ; A/E (AZERTY, Q/E en QWERTY) = pivoter ;
- *              R/F ou Page↑/Page↓ = incliner ; +/- = zoom ; T = vue de dessus ; N = nord en haut ;
+ *   clavier  : ZQSD (AZERTY) / WASD (QWERTY) = déplacer ; A/E (AZERTY, Q/E en QWERTY) ou ←/→ = pivoter ;
+ *              R/F, Page↑/Page↓ ou ↑/↓ = incliner ; +/- = zoom ; T = vue de dessus ; N = nord en haut ;
  *              H = retour au point de départ ; C = mode cinématique (orbite lente) ;
  *   à l'écran : boutons pivoter ↺ ↻ et incliner ▲ ▼ près de la boussole (`rotateBy`, `tiltBy`), boussole = nord ;
  *   tactile  : 1 doigt = outil (ou déplacement avec l'outil Sélection) ; 2 doigts = déplacement
@@ -796,12 +796,14 @@ export class CameraController implements ICameraController {
       if (Math.hypot(fv.vx, fv.vy) < 0.02) this.flingV = null;
     }
     const k = this.keys;
-    const f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-    const r = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    // Flèches : en vue aérienne, ↑/↓ inclinent (comme R/F) et ←/→ pivotent (comme A/E) ; en vue rue, elles font marcher.
+    const street = this.mode !== 'aerial';
+    const f = (k.has('KeyW') || (street && k.has('ArrowUp')) ? 1 : 0) - (k.has('KeyS') || (street && k.has('ArrowDown')) ? 1 : 0);
+    const r = (k.has('KeyD') || (street && k.has('ArrowRight')) ? 1 : 0) - (k.has('KeyA') || (street && k.has('ArrowLeft')) ? 1 : 0);
     const c = this.camera;
     if (this.mode === 'aerial') {
       const g = this.goal;
-      const anyKey = f || r || k.has('KeyE') || k.has('KeyQ') || k.has('KeyR') || k.has('KeyF') || k.has('PageUp') || k.has('PageDown') || k.has('Equal') || k.has('NumpadAdd') || k.has('Minus') || k.has('NumpadSubtract');
+      const anyKey = f || r || k.has('ArrowUp') || k.has('ArrowDown') || k.has('ArrowLeft') || k.has('ArrowRight') || k.has('KeyE') || k.has('KeyQ') || k.has('KeyR') || k.has('KeyF') || k.has('PageUp') || k.has('PageDown') || k.has('Equal') || k.has('NumpadAdd') || k.has('Minus') || k.has('NumpadSubtract');
       if (anyKey) this.stopCinematic();
       const fast = k.has('ShiftLeft') || k.has('ShiftRight') ? 2.2 : 1;
       const speed = g.dist * 0.9 * dt * fast;
@@ -816,10 +818,10 @@ export class CameraController implements ICameraController {
         const ef = ramp(m.y) - ramp(H - 1 - m.y);
         if (er || ef) { this.stopCinematic(); this.panLocal(er * g.dist * 0.9 * dt, ef * g.dist * 0.9 * dt); }
       }
-      if (k.has('KeyE')) g.yaw -= 1.4 * dt;
-      if (k.has('KeyQ')) g.yaw += 1.4 * dt;
-      if (k.has('KeyR') || k.has('PageUp')) g.pitchOffset = this.clampOffset(g.pitchOffset + 0.9 * dt);
-      if (k.has('KeyF') || k.has('PageDown')) g.pitchOffset = this.clampOffset(g.pitchOffset - 0.9 * dt);
+      if (k.has('KeyE') || k.has('ArrowRight')) g.yaw -= 1.4 * dt;
+      if (k.has('KeyQ') || k.has('ArrowLeft')) g.yaw += 1.4 * dt;
+      if (k.has('KeyR') || k.has('PageUp') || k.has('ArrowUp')) g.pitchOffset = this.clampOffset(g.pitchOffset + 0.9 * dt);
+      if (k.has('KeyF') || k.has('PageDown') || k.has('ArrowDown')) g.pitchOffset = this.clampOffset(g.pitchOffset - 0.9 * dt);
       if (k.has('Equal') || k.has('NumpadAdd')) this.zoomAt((this.dom.clientWidth || 2) / 2, (this.dom.clientHeight || 2) / 2, Math.exp(-dt * 1.6));
       if (k.has('Minus') || k.has('NumpadSubtract')) this.zoomAt((this.dom.clientWidth || 2) / 2, (this.dom.clientHeight || 2) / 2, Math.exp(dt * 1.6));
       if (this.cinematic) g.yaw += 0.07 * dt;
