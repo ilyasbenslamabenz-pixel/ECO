@@ -9,7 +9,7 @@ des city-builders modernes ; textes, couleurs et valeurs propres au jeu.
 | Simulation | `src/sim/plugins/cartes.ts`, `src/sim/plugins/historique.ts`, section `src/sim/save-sections/historique.ts` ; `demography.ts` (`scoreCitizen`, `residentAggregates`, `inspectBuilding().diagnosis`) ; `plugins/dechets.ts` (`binLevel`) ; façade `economy.history()` (`plugins/types.ts`, `host.ts`) ; rattachement dans `world.ts` |
 | Rendu | `src/render/plugins/cartes.ts` (nouveau ; une ligne dans le registre) — aucun fichier cœur du rendu modifié |
 | Interface | `src/ui/layers-menu.ts` (menu Cartes), `src/ui/why.ts` + `panels.ts` (fiche Pourquoi), `src/ui/history-view.ts` + `charts.ts` (`drawTimeChart`) + `dashboards.ts` (Statistiques, Journal), `src/ui/notify-log.ts` + `notify.ts` (journal), `markup.html`, `styles.css` |
-| Tests | `tests/jeu/interface.test.ts` (11 tests), `tests/e2e/interface-pc.mjs` (dans `npm run e2e`), `tests/e2e/interface-iphone.mjs` (facultatif : `npm run e2e:interface:iphone`) |
+| Tests | `tests/jeu/interface.test.ts` (10 tests), `tests/e2e/interface-pc.mjs` (dans `npm run e2e`), `tests/e2e/interface-iphone.mjs` (facultatif : `npm run e2e:interface:iphone`) |
 
 ## 1. Menu Cartes
 

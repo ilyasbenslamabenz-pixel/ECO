@@ -15,7 +15,10 @@
  */
 import { DAM_FLOW_MAX, damGeometry, type DamGeometry, type EditPlan, type TerrainEdit } from '../terrain/edits';
 import { NO_WATER, type SampleRect, type WorldTerrain } from '../terrain/types';
-import { HydroSolver, type FeedResult, type HydroFeed, type HydroGrid } from './fill';
+import { HydroSolver, STREAM_DEPTH, type FeedResult, type HydroFeed, type HydroGrid } from './fill';
+
+/** Profondeur minimale d'une retenue contre un barrage (m) : un ruisseau de débordement n'en est pas une. */
+const LAKE_MIN_DEPTH = STREAM_DEPTH + 0.15;
 
 /** Pas de temps du remplissage (minutes de jeu) : 6 min = 6 ticks (≈ 1,7 image d'eau par seconde à ×1). */
 export const FILL_QUANTUM_MIN = 6;
@@ -321,7 +324,8 @@ export class HydroSystem {
         }
       });
       let level = -Infinity, tail = Infinity;
-      for (const k of d.geom.upFace) if (ws[k]! !== NO_WATER && ws[k]! > ground[k]! + 0.05) level = Math.max(level, ws[k]!);
+      // Retenue : eau d'un lac (plus profonde qu'un ruisseau) contre la face amont, sous la crête.
+      for (const k of d.geom.upFace) if (ground[k]! < d.crest && ws[k]! !== NO_WATER && ws[k]! > ground[k]! + LAKE_MIN_DEPTH) level = Math.max(level, ws[k]!);
       for (const k of d.geom.downFace) tail = Math.min(tail, ws[k]! !== NO_WATER && ws[k]! > ground[k]! ? ws[k]! : ground[k]!);
       if (!Number.isFinite(tail)) tail = d.crest;
       const lv = Number.isFinite(level) ? level : NaN;
@@ -375,15 +379,23 @@ export class HydroSystem {
         let level = -Infinity, tail = Infinity;
         for (const k of newDam.geom.upFace) {
           const w = water[k]! !== NO_WATER && water[k]! > base[k]! ? water[k]! : base[k]!;
-          if (w !== NO_WATER && w > ground[k]! + 0.05) level = Math.max(level, w);
+          if (ground[k]! < newDam.crest && w !== NO_WATER && w > ground[k]! + LAKE_MIN_DEPTH) level = Math.max(level, w);
         }
         for (const k of newDam.geom.downFace) {
           const w = water[k]! !== NO_WATER && water[k]! > base[k]! ? water[k]! : base[k]!;
           tail = Math.min(tail, w !== NO_WATER && w > ground[k]! ? w : ground[k]!);
         }
-        const own = feeds.findIndex((f) => f.tag === -di);
-        if (own >= 0) { out.level = res[own]!.level; out.area = Math.round(res[own]!.area); out.stored = Math.round(res[own]!.stored); out.outlet = res[own]!.outlet; out.status = res[own]!.status; }
-        else if (!Number.isFinite(level)) { out.level = NaN; out.area = 0; out.stored = 0; out.status = 'none'; }
+        // Retenue = eau au niveau mesuré contre la face amont (surface des cases à ce niveau).
+        out.level = NaN; out.area = 0; out.stored = 0; out.status = 'none'; out.outlet = '';
+        if (Number.isFinite(level)) {
+          const A = t.spacing * t.spacing;
+          let area = 0, stored = 0;
+          for (let k = 0; k < water.length; k++) {
+            const w = water[k]!;
+            if (w !== NO_WATER && Math.abs(w - level) < 0.02 && w > ground[k]! + 0.05) { area += A; stored += (w - Math.max(ground[k]!, base[k]! === NO_WATER ? -Infinity : base[k]!)) * A; }
+          }
+          out.area = Math.round(area); out.stored = Math.round(stored); out.status = 'sink';
+        }
         out.headM = Number.isFinite(level) && Number.isFinite(tail) ? Math.max(0, Math.round((level - tail) * 10) / 10) : 0;
         out.flowM3s = Math.round(flow * 10) / 10;
         if (Number.isFinite(level)) out.level = level;

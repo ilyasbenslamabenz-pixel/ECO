@@ -13,11 +13,12 @@ mkdirSync(outDir, { recursive: true });
 let failed = 0;
 const check = (ok, msg, extra) => { console.log(`${ok ? 'OK  ' : 'ÉCHEC'} ${msg}${extra !== undefined ? ` ${JSON.stringify(extra)}` : ''}`); if (!ok) failed++; };
 
-// Site du barrage (graine 7) : vallon alimenté par la source posée sur les reliefs du nord-ouest.
-const SOURCE = { x: -750, z: -750 };
-const DAM_A = { x: -563.15, z: -916.85 }, DAM_B = { x: -732.85, z: -747.15 };
-const DAM_C = { x: (DAM_A.x + DAM_B.x) / 2, z: (DAM_A.z + DAM_B.z) / 2 };
-const PAINT = { x: -450, z: 150 };
+// Graine 7 : plaine à l'ouest. Vallon sculpté (crêtes au pinceau Élever), source au fond, barrage en travers.
+const VX = -450, VZ = 150;
+const SOURCE = { x: VX - 70, z: VZ };
+const DAM_A = { x: VX + 20, z: VZ - 80 }, DAM_B = { x: VX + 20, z: VZ + 80 };
+const DAM_C = { x: VX + 20, z: VZ };
+const PAINT = { x: -300, z: -450 };
 
 const { server, base } = await serve();
 const browser = await launch();
@@ -43,14 +44,13 @@ try {
     await page.waitForTimeout(200);
   };
   const pick = async (mode) => {
-    await page.keyboard.press('Escape');
     await page.click('#toolbar button[data-cat="terrain"]');
     await page.click(`#drawer-body button[data-terrain="${mode}"]`);
   };
   const actionButton = (text) => page.locator('button', { hasText: text }).first();
 
   // Captures « avant ».
-  await shot('avant-vallon.png', DAM_C.x, DAM_C.z, 520, 0.9, 0.6);
+  await shot('avant-vallon.png', VX, VZ, 420, 0.8, 0.9);
   await shot('avant-pinceau.png', PAINT.x, PAINT.z, 320, 0.9, 0.4);
 
   // 1. Pinceau Élever, force forte, forme dure : appuyer et glisser à la souris.
@@ -87,10 +87,26 @@ try {
   await page.waitForFunction((m) => Math.abs(window.__aube.lastStats.money - m) < 2, money0, { timeout: 20000 }).catch(() => undefined);
   check(Math.abs((await page.evaluate(() => window.__aube.lastStats.money)) - money0) < 2, 'coût remboursé à l\'annulation');
 
-  // 2. Source d'eau sur les reliefs (un clic).
+  // 2. Vallon : deux crêtes et un mur amont au pinceau Élever (forme dure), passes envoyées à la simulation.
+  const sculpt = await page.evaluate(async ([cx, cz]) => {
+    let ok = 0;
+    const ridge = async (x0, z0, x1, z1) => {
+      const L = Math.hypot(x1 - x0, z1 - z0);
+      for (let d = 0; d <= L; d += 24) for (let p = 0; p < 2; p++) {
+        try { await window.__aube.sendExt('terrainEdit', { edit: { k: 'raise', x: x0 + ((x1 - x0) * d) / L, z: z0 + ((z1 - z0) * d) / L, r: 30, d: 10, s: 1 } }); ok++; } catch { /* refus */ }
+      }
+    };
+    await ridge(cx - 120, cz - 70, cx + 40, cz - 70);
+    await ridge(cx - 120, cz + 70, cx + 40, cz + 70);
+    await ridge(cx - 120, cz - 70, cx - 120, cz + 70);
+    return ok;
+  }, [VX, VZ]);
+  check(sculpt >= 36, 'vallon sculpté (passes du pinceau Élever)', sculpt);
+
+  // 3. Source d'eau au fond du vallon (un clic).
   await pick('source');
   await actionButton('25 m³/s').click();
-  await page.evaluate(([x, z]) => { window.__aube.lookAt(x, z, 520, 0.9, 0.6); window.__aube.renderNow(1); }, [DAM_C.x, DAM_C.z]);
+  await page.evaluate(([x, z]) => { window.__aube.lookAt(x, z, 420, 1.0, 0); window.__aube.renderNow(1); }, [VX, VZ]);
   await hoverWorld(SOURCE);
   await page.waitForFunction(() => { const p = window.__aube.toolPreview(); return p.kind === 'terrain' && p.validity !== 'pending'; }, null, { timeout: 30000 });
   const srcTag = await page.evaluate(() => document.querySelector('#cursor-tag, .cursor-tag')?.textContent ?? '');
@@ -100,9 +116,9 @@ try {
   const st1 = await hydro();
   check(st1.sources.length === 1 && st1.sources[0].q === 25, 'source posée (25 m³/s)', st1.sources);
 
-  // 3. Barrage en travers du vallon : aperçu vert (chute, production), puis pose.
+  // 4. Barrage en travers du vallon : aperçu vert (chute, production), puis pose.
   await pick('dam');
-  await page.evaluate(([x, z]) => { window.__aube.lookAt(x, z, 520, 0.9, 0.6); window.__aube.renderNow(1); }, [DAM_C.x, DAM_C.z]);
+  await page.evaluate(([x, z]) => { window.__aube.lookAt(x, z, 420, 1.0, 0); window.__aube.renderNow(1); }, [VX, VZ]);
   // Refus clair : un barrage trop court.
   await clickWorld(DAM_A);
   await hoverWorld({ x: DAM_A.x + 6, z: DAM_A.z + 6 });
@@ -119,9 +135,10 @@ try {
   await page.waitForFunction(async () => (await window.__aube.sendExt('hydroState', {})).dams.length === 1, null, { timeout: 30000 }).catch(() => undefined);
   const st2 = await hydro();
   check(st2.dams.length === 1, 'barrage posé', st2.dams);
+  check(st2.dams[0] && !st2.dams[0].full, 'retenue vide au départ (remplissage progressif)', st2.dams[0]);
   check(await page.evaluate(() => window.__aube.quays().length >= 16), 'parements du barrage rendus');
 
-  // 4. Remplissage : la retenue monte jusqu'à la crête.
+  // 5. Remplissage : la retenue monte jusqu'à la crête.
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 4 }));
   await page.waitForFunction(async () => { const s = await window.__aube.sendExt('hydroState', {}); return s.dams[0]?.full; }, null, { timeout: 120000, polling: 1000 }).catch(() => undefined);
   await page.evaluate(() => window.__aube.send('setSpeed', { speed: 0 }));
@@ -129,14 +146,13 @@ try {
   const d = st3.dams[0];
   check(d && d.full && d.headM > 5 && Math.abs(d.level - d.crest) < 0.5, 'retenue pleine au niveau de la crête, chute mesurée', d);
   check(st3.lastMs < 200, 'calcul de l\'eau léger (ms)', st3.lastMs);
-  const wetUp = await page.evaluate(([x, z]) => window.__aube.isWet(x, z), [DAM_C.x - 30, DAM_C.z - 30]);
+  const wetUp = await page.evaluate(([x, z]) => window.__aube.isWet(x, z), [DAM_C.x - 30, DAM_C.z]);
   check(wetUp, 'eau visible en amont du barrage (rendu)');
   await page.mouse.move(5, 400);
-  await shot('apres-retenue.png', DAM_C.x, DAM_C.z, 520, 0.9, 0.6);
-  await shot('apres-retenue-proche.png', DAM_C.x, DAM_C.z, 260, 0.7, 2.2);
+  await shot('apres-retenue.png', VX, VZ, 420, 0.8, 0.9);
+  await shot('apres-retenue-proche.png', DAM_C.x + 40, DAM_C.z, 240, 0.6, 1.2);
 
-  // 5. Sauvegarde puis rechargement : source, barrage et retenue conservés.
-  await page.keyboard.press('Escape');
+  // 6. Sauvegarde puis rechargement : source, barrage et retenue conservés.
   await page.evaluate(() => window.__aube.saveSlot('terraform-e2e'));
   await page.evaluate(() => window.__aube.loadSlot('terraform-e2e'));
   await page.waitForFunction(async () => (await window.__aube.sendExt('hydroState', {})).dams.length === 1, null, { timeout: 60000 }).catch(() => undefined);

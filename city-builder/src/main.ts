@@ -506,7 +506,7 @@ async function boot(): Promise<void> {
     if (p.kind === 'grid') return { kind: p.kind, validity: p.validity, message: p.message, cost: p.cost, lines: p.layout?.lines.length ?? 0, nx: p.layout?.nx ?? 0, nz: p.layout?.nz ?? 0, length: p.layout?.length ?? 0, drawing: cons.machine.drawing };
     if (p.kind === 'upgrade') return { kind: p.kind, validity: p.validity, message: p.message, cost: p.cost, refund: p.refund, target: p.target?.id ?? null, from: p.target?.kindId ?? null, toKind: p.toKind, reverse: p.reverse };
     if (p.kind === 'bulldoze') return { kind: p.kind, area: cons.machine.bulldozeArea, areaStart: p.areaStart ?? null, buildings: p.area?.buildings.length ?? 0, edges: p.area?.edges.length ?? 0, refund: p.area?.refund ?? p.refund, target: p.target?.kind ?? null };
-    if (p.kind === 'terrain') return { kind: p.kind, mode: p.mode, validity: p.validity, message: p.message, cost: p.cost, length: p.length, start: p.start };
+    if (p.kind === 'terrain') return { kind: p.kind, mode: p.mode, validity: p.validity, message: p.message, cost: p.cost, length: p.length, start: p.start, hard: p.hard, innerRadius: p.innerRadius, stroke: p.stroke };
     return { kind: p.kind };
   };
 

@@ -1280,8 +1280,7 @@ body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !impor
   body.ui-rail #toolbar .tb-grp::after { content: attr(data-label); position: absolute; left: 6px; top: -32px; white-space: nowrap; font-size: 9.5px; font-weight: 800;
     letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .78); text-shadow: 0 1px 3px rgba(0, 0, 0, .85); pointer-events: none; }
   :root[data-theme="clair"] body.ui-rail #toolbar .tb-grp::after { color: rgba(13, 22, 32, .78); text-shadow: 0 1px 2px rgba(255, 255, 255, .9); }
-  body.ui-rail #toolbar .tb-sep:not(.tb-grp) { display: none; }
-  body.ui-rail #toolbar .tb-grp + button[data-tool="bulldoze"] { margin-left: 0; }
+  body.ui-rail #toolbar .tb-sep:not(.tb-grp) { margin: 10px 3px; }
 }
 /* Fenêtres de bureau étroites : vitesse en un bouton « suivante », puis nom de ville masqué. */
 @media (min-width: 761px) and (max-width: 1180px) {
@@ -1315,6 +1314,8 @@ body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !impor
   body.ui-rail #sidebar button.active svg.ic { color: #fff; }
   /* Tableaux de bord : ouverts à côté du rail (la carte reste visible à droite) ; la fiche d'un objet reste à droite. */
   body.ui-rail .panel.dash { left: calc(max(10px, var(--safe-l)) + 62px); right: auto; }
+  /* Bas d'écran (sous-barre, outils) : commence après le rail, la sous-barre ne passe plus dessous. */
+  body.ui-rail #bottom { left: calc(max(10px, var(--safe-l)) + 62px); }
 }
 
 /* ------------------------------ Téléphone ------------------------------ */
@@ -1418,7 +1419,7 @@ body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !impor
   body.ui-rail #layers-pop, body.ui-rail #touch-confirm { zoom: var(--uiz); }
   body.ui-rail #sidebar { top: calc((var(--hud-h) + 8px) / var(--uiz)); max-height: calc((100dvh - var(--hud-h) - 20px) / var(--uiz)); }
   body.ui-rail .panel { top: calc((var(--hud-h) + 10px) / var(--uiz)); max-height: calc((100dvh - var(--hud-h) - var(--tb-h) - 24px) / var(--uiz)); }
-  body.ui-rail .panel.dash { left: calc(10px / var(--uiz) + 62px); }
+  body.ui-rail .panel.dash, body.ui-rail #bottom { left: calc(10px / var(--uiz) + 62px); }
   body.ui-rail #objectives { top: calc((var(--hud-h) + 8px) / var(--uiz)); }
   body.ui-rail #toasts { top: calc((var(--hud-h) + 8px + var(--obj-h, 0px)) / var(--uiz)); }
   body.ui-rail #tooltip { font-size: calc(13px * var(--uiz)); max-width: calc(320px * var(--uiz)); }
