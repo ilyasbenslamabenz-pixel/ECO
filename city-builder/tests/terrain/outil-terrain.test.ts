@@ -32,10 +32,10 @@ test('Défricher : aperçu (coût) puis application au clic', async () => {
   await settle();
   const p = tool.preview();
   assert.equal(p.validity, 'ok');
-  assert.ok(p.cost >= 20 && p.outline && p.outline.length > 10);
+  assert.ok(p.cost === 0 && p.outline && p.outline.length > 10);
   const money = s.economy.money;
   assert.equal(await tool.click(), true);
-  assert.ok(s.economy.money < money);
+  assert.ok(s.economy.money <= money);
   assert.match(notes.at(-1)!, /Défrichage/);
 });
 

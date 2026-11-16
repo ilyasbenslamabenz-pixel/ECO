@@ -103,7 +103,7 @@ test('annulation : un geste de plusieurs passes est annulé d\'un coup (relief, 
   if (!a.ok || !b.ok) return;
   assert.equal(a.data.seq, 0);
   assert.equal(b.data.seq, 1);
-  assert.ok(s.economy.money < money);
+  assert.ok(s.economy.money <= money, 'terrassement gratuit');
   const u = s.runExt('terrainUndo', { since: 0 });
   assert.ok(u.ok, u.ok ? '' : u.error.message);
   assert.deepEqual(Array.from(N), Array.from(before));

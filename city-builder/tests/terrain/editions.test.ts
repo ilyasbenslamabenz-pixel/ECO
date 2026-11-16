@@ -144,7 +144,7 @@ test('défricher : forêt retirée du disque, petit coût, zone transmise au ren
   const x = t.originX + (bk % t.samplesX) * t.spacing, z = t.originZ + Math.floor(bk / t.samplesX) * t.spacing;
   const r = s.terrainEdit({ edit: { k: 'clear', x, z, r: 40 } });
   assert.ok(r.ok);
-  assert.ok(r.data.cost >= 20 && r.data.cost < 5000, `coût ${r.data.cost}`);
+  assert.equal(r.data.cost, 0, `défrichage gratuit (coût ${r.data.cost})`);
   assert.equal(r.data.volume, 0);
   for (let k = 0; k < t.forest.length; k++) {
     const kx = t.originX + (k % t.samplesX) * t.spacing, kz = t.originZ + Math.floor(k / t.samplesX) * t.spacing;
@@ -250,7 +250,7 @@ test('pinceaux de relief : élever, abaisser, niveler (bord adouci, coût, sauve
   for (let a = 0; a < 64 && at(px, pz) <= t.waterLevel + 2; a++) { px = Math.cos(a) * 60 * (1 + (a >> 3)); pz = Math.sin(a) * 60 * (1 + (a >> 3)); }
   const h0 = at(px, pz), edge0 = at(px + 40, pz);
   const dry = cmd({ k: 'raise', x: px, z: pz, r: 30, d: 4 }, true);
-  assert.ok(dry.ok && dry.data!.cost > 0 && dry.data!.volume > 0, 'aperçu chiffré');
+  assert.ok(dry.ok && dry.data!.cost === 0 && dry.data!.volume > 0, 'aperçu chiffré (terrassement gratuit)');
   assert.equal(at(px, pz), h0, 'aperçu sans effet');
   assert.ok(cmd({ k: 'raise', x: px, z: pz, r: 30, d: 4 }).ok);
   assert.ok(Math.abs(at(px, pz) - (h0 + 4)) < 0.05, `centre +4 m (${h0} -> ${at(px, pz)})`);
@@ -281,7 +281,7 @@ test('rivière : tracé courbe en eau, berges en pente sans mur, eau descendante
   assert.equal(plan.plan.walls.length, 0, 'berges naturelles : aucun mur');
   const r = s.terrainEdit({ edit: { k: 'river', pts, w: 24 } });
   assert.ok(r.ok, r.ok ? '' : r.error.message);
-  assert.ok(r.data.volume > 0 && r.data.cost > 0);
+  assert.ok(r.data.volume > 0 && r.data.cost === 0);
   assert.ok(s.isWet(pts[0]!, pts[1]!), 'eau à la source');
   assert.ok(s.isWet(pts[2]!, pts[3]!), 'eau au point de passage');
   // Niveau : la source n'est pas plus basse que l'embouchure, l'embouchure au niveau de la mer.

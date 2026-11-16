@@ -114,11 +114,11 @@ export const EDIT_LIMITS = {
 /** Coûts (CHF). */
 export const EDIT_COSTS = {
   /** Défrichage : par m² de forêt dense (proportionnel à la densité). */
-  clearPerM2: 0.4,
+  clearPerM2: 0, // gratuit (demande joueur : le terrassement doit être gratuit)
   /** Minimum facturé pour un défrichage. */
-  clearMin: 20,
+  clearMin: 0,
   /** Remblai / déblai : par m³ de terre déplacée. */
-  earthPerM3: 1.5,
+  earthPerM3: 0, // gratuit (demande joueur) ; quais, barrages, sources et digues restent payants
   /** Mur de quai : par mètre. */
   wallPerM: 80,
   /** Barrage : par m³ de béton (axe × hauteur × épaisseur moyenne DAM_THICKNESS). */
