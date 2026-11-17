@@ -127,6 +127,37 @@ test('simulation : un bâtiment riverain qui gêne l\'élargissement est nommé,
   assert.ok(s.buildings.indexOf(far.data.buildingId) >= 0);
 });
 
+test('simulation : « démolir les bâtiments gênants » — devis sans rien toucher, puis élargissement et démolition', () => {
+  const s = newTownSim();
+  const id = seg(s, -240, 0, 0, 0);
+  const d = s.getAsset('maison')!.footprint.tilesZ * TILE_SIZE;
+  const near = s.placeBuilding({ assetId: 'maison', x: -120, z: -8 - d / 2, rot: 0 });
+  const near2 = s.placeBuilding({ assetId: 'maison', x: -60, z: 8 + d / 2, rot: 2 });
+  const far = s.placeBuilding({ assetId: 'maison', x: -180, z: 30 + d / 2, rot: 2 });
+  assert.ok(near.ok && near2.ok && far.ok);
+  const count0 = s.buildings.count;
+  // Devis : les deux maisons riveraines seraient démolies, rien ne change encore.
+  const dry = s.upgradeRoad({ edgeId: id, kind: 'avenue', demolishBuildings: true, dryRun: true });
+  assert.ok(dry.ok, !dry.ok ? dry.error.message : '');
+  assert.deepEqual([...(dry.data.demolishedIds ?? [])].sort(), [near.data.buildingId, near2.data.buildingId].sort());
+  assert.equal(s.buildings.count, count0);
+  // Validation : avenue construite, maisons riveraines démolies (25 % remboursés), la maison éloignée reste.
+  const m0 = s.economy.money;
+  const up = s.upgradeRoad({ edgeId: id, kind: 'avenue', demolishBuildings: true });
+  assert.ok(up.ok, !up.ok ? up.error.message : '');
+  assert.equal(up.data.kind, 'avenue');
+  assert.equal(s.buildings.indexOf(near.data.buildingId), -1);
+  assert.equal(s.buildings.indexOf(near2.data.buildingId), -1);
+  assert.ok(s.buildings.indexOf(far.data.buildingId) >= 0);
+  const refund = Math.round(s.getAsset('maison')!.cost * 0.25) * 2;
+  assert.equal(Math.round(s.economy.money - m0), refund - up.data.cost);
+  // Sans élargissement (déclassement), l'option ne démolit rien.
+  const down = s.upgradeRoad({ edgeId: up.data.edgeId, kind: 'street', demolishBuildings: true });
+  assert.ok(down.ok);
+  assert.equal(down.data.demolishedIds, undefined);
+  assert.ok(s.buildings.indexOf(far.data.buildingId) >= 0);
+});
+
 test('simulation : route voisine parallèle trop proche pour un élargissement', () => {
   const s = newTownSim();
   const id = seg(s, -240, 0, 0, 0);

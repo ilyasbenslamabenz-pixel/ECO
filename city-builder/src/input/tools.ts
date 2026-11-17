@@ -574,7 +574,7 @@ export class ToolController implements IToolController, PointerToolSink {
         const from = ROAD_NAMES[e.kindId] ?? e.kindId, to = ROAD_NAMES[toKind] ?? toKind;
         const what = toKind !== e.kindId ? `${from} → ${to}${p.reverse ? ' · sens inversé' : ''}` : `${from} · sens inversé`;
         if (p.validity === 'error') tag(`${what}\n${p.message}`, 'error');
-        else tag(`${what} · ${fmt(e.length)} m\n${p.validity === 'pending' ? '…' : p.cost > 0 ? `${fmt(p.cost)} ¢ (différence)` : p.refund > 0 ? `+${fmt(p.refund)} ¢ remboursés` : 'gratuit'}`, p.validity === 'ok' ? 'ok' : 'pending');
+        else tag(`${what} · ${fmt(e.length)} m\n${p.validity === 'pending' ? '…' : p.cost > 0 ? `${fmt(p.cost)} ¢ (différence)` : p.refund > 0 ? `+${fmt(p.refund)} ¢ remboursés` : 'gratuit'}${p.message ? `\n${p.message}` : ''}`, p.validity === 'ok' ? 'ok' : 'pending');
         break;
       }
       case 'junction': {

@@ -1181,23 +1181,31 @@ export class Simulation {
     return { ok: true, data: { refund, restoreToken: this.addReceipt({ what: 'road', kind: info.kind, refund }) } };
   }
 
-  /** Bâtiment qui gêne le plus une emprise de demi-largeur `half` le long de `curve` (outil « Améliorer »). */
-  private readonly upgradeBlocker = (curve: Float64Array, half: number): UpgradeBlocker | null => {
+  /** Bâtiments qui empiètent sur une emprise de demi-largeur `half` le long de `curve` (outil « Améliorer »). */
+  private buildingsInCorridor(curve: Float64Array, half: number): { id: number; missing: number }[] {
     const [x0, z0, x1, z1] = cubicBounds(curve);
     this.buildingIndex.query(x0 - half, z0 - half, x1 + half, z1 + half, this.q);
-    if (this.q.length === 0) return null;
+    if (this.q.length === 0) return [];
     const poly = polyline(curve, Math.max(2, Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 4)));
-    let worst: UpgradeBlocker | null = null;
+    const out: { id: number; missing: number }[] = [];
     for (const id of this.q) {
       const o = this.obbs.get(id);
       if (!o) continue;
       let d = Infinity;
       for (let k = 0; k + 3 < poly.length; k += 2) d = Math.min(d, distSegmentObb(poly[k]!, poly[k + 1]!, poly[k + 2]!, poly[k + 3]!, o));
-      if (d < half && (!worst || half - d > worst.missing)) {
-        const bi = this.buildings.indexOf(id);
-        const asset = bi >= 0 ? this.catalog?.assets[this.buildings.assetIndex[bi]!] : undefined;
-        worst = { name: asset?.nameFr ?? 'Bâtiment', missing: half - d };
-      }
+      if (d < half) out.push({ id, missing: half - d });
+    }
+    return out;
+  }
+
+  /** Bâtiment qui gêne le plus une emprise de demi-largeur `half` le long de `curve` (outil « Améliorer »). */
+  private readonly upgradeBlocker = (curve: Float64Array, half: number): UpgradeBlocker | null => {
+    let worst: UpgradeBlocker | null = null;
+    for (const { id, missing } of this.buildingsInCorridor(curve, half)) {
+      if (worst && missing <= worst.missing) continue;
+      const bi = this.buildings.indexOf(id);
+      const asset = bi >= 0 ? this.catalog?.assets[this.buildings.assetIndex[bi]!] : undefined;
+      worst = { name: asset?.nameFr ?? 'Bâtiment', missing };
     }
     return worst;
   };
@@ -1206,17 +1214,36 @@ export class Simulation {
   upgradeRoad(a: CommandArgs<'upgradeRoad'>): CmdOutcome<'upgradeRoad'> {
     if (!this.terrain) return fail('NO_GAME', 'Aucune partie en cours');
     const req = { segId: a.edgeId, ...(a.kind && isRoadKind(a.kind) ? { kind: a.kind } : {}), ...(a.reverse ? { reverse: true } : {}) };
-    const p = planUpgrade(this.net, req, { blockedBy: this.upgradeBlocker, refundRate: DEMOLISH_REFUND_RATE, bounds: this.planOptions().bounds });
+    // « Démolir les bâtiments gênants » : l'élargissement n'est plus refusé pour un bâtiment riverain ; ceux qui
+    // empiètent sur la nouvelle emprise sont démolis (lots du zonage : ils repoussent en retrait de la nouvelle route).
+    const demolishOk = a.demolishBuildings === true;
+    const p = planUpgrade(this.net, req, { ...(demolishOk ? {} : { blockedBy: this.upgradeBlocker }), refundRate: DEMOLISH_REFUND_RATE, bounds: this.planOptions().bounds });
     if (!p.ok) return fail(p.error.code, p.error.message, p.error.phase);
     const { cost, refund, kind } = p.plan;
+    const from = this.net.kindOf(a.edgeId);
+    const doomed = demolishOk && halfWidth(kind) > halfWidth(from) ? this.buildingsInCorridor(p.plan.curve, halfWidth(kind)).map((b) => b.id) : [];
+    for (const id of doomed) {
+      const bi = this.buildings.indexOf(id);
+      const asset = bi >= 0 ? this.catalog?.assets[this.buildings.assetIndex[bi]!] : undefined;
+      if (asset?.category === 'transport') return fail('COLLISION', `Élargissement impossible : « ${asset.nameFr} » fait partie d'un port ou d'un aéroport`);
+    }
     if (cost > 0 && this.economy.bankrupt) return fail('INSUFFICIENT_FUNDS', 'Ville en faillite : travaux suspendus jusqu\'au retour d\'une trésorerie positive');
     if (cost > 0 && !this.economy.canAfford(cost)) return fail('INSUFFICIENT_FUNDS', `Fonds insuffisants (${cost} crédits requis)`);
-    if (a.dryRun) return { ok: true, data: { edgeId: a.edgeId, kind, cost, refund } };
+    if (a.dryRun) return { ok: true, data: { edgeId: a.edgeId, kind, cost, refund, ...(doomed.length ? { demolishedIds: doomed } : {}) } };
+    let displaced = 0;
+    for (const id of doomed) {
+      const bi = this.buildings.indexOf(id);
+      if (bi < 0) continue;
+      displaced += this.buildings.residents[bi]!;
+      // Sans notification par bâtiment (un seul message récapitulatif) ; bâtiment du joueur : 25 % remboursés.
+      this.demolishChecked(id, this.privateIds.has(id) ? true : false);
+    }
     const { edgeId } = commitUpgrade(this.net, p.plan);
     if (cost > 0) this.economy.spend(cost);
     if (refund > 0) this.economy.refund(refund);
     this.applyNetworkChanges(true);
-    return { ok: true, data: { edgeId, kind, cost, refund } };
+    if (doomed.length) this.notify('info', `Route élargie : ${doomed.length} bâtiment(s) démoli(s)${displaced ? `, ${displaced} habitant(s) relogé(s) ou partis` : ''}`);
+    return { ok: true, data: { edgeId, kind, cost, refund, ...(doomed.length ? { demolishedIds: doomed } : {}) } };
   }
 
   /** Marge de recherche autour d'une route pour l'accès des bâtiments et le talus. */

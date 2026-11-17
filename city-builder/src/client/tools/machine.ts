@@ -257,6 +257,9 @@ export class ConstructionTools {
   setGridBlock(b: number): void { this.gridBlock = b; this.gridKey = ''; this.refresh(); }
   setGuides(on: boolean): void { this.guides = on; this.refresh(); }
   setUpgradeTarget(t: UpgradeTarget): void { this.upgradeTarget = t; this.upgradeKey = ''; this.refresh(); }
+  /** Outil Améliorer : un élargissement démolit les bâtiments riverains qui gênent (sinon il est refusé). */
+  upgradeDemolish = false;
+  setUpgradeDemolish(on: boolean): void { this.upgradeDemolish = on; this.upgradeKey = ''; this.refresh(); }
 
   /** Vrai si un tracé (ou un quadrillage) est en cours : le bouton « Terminer » l'arrête. */
   get drawing(): boolean {
@@ -796,15 +799,23 @@ export class ConstructionTools {
     this.dry.run(async () => {
       if (seq !== this.previewSeq) return;
       let validity: Validity; let message = ''; let cost = 0; let refund = 0;
+      const doomed = new Set<number>();
       try {
         // Rue entière : somme des devis de chaque tronçon (refus du premier tronçon impossible).
         for (const c of chain) {
-          const r = await this.sim.send('upgradeRoad', { edgeId: c.id, ...args, dryRun: true });
+          const r = await this.sim.send('upgradeRoad', { edgeId: c.id, ...args, dryRun: true, ...(this.upgradeDemolish ? { demolishBuildings: true } : {}) });
           cost += r.cost; refund += r.refund;
+          for (const id of r.demolishedIds ?? []) doomed.add(id);
         }
         validity = 'ok';
-        if (chain.length > 1) message = `Rue entière : ${chain.length} tronçons`;
-      } catch (e) { validity = 'error'; message = errorOf(e).message; }
+        const parts: string[] = [];
+        if (chain.length > 1) parts.push(`Rue entière : ${chain.length} tronçons`);
+        if (doomed.size) parts.push(`démolit ${doomed.size} bâtiment${doomed.size > 1 ? 's' : ''}`);
+        message = parts.join(' · ');
+      } catch (e) {
+        validity = 'error'; message = errorOf(e).message;
+        if (!this.upgradeDemolish && /empiète/.test(message)) message += ' — ou activez « Démolir les bâtiments gênants »';
+      }
       const cur = this.preview;
       if (cur.kind === 'upgrade' && this.upgradeKey === key) {
         this.preview = { ...cur, validity, message, cost, refund };
@@ -1081,7 +1092,7 @@ export class ConstructionTools {
     let failed = '';
     for (const c of chain) {
       try {
-        const r = await this.sim.send('upgradeRoad', { edgeId: c.id, ...args });
+        const r = await this.sim.send('upgradeRoad', { edgeId: c.id, ...args, ...(this.upgradeDemolish ? { demolishBuildings: true } : {}) });
         this.undo.renameEdge(c.id, r.edgeId);
         steps.push({ kind: 'upgradeRoad', edgeId: r.edgeId, toKind: c.kindId, reverse: !!args.reverse && c.kindId === 'oneway' });
         cost += r.cost; refund += r.refund; kindTo = r.kind;

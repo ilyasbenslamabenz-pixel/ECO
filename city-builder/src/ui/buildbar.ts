@@ -625,6 +625,8 @@ export class BuildBar {
       if (sub === 'draw') act('Guides', `Lignes guides parallèles aux routes, à ${m.gridBlock} m (avec l’aimantation)`, () => m.setGuides(!m.guides), m.guides && m.magnet);
       if (sub === 'upgrade') {
         for (const [id, label] of Object.entries(UPGRADE_LABELS) as [UpgradeTarget, string][]) act(label, UPGRADE_TIPS[id as keyof typeof UPGRADE_TIPS] ?? label, () => m.setUpgradeTarget(id), m.upgradeTarget === id);
+        // Élargir une rue bordée de maisons : sans cette option, le premier bâtiment riverain bloque tout.
+        act('Démolir les bâtiments gênants', 'Gamme + : les bâtiments qui empiètent sur la nouvelle emprise sont démolis (nombre affiché avant de valider ; les lots du zonage repoussent en retrait). Désactivé : l\'élargissement est refusé', () => m.setUpgradeDemolish(!m.upgradeDemolish), m.upgradeDemolish);
       }
       if (sub === 'draw') {
         // Hauteur du tracé (pas de 4 m) : viaduc / passage supérieur au-dessus, tranchée / tunnel en dessous.

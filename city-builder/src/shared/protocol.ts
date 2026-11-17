@@ -76,8 +76,10 @@ export interface CommandMap {
    * Refus (COLLISION, TOO_STEEP…) avec un message explicite, p. ex. bâtiment riverain qui gêne l'élargissement.
    */
   upgradeRoad: {
-    args: { edgeId: number; kind?: RoadKindId; reverse?: boolean; dryRun?: boolean };
-    result: { edgeId: number; kind: RoadKindId; cost: number; refund: number };
+    /** `demolishBuildings` : un élargissement démolit les bâtiments qui empiètent au lieu d'être refusé. */
+    args: { edgeId: number; kind?: RoadKindId; reverse?: boolean; dryRun?: boolean; demolishBuildings?: boolean };
+    /** `demolishedIds` : bâtiments démolis (ou qui le seraient, en dryRun) par l'élargissement. */
+    result: { edgeId: number; kind: RoadKindId; cost: number; refund: number; demolishedIds?: number[] };
   };
   placeBuilding: {
     args: {
@@ -314,6 +316,7 @@ export function validateCommandMessage(msg: unknown): CommandError | null {
       if (a.kind !== undefined && !ROAD_KIND_IDS.includes(a.kind as RoadKindId)) return bad('Type de route inconnu');
       if (a.reverse !== undefined && typeof a.reverse !== 'boolean') return bad('reverse invalide');
       if (a.dryRun !== undefined && typeof a.dryRun !== 'boolean') return bad('dryRun invalide');
+      if (a.demolishBuildings !== undefined && typeof a.demolishBuildings !== 'boolean') return bad('demolishBuildings invalide');
       if (a.kind === undefined && a.reverse !== true) return bad('Rien à modifier : indiquer un type ou reverse');
       return null;
     case 'placeBuilding':
