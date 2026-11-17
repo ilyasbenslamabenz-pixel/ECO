@@ -90,7 +90,7 @@ test('annulation d\'un quadrillage : la rue existante découpée par le quadrill
   tools.setRoadSub('grid');
   tools.setGridBlock(64);
   await clickAt(tools, -304, -96);
-  tools.hover({ x: -304 + 130, z: -96 + 128 }, null);
+  tools.hover({ x: -304 + 260, z: -96 + 128 }, null);
   await settle();
   const p = tools.preview;
   assert.ok(p.kind === 'grid' && p.layout && p.validity === 'ok', p.kind === 'grid' ? p.message : p.kind);

@@ -65,15 +65,16 @@ async function clickAt(tools: ConstructionTools, x: number, z: number): Promise<
 
 test('grille : coin sur la grille de 8 m, îlots entiers, plafond, rues déjà construites retirées', () => {
   assert.deepEqual(gridCorner(13, -4.5), { x: 16, z: -8 });
-  const g = gridLayout({ x: 0, z: 0 }, { x: 140, z: -70 }, 64);
+  // Îlots rectangulaires : côté long (x local) = 2 × côté court.
+  const g = gridLayout({ x: 0, z: 0 }, { x: 280, z: -70 }, 64);
   assert.equal(g.nx, 2); assert.equal(g.nz, 1);
-  assert.deepEqual([g.x0, g.z0, g.x1, g.z1], [0, -64, 128, 0]);
+  assert.deepEqual([g.x0, g.z0, g.x1, g.z1], [0, -64, 256, 0]);
   assert.equal(g.lines.length, 2 + 3);
-  assert.equal(g.length, 2 * 128 + 3 * 64);
+  assert.equal(g.length, 2 * 256 + 3 * 64);
   const big = gridLayout({ x: 0, z: 0 }, { x: 5000, z: 10 }, 48);
   assert.ok(big.clamped && big.nx === 12 && big.nz === 1);
   assert.ok(edgeOnGrid([0, -64, 64, -64], g));
-  assert.ok(edgeOnGrid([64, -64, 64, 0], g));
+  assert.ok(edgeOnGrid([128, -64, 128, 0], g));
   assert.ok(!edgeOnGrid([32, -64, 32, 0], g), 'pas une rue du quadrillage');
   assert.ok(!edgeOnGrid([0, 0, 128, -64], g), 'diagonale');
 });
@@ -155,7 +156,7 @@ test('quadrillage : coût affiché avant validation, îlots construits avec leur
   const money0 = port.sim.economy.money;
   await clickAt(tools, -300, -100);
   assert.equal(tools.drawing, true);
-  tools.hover({ x: -300 + 130, z: -100 + 128 }, null);
+  tools.hover({ x: -300 + 260, z: -100 + 128 }, null);
   await settle();
   const p = tools.preview;
   assert.equal(p.kind, 'grid');
@@ -170,12 +171,12 @@ test('quadrillage : coût affiché avant validation, îlots construits avec leur
   assert.ok(notes.some((n) => /^ok:Quadrillage 2×2 îlots de 64 m/.test(n)), notes.join(' | '));
   assert.equal(port.sim.economy.money, money0 - expected);
   assert.equal(m.nodes.size, 9, '3×3 carrefours');
-  assert.equal(m.edges.size, 12, '12 tronçons de 64 m');
-  for (const e of m.edges.values()) assert.ok(Math.abs(e.length - 64) < 0.01);
+  assert.equal(m.edges.size, 12, '12 tronçons : 64 m (côté court) ou 128 m (côté long)');
+  for (const e of m.edges.values()) assert.ok(Math.abs(e.length - 64) < 0.01 || Math.abs(e.length - 128) < 0.01);
   assert.equal(tools.drawing, false);
   // Quadrillage voisin qui partage le bord est : la rue commune n'est pas reconstruite.
-  await clickAt(tools, -300 + 128, -100);
-  tools.hover({ x: -300 + 128 + 64, z: -100 + 128 }, null);
+  await clickAt(tools, -300 + 256, -100);
+  tools.hover({ x: -300 + 256 + 128, z: -100 + 128 }, null);
   await settle();
   const q = tools.preview;
   assert.ok(q.kind === 'grid' && q.layout);
@@ -295,11 +296,11 @@ test('Améliorer : motif local immédiat (inverser une rue à double sens, gamme
   assert.ok(r.kind === 'upgrade' && r.toKind === 'avenue' && r.validity === 'ok' && r.refund > 0 && r.cost === 0, r.kind === 'upgrade' ? r.message : '');
 });
 
-test('quadrillage orienté : aligné sur une route en biais (rues parallèles et perpendiculaires, îlots carrés)', async () => {
+test('quadrillage orienté : aligné sur une route en biais (rues parallèles et perpendiculaires, îlots rectangulaires)', async () => {
   const { gridLayout, edgeOnGrid } = await import('../../src/client/tools/grid');
   const ang = Math.PI / 6; // 30°
   const a = { x: 10, z: 20 };
-  const far = { x: a.x + Math.cos(ang) * 130 - Math.sin(ang) * 128, z: a.z + Math.sin(ang) * 130 + Math.cos(ang) * 128 };
+  const far = { x: a.x + Math.cos(ang) * 260 - Math.sin(ang) * 128, z: a.z + Math.sin(ang) * 260 + Math.cos(ang) * 128 };
   const L = gridLayout(a, far, 64, undefined, ang);
   assert.equal(L.nx, 2); assert.equal(L.nz, 2);
   assert.equal(L.lines.length, 6);
@@ -307,7 +308,8 @@ test('quadrillage orienté : aligné sur une route en biais (rues parallèles et
     const d = Math.atan2(zb - za, xb - xa);
     const rel = ((d - ang) % (Math.PI / 2) + Math.PI / 2) % (Math.PI / 2);
     assert.ok(rel < 1e-3 || Math.PI / 2 - rel < 1e-3, `rue parallèle ou perpendiculaire à la route (${d})`);
-    assert.ok(Math.abs(Math.hypot(xb - xa, zb - za) - 128) < 0.05, 'longueur 2 îlots');
+    const len = Math.hypot(xb - xa, zb - za);
+    assert.ok(Math.abs(len - 128) < 0.05 || Math.abs(len - 256) < 0.05, 'longueur 2 îlots');
     assert.ok(edgeOnGrid([xa, za, xb, zb], L), 'annulation groupée : rue reconnue dans le repère tourné');
   }
   assert.equal(L.corners.length, 8);

@@ -64,12 +64,15 @@ export function gridLayout(a: { x: number; z: number }, bw: { x: number; z: numb
   const [blx, blz] = F.toLocal(bw.x, bw.z);
   const b = { x: blx, z: blz };
   const B = Math.max(TILE_SIZE, snap(block));
+  // Îlots rectangulaires (demande joueur : moins d'intersections, plus de place) : côté long = 2 × côté court.
+  // Les lignes du côté long tombent sur des multiples de B : edgeOnGrid / annulation restent valables.
+  const BX = 2 * B;
   const sx = b.x >= a.x ? 1 : -1, sz = b.z >= a.z ? 1 : -1;
-  let nx = Math.max(1, Math.round(Math.abs(b.x - a.x) / B));
+  let nx = Math.max(1, Math.round(Math.abs(b.x - a.x) / BX));
   let nz = Math.max(1, Math.round(Math.abs(b.z - a.z) / B));
   const clamped = nx > GRID_MAX_BLOCKS || nz > GRID_MAX_BLOCKS;
   nx = Math.min(nx, GRID_MAX_BLOCKS); nz = Math.min(nz, GRID_MAX_BLOCKS);
-  const x0 = Math.min(a.x, a.x + sx * nx * B), x1 = Math.max(a.x, a.x + sx * nx * B);
+  const x0 = Math.min(a.x, a.x + sx * nx * BX), x1 = Math.max(a.x, a.x + sx * nx * BX);
   const z0 = Math.min(a.z, a.z + sz * nz * B), z1 = Math.max(a.z, a.z + sz * nz * B);
   const raw: [number, number, number, number][] = [];
   const seg = (xa: number, za: number, xb: number, zb: number): [number, number, number, number] => {
@@ -78,7 +81,7 @@ export function gridLayout(a: { x: number; z: number }, bw: { x: number; z: numb
     return [r2(p), r2(q), r2(r), r2(t)];
   };
   for (let i = 0; i <= nz; i++) raw.push(seg(x0, z0 + i * B, x1, z0 + i * B));
-  for (let j = 0; j <= nx; j++) raw.push(seg(x0 + j * B, z0, x0 + j * B, z1));
+  for (let j = 0; j <= nx; j++) raw.push(seg(x0 + j * BX, z0, x0 + j * BX, z1));
   const corners = [...F.toWorld(x0, z0), ...F.toWorld(x1, z0), ...F.toWorld(x1, z1), ...F.toWorld(x0, z1)];
   const lines = mirror ? raw.flatMap((l) => uncoveredPieces(l, mirror)) : raw;
   let length = 0;
