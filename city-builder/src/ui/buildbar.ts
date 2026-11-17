@@ -19,7 +19,7 @@ import { iconEl } from './icons';
 import type { ThumbnailSource } from './thumbnails';
 import { zonageDrawer } from './panels/zonage';
 import { busEditor } from './bus-editor';
-import { cardInfo } from './card-info';
+import { cardInfo, cardStats, subGroupOf } from './card-info';
 import { renderTerrainDrawer, terrainHint, terrainToolActions } from './terrain-drawer';
 
 export type DrawerId = 'road' | 'building' | 'services' | 'transport' | 'environment' | 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
@@ -384,7 +384,7 @@ export class BuildBar {
         cb.addEventListener('click', () => { this.closeDrawer(); this.d.machine.setPowerSub('cable'); this.d.tools.setTool('powerline'); });
         this.tabsEl.append(cb);
       }
-      for (const a of assetsForTab(this.d.catalog, current)) this.body.append(this.card(a, current.placeable, current.color));
+      this.renderCards(assetsForTab(this.d.catalog, current), current);
     }
     if (id === 'transport' && this.pendingBusChip) { this.tabsEl.append(this.pendingBusChip); this.pendingBusChip = null; }
     if (id === 'transport') for (const p of PLANNED.transport) this.body.append(this.plannedTile(p));
@@ -402,6 +402,31 @@ export class BuildBar {
     return b;
   }
 
+  /**
+   * Cartes d'un onglet, rangées par sous-catégorie (étiquettes du catalogue : famille de service, densité, rôle
+   * électrique…) : un titre court par groupe avec son effectif ; pas de titre quand l'onglet n'a qu'un groupe.
+   */
+  private renderCards(assets: CatalogAsset[], tab: Tab): void {
+    const groups = new Map<string, CatalogAsset[]>();
+    for (const a of assets) {
+      const g = subGroupOf(a, tab.cats.length > 1);
+      const list = groups.get(g);
+      if (list) list.push(a); else groups.set(g, [a]);
+    }
+    if (groups.size < 2) {
+      for (const a of assets) this.body.append(this.card(a, tab.placeable, tab.color));
+      return;
+    }
+    for (const [name, list] of groups) {
+      const from = tab.placeable ? Math.min(...list.map((a) => a.cost)) : 0;
+      const head = el('div', { cls: 'cg-head' }, el('span', { cls: 'cg-name', text: name }), el('span', { cls: 'cg-n', text: String(list.length) }),
+        from > 0 ? el('span', { cls: 'cg-from', text: `dès ${money(from)}` }) : null);
+      const row = el('div', { cls: 'cg-row' });
+      for (const a of list) row.append(this.card(a, tab.placeable, tab.color));
+      this.body.append(el('section', { cls: 'card-group', attrs: { 'aria-label': `${name} (${list.length})`, style: `--ic:${tab.color}` } }, head, row));
+    }
+  }
+
   private plannedTile(p: { label: string; icon: string; color: string; phase: string; tip: string }): HTMLButtonElement {
     const b = el('button', { cls: 'tile soon', attrs: { disabled: '', style: `--ic:${p.color}`, 'data-planned': p.label } },
       el('span', { cls: 'tile-ico' }, iconEl(p.icon)), el('span', { cls: 'nm', text: p.label }), phaseBadge(p.phase));
@@ -415,10 +440,21 @@ export class BuildBar {
     const cap = a.capacity.residents ? `${fmt(a.capacity.residents)} hab.` : a.capacity.jobs ? `${fmt(a.capacity.jobs)} emplois` : '';
     // L'essentiel : puissance, capacité, rayon, dépendances (catalogue et modèles partagés de la simulation).
     const info = cardInfo(a);
+    // Chiffres clés en pastilles (pictogramme + valeur) : habitants, emplois, puis ceux du module concerné.
+    const stats = [
+      ...(a.capacity.residents ? [{ icon: 'people', text: `${fmt(a.capacity.residents)} hab.`, label: 'Habitants logés' }] : []),
+      ...(a.capacity.jobs ? [{ icon: 'office', text: `${fmt(a.capacity.jobs)} emplois`, label: 'Emplois' }] : []),
+      ...cardStats(a),
+    ];
+    const statEls = stats.map((st) => el('span', { cls: 'st', attrs: { title: st.label } }, iconEl(st.icon), el('span', { text: st.text })));
+    // Empreinte et hauteur posées sur la vignette ; variantes à côté.
+    if (a.footprint.tilesX > 0) thumb.append(el('span', { cls: 'th-fp', text: `${a.footprint.tilesX * TILE_SIZE}×${a.footprint.tilesZ * TILE_SIZE} m` }));
+    if (a.variants.length > 1) thumb.append(el('span', { cls: 'th-var', text: `${a.variants.length} variantes` }));
     const b = el('button', { cls: 'card', attrs: { 'data-asset': a.id, style: `--ic:${color}` } }, thumb,
-      el('div', { cls: 'cap' }, el('span', { cls: 'nm', text: a.nameFr }), el('span', { cls: 'ct', text: placeable ? money(a.cost) : '' }),
-        info.lines.length ? el('span', { cls: 'kf', text: info.lines.join(' · ') }) : null,
-        el('span', { cls: 'sz', text: [fp, info.lines.length ? '' : cap].filter(Boolean).join(' · ') }),
+      el('div', { cls: 'cap' }, el('span', { cls: 'nm', text: a.nameFr }),
+        placeable ? el('span', { cls: 'price' }, el('span', { cls: 'ct', text: money(a.cost) }), a.upkeepPerMonth > 0 ? el('span', { cls: 'up', text: `${money(a.upkeepPerMonth)}/mois` }) : null) : el('span', { cls: 'ct', text: '' }),
+        statEls.length ? el('span', { cls: 'kf' }, ...statEls) : null,
+        el('span', { cls: 'sz', text: fp }),
         info.depends ? el('span', { cls: 'dep', text: info.depends }) : null));
     const lockAt = placeable ? progressionView.assetLock(a.id) : null;
     if (lockAt) {
@@ -433,7 +469,7 @@ export class BuildBar {
       thumb.append(el('span', { cls: 'badge' }, phaseBadge(DECOR_PLACEMENT_PHASE)));
       // Pas de transparence sur la vignette elle-même : le modèle reste lisible.
     } else {
-      b.dataset['tip'] = `${a.nameFr} — ${money(a.cost)}, entretien ${money(a.upkeepPerMonth)}/mois${a.variants.length > 1 ? ` · ${a.variants.length} variantes` : ''}${info.lines.length ? ` · ${info.lines.join(' · ')}` : ''}${cap && info.lines.length ? ` · ${cap}` : ''}${info.depends ? ` — ${info.depends}` : ''}`;
+      b.dataset['tip'] = `${a.nameFr} — ${money(a.cost)}, entretien ${money(a.upkeepPerMonth)}/mois${a.variants.length > 1 ? ` · ${a.variants.length} variantes` : ''}${info.lines.length ? ` · ${info.lines.join(' · ')}` : ''}${cap ? ` · ${cap}` : ''}${info.depends ? ` — ${info.depends}` : ''}`;
       b.addEventListener('click', () => {
         this.d.tools.setTool('building', { assetId: a.id });
         // On libère la vue pour viser (le tiroir se rouvre d'un clic ; la barre d'options de l'outil prend le relais).

@@ -55,37 +55,75 @@ const DEPENDS: Record<string, string> = {
 
 export interface CardInfo { lines: string[]; depends: string | null }
 
-export function cardInfo(a: CatalogAsset): CardInfo {
-  const lines: string[] = [];
+/** Chiffre clé d'une carte : pictogramme, valeur courte et libellé complet (info-bulle, lecteur d'écran). */
+export interface CardStat { icon: string; text: string; label: string }
+
+/** Chiffres clés structurés (mêmes valeurs que `cardInfo().lines`, avec un pictogramme par chiffre). */
+export function cardStats(a: CatalogAsset): CardStat[] {
+  const out: CardStat[] = [];
   const pk = facilityKindOf(a);
   if (pk) {
     const kw = nominalKwOf(a, pk);
-    if (pk === 'poste') lines.push(`Transformation ${mw(kw)}`);
-    else if (pk === 'batterie') lines.push(`Stockage ${nf1(capacityKwhOf(a) / 1000)} MWh · ${mw(kw)} · rendement ${Math.round(BATTERY_SPEC.roundTrip * 100)} %`);
+    if (pk === 'poste') out.push({ icon: 'pylon', text: `Transformation ${mw(kw)}`, label: 'Puissance de transformation' });
+    else if (pk === 'batterie') out.push({ icon: 'energy', text: `Stockage ${nf1(capacityKwhOf(a) / 1000)} MWh · ${mw(kw)} · rendement ${Math.round(BATTERY_SPEC.roundTrip * 100)} %`, label: 'Stockage, puissance et rendement' });
     else {
       const s = avgShare(pk);
-      lines.push(s !== null && s < 0.999 ? `${mw(kw)} nominal · moy. ≈ ${mw(kw * s)}` : `${mw(kw)} nominal`);
+      out.push({ icon: 'energy', text: s !== null && s < 0.999 ? `${mw(kw)} nominal · moy. ≈ ${mw(kw * s)}` : `${mw(kw)} nominal`, label: 'Puissance nominale (et moyenne attendue sur l’année)' });
     }
   }
   const wk = waterKindOf(a.id);
   if (wk) {
     const w = WATER_FACILITIES[wk];
-    if (wk === 'chateau') lines.push(`Réserve ${fmt(w.storage ?? 0)} m³ · ${fmt(w.capacity)} m³/h`);
-    else if (wk !== 'emissaire') lines.push(`${fmt(w.capacity)} m³/h`);
+    if (wk === 'chateau') out.push({ icon: 'watertower', text: `Réserve ${fmt(w.storage ?? 0)} m³ · ${fmt(w.capacity)} m³/h`, label: 'Réserve et débit' });
+    else if (wk !== 'emissaire') out.push({ icon: 'water', text: `${fmt(w.capacity)} m³/h`, label: 'Débit traité' });
   }
   const cap = tagNum(a, 'capacite_service:');
   if (cap) {
     const svc = a.tags.find((t) => t.startsWith('service:'))?.slice(8) ?? '';
     const unit = svc === 'education' ? 'élèves' : svc === 'petite_enfance' ? 'enfants' : svc === 'sante' ? 'patients' : svc === 'sport' ? 'usagers' : svc === 'incendie' || svc === 'police' ? 'véhicules' : '';
-    lines.push(unit ? `${fmt(cap)} ${unit}` : `Capacité ${fmt(cap)}`);
+    out.push({ icon: svc === 'incendie' || svc === 'police' ? 'truck' : 'people', text: unit ? `${fmt(cap)} ${unit}` : `Capacité ${fmt(cap)}`, label: 'Capacité du service' });
   }
   const trucks = tagNum(a, 'camions:');
-  if (trucks) lines.push(`${fmt(trucks)} camions`);
+  if (trucks) out.push({ icon: 'truck', text: `${fmt(trucks)} camions`, label: 'Camions de collecte' });
   const perDay = tagNum(a, 'capacite_jour:');
-  if (perDay) lines.push(`${tonnes(perDay)} / jour`);
+  if (perDay) out.push({ icon: 'recycle', text: `${tonnes(perDay)} / jour`, label: 'Déchets traités par jour' });
   const total = tagNum(a, 'capacite_totale:');
-  if (total) lines.push(`${tonnes(total)} au total`);
+  if (total) out.push({ icon: 'landfill', text: `${tonnes(total)} au total`, label: 'Capacité totale de stockage' });
   const radius = tagNum(a, 'rayon:');
-  if (radius) lines.push(`Rayon ${radius >= 1000 ? `${nf1(radius / 1000)} km` : `${fmt(radius)} m`}`);
-  return { lines, depends: DEPENDS[a.id] ?? null };
+  if (radius) out.push({ icon: 'target', text: `Rayon ${radius >= 1000 ? `${nf1(radius / 1000)} km` : `${fmt(radius)} m`}`, label: 'Rayon d’action' });
+  return out;
+}
+
+export function cardInfo(a: CatalogAsset): CardInfo {
+  return { lines: cardStats(a).map((s) => s.text), depends: DEPENDS[a.id] ?? null };
+}
+
+/** Libellés des familles `service:*` du catalogue (sous-catégories des cartes). */
+const SERVICE_FR: Record<string, string> = {
+  alimentation: 'Alimentation', commerces: 'Boutiques et magasins', restauration: 'Cafés et restaurants', carburant: 'Carburant', tourisme: 'Hôtellerie',
+  emplois_tertiaires: 'Bureaux', emplois_industriels: 'Usines et ateliers', fret: 'Logistique', stockage: 'Dépôts', stockage_agricole: 'Stockage agricole',
+  eau: 'Eau potable', assainissement: 'Assainissement', electricite: 'Électricité', education: 'Écoles', petite_enfance: 'Petite enfance', sante: 'Santé',
+  police: 'Police', incendie: 'Pompiers', culture: 'Culture', sport: 'Sport', loisirs: 'Loisirs', administration: 'Administration', patrimoine: 'Lieux de culte',
+  transport: 'Gares', dechets: 'Déchets',
+};
+const DENSITE_FR: Record<string, string> = { faible: 'Densité faible', moyenne: 'Densité moyenne', forte: 'Densité forte', tres_forte: 'Très haute densité' };
+const CATEGORY_GROUP_FR: Partial<Record<CatalogAsset['category'], string>> = { apartment_low: 'Petits immeubles (R+1 à R+3)', apartment_mid: 'Immeubles moyens (R+4 à R+8)' };
+
+/**
+ * Sous-catégorie d'un modèle dans un onglet du menu de construction, d'après ses étiquettes du catalogue (rien
+ * d'inventé) : rôle électrique, étape des déchets, famille de service, catégorie, puis densité.
+ */
+export function subGroupOf(a: CatalogAsset, multiCats: boolean): string {
+  const pk = facilityKindOf(a);
+  if (pk) return pk === 'poste' ? 'Réseau électrique' : pk === 'batterie' ? 'Stockage d’électricité' : 'Production d’électricité';
+  const d = a.tags.find((t) => t.startsWith('dechets:'))?.slice(8);
+  if (d) return d === 'depot' ? 'Collecte' : d === 'decharge' ? 'Stockage des déchets' : 'Traitement';
+  if (a.tags.includes('depot_bus')) return 'Dépôts';
+  if (multiCats && CATEGORY_GROUP_FR[a.category]) return CATEGORY_GROUP_FR[a.category]!;
+  const svc = a.tags.find((t) => t.startsWith('service:'))?.slice(8);
+  if (svc && SERVICE_FR[svc]) return SERVICE_FR[svc]!;
+  if (a.tags.includes('culte')) return 'Lieux de culte';
+  const dens = a.tags.find((t) => t.startsWith('densite:'))?.slice(8);
+  if (dens && DENSITE_FR[dens]) return DENSITE_FR[dens]!;
+  return 'Autres';
 }

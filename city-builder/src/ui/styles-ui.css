@@ -1,0 +1,178 @@
+/* =====================================================================================
+   Boutons, fenêtres et menu de construction — suite de la refonte (chargé en dernier, voir scripts/build.mjs).
+   N'utilise que les jetons de styles.css (:root et thèmes) ; aucun identifiant ni classe n'est renommé, les
+   règles plus anciennes restent et sont seulement surchargées ici.
+   1. Boutons : une hiérarchie nette (principal · secondaire · discret · danger), rayons --r-*, état pressé,
+      principal à la couleur d'accent du thème (au lieu d'un vert fixe qui jurait avec le thème Nuit bleu).
+   2. Fenêtres : menu, chargement, Premiers pas, notifications, info-bulle, sous-barre — même cadre que les
+      panneaux (.panel) : surface mate, filet fin, en-tête séparé, bouton fermer discret.
+   3. Menu de construction : cartes détaillées (vignette annotée, prix + entretien, chiffres clés en pastilles,
+      dépendances) rangées par sous-catégorie (titre, effectif, « dès … »).
+   ===================================================================================== */
+
+/* ---------------------------------- 1. Boutons ---------------------------------- */
+button { border-radius: var(--r-md); font-weight: 550; letter-spacing: .005em; }
+button:active:not(:disabled) { transform: translateY(1px) scale(.985); }
+button:disabled { opacity: .4; }
+button:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .18); }
+
+/* Principal : aplat d'accent du thème, texte contrasté (--accent-ink), léger relief. */
+button.primary { background: var(--accent-strong); color: var(--accent-ink); border-color: transparent; font-weight: 700;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .16) inset, 0 2px 8px rgba(var(--accent-rgb), .28); }
+button.primary:hover:not(:disabled) { background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 0 rgba(255, 255, 255, .2) inset, 0 4px 14px rgba(var(--accent-rgb), .36); }
+button.primary svg.ic { color: currentColor !important; }
+.menu-screen > button.primary svg.ic { color: currentColor; }
+/* Le thème Nuit gardait un survol gris sur tous les boutons sauf .primary : l'actif garde son accent. */
+@media (hover: hover) {
+  :root[data-theme="nuit"] button.active:hover:not(:disabled):not(.primary) { background: rgba(var(--accent-rgb), .24); }
+}
+/* Actif (bascule) : teinte d'accent + filet, lisible sans couleur grâce au contraste du texte. */
+button.active { background: rgba(var(--accent-rgb), .16); border-color: rgba(var(--accent-rgb), .65); color: var(--text-strong); }
+/* Danger : rouge du thème, plein au survol. */
+button.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: color-mix(in srgb, var(--danger) 7%, transparent); }
+button.danger:hover:not(:disabled) { background: var(--danger); border-color: var(--danger); color: #fff; }
+/* Discret (liens d'action) : sans cadre. */
+button.link { background: none; border-color: transparent; color: var(--muted); }
+button.link:hover:not(:disabled) { color: var(--text-strong); background: rgba(var(--ink), .06); }
+/* Boutons-icônes (fermer, replier) : carrés, sans cadre, survol teinté. */
+.icon-btn { border-color: transparent; background: transparent; color: var(--muted); border-radius: var(--r-md); }
+.icon-btn:hover:not(:disabled) { color: var(--text-strong); background: rgba(var(--ink), .08); border-color: transparent; }
+.icon-btn svg.ic { width: 18px; height: 18px; }
+
+/* Groupes segmentés : coins cohérents, actif en aplat. */
+.seg { border-radius: var(--r-md); background: rgba(var(--ink), .045); }
+.seg button { font-weight: 600; }
+
+/* Options d'outil (barre au-dessus des outils) : pastilles de même hauteur, active en accent. */
+.tool-actions button { font-weight: 600; border-color: var(--line); background: rgba(var(--ink), .05); }
+.tool-actions button.active { background: rgba(var(--accent-rgb), .2); border-color: rgba(var(--accent-rgb), .7); color: var(--text-strong); }
+.tool-actions button:last-child { background: transparent; border-color: var(--line-2); }
+
+/* Champs de formulaire : même rayon que les boutons, focus en accent. */
+.form input, .form select { border-radius: var(--r-md); transition: border-color var(--dur-1) ease, box-shadow var(--dur-1) ease; }
+.form input:focus, .form select:focus { border-color: rgba(var(--accent-rgb), .7); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .18); outline: none; }
+
+/* ---------------------------------- 2. Fenêtres ---------------------------------- */
+/* Menu principal, chargement : cadre de panneau, titre plus serré, boutons en liste alignés. */
+.loading-card, .menu-card { border-radius: calc(var(--r-lg) + 4px); border-color: var(--line-2); padding: 24px;
+  box-shadow: var(--shadow), 0 1px 0 rgba(var(--ink), .05) inset; animation: win-in var(--dur-2) var(--ease); }
+.menu-card h2 { font-size: var(--fs-xl); letter-spacing: -.005em; padding-bottom: 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.menu-screen { gap: 8px; }
+.menu-screen > button { min-height: 46px; border-radius: var(--r-md); font-weight: 600; }
+.menu-screen > button:not(.primary) { background: rgba(var(--ink), .045); }
+.menu-screen > button:hover:not(:disabled):not(.primary) { background: rgba(var(--ink), .09); border-color: var(--line-2); }
+.menu-screen > button svg.ic { color: var(--accent-2); }
+.menu-screen > button:disabled { opacity: .45; }
+.slot { border-radius: var(--r-md); transition: border-color var(--dur-1) ease, background var(--dur-1) ease; }
+.slot:hover { border-color: var(--line-2); }
+.slot-empty { border-radius: var(--r-md); }
+.form-actions { padding-top: 10px; border-top: 1px solid var(--line); }
+@keyframes win-in { from { opacity: 0; transform: translateY(6px) scale(.985); } }
+
+/* Premiers pas / objectifs : même cadre que les panneaux, en-tête séparé. */
+#objectives { border-radius: var(--r-lg); background: var(--panel); border-color: var(--line-2); box-shadow: 0 10px 28px rgba(0, 0, 0, .3), 0 1px 0 rgba(var(--ink), .04) inset; }
+#obj-toggle { border-radius: 0; font-weight: 650; }
+#obj-toggle:hover:not(:disabled) { background: rgba(var(--ink), .05); }
+#objectives.open #obj-toggle { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.obj-actions button { border-radius: var(--r-md); }
+
+/* Notifications : surface mate, filet d'état à gauche conservé, bouton d'action en pastille. */
+.toast { border-radius: var(--r-md); border-color: var(--line-2); box-shadow: 0 8px 22px rgba(0, 0, 0, .3); }
+.toast .toast-act { border-radius: var(--r-md); }
+
+/* Info-bulle : cadre net, texte un cran plus clair, ombre courte. */
+#tooltip { border-radius: var(--r-md); box-shadow: 0 6px 18px rgba(0, 0, 0, .32); line-height: 1.4; }
+
+/* Sous-barre de construction : en-tête séparé (titre · onglets · fermer), corps légèrement en retrait. */
+#build-drawer { border-color: var(--line-2); background: var(--panel); box-shadow: 0 12px 32px rgba(0, 0, 0, .34), 0 1px 0 rgba(var(--ink), .05) inset; overflow: hidden; }
+.drawer-head { padding: 7px 6px 7px 12px; border-bottom: 1px solid var(--line); gap: 12px; }
+.drawer-title { font-size: var(--fs-md); font-weight: 700; padding-right: 12px; border-right: 1px solid var(--line); }
+.drawer-title svg.ic { width: 22px; height: 22px; padding: 3px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--ic) 16%, transparent); box-sizing: content-box; }
+#drawer-close { width: 34px; height: 34px; min-height: 34px; padding: 0; }
+.drawer-body { overflow-y: auto; padding: 10px 12px 12px; background: rgba(var(--ink), .018); scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.drawer-body::-webkit-scrollbar { height: 8px; }
+.drawer-body::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
+
+/* Bureau : un peu plus de hauteur pour les cartes détaillées (le corps défile verticalement au besoin). */
+@media (min-width: 761px) {
+  #build-drawer { max-height: min(58vh, 450px); }
+  /* Tous les onglets visibles (retour à la ligne) : plus d'onglet caché hors du tiroir. */
+  .drawer-head .tabs { flex-wrap: wrap; row-gap: 4px; overflow: visible; }
+}
+
+/* Onglets du tiroir : pastilles discrètes, active = teinte de la catégorie + filet. */
+.chip-tab { border-radius: var(--r-md); font-weight: 600; background: transparent; border-color: transparent; color: var(--muted); padding: 4px 10px 4px 7px; }
+.chip-tab:hover:not(:disabled) { background: rgba(var(--ink), .07); color: var(--text-strong); border-color: transparent; }
+.chip-tab.active, :root:is([data-theme="clair"], [data-theme="nuit"]) .chip-tab.active {
+  color: var(--text-strong); background: color-mix(in srgb, var(--ic, var(--accent)) 16%, transparent); border-color: color-mix(in srgb, var(--ic, var(--accent)) 55%, transparent); box-shadow: none; }
+.chip-tab .n { min-width: 18px; padding: 0 5px; border-radius: 999px; background: rgba(var(--ink), .08); text-align: center; line-height: 16px; font-weight: 650; }
+.chip-tab.active .n { background: color-mix(in srgb, var(--ic, var(--accent)) 28%, transparent); color: var(--text-strong); }
+/* Raccourcis (tableau de bord, ligne HT, câble, lignes de bus) : distingués des onglets par un filet pointillé. */
+.chip-tab[data-dashboard], .chip-tab[data-powerline], .chip-tab[data-cable] { border: 1px dashed var(--line-2); color: var(--text); }
+
+/* ---------------------------------- 3. Cartes du menu de construction ---------------------------------- */
+/* Groupes par sous-catégorie : titre court au-dessus de chaque rangée de cartes. */
+.card-group { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding-right: 12px; margin-right: 2px; border-right: 1px solid var(--line); }
+.card-group:last-child { border-right: 0; padding-right: 0; }
+.cg-head { display: flex; align-items: baseline; gap: 6px; padding: 0 2px; white-space: nowrap; font-size: var(--fs-xs); line-height: 1.2; }
+.cg-name { font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-strong); }
+.cg-name::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 2px; background: var(--ic, var(--accent)); vertical-align: 0; }
+.cg-n { font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cg-from { color: var(--muted); }
+.cg-row { display: flex; gap: 10px; }
+
+/* Carte : vignette annotée, puis nom, prix, chiffres clés, empreinte, dépendances. */
+.card { width: 164px; border-radius: var(--r-lg); background: var(--panel-solid); border-color: var(--line-2); box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+  transition: border-color var(--dur-1) ease, box-shadow var(--dur-1) ease, transform var(--dur-1) ease; }
+.card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--ic, var(--accent)) 70%, transparent); box-shadow: 0 6px 16px rgba(0, 0, 0, .3); transform: translateY(-2px); background: var(--panel-solid); }
+.card:active:not(:disabled) { transform: translateY(0) scale(.99); }
+.card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 4px 14px rgba(var(--accent-rgb), .28); }
+.card .thumb { aspect-ratio: 16 / 11; }
+.card .thumb::after { height: 2px; }
+.card .thumb img { transition: transform var(--dur-2) var(--ease); }
+.card:hover:not(:disabled) .thumb img { transform: scale(1.04); }
+/* Étiquettes posées sur la vignette (empreinte et hauteur en bas, variantes en haut à droite). */
+.card .th-fp, .card .th-var { position: absolute; z-index: 1; font-size: 10px; font-weight: 650; line-height: 1; padding: 3px 6px; border-radius: 5px;
+  background: rgba(8, 12, 18, .72); color: #eef3f8; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.card .th-fp { left: 5px; bottom: 7px; }
+.card .th-var { right: 5px; top: 5px; }
+.card.locked .th-var, .card .thumb:has(.badge) .th-var { display: none; }
+.card .cap { padding: 8px 9px 9px; gap: 4px; flex: 1; }
+.card .nm { font-size: var(--fs-sm); font-weight: 650; min-height: 30px; color: var(--text-strong); }
+.card .price { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 6px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
+.card .price .ct { font-size: 13px; font-weight: 750; color: var(--accent); white-space: nowrap; }
+.card .price .up { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+/* Chiffres clés : une pastille par chiffre (pictogramme à la couleur de la catégorie). */
+.card .kf { display: flex; flex-wrap: wrap; gap: 3px 4px; font-weight: 600; }
+.card .kf .st { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 6px 2px 4px; border-radius: 5px; font-size: 10.5px; line-height: 1.3;
+  color: var(--text-strong); background: rgba(var(--ink), .06); }
+.card .kf .st svg.ic { width: 12px; height: 12px; stroke-width: 2.1; color: var(--ic, var(--accent)); }
+.card .kf .st > span { min-width: 0; overflow-wrap: anywhere; }
+.card .sz { font-size: 10.5px; }
+.card .dep { -webkit-line-clamp: 3; margin-top: 1px; padding: 4px 6px; border-radius: 5px; background: color-mix(in srgb, var(--warn) 9%, transparent); border-left: 2px solid var(--warn); }
+:root[data-theme="clair"] .card .th-fp, :root[data-theme="clair"] .card .th-var { background: rgba(255, 255, 255, .88); color: #0d1620; }
+:root[data-theme="clair"] .card .thumb { background: radial-gradient(ellipse at 50% 30%, #f0f4f8, #cfd9e3); }
+.road-card { width: 172px; }
+.road-card .cap .ct { font-size: 13px; font-weight: 750; }
+.tile { border-radius: var(--r-lg); }
+
+/* Téléphone : cartes compactes (vignette, nom, prix, chiffres clés) ; détails complets dans l'info-bulle. */
+@media (max-width: 760px) {
+  .drawer-title { border-right: 0; padding-right: 0; }
+  .drawer-head { padding: 6px 6px 6px 10px; }
+  .card { width: 128px; }
+  .card .thumb { aspect-ratio: 16 / 10; }
+  .drawer-body { padding: 8px 10px; }
+  .card-group { gap: 4px; }
+  .card .price .up, .card .sz, .card .dep, .card .th-var { display: none; }
+  .card .price { padding-bottom: 3px; }
+  .card .cap { padding: 6px 7px 7px; gap: 3px; }
+  .card .kf .st:nth-child(n + 3) { display: none; }
+  .card-group { padding-right: 8px; }
+  .cg-from { display: none; }
+  .card:hover:not(:disabled) { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .card .thumb img, .loading-card, .menu-card { transition: none; animation: none; }
+  .card:hover:not(:disabled), .card:hover:not(:disabled) .thumb img { transform: none; }
+}
