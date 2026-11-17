@@ -209,8 +209,9 @@ export interface BuildBarDeps {
 }
 
 /** Actions de l'outil « Améliorer » (barre d'options). */
-const UPGRADE_LABELS = { next: 'Gamme +', prev: 'Gamme −', oneway: 'Sens unique', reverse: 'Inverser' } as const;
+const UPGRADE_LABELS = { lanes: 'Plus de voies', next: 'Gamme +', prev: 'Gamme −', oneway: 'Sens unique', reverse: 'Inverser' } as const;
 const UPGRADE_TIPS = {
+  lanes: 'Plus de voies SANS élargir (rue 2 → 4 voies, avenue 4 → 6, boulevard 6 → 8) : trottoirs ou terre-plein réduits, aucun bâtiment à démolir',
   next: 'Type supérieur : rue → avenue → boulevard (la différence de prix est facturée)',
   prev: 'Type inférieur : boulevard → avenue → rue (25 % de la différence remboursés)',
   oneway: 'Passer en sens unique (sur un sens unique : inverse le sens)',

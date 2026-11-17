@@ -84,7 +84,7 @@ export interface JunctionTarget { id: number; x: number; z: number; legs: number
 /** Distances proposées (m, d'axe à axe) pour la route parallèle. */
 export const PARALLEL_DISTANCES = [32, 48, 64, 96] as const;
 /** Action de l'outil « Améliorer » : type suivant (rue → avenue → boulevard), type précis, ou inversion du sens. */
-export type UpgradeTarget = 'next' | 'prev' | 'reverse' | RoadKindId;
+export type UpgradeTarget = 'next' | 'prev' | 'reverse' | 'lanes' | RoadKindId;
 
 /** Sous-outil de l'outil Énergie (ToolId `powerline`) : ligne haute tension ou câble souterrain. */
 export type PowerSubTool = 'ht' | 'cable';
@@ -618,6 +618,12 @@ export class ConstructionTools {
   upgradeArgs(e: RoadEdgeView): { kind?: RoadKindId; reverse?: boolean } | string {
     const t = this.upgradeTarget;
     if (t === 'reverse') return e.kindId === 'oneway' ? { reverse: true } : 'Seule une rue à sens unique a un sens à inverser';
+    if (t === 'lanes') {
+      // Plus de voies à largeur égale (aucun bâtiment riverain gênant) : rue → 4 voies, avenue → 6, boulevard → 8.
+      const to: Partial<Record<RoadKindId, RoadKindId>> = { street: 'street4', oneway: 'street4', avenue: 'avenue6', boulevard: 'boulevard8' };
+      const k = to[e.kindId];
+      return k ? { kind: k } : 'Déjà au maximum de voies pour cette largeur';
+    }
     if (t === 'next') return e.kindId === 'boulevard' ? 'Déjà au plus large (boulevard) : utilisez « Gamme − »' : { kind: nextUpgradeKind(e.kindId) };
     if (t === 'prev') return e.kindId === 'street' ? 'Déjà au plus étroit (rue)' : { kind: prevUpgradeKind(e.kindId) };
     if (t === e.kindId) return t === 'oneway' ? { reverse: true } : `Ce tronçon est déjà : ${roadDef(t)?.nameFr ?? t}`;

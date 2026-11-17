@@ -7,7 +7,7 @@
  *   [trottoir] [bande] [voies sens inverse] [terre-plein] [voies sens direct] [bande] [trottoir]
  */
 
-export type RoadKindId = 'street' | 'avenue' | 'boulevard' | 'oneway' | 'pedestrian' | 'highway';
+export type RoadKindId = 'street' | 'avenue' | 'boulevard' | 'oneway' | 'pedestrian' | 'highway' | 'street4' | 'avenue6' | 'boulevard8';
 
 export type MedianKind = 'none' | 'planted' | 'barrier';
 export type SurfaceKind = 'asphalt' | 'asphalt_worn' | 'pavers';
@@ -85,10 +85,27 @@ export const ROAD_KINDS: Record<RoadKindId, RoadKindDef> = {
     speedKmh: 110, costPerMeter: 420, upkeepPerMeterMonth: 2.2, bridgeCostFactor: 3, maxGrade: 0.06, minRadius: 120,
     pedestrians: false, atGradeCrossing: false, lampSpacing: 0, treeSpacing: 0,
   },
+  // Mêmes emprises que la rue, l'avenue et le boulevard, plus de voies (trottoirs ou terre-plein réduits) : améliorer le
+  // trafic d'une route existante sans l'élargir (aucun bâtiment riverain à démolir).
+  street4: {
+    ...base, id: 'street4', nameFr: 'Rue 4 voies (même largeur, trottoirs étroits)', lanesForward: 2, lanesBackward: 2, laneWidth: 2.75,
+    shoulder: 0, medianWidth: 0, median: 'none', sidewalk: 0.7, speedKmh: 40, costPerMeter: 90, upkeepPerMeterMonth: 0.55,
+    maxGrade: 0.12, minRadius: 12, lampSpacing: 26, treeSpacing: 0,
+  },
+  avenue6: {
+    ...base, id: 'avenue6', nameFr: 'Avenue 6 voies (même largeur, sans terre-plein)', lanesForward: 3, lanesBackward: 3, laneWidth: 3,
+    shoulder: 0.25, medianWidth: 0, median: 'none', sidewalk: 2.25, speedKmh: 50, costPerMeter: 200, upkeepPerMeterMonth: 1.1,
+    maxGrade: 0.1, minRadius: 25, lampSpacing: 28, treeSpacing: 0,
+  },
+  boulevard8: {
+    ...base, id: 'boulevard8', nameFr: 'Boulevard 8 voies (même largeur, sans terre-plein)', lanesForward: 4, lanesBackward: 4, laneWidth: 3,
+    shoulder: 0.4, medianWidth: 0, median: 'none', sidewalk: 4, speedKmh: 60, costPerMeter: 340, upkeepPerMeterMonth: 1.9,
+    maxGrade: 0.08, minRadius: 40, lampSpacing: 30, treeSpacing: 0,
+  },
 };
 
 /** Ordre stable des types (index stocké dans les typed arrays et les sauvegardes binaires). */
-export const ROAD_KIND_ORDER: readonly RoadKindId[] = ['street', 'avenue', 'boulevard', 'oneway', 'pedestrian', 'highway'];
+export const ROAD_KIND_ORDER: readonly RoadKindId[] = ['street', 'avenue', 'boulevard', 'oneway', 'pedestrian', 'highway', 'street4', 'avenue6', 'boulevard8'];
 
 export function isRoadKind(v: unknown): v is RoadKindId {
   return typeof v === 'string' && v in ROAD_KINDS;

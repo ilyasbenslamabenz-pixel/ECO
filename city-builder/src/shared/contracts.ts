@@ -18,7 +18,7 @@ export type RoadTypeId = 'street' | 'avenue' | 'boulevard';
  * Les 6 types de routes du module routier (src/sim/roads/types.ts : largeurs, voies, vitesses, coûts en données).
  * `RoadTypeId` reste le type « hérité » (sauvegardes v1, outils simples) ; chaque tronçon porte son `kind`.
  */
-export type RoadKindId = 'street' | 'avenue' | 'boulevard' | 'oneway' | 'pedestrian' | 'highway';
+export type RoadKindId = 'street' | 'avenue' | 'boulevard' | 'oneway' | 'pedestrian' | 'highway' | 'street4' | 'avenue6' | 'boulevard8';
 
 export interface RoadTypeDef {
   id: RoadTypeId;
