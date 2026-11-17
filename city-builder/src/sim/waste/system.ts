@@ -234,6 +234,9 @@ export class WasteSystem {
       // Ouvrages techniques sans occupants (éoliennes, postes, pompes, châteaux d'eau…) : aucun déchet. Un bac hérité
       // d'une ancienne partie est retiré (sinon « bacs pleins » à vie au-dessus de chaque éolienne).
       if (isUnstaffedUtility(a)) { this.bins.delete(id); continue; }
+      // Installations de la filière (dépôt, centre de tri, incinérateur, décharge) : leurs propres déchets sont traités
+      // sur place. Les tournées ne s'y arrêtent pas (planTours) : un bac ici restait plein à vie (icône permanente).
+      if (this.facilities.has(id)) { this.bins.delete(id); continue; }
       const jobs = st.workers[i]!, res = st.residents[i]!;
       const kgDay = jobs <= 0 && res <= 0 ? 0 : res * P.kgPerResident + jobs * (P.kgPerJob[a?.category ?? ''] ?? P.kgPerJobDefault);
       if (kgDay <= 0) { const b0 = this.bins.get(id); if (b0) b0.rate = 0; continue; }

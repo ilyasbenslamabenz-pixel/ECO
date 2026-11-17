@@ -216,3 +216,24 @@ test('sans le contrat municipal : module inactif (aucun ext, aucune section, com
   const r = s.plugins.command('dechets', 'etat', {});
   assert.ok(!r.ok && r.error.code === 'NOT_IMPLEMENTED');
 });
+
+test('installations de la filière avec du personnel : pas de bac à collecter, jamais « bacs pleins » au-dessus', () => {
+  const municipal = createMunicipalPlugin();
+  const dechets = createDechetsPlugin();
+  const sim = new Simulation([municipal, dechets]);
+  const cat = wasteCatalog();
+  // Comme le vrai catalogue : dépôt 24 postes, centre de tri 40, incinérateur 35 (au-delà du personnel technique).
+  for (const [id, jobs] of [['t_depot', 24], ['t_tri', 40], ['t_incinerateur', 35]] as const) cat.assets.find((a) => a.id === id)!.capacity.jobs = jobs;
+  sim.setCatalog(cat);
+  sim.newGame({ seed: 1234, mapChunks: 4, startMoney: 80_000_000, cityName: 'Bourg-Filière', terrain: { hydrology: 'aucune', rivers: 0 } });
+  buildTown(sim);
+  const ids = buildWasteZone(sim);
+  runDays(sim, 6, 4);
+  const staffed = ids.slice(0, 3).filter((id) => sim.buildings.workers[sim.buildings.indexOf(id)]! > 0);
+  assert.ok(staffed.length >= 1, 'au moins une installation a du personnel');
+  const svc = sim.plugins.service<{ binFull(id: number): boolean }>('dechets')!;
+  for (const id of ids) {
+    assert.equal(dechets.waste.bins.has(id), false, `aucun bac sur l'installation ${id}`);
+    assert.equal(svc.binFull(id), false);
+  }
+});
