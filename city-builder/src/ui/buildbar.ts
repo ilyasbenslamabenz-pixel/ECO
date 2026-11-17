@@ -20,6 +20,7 @@ import type { ThumbnailSource } from './thumbnails';
 import { zonageDrawer } from './panels/zonage';
 import { busEditor } from './bus-editor';
 import { cardInfo } from './card-info';
+import { groupAssets } from './build-groups';
 import { renderTerrainDrawer, terrainHint, terrainToolActions } from './terrain-drawer';
 
 export type DrawerId = 'road' | 'building' | 'services' | 'transport' | 'environment' | 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
@@ -384,7 +385,14 @@ export class BuildBar {
         cb.addEventListener('click', () => { this.closeDrawer(); this.d.machine.setPowerSub('cable'); this.d.tools.setTool('powerline'); });
         this.tabsEl.append(cb);
       }
-      for (const a of assetsForTab(this.d.catalog, current)) this.body.append(this.card(a, current.placeable, current.color));
+      // Sous-catégories : groupes titrés dans la rangée (une seule rangée sans titre si l'onglet n'en a pas).
+      for (const g of groupAssets(current.id, assetsForTab(this.d.catalog, current))) {
+        const cards = g.assets.map((a) => this.card(a, current.placeable, current.color));
+        if (!g.label) { this.body.append(...cards); continue; }
+        this.body.append(el('section', { cls: 'card-grp', attrs: { 'aria-label': g.label, style: `--ic:${current.color}` } },
+          el('h5', { cls: 'grp-h' }, el('span', { text: g.label }), el('span', { cls: 'n', text: String(g.assets.length) })),
+          el('div', { cls: 'grp-cards' }, ...cards)));
+      }
     }
     if (id === 'transport' && this.pendingBusChip) { this.tabsEl.append(this.pendingBusChip); this.pendingBusChip = null; }
     if (id === 'transport') for (const p of PLANNED.transport) this.body.append(this.plannedTile(p));
@@ -415,11 +423,21 @@ export class BuildBar {
     const cap = a.capacity.residents ? `${fmt(a.capacity.residents)} hab.` : a.capacity.jobs ? `${fmt(a.capacity.jobs)} emplois` : '';
     // L'essentiel : puissance, capacité, rayon, dépendances (catalogue et modèles partagés de la simulation).
     const info = cardInfo(a);
+    // Chiffres clés en pastilles : habitants et emplois d'abord, puis ceux du module (puissance, capacité, rayon).
+    const stats = [
+      ...(a.capacity.residents ? [{ icon: 'people', text: `${fmt(a.capacity.residents)} hab.` }] : []),
+      ...(a.capacity.jobs && !info.stats.length ? [{ icon: 'office', text: `${fmt(a.capacity.jobs)} emplois` }] : []),
+      ...info.stats,
+    ];
+    // Empreinte en badge sur la vignette (repère rapide de la taille).
+    if (a.footprint.tilesX > 0) thumb.append(el('span', { cls: 'fp-badge', text: `${a.footprint.tilesX}×${a.footprint.tilesZ}` }));
+    if (a.variants.length > 1) thumb.append(el('span', { cls: 'var-badge', text: `${a.variants.length} variantes` }));
     const b = el('button', { cls: 'card', attrs: { 'data-asset': a.id, style: `--ic:${color}` } }, thumb,
-      el('div', { cls: 'cap' }, el('span', { cls: 'nm', text: a.nameFr }), el('span', { cls: 'ct', text: placeable ? money(a.cost) : '' }),
-        info.lines.length ? el('span', { cls: 'kf', text: info.lines.join(' · ') }) : null,
-        el('span', { cls: 'sz', text: [fp, info.lines.length ? '' : cap].filter(Boolean).join(' · ') }),
-        info.depends ? el('span', { cls: 'dep', text: info.depends }) : null));
+      el('div', { cls: 'cap' }, el('span', { cls: 'nm', text: a.nameFr }),
+        placeable ? el('span', { cls: 'price' }, el('span', { cls: 'ct', text: money(a.cost) }), a.upkeepPerMonth ? el('span', { cls: 'up', text: `${money(a.upkeepPerMonth)}/mois` }) : null) : null,
+        stats.length ? el('span', { cls: 'kf' }, ...stats.map((x) => el('span', { cls: 'st' }, iconEl(x.icon), el('span', { text: x.text })))) : null,
+        el('span', { cls: 'sz', text: fp }),
+        info.depends ? el('span', { cls: 'dep' }, iconEl('info'), el('span', { text: info.depends })) : null));
     const lockAt = placeable ? progressionView.assetLock(a.id) : null;
     if (lockAt) {
       // Déblocages progressifs : modèle encore verrouillé (la simulation refuse aussi la pose).

@@ -53,39 +53,43 @@ const DEPENDS: Record<string, string> = {
   elec_batteries: 'Se charge avec le surplus des centrales et alimente la ville la nuit ou sans vent ; près d’une route reliée aux centrales.',
 };
 
-export interface CardInfo { lines: string[]; depends: string | null }
+/** Chiffre clé d'une carte : icône (src/ui/icons.ts) + texte court. */
+export interface CardStat { icon: string; text: string }
+export interface CardInfo { lines: string[]; stats: CardStat[]; depends: string | null }
 
 export function cardInfo(a: CatalogAsset): CardInfo {
-  const lines: string[] = [];
+  const stats: CardStat[] = [];
+  // `lines` (texte des info-bulles) est dérivé de `stats` : une seule source pour les deux affichages.
+  const add = (text: string, icon: string): void => { stats.push({ icon, text }); };
   const pk = facilityKindOf(a);
   if (pk) {
     const kw = nominalKwOf(a, pk);
-    if (pk === 'poste') lines.push(`Transformation ${mw(kw)}`);
-    else if (pk === 'batterie') lines.push(`Stockage ${nf1(capacityKwhOf(a) / 1000)} MWh · ${mw(kw)} · rendement ${Math.round(BATTERY_SPEC.roundTrip * 100)} %`);
+    if (pk === 'poste') add(`Transformation ${mw(kw)}`, 'pylon');
+    else if (pk === 'batterie') { add(`Stockage ${nf1(capacityKwhOf(a) / 1000)} MWh`, 'energy'); add(`${mw(kw)} · rendement ${Math.round(BATTERY_SPEC.roundTrip * 100)} %`, 'pylon'); }
     else {
       const s = avgShare(pk);
-      lines.push(s !== null && s < 0.999 ? `${mw(kw)} nominal · moy. ≈ ${mw(kw * s)}` : `${mw(kw)} nominal`);
+      add(s !== null && s < 0.999 ? `${mw(kw)} nominal · moy. ≈ ${mw(kw * s)}` : `${mw(kw)} nominal`, 'energy');
     }
   }
   const wk = waterKindOf(a.id);
   if (wk) {
     const w = WATER_FACILITIES[wk];
-    if (wk === 'chateau') lines.push(`Réserve ${fmt(w.storage ?? 0)} m³ · ${fmt(w.capacity)} m³/h`);
-    else if (wk !== 'emissaire') lines.push(`${fmt(w.capacity)} m³/h`);
+    if (wk === 'chateau') add(`Réserve ${fmt(w.storage ?? 0)} m³ · ${fmt(w.capacity)} m³/h`, 'water');
+    else if (wk !== 'emissaire') add(`${fmt(w.capacity)} m³/h`, 'water');
   }
   const cap = tagNum(a, 'capacite_service:');
   if (cap) {
     const svc = a.tags.find((t) => t.startsWith('service:'))?.slice(8) ?? '';
     const unit = svc === 'education' ? 'élèves' : svc === 'petite_enfance' ? 'enfants' : svc === 'sante' ? 'patients' : svc === 'sport' ? 'usagers' : svc === 'incendie' || svc === 'police' ? 'véhicules' : '';
-    lines.push(unit ? `${fmt(cap)} ${unit}` : `Capacité ${fmt(cap)}`);
+    add(unit ? `${fmt(cap)} ${unit}` : `Capacité ${fmt(cap)}`, 'people');
   }
   const trucks = tagNum(a, 'camions:');
-  if (trucks) lines.push(`${fmt(trucks)} camions`);
+  if (trucks) add(`${fmt(trucks)} camions`, 'truck');
   const perDay = tagNum(a, 'capacite_jour:');
-  if (perDay) lines.push(`${tonnes(perDay)} / jour`);
+  if (perDay) add(`${tonnes(perDay)} / jour`, 'waste');
   const total = tagNum(a, 'capacite_totale:');
-  if (total) lines.push(`${tonnes(total)} au total`);
+  if (total) add(`${tonnes(total)} au total`, 'landfill');
   const radius = tagNum(a, 'rayon:');
-  if (radius) lines.push(`Rayon ${radius >= 1000 ? `${nf1(radius / 1000)} km` : `${fmt(radius)} m`}`);
-  return { lines, depends: DEPENDS[a.id] ?? null };
+  if (radius) add(`Rayon ${radius >= 1000 ? `${nf1(radius / 1000)} km` : `${fmt(radius)} m`}`, 'target');
+  return { lines: stats.map((x) => x.text), stats, depends: DEPENDS[a.id] ?? null };
 }
