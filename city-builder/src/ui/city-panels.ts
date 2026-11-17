@@ -205,8 +205,22 @@ export class CityPanels {
     else this.renderLoans();
   }
 
-  private ledgerRow(icon: string, label: string, value: string, cls: string): HTMLElement[] {
-    return [el('dt', {}, iconEl(icon), el('span', { text: label })), el('dd', { cls, text: value })];
+  private ledgerRow(icon: string, label: string, value: string, cls: string, note = ''): HTMLElement[] {
+    return [el('dt', {}, iconEl(icon), el('span', { text: label }), note ? el('small', { cls: 'lg-note', text: note }) : null), el('dd', { cls, text: value })];
+  }
+
+  /**
+   * Impôt d'entreprise nul : pourquoi (aucune entreprise, toutes fermées, ou toutes déficitaires — l'impôt des
+   * entreprises porte sur le bénéfice). Vide quand l'impôt rapporte ou que l'information manque.
+   */
+  private taxNote(s: Sector, amount: number): string {
+    if (s === 'residential' || amount >= 1) return '';
+    const bs = (this.report?.demography as { living?: { bySector?: Record<string, { active: number; deficit: number; closed: number }> } | null } | undefined)?.living?.bySector?.[s];
+    if (!bs) return '';
+    const noun = s === 'commercial' ? ['commerce', 'commerces'] : s === 'industrial' ? ['entreprise industrielle', 'entreprises industrielles'] : ['bureau', 'bureaux'];
+    if (bs.active === 0) return bs.closed > 0 ? `Aucun ${noun[0]} ouvert (${bs.closed} fermé${bs.closed > 1 ? 's' : ''})` : `Aucun ${noun[0]} : zonez-en pour cet impôt`;
+    if (bs.deficit >= bs.active) return `${bs.active} ${bs.active > 1 ? noun[1] : noun[0]}, tous en perte : l'impôt porte sur le bénéfice`;
+    return '';
   }
 
   private renderOverview(): void {
@@ -214,7 +228,7 @@ export class CityPanels {
     if (!r) return;
     const f = r.economy.forecast;
     $('fin-income').textContent = `+${money(f.totalIncome)}`;
-    $('fin-inc-rows').replaceChildren(...SECTORS.flatMap((s) => this.ledgerRow(INCOME_ICON[s], INCOME_FR[s], money(f.income[s] ?? 0), '')));
+    $('fin-inc-rows').replaceChildren(...SECTORS.flatMap((s) => this.ledgerRow(INCOME_ICON[s], INCOME_FR[s], money(f.income[s] ?? 0), '', this.taxNote(s, f.income[s] ?? 0))));
     $('fin-expense').textContent = f.totalExpenses > 0 ? `−${money(f.totalExpenses)}` : money(0);
     $('fin-exp-rows').replaceChildren(...EXPENSES.flatMap((x) => this.ledgerRow(x.icon, x.label, f.expenses[x.key] > 0 ? `−${money(f.expenses[x.key])}` : money(0), '')));
     // Services municipaux (électricité, eau, déchets…) : solde net prévu, compris dans le solde mensuel.

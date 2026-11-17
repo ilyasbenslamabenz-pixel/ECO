@@ -95,6 +95,11 @@ export interface LivingReport {
   companiesActive: number;
   companiesInDifficulty: number;
   companiesClosed: number;
+  /**
+   * Entreprises par secteur imposable (dernier mois clos) : ouvertes, déficitaires (aucun impôt : l'impôt des
+   * entreprises porte sur le bénéfice), fermées. Explique un impôt à 0 dans le panneau Finances.
+   */
+  bySector?: Record<'commercial' | 'industrial' | 'office', { active: number; deficit: number; closed: number }>;
   /** Locaux vacants par raison de fermeture, entreprises en difficulté par raison. */
   closureReasons: { key: string; label: string; count: number }[];
   difficultyReasons: { key: string; label: string; count: number }[];
@@ -332,10 +337,15 @@ export class LivingEconomy {
     const reasonsClosed = new Array<number>(CLOSURE_REASONS.length).fill(0);
     const reasonsDiff = new Array<number>(CLOSURE_REASONS.length).fill(0);
     let active = 0, diff = 0, closedN = 0, bRent = 0, bRentN = 0;
+    const z = (): { active: number; deficit: number; closed: number } => ({ active: 0, deficit: 0, closed: 0 });
+    const bySector = { commercial: z(), industrial: z(), office: z() };
+    const secKey = (v: number): keyof typeof bySector | null => (v === 1 ? 'commercial' : v === 2 ? 'industrial' : v === 3 ? 'office' : null);
     for (let k = 0; k < h.companies.count; k++) {
       if (cc.sector[k] === 4 || cc.sector[k] === 0) continue;
       const st = cc.status[k]!;
-      if (st === CompanyStatus.Closed) { closedN++; reasonsClosed[cc.reason[k]!]!++; continue; }
+      const bs = secKey(cc.sector[k]!);
+      if (st === CompanyStatus.Closed) { closedN++; reasonsClosed[cc.reason[k]!]!++; if (bs) bySector[bs].closed++; continue; }
+      if (bs) { bySector[bs].active++; if (cc.profit[k]! < 0) bySector[bs].deficit++; }
       active++;
       if (st === CompanyStatus.Difficulty) { diff++; reasonsDiff[cc.reason[k]!]!++; }
       if (cc.rent[k]! > 0) { bRent += cc.rent[k]!; bRentN++; }
@@ -356,7 +366,7 @@ export class LivingEconomy {
       distressShare: nh ? r1(distress / Math.max(1, h.householdCount)) : 0,
       landValueAverage: landN ? Math.round((100 * landSum) / landN) : 0,
       businessRentAverage: bRentN ? Math.round(bRent / bRentN) : 0,
-      companiesActive: active, companiesInDifficulty: diff, companiesClosed: closedN,
+      companiesActive: active, companiesInDifficulty: diff, companiesClosed: closedN, bySector,
       closureReasons: list(reasonsClosed), difficultyReasons: list(reasonsDiff),
       recentClosures: [],
       jobsVacant: Math.max(0, jobsOpen - filled), vacancyRate: jobsOpen ? r1(1 - filled / jobsOpen) : 0,
