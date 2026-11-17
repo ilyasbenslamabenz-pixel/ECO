@@ -2223,11 +2223,14 @@ export class DemographySystem {
     const pop = this.popW;
     let jobsTotal = 0, jobsFilled = 0, housingCapacity = 0, housingFree = 0;
     let commercialJobs = 0, freeIndustrial = 0, freeOffice = 0;
+    // Emplois des lieux de travail délestés (coupure de courant) : ils n'embauchent plus (indice « need-power »).
+    let jobCapAll = 0, jobCapCut = 0;
     for (let i = 0; i < b.count; i++) {
       const m = this.metaOfIndex(i);
       if (!m) continue;
       if (b.roadAccess[i]) {
         if (this.jobOpen(i)) jobsTotal += m.jobCap;
+        if (m.jobCap > 0 && m.resCap <= 0) { jobCapAll += m.jobCap; if (this.powerState(b.id[i]!) === 1) jobCapCut += m.jobCap; }
         housingCapacity += m.resCap;
         housingFree += Math.max(0, m.resCap - b.residents[i]!);
         if (m.sector === Sector.Commercial) commercialJobs += m.jobCap;
@@ -2271,6 +2274,9 @@ export class DemographySystem {
     if (!this.hasRoads()) growthHint = 'need-roads';
     else if (vacancyReasons.sansEau >= blocked) growthHint = 'need-water';
     else if (vacancyReasons.sansElectricite >= blocked) growthHint = 'need-power';
+    // Lieux de travail délestés : le chômage vient du manque de courant, pas d'un manque d'emplois ou de zones
+    // (sans cet indice, la ville affichait « créez des emplois » et le joueur zonait encore de l'industrie à alimenter).
+    else if (jobCapCut >= Math.max(20, jobCapAll * 0.15)) growthHint = 'need-power';
     else if (!lots || lots.zoned === 0) growthHint = pop === 0 || (lots?.demand ?? demandR) > 0.2 ? 'need-zones' : null;
     else if (lots.free === 0 && (lots.demand > 0.3 || demandR > 0.3) && housingFree <= Math.max(4, housingCapacity * 0.03)) growthHint = 'need-roads';
     // Économie vivante (pleine pression à moitié installée, ville d'au moins 150 habitants).

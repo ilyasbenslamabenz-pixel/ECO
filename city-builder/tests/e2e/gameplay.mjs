@@ -80,7 +80,8 @@ try {
   check(saved.ok, 'état de référence lu');
   const ref = strip(saved.r.data);
   const listed = await page.evaluate(() => [...document.querySelectorAll('#save-list .slot .name')].map((e) => e.textContent));
-  check(listed.some((t) => t.includes('partie-e2e')), `emplacement listé dans l'interface (${listed.join(', ')})`);
+  // L'interface affiche le nom saisi (« Partie e2e »), l'identifiant technique de l'emplacement est « partie-e2e ».
+  check(listed.some((t) => /partie[- ]e2e/i.test(t)), `emplacement listé dans l'interface (${listed.join(', ')})`);
   check(await page.evaluate(() => window.__aube.saveStoreKind) === 'indexeddb', 'sauvegarde stockée dans IndexedDB');
 
   // Rechargement de la page, puis chargement depuis le menu.
@@ -88,7 +89,7 @@ try {
   await page.waitForFunction(() => window.__aube?.ready === true, null, { timeout: 300000 });
   await page.click('#btn-load');
   await page.waitForSelector('#load-list .slot');
-  const row = page.locator('#load-list .slot', { hasText: 'partie-e2e' });
+  const row = page.locator('#load-list .slot', { hasText: /partie[- ]e2e/i });
   await row.locator('button.primary').click();
   await page.waitForFunction(() => window.__aube.snapshotReceived, null, { timeout: 120000 });
   // Date exacte au chargement = celle de l'instantané (la partie chargée reprend à vitesse 1 jusqu'à la pause).

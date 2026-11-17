@@ -2,7 +2,7 @@
  * Étude d'équilibrage économique (docs/EQUILIBRE_ECONOMIE.md) — NON branchée sur `npm test`.
  *
  *   npx tsx tests/perf/equilibre-economie.ts --parcours=prudent|typique|ambitieux|depart [--mois=36]
- *        [--reglages=base|A,B,…] [--graine=4242] [--json=chemin] [--quiet]
+ *        [--reglages=base|A,B,…] [--graine=4242] [--json=chemin] [--sauver=chemin] [--quiet] [--debug]
  *
  * Partie « Nouvelle partie » telle que le jeu la crée (catalogue réel avec prix des logements ÷ 4 et dépôt de tram
  * dérivé, 3 M CHF, déblocages progressifs activés, avril, 9 h), sur une carte plate sans eau (reproductible). Un
@@ -35,6 +35,8 @@ const MONTHS = Number(opt('mois', '36'));
 const SEED = Number(opt('graine', '4242'));
 const REG = opt('reglages', 'base').split(',').filter((x) => x && x !== 'base');
 const JSON_OUT = opt('json', '');
+/** `--sauver=chemin` : sauvegarde de la ville en fin de partie (à recharger pour l'inspecter). */
+const SAVE_OUT = opt('sauver', '');
 const QUIET = args.includes('--quiet');
 const log = (...m: unknown[]): void => { if (!QUIET) console.log(...m); };
 
@@ -504,4 +506,5 @@ const out = {
 };
 log(JSON.stringify({ ...out, rows: undefined, evenements: undefined }));
 if (JSON_OUT) writeFileSync(JSON_OUT, JSON.stringify(out));
+if (SAVE_OUT) writeFileSync(SAVE_OUT, JSON.stringify(s.toSave()));
 void MILESTONES;

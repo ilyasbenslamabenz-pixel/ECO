@@ -17,6 +17,8 @@ Règles : ne rien supprimer, ne pas changer l'architecture sans accord, aucun r�
 - Paysage, prise en main, gorge du fleuve, barrage 3D : agents arrêtés (travail partiel dans leurs worktrees).
 
 ## Connu
-- `tests/e2e/interface-iphone.mjs` : « fiche sur 390 px sans débordement » échoue (1 élément hors écran), déjà avant la
-  refonte du menu de construction.
-- Test `tests/jeu/equilibre.test.ts` « budget serré » : 454 habitants au lieu de 500 depuis le recul de façade par type.
+- Corrigé : « budget serré » (seuil 430 habitants, lots calés sur la trame) ; iPhone « fiche sur 390 px » (animation
+  verticale des panneaux sur téléphone) ; e2e:game / e2e:play (nom d'emplacement et « Façade » en majuscule).
+- Gameplay mesuré (`tests/perf/equilibre-economie.ts --debug --sauver=…`) : passé ~1 500 habitants, l'industrie
+  consomme l'essentiel du courant (12,9 MW sur 19,9 MW à 7 000 hab.) ; sans centrale à gaz, tout l'industriel est
+  délesté → chômage 30–47 %, satisfaction 11–18, départs. L'indice de croissance affiche maintenant « need-power ».

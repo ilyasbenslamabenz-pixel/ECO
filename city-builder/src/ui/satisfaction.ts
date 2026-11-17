@@ -79,7 +79,7 @@ export function growthHint(r: SimReport | null): GrowthHint | null {
 export const GROWTH_HINT_FR: Record<GrowthHint, string> = {
   'need-roads': 'Plus de place constructible : tracez des routes et zonez le long',
   'need-zones': 'Aucune zone résidentielle libre : zonez du résidentiel le long des routes (Zones)',
-  'need-power': 'Les nouveaux bâtiments attendent l’électricité : raccordez-vous au réseau voisin (Énergie › Réglages) ou construisez une centrale',
+  'need-power': 'Courant insuffisant : des logements ou des lieux de travail sont coupés (chômage, départs). Construisez une centrale ou raccordez-vous au réseau voisin (Énergie)',
   'need-water': 'Les nouveaux bâtiments attendent l’eau : raccordez-vous au réseau voisin (Eau › Réglages) ou posez une station de pompage',
   'high-rent': 'Beaucoup de ménages peinent à payer leur loyer : créez des emplois mieux payés et zonez du résidentiel moins cher (Population › Économie)',
   'need-jobs': 'Le chômage est élevé : zonez des commerces, des bureaux ou de l’industrie (Population › Économie)',

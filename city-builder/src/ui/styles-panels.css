@@ -147,8 +147,10 @@
 }
 
 /* ---------- Téléphone : feuille basse pleine largeur, mêmes règles, cibles ≥ 40 px ---------- */
+@keyframes pn-in-y { from { opacity: 0; transform: translateY(8px); } }
 @media (max-width: 760px) {
-  .panel { border-radius: 12px; width: auto; }
+  /* Feuille pleine largeur : entrée verticale (un glissement horizontal la faisait dépasser de l'écran pendant l'animation). */
+  .panel { border-radius: 12px; width: auto; animation-name: pn-in-y; }
   .panel-head { padding: 12px 6px 8px 12px; }
   .panel-head h3 { font-size: var(--fs-lg); }
   .panel-btns .icon-btn { width: 40px; height: 40px; min-height: 40px; min-width: 40px; }

@@ -140,7 +140,7 @@ try {
   check(pv.kind === 'building' && pv.snapped, `aperçu aimanté à la route en biais (${JSON.stringify(pv)})`);
   check(Math.abs(pv.rot - Math.round(pv.rot)) > 0.05 && dotAlong < 0.02, `façade perpendiculaire à la route en biais (rot ${pv.rot?.toFixed(3)} quart(s) de tour, |cos| = ${dotAlong.toFixed(3)})`);
   const t1 = await tag(page);
-  check(/façade côté route/.test(t1), `étiquette au curseur : « ${t1.replace(/\n/g, ' / ')} »`);
+  check(/façade côté route/i.test(t1), `étiquette au curseur : « ${t1.replace(/\n/g, ' / ')} »`);
   check(pv.validity === 'ok', `pose jugée valide par la simulation (${pv.message || 'ok'})`);
   await render(page, 2);
   await shot(page, 'biais-apercu');

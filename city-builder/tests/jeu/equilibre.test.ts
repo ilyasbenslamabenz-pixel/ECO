@@ -101,6 +101,23 @@ test('raccordement eau : ville desservie sans installation, eau achetée au m³,
   for (const id of houses(s)) assert.equal(eau.serviceState(id), 'ok');
 });
 
+test('lieux de travail délestés : l\'indice de croissance réclame du courant (pas « créez des emplois »)', () => {
+  const s = new Simulation(); s.setCatalog(powerCatalog());
+  s.newGame({ seed: 1234, mapChunks: 4, startMoney: 80_000_000, cityName: 'Bourg-Délesté', terrain: { hydrology: 'aucune', rivers: 0 } });
+  buildTown(s);
+  assert.ok(s.buildRoad({ type: 'street', points: [-220, 0, -220, 80] }).ok);
+  advanceHours(s, 48);
+  placeFacilities(s, 160, -100, 100, ['petite_centrale']); // 150 kW : l'industrie et les bureaux sont délestés en premier
+  advanceHours(s, 3);
+  const sum = cmd(s, 'electricite', 'state').data.summary;
+  assert.ok(sum.jobsWithoutPower > 0, `emplois sans courant ${sum.jobsWithoutPower}`);
+  assert.equal(report(s).growthHint, 'need-power');
+  // Courant rétabli (raccordement) : l'indice disparaît.
+  assert.ok(cmd(s, 'electricite', 'raccordement', { on: true }).ok);
+  advanceHours(s, 3);
+  assert.notEqual(report(s).growthHint, 'need-power');
+});
+
 /* ------------------------------ Sans service, première installation ------------------------------ */
 
 test('sans service : aucune pénalité pendant le premier mois, puis pénalité progressive (électricité, eau)', () => {
@@ -265,6 +282,8 @@ test('partie type en budget serré (1 M) : raccordement, services de base, ni fa
   const r = report(s);
   assert.ok(!s.economy.bankrupt && Math.min(...money) > 0, `trésorerie ${money.map((v) => Math.round(v / 1000)).join(' / ')} k`);
   assert.ok(money[3]! < 3_000_000, 'trésorerie maîtrisée');
-  assert.ok(r.population > 500, `population ${r.population}`);
+  // 450 habitants et plus : depuis le calage des lots sur la trame de la route (a57b90a), sans replis hors trame, une
+  // rangée zonée porte un peu moins de lots (454 mesurés, contre ~500 avant).
+  assert.ok(r.population > 430, `population ${r.population}`);
   assert.ok(r.happiness > 33, `satisfaction ${r.happiness.toFixed(1)} : ${r.satisfactionFactors.map((f) => `${f.key} ${f.delta}`).join(', ')}`);
 });
