@@ -70,3 +70,16 @@ test('contrôleur de paliers : descente espacée, montée après cadence tenue, 
   for (let t = 0; t < 10; t++) b.down(t * 5000);
   assert.equal(b.tier, QUALITY_TIERS.length - 1);
 });
+
+test('GPU intégré : résolution dynamique et paliers aussi en Moyenne (fluidité), pas sur GPU dédié', async () => {
+  const { dynResEnabled, tiersEnabledFor } = await import('../../src/ui/options');
+  assert.equal(dynResEnabled({ quality: 'moyenne', dynRes: 'auto' }, true), true);
+  assert.equal(dynResEnabled({ quality: 'haute', dynRes: 'auto' }, true), true);
+  assert.equal(dynResEnabled({ quality: 'moyenne', dynRes: 'auto' }, false), false);
+  assert.equal(dynResEnabled({ quality: 'moyenne', dynRes: 'off' }, true), false, 'choix « fixe » du joueur respecté');
+  assert.deepEqual(desktopDynamic('moyenne', 1.5, 1.5, true), { min: 1, max: 1.5 });
+  assert.equal(tiersEnabledFor('moyenne', false, true), true);
+  assert.equal(tiersEnabledFor('moyenne', false, false), false);
+  assert.equal(tiersEnabledFor('haute', false, true), false);
+  assert.equal(tiersEnabledFor('auto', false, false), true);
+});

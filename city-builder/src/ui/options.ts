@@ -85,9 +85,17 @@ export function urlDynRes(search = typeof location !== 'undefined' ? location.se
   return d === '1' ? 'on' : d === '0' ? 'off' : null;
 }
 
-/** Résolution dynamique effective (option « auto » : activée en qualité Auto). */
-export function dynResEnabled(o: Pick<GraphicsOptions, 'quality' | 'dynRes'>): boolean {
-  return o.dynRes === 'on' || (o.dynRes === 'auto' && o.quality === 'auto');
+/**
+ * Résolution dynamique effective (option « auto » : activée en qualité Auto ; sur GPU intégré, aussi en Moyenne et
+ * Haute, où une densité figée à 1,5–2 faisait chuter la cadence dans les scènes chargées).
+ */
+export function dynResEnabled(o: Pick<GraphicsOptions, 'quality' | 'dynRes'>, igpu = false): boolean {
+  return o.dynRes === 'on' || (o.dynRes === 'auto' && (o.quality === 'auto' || (igpu && o.quality !== 'basse')));
+}
+
+/** Paliers de qualité automatiques : qualité Auto sur ordinateur, et Moyenne sur GPU intégré (fluidité d'abord). */
+export function tiersEnabledFor(quality: GraphicsOptions['quality'], lite: boolean, igpu: boolean): boolean {
+  return !lite && (quality === 'auto' || (igpu && quality === 'moyenne'));
 }
 
 /** Ombres imposées par l'adresse (`?ombres=off|low|high|ultra`, page de mesure), jamais mémorisées seules. */
@@ -174,14 +182,16 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
   t.renderer.setPixelRatio(ratio);
   if (t.perf) {
     t.perf.maxFps = o.fps === '30' ? 30 : o.fps === '60' ? 60 : o.fps === 'max' ? 0 : prof.lite ? 60 : 0;
-    // Téléphone : ombres recalculées au plus 1 image sur 4 tant que rien ne bouge autour du soleil.
-    t.perf.shadowEvery = prof.lite ? 4 : 1;
+    // Téléphone : ombres recalculées au plus 1 image sur 4 tant que rien ne bouge autour du soleil ; GPU intégré :
+    // 1 image sur 2 (la passe d'ombre redessine tous les objets : ~40 % du temps d'image sur ces GPU), aussitôt
+    // quand la caméra ou le soleil se déplace (clé de position, src/render/scene.ts).
+    t.perf.shadowEvery = prof.lite ? 4 : prof.igpu ? 2 : 1;
     // Téléphone : résolution qui monte quand l'appareil suit (plafond prudent : 1,25 en auto/basse, 1,5 en moyenne).
     t.perf.adaptive = prof.lite
       ? (o.quality !== 'haute' ? { min: ratio, max: Math.min(dpr, o.quality === 'moyenne' ? 1.5 : 1.25) } : null)
-      : dynResEnabled(o) ? desktopDynamic(o.quality, ratio, dpr, prof.igpu) : null;
-    // Paliers de qualité automatiques (src/render/quality-tiers.ts) : qualité Auto sur ordinateur seulement.
-    if ('tiersEnabled' in t.perf) t.perf.tiersEnabled = o.quality === 'auto' && !prof.lite;
+      : dynResEnabled(o, prof.igpu) ? desktopDynamic(o.quality, ratio, dpr, prof.igpu) : null;
+    // Paliers de qualité automatiques (src/render/quality-tiers.ts) : qualité Auto, et Moyenne sur GPU intégré.
+    if ('tiersEnabled' in t.perf) t.perf.tiersEnabled = tiersEnabledFor(o.quality, prof.lite, prof.igpu);
     t.perf.ratio = ratio;
   }
   const size = new THREE.Vector2();

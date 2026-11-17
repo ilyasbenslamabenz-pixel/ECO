@@ -170,3 +170,10 @@
 
 /* Tableaux du panneau Énergie : la première colonne (libellé) ne se coupe plus au milieu d'un mot (« Commerce / s »). */
 #dash-body .elec td:first-child, #dash-body .elec th:first-child { overflow-wrap: normal; word-break: normal; min-width: 6.5em; }
+
+/* Ordinateur : fiche bâtiment ouverte (à droite) — les encadrés qui occupent la même colonne (Premiers pas,
+   Problèmes à régler, mini-carte) s'effacent le temps de la consultation au lieu d'être recouverts. */
+@media (min-width: 761px) {
+  body:has(#info-panel:not(.hidden)) #objectives,
+  body:has(#info-panel:not(.hidden)) #mm-col { visibility: hidden; }
+}
