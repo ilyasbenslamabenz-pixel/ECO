@@ -344,6 +344,7 @@ async function boot(): Promise<void> {
     return { textures: tex.size, images: imgs.size, sources: srcs.size, top: Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 25) };
   };
   const props = new PropLayer(render.ctx.scene, lib);
+  (debug as unknown as Record<string, unknown>).buildingDebug = (id: number) => render.buildings.debugInstance(id);
   debug.sceneCheck = () => ({
     buildings: render.buildings.count, buildingErrors: render.buildings.errors.slice(0, 20), buildingsLoading: render.buildings.loading,
     buildingsVisibleByLod: Array.from(render.buildings.visible), vehicles: render.vehicles.stats(), vehicleErrors: render.vehicles.loadErrors.slice(0, 20),

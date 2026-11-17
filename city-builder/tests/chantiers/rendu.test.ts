@@ -107,3 +107,48 @@ test('chantiers/rendu : masque de repli — instance neutralisée pendant le cha
   assert.equal(mask.masked, 0);
   assert.deepEqual(Array.from(mesh.instanceMatrix.array), before, 'matrice restituée à l\'identique');
 });
+
+test('chantiers/rendu : masque par l\'API rétabli à l\'instantané complet et au retrait du bâtiment (« la maison n\'apparaît pas »)', async () => {
+  const THREE = await import('three');
+  const { BuildingMask } = await import('../../src/render/construction/mask');
+  const { InstancedBuildingRenderer } = await import('../../src/render/buildings/renderer');
+  const { emptyCatalog } = await import('../../src/shared/catalog');
+  const asset = {
+    id: 'maison', nameFr: 'maison', category: 'house',
+    lods: [{ file: 'm0.glb', maxDistance: 1e9 }], dimensions: { width: 10, depth: 10, height: 8 }, footprint: { tilesX: 2, tilesZ: 2 },
+    cost: 1, upkeepPerMonth: 1, capacity: { residents: 1, jobs: 0 }, frontage: [{ x: 0, z: 5, nx: 0, nz: 1, kind: 'pedestrian' }],
+    variants: [{ id: 'v0', nameFr: 'v0', heightScale: 1 }], textureSets: [], license: { spdx: 'CC0-1.0', source: 't', author: 't' }, tags: [],
+  };
+  const src = {
+    catalog: { ...emptyCatalog(), assets: [asset] } as never,
+    url: (f: string) => f,
+    load: () => Promise.resolve(new THREE.Group().add(new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3)), new THREE.MeshStandardMaterial({ name: 'facade' })))),
+  };
+  const scene = new THREE.Scene();
+  const r = new InstancedBuildingRenderer(scene, src, { castShadow: false });
+  const rec = { id: 1, assetId: 'maison', variant: 0, x: 0, y: 0, z: 0, rot: 0 };
+  const hidden = (): boolean => r.debugInstance(1)!.hidden;
+  // Partie 1 : maison #1 en chantier, masquée par l'API.
+  const mask = new BuildingMask(scene, r);
+  r.add([rec]);
+  mask.hide(1, 'maison', 0, 0, 0, 0);
+  assert.equal(hidden(), true);
+  // Remplacement du même bâtiment (même identifiant) : masquage conservé.
+  r.add([rec]);
+  assert.equal(hidden(), true, 'remplacé : toujours en chantier');
+  // Instantané complet (nouvelle partie / chargement) : bâtiments retirés puis rajoutés, puis chantiers effacés.
+  r.remove([1]);
+  r.add([rec]);
+  assert.equal(hidden(), false, 'retiré puis rajouté : plus masqué');
+  mask.hide(1, 'maison', 0, 0, 0, 0);
+  mask.clear();
+  assert.equal(hidden(), false, 'clear() rétablit les bâtiments masqués par l\'API');
+  mask.hide(1, 'maison', 0, 0, 0, 0);
+  mask.show(1);
+  assert.equal(hidden(), false);
+  // Rendu effectif : la maison est dessinée une fois son LOD chargé.
+  r.update(0, 10, 30);
+  await new Promise((res) => setTimeout(res, 0));
+  r.update(0, 10, 30.5);
+  assert.ok(r.debugInstance(1)!.counts[0]! > 0, 'maison dessinée');
+});
