@@ -111,6 +111,9 @@ export interface PowerState {
  *  ne viennent que d'un manque de production. Les lignes HT gardent leurs pannes. */
 export const PLANT_RANDOM_FAILURES = false as boolean;
 
+/** Gaz brûlé pour vendre la capacité inutilisée d'une centrale thermique (¢/kWh vendu). */
+export const THERMAL_EXPORT_FUEL_CENTS = 2;
+
 export const INTERMITTENT_ADVICE = 'La nuit sans vent, vos éoliennes et panneaux solaires ne produisent rien. Raccordez-vous au réseau voisin, construisez une centrale thermique ou des batteries.';
 
 /** Consigne affichée pour une installation isolée (notification, panneau). */
@@ -215,6 +218,8 @@ export class PowerSystem {
   private govRenew = 1;
   /** Capacité du raccordement au réseau voisin (kW) à la dernière répartition (événement « panne » : réduite). */
   private importCapKw: number = IMPORT_SPEC.capacityKw;
+  /** Part thermique de la vente de l'heure (kW), dont le gaz est facturé. */
+  private thermalSoldKw = 0;
   private cutList: number[] = [];
   private summaryCache: ElectriciteSummary | undefined;
   private facilityViews: FacilityView[] = [];
@@ -1275,14 +1280,21 @@ export class PowerSystem {
    */
   private exportStep(ctx: PluginContext, facs: Facility[], avail: Map<number, number>, outputOf: Map<number, number>, isolated: Set<number>, rooftopSpare: number, importedKw: number, capFactor: number, summary: ElectriciteSummary): number {
     let spare = Math.max(0, rooftopSpare);
+    let thermal = 0;
     for (const f of facs) {
-      if (f.kind !== 'eolien' && f.kind !== 'solaire' && f.kind !== 'hydro') continue;
+      if (f.kind !== 'eolien' && f.kind !== 'solaire' && f.kind !== 'hydro' && f.kind !== 'thermique') continue;
       if (isolated.has(f.id) || this.facilityState(f.id).failedUntil > 0) continue;
-      spare += Math.max(0, (avail.get(f.id) ?? 0) - (outputOf.get(f.id) ?? 0));
+      const free = Math.max(0, (avail.get(f.id) ?? 0) - (outputOf.get(f.id) ?? 0));
+      // Centrales thermiques (demande joueur : vendre TOUT le surplus) : leur capacité inutilisée est aussi vendue,
+      // le gaz brûlé pour la vente étant facturé (THERMAL_EXPORT_FUEL_CENTS) dans sellExport.
+      if (f.kind === 'thermique') thermal += free;
+      spare += free;
     }
     // Ni raccordement ni route au bord exigés, ni plafond : seul le prix choisi règle la part achetée par les voisins.
     void ctx; void capFactor;
-    const sold = this.exportOn && importedKw <= 1e-6 ? spare * exportDemandShare(this.exportPrice) : 0;
+    const share = this.exportOn && importedKw <= 1e-6 ? exportDemandShare(this.exportPrice) : 0;
+    const sold = spare * share;
+    this.thermalSoldKw = thermal * share;
     summary.sellableKw = Math.round(spare * 10) / 10;
     summary.exportedKw = Math.round(sold * 10) / 10;
     return sold > 1e-6 ? sold : 0;
@@ -1290,7 +1302,7 @@ export class PowerSystem {
 
   /** Vente de l'heure : recette versée tout de suite à la trésorerie (poste détaillé du bilan), cumuls du mois. */
   private sellExport(ctx: PluginContext, kw: number): void {
-    const cents = kw * this.exportPrice;
+    const cents = kw * this.exportPrice - this.thermalSoldKw * THERMAL_EXPORT_FUEL_CENTS;
     const mo = this.state.month;
     mo.exportedKwh = (mo.exportedKwh ?? 0) + kw;
     mo.exportIncome = (mo.exportIncome ?? 0) + cents;

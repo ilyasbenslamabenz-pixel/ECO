@@ -132,7 +132,7 @@ export const IMPORT_SPEC = { capacityKw: 3_000, priceCentsPerKwh: 4.5, connectio
  * chargées d'abord) est vendue, dans la limite de `capacityKw`, si la ville est reliée à l'extérieur (raccordement
  * au réseau voisin OU connexion extérieure par route reliée). Prix de vente (¢/kWh) inférieur au prix d'achat
  * (`IMPORT_SPEC.priceCentsPerKwh`) et au tarif de revente local : acheter puis revendre fait toujours perdre.
- * Les centrales thermiques ne vendent pas leur capacité inutilisée (pilotables : elles ne brûlent que le gaz appelé).
+ * Les centrales thermiques vendent aussi leur capacité inutilisée ; le gaz brûlé pour la vente est facturé.
  */
 /**
  * Vente du surplus aux villes voisines : sans plafond de puissance ni condition de raccordement. Prix réglable par le
