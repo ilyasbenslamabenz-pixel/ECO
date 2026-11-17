@@ -387,7 +387,9 @@ export function createTerrainMaterial(tex: TerrainTextures, waterLevel: number):
           // (route la plus proche, bâtiments voisins, sinon axes du monde) ; intensité < 1 : fondu entre deux trames.
           vec4 gf = vec4(0.0, 0.0, 0.0, 3.0);
           vec2 fuv = (vTWorld.xz - uGridFieldBox.xy) / uGridFieldBox.z;
-          if (uGridFieldBox.w > 0.5 && fuv.x >= 0.0 && fuv.y >= 0.0 && fuv.x < 1.0 && fuv.y < 1.0) gf = texture2D(uGridField, fuv);
+          // Choix du joueur : un seul quadrillage de carrés de 8 m, identique sur toute la carte (axes du monde) ;
+          // le champ de trames par route n'est plus affiché.
+          if (false && uGridFieldBox.w > 0.5 && fuv.x >= 0.0 && fuv.y >= 0.0 && fuv.x < 1.0 && fuv.y < 1.0) gf = texture2D(uGridField, fuv);
           float worldAxes = step(1.5, gf.w);
           float fieldW = gf.w - 2.0 * worldAxes;
           vec2 T = vec2(cos(gf.x), sin(gf.x)), N = vec2(-T.y, T.x);

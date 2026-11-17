@@ -139,7 +139,7 @@ export class ZoningOverlay {
   private onChange(c: ZoningChange): void {
     if (c.kind === 'all') { this.rebuild(); return; }
     if (c.kind === 'cells') {
-      if (!this.field && this.view.field) { this.rebuild(); return; }
+      // (cases du monde : pas de reconstruction sur le champ de trames)
       const seen = new Set<number>();
       for (let k = 0; k + 1 < c.cells.length; k += 2) {
         const w = c.cells[k]!;
@@ -194,7 +194,7 @@ export class ZoningOverlay {
     this.keysOf.clear();
     this.cellOf = [];
     this.count = 0;
-    this.field = this.view.field;
+    this.field = null; // Cases du monde (carrés de 8 m identiques partout, choix du joueur)
     this.fieldStale = false;
     const codes = this.view.codes;
     for (let i = 0; i < codes.length; i++) if (codes[i]! & 15) this.addWorld(i);
