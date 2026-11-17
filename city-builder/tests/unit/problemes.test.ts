@@ -31,3 +31,12 @@ test('ville saine : aucun problème', () => {
   const p = collectProblems({ power: 0, water: 0 }, { economy: { forecast: { balance: 5000 } }, demography: { population: 300, unemploymentRate: 0.03, cityServices: { coverage: { police: 1, fire: 1, health: 1 } } } }, 1e6, false);
   assert.equal(p.length, 0);
 });
+
+test('réserve de courant faible : prévenue avant les coupures, ouvre le tableau Énergie', () => {
+  const p = collectProblems(null, null, 1e6, false, 0, 0.08);
+  assert.equal(p.length, 1);
+  assert.equal(p[0]!.id, 'reserve-courant');
+  assert.equal(p[0]!.count, '8 %');
+  assert.match(p[0]!.open, /energy/);
+  assert.equal(collectProblems(null, null, 1e6, false, 0, undefined).length, 0);
+});

@@ -60,8 +60,14 @@ const kShort = (v: number): string => {
 };
 
 /** Liste des problèmes (pure, testable) : alertes, finances, chômage, couverture, trafic signalé. */
-export function collectProblems(counts: Partial<Record<AlertKind, number>> | null, report: ReportLike | null, money: number | null, trafficAlert: boolean, noCollection = 0): Problem[] {
+export function collectProblems(counts: Partial<Record<AlertKind, number>> | null, report: ReportLike | null, money: number | null, trafficAlert: boolean, noCollection = 0, powerReserve?: number): Problem[] {
   const out: Problem[] = [];
+  // Réserve de courant faible : prévenir AVANT la baisse de régime des commerces et de l'industrie.
+  if (powerReserve !== undefined) {
+    const pct = Math.round(powerReserve * 100);
+    out.push({ id: 'reserve-courant', severity: 'important', short: 'Réserve de courant faible', count: `${pct} %`, weight: 1, icon: 'energy', open: '#sidebar [data-dash="energy"]',
+      text: `Réserve de courant faible : ${pct} % de marge (au plus bas sur 24 h). Au-delà, commerces et industrie tournent au ralenti et embauchent moins. Ajoutez une centrale (Énergie).` });
+  }
   // Aucun dépôt de camions-bennes : un seul message clair (pas d'icône sur chaque bâtiment).
   if (noCollection > 0) {
     out.push({ id: 'collecte', severity: 'important', text: `Aucune collecte des déchets : ${noCollection} bâtiment${noCollection > 1 ? 's ont leurs' : ' a ses'} bacs pleins. Construisez un dépôt de camions-bennes et une décharge reliés aux rues (aucun branchement : les camions passent par les routes).`,
@@ -145,7 +151,7 @@ export function initProblems(): void {
     const dbg = (window as unknown as { __aube?: DebugLike }).__aube;
     const stats = dbg?.lastStats as { money?: number } | null | undefined;
     const traffic = journal.entries.some((e) => e.key === 'r:trafic' && e.unread);
-    const all = collectProblems(lastAlertes()?.counts ?? null, (dbg?.lastReport as ReportLike | undefined) ?? null, stats?.money ?? null, traffic, lastAlertes()?.noCollection ?? 0);
+    const all = collectProblems(lastAlertes()?.counts ?? null, (dbg?.lastReport as ReportLike | undefined) ?? null, stats?.money ?? null, traffic, lastAlertes()?.noCollection ?? 0, lastAlertes()?.powerReserve);
     current = all.slice(0, 3);
     const s = current.map((p) => `${p.id}|${p.text}|${p.severity}`).join(';') + `#${all.length}`;
     if (s === sig) return;

@@ -777,7 +777,15 @@ export class DemographySystem {
     return w;
   }
 
-  private active(bi: number): boolean { const id = this.ctx.buildings.id[bi]!; return this.activity(id) >= 1 && !this.services.blocked(id); }
+  private active(bi: number): boolean { const id = this.ctx.buildings.id[bi]!; return this.activity(id) > 0 && !this.services.blocked(id); }
+  /**
+   * Postes ouverts à l'embauche : la capacité du modèle, réduite à la part d'activité (lieu de travail en baisse de
+   * régime faute de courant suffisant). Les salariés déjà en poste au-delà ne sont pas licenciés.
+   */
+  private jobCapAt(bi: number, m: { jobCap: number }): number {
+    const a = this.activity(this.ctx.buildings.id[bi]!);
+    return a >= 1 ? m.jobCap : Math.floor(m.jobCap * Math.max(0, a));
+  }
   /** Emplois offerts : bâtiment actif (courant) et entreprise ouverte (pas un local vacant après fermeture). */
   private jobOpen(bi: number): boolean { return this.active(bi) && this.living.isOpen(this.ctx.buildings.id[bi]!); }
 
@@ -1042,8 +1050,8 @@ export class DemographySystem {
             const j = pre ? cell[k]! : b.indexOf(cell[k]!);
             if (j < 0 || !b.roadAccess[j]) continue;
             const m = this.metaOfIndex(j);
-            if (!m || m.jobCap - b.workers[j]! <= 0 || !this.jobOpen(j)) continue;
-            const free = m.jobCap - b.workers[j]!;
+            if (!m || this.jobCapAt(j, m) - b.workers[j]! <= 0 || !this.jobOpen(j)) continue;
+            const free = this.jobCapAt(j, m) - b.workers[j]!;
             const dx = b.x[j]! - hx, dz = b.z[j]! - hz;
             const d = Math.sqrt(dx * dx + dz * dz);
             if (d > MAX_COMMUTE_M && (d > reach || !this.transitServes(homeId, b.id[j]!))) continue;
@@ -1313,7 +1321,7 @@ export class DemographySystem {
     let freeJobs = 0;
     for (let k = 0; k < b.count; k++) {
       const m = this.metaOfIndex(k);
-      if (m && b.roadAccess[k] && this.jobOpen(k)) freeJobs += Math.max(0, m.jobCap - b.workers[k]!);
+      if (m && b.roadAccess[k] && this.jobOpen(k)) freeJobs += Math.max(0, this.jobCapAt(k, m) - b.workers[k]!);
     }
     return freeJobs;
   }
@@ -2153,7 +2161,7 @@ export class DemographySystem {
     for (let i = 0; i < b.count; i++) {
       const m = this.metaOfIndex(i);
       if (!m) continue;
-      if (b.roadAccess[i] && this.jobOpen(i)) jobsTotal += m.jobCap;
+      if (b.roadAccess[i] && this.jobOpen(i)) jobsTotal += this.jobCapAt(i, m);
       jobsFilled += b.workers[i]!;
       if (b.roadAccess[i]) attractSum += m.attract;
     }
@@ -2229,8 +2237,8 @@ export class DemographySystem {
       const m = this.metaOfIndex(i);
       if (!m) continue;
       if (b.roadAccess[i]) {
-        if (this.jobOpen(i)) jobsTotal += m.jobCap;
-        if (m.jobCap > 0 && m.resCap <= 0) { jobCapAll += m.jobCap; if (this.powerState(b.id[i]!) === 1) jobCapCut += m.jobCap; }
+        if (this.jobOpen(i)) jobsTotal += this.jobCapAt(i, m);
+        if (m.jobCap > 0 && m.resCap <= 0) { jobCapAll += m.jobCap; if (this.powerState(b.id[i]!) === 1) jobCapCut += m.jobCap - this.jobCapAt(i, m); }
         housingCapacity += m.resCap;
         housingFree += Math.max(0, m.resCap - b.residents[i]!);
         if (m.sector === Sector.Commercial) commercialJobs += m.jobCap;

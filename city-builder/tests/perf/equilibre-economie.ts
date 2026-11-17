@@ -2,7 +2,7 @@
  * Étude d'équilibrage économique (docs/EQUILIBRE_ECONOMIE.md) — NON branchée sur `npm test`.
  *
  *   npx tsx tests/perf/equilibre-economie.ts --parcours=prudent|typique|ambitieux|depart [--mois=36]
- *        [--reglages=base|A,B,…] [--graine=4242] [--json=chemin] [--sauver=chemin] [--quiet] [--debug]
+ *        [--reglages=base|A,B,…] [--graine=4242] [--json=chemin] [--sauver=chemin] [--quiet] [--debug] [--centrale]
  *
  * Partie « Nouvelle partie » telle que le jeu la crée (catalogue réel avec prix des logements ÷ 4 et dépôt de tram
  * dérivé, 3 M CHF, déblocages progressifs activés, avril, 9 h), sur une carte plate sans eau (reproductible). Un
@@ -251,10 +251,17 @@ function samplePeak(): void {
   if (bal && bal.buildings > 0) peak.served = Math.min(peak.served, bal.servedShare);
 }
 /** Réseaux : raccordements au départ ; centrales / pompage dès que le raccordement sature. */
+const GAZ = args.includes('--centrale');
+const gasLocked = (): boolean => JSON.stringify(cmd('paliers', 'state').data?.locks?.assets ?? {}).includes('elec_centrale_gaz');
 function utilities(day: number): void {
   // Maxima de la veille (relevés toutes les 3 h) : coupures et import proche du plafond du raccordement.
   const { cut, imported, served } = peak;
   peak.cut = 0; peak.imported = 0; peak.served = 1;
+  // `--centrale` : joueur qui suit l'indice « courant insuffisant » et pose une centrale au gaz dès qu'elle est
+  // débloquée (palier Bourg) et payable, au lieu d'empiler des éoliennes.
+  if (GAZ && day - lastPower >= 8 && cut > 0 && !gasLocked()) {
+    if (buy('elec_centrale_gaz', 'utility', 'gaz')) { lastPower = day; return; }
+  }
   if (day - lastPower >= 8 && (cut > 0 || imported > 0.85 * 3000) && money() > asset('elec_eolienne').cost + reserveOf / 2) {
     if (placeWind()) { built['eolienne'] = (built['eolienne'] ?? 0) + 1; event(`éolienne n° ${built['eolienne']} (coupés ${cut}, import ${Math.round(imported)} kW)`); lastPower = day; }
   }

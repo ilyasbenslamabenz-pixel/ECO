@@ -10,8 +10,10 @@
  *     distribution (la plus proche à portée) et par classe ;
  *  4. graphe municipal reconstruit : producteur -> jeu de barres (J) -> transformateur -> nœud de distribution (D)
  *     -> un consommateur par classe (priorité = rang de la classe) ; lignes = arêtes J–J (capacité, pertes/km) ;
- *  5. répartition (`Networks.allocate`, ordre de mérite, délestage des priorités basses) ; dans une classe
- *     partiellement servie, les bâtiments déjà installés (identifiant le plus petit) sont alimentés d'abord :
+ *  5. répartition (`Networks.allocate`, ordre de mérite, délestage des priorités basses) ; les lieux de travail
+ *     (commerces, industrie) partagent le courant de leur classe et tournent au ralenti (baisse de régime, embauche
+ *     plafonnée à la part reçue) ; dans les autres classes partiellement servies, les bâtiments déjà installés
+ *     (identifiant le plus petit) sont alimentés d'abord :
  *     délestage progressif, les derniers arrivés sont coupés en premier au lieu de toute la ville à tour de rôle ;
  *     raccordement au réseau extérieur (réglage `raccordement`, `IMPORT_SPEC`) : appoint appelé en dernier, relié à
  *     toutes les installations raccordées à la voirie et aux bâtiments qu'aucune installation ne dessert ;
@@ -135,6 +137,10 @@ export function emptyPowerState(): PowerState {
 
 /* --------------------------------- Constantes --------------------------------- */
 
+/** Classes de consommateurs en baisse de régime (courant partagé) plutôt qu'en coupure franche bâtiment par bâtiment. */
+const BROWNOUT_CLASSES: ReadonlySet<ConsumerClass> = new Set<ConsumerClass>(['commerce', 'industrie']);
+/** Part minimale du courant pour qu'un lieu de travail en baisse de régime continue de tourner. */
+export const BROWNOUT_MIN_SHARE = 0.1;
 const MAX_EVENTS = 40;
 /** Capacité minimale du transformateur de distribution d'une centrale (kW). */
 const PLANT_DISTRIBUTION_MIN_KW = 20_000;
@@ -1125,14 +1131,25 @@ export class PowerSystem {
     // Délestage progressif : les bâtiments les plus anciens (identifiant croissant) gardent le courant, les derniers
     // raccordés sont coupés d'abord (et non toute la ville à tour de rôle).
     for (const list of groups.values()) list.sort((p, q) => p.id - q.id);
-    const pick = (list: Consumer[], budget: number): { on: Set<number>; used: number } => {
+    const pick = (list: Consumer[], budget: number): { on: Set<number>; used: number; share?: number } => {
       const on = new Set<number>();
       let used = 0;
+      // Lieux de travail (commerces, industrie) : baisse de régime au lieu de coupures franches. Tous reçoivent la même
+      // part du courant attribué à la classe et tournent au ralenti (embauche plafonnée à cette part) ; en dessous de
+      // BROWNOUT_MIN_SHARE, la part ne suffit plus à faire tourner l'activité et toute la classe est délestée.
+      if (list.length && BROWNOUT_CLASSES.has(list[0]!.cls)) {
+        let total = 0;
+        for (const c of list) total += c.demandKw;
+        const share = total > 0 ? Math.min(1, budget / total) : 1;
+        if (share < BROWNOUT_MIN_SHARE) return { on, used: 0, share: 0 };
+        for (const c of list) on.add(c.id);
+        return { on, used: total * share, share };
+      }
       for (const c of list) if (c.demandKw <= budget - used + 1e-6) { on.add(c.id); used += c.demandKw; }
       return { on, used };
     };
     let report = this.runNetwork(m, facs, avail, rooftopByHub, demandBy, prio, imp);
-    let picks = new Map<string, { on: Set<number>; used: number }>();
+    let picks = new Map<string, { on: Set<number>; used: number; share?: number }>();
     for (let iter = 0; iter < 6; iter++) {
       picks = new Map();
       let wasted = false;
@@ -1150,7 +1167,8 @@ export class PowerSystem {
     for (const c of consumers) if (c.hub === NO_HUB) { this.served.set(c.id, 0); this.noService.add(c.id); }
     for (const [key, list] of groups) {
       const pk = picks.get(key)!;
-      for (const c of list) this.served.set(c.id, pk.on.has(c.id) ? 1 : 0);
+      const share = pk.share === undefined ? 1 : pk.share >= 0.999 ? 1 : pk.share;
+      for (const c of list) this.served.set(c.id, pk.on.has(c.id) ? share : 0);
     }
 
     // 6. Bilans.
@@ -1163,9 +1181,14 @@ export class PowerSystem {
       b.buildings++;
       b.demandKw += c.demandKw;
       demandKw += c.demandKw;
-      const on = this.served.get(c.id) === 1;
-      if (on) b.deliveredKw += c.demandKw;
-      else {
+      const f = this.served.get(c.id) ?? 1;
+      if (f >= 1) b.deliveredKw += c.demandKw;
+      else if (f > 0 && c.hub !== NO_HUB) {
+        // Baisse de régime : courant partiel, emplois à proportion de la part reçue (compté parmi les bâtiments délestés).
+        b.deliveredKw += c.demandKw * f;
+        cut++; b.cut++; this.cutList.push(c.id);
+        jobsOff += Math.round(c.jobs * (1 - f));
+      } else {
         if (c.hub === NO_HUB) { unlinked++; b.unlinked++; unlinkedKw += c.demandKw; } else { cut++; b.cut++; this.cutList.push(c.id); }
         jobsOff += c.jobs; resOff += c.residents;
       }

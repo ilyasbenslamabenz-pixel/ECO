@@ -28,4 +28,12 @@ export interface AlertesPayload {
    * « Aucune collecte des déchets » (pas d'icône par bâtiment). Absent quand la collecte existe ou que rien ne déborde.
    */
   noCollection?: number;
+  /**
+   * Réserve de courant faible (avant toute coupure) : marge la plus basse des dernières 24 h de jeu, en part de la
+   * demande (0,08 = 8 %). Absente quand la marge reste au-dessus de `POWER_RESERVE_WARN` ou qu'il y a déjà des coupures.
+   */
+  powerReserve?: number;
 }
+
+/** Marge de production sous laquelle la ville est prévenue (avant que les lieux de travail passent en baisse de régime). */
+export const POWER_RESERVE_WARN = 0.15;

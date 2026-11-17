@@ -281,7 +281,8 @@ export class Simulation {
     const eau = (): Eau | undefined => this.plugins.service<Eau>('eau');
     const elecState = (e: Elec, id: number): NetState => e.serviceState?.(id) ?? (e.powerFactor(id) >= 1 ? 'ok' : 'coupe');
     const code = (st: NetState | undefined): number => (st === 'coupe' ? 1 : st === 'aucun' ? 2 : 0);
-    this.demography.activity = (id) => { const e = elec(); return e && e.hasNetwork?.() && elecState(e, id) === 'coupe' ? 0 : 1; };
+    // Part d'activité : 1 alimenté, 0 coupé, entre les deux pour un lieu de travail en baisse de régime (courant partiel).
+    this.demography.activity = (id) => { const e = elec(); return e && e.hasNetwork?.() && elecState(e, id) === 'coupe' ? Math.max(0, Math.min(1, e.powerFactor(id))) : 1; };
     this.demography.growthGates = [
       (id) => { const e = elec(); return !e || !e.hasNetwork?.() || elecState(e, id) !== 'coupe'; },
       (id) => eau()?.growthAllowed(id) ?? true,

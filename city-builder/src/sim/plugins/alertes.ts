@@ -6,7 +6,8 @@
  */
 import { isBuildingCategory, type CatalogAsset } from '../../shared/catalog';
 import type { ElectriciteService } from '../../shared/power/types';
-import { ALERT_BITS, ALERT_KINDS, type AlertesPayload, type AlertKind } from '../../shared/protocol-ext/alertes';
+import { ALERT_BITS, ALERT_KINDS, POWER_RESERVE_WARN, type AlertesPayload, type AlertKind } from '../../shared/protocol-ext/alertes';
+import { IMPORT_SPEC } from '../../shared/power/model';
 import { facilityKindOfTags } from '../../shared/waste/types';
 import { isUnstaffedUtility } from '../../shared/utility-buildings';
 import { ROAD_KINDS } from '../roads/types';
@@ -127,18 +128,46 @@ export function computeAlerts(ctx: PluginContext): AlertesPayload {
   return noCollection > 0 ? { items, counts, noCollection } : { items, counts };
 }
 
+/**
+ * Marge de production de l'heure (part de la demande raccordée), ou null sans objet : pas de réseau, demande trop
+ * faible, ou déjà des bâtiments délestés (l'alerte « sans électricité » prend alors le relais).
+ */
+export function powerReserveShare(ctx: PluginContext): number | null {
+  const power = ctx.use<ElectriciteService>('electricite');
+  if (!power || !(power.hasNetwork?.() ?? true)) return null;
+  const s = power.summary();
+  if (!s || s.cut > 0) return null;
+  const demand = s.demandKw - s.unlinkedKw;
+  if (demand < 200) return null;
+  // Capacité : production disponible + appoint du réseau voisin quand il est utilisé (plafond du raccordement).
+  const capacity = s.availableKw + (s.importedKw !== undefined ? IMPORT_SPEC.capacityKw : 0);
+  return (capacity - demand) / demand;
+}
+
 export function createAlertesPlugin(): SimPlugin {
   let last: AlertesPayload = { items: [], counts: emptyCounts() };
   let key = '', sentKey = '', acc = 60;
-  const refresh = (ctx: PluginContext): void => { last = computeAlerts(ctx); key = last.items.join(',') + (last.noCollection ? `|${last.noCollection}` : ''); };
+  /** Marges horaires des dernières 24 h (le vent et le soleil varient : l'alerte retient la plus basse). */
+  let reserves: number[] = [];
+  const refresh = (ctx: PluginContext, hourly = false): void => {
+    last = computeAlerts(ctx);
+    if (hourly) {
+      const r = powerReserveShare(ctx);
+      // Coupure en cours ou réseau absent : on repart de zéro (l'alerte de réserve n'a de sens qu'avant la coupure).
+      if (r === null) reserves = []; else { reserves.push(r); if (reserves.length > 24) reserves.shift(); }
+    }
+    const low = reserves.length ? Math.min(...reserves) : Infinity;
+    if (low < POWER_RESERVE_WARN) last.powerReserve = Math.round(Math.max(0, low) * 100) / 100;
+    key = last.items.join(',') + (last.noCollection ? `|${last.noCollection}` : '') + (last.powerReserve !== undefined ? `|r${last.powerReserve}` : '');
+  };
   return {
     id: 'alertes',
-    onNewGame() { last = { items: [], counts: emptyCounts() }; key = ''; sentKey = ''; acc = 60; },
+    onNewGame() { last = { items: [], counts: emptyCounts() }; key = ''; sentKey = ''; acc = 60; reserves = []; },
     onTick(ctx, minutes) {
       acc += minutes;
       if (acc < 60) return;
       acc = 0;
-      refresh(ctx);
+      refresh(ctx, true);
     },
     takeDelta() {
       if (key === sentKey) return undefined;
@@ -146,7 +175,7 @@ export function createAlertesPlugin(): SimPlugin {
       return last;
     },
     // Aucune alerte : rien d'émis (module inerte, simulation identique avec ou sans lui).
-    snapshot(ctx) { refresh(ctx); sentKey = key; return last.items.length || last.noCollection ? last : undefined; },
+    snapshot(ctx) { refresh(ctx); sentKey = key; return last.items.length || last.noCollection || last.powerReserve !== undefined ? last : undefined; },
     command(ctx, name) {
       if (name === 'state') { refresh(ctx); return { ok: true, data: last }; }
       return { ok: false, code: 'INVALID_ARGS', message: `Commande inconnue : ${name}` };

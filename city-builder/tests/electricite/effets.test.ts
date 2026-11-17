@@ -24,15 +24,18 @@ test('effet : pénurie électrique -> coupures des moins prioritaires (industrie
   assert.ok(s.shortfallKw > 0);
   assert.equal(cls(s, 'sante').cut, 0, 'hôpital alimenté');
   assert.ok(Math.abs(cls(s, 'sante').deliveredKw - cls(s, 'sante').demandKw) < 1e-6);
-  // Invariant de délestage : une classe n'est touchée que si toutes les classes moins prioritaires sont coupées.
+  // Invariant de délestage : une classe n'est touchée que si les classes moins prioritaires sont coupées. Seule
+  // exception : le reliquat qu'une classe ne peut pas utiliser (moins qu'un bâtiment de plus) fait tourner au ralenti
+  // les lieux de travail (baisse de régime, tests/electricite/baisse-regime.test.ts) ; il reste marginal.
   const order: ConsumerClass[] = ['sante', 'services', 'residentiel', 'commerce', 'industrie'];
   for (let k = 0; k < order.length; k++) {
     if (cls(s, order[k]!).deliveredKw < cls(s, order[k]!).demandKw - 1e-6) {
-      for (const lower of order.slice(k + 1)) assert.equal(cls(s, lower).deliveredKw, 0, `${lower} coupé avant ${order[k]}`);
+      const lowerKw = order.slice(k + 1).reduce((t, c) => t + cls(s, c).deliveredKw, 0);
+      assert.ok(lowerKw <= 0.03 * s.demandKw, `${order[k]} incomplet : classes inférieures ${lowerKw} kW (reliquat seulement)`);
     }
   }
   assert.equal(cls(s, 'industrie').deliveredKw, 0, 'industrie coupée en premier');
-  assert.equal(cls(s, 'commerce').deliveredKw, 0, 'commerces coupés ensuite');
+  assert.ok(cls(s, 'commerce').deliveredKw <= 0.03 * s.demandKw, 'commerces coupés ensuite (au plus le reliquat)');
   assert.ok(s.cut > 0 && s.jobsWithoutPower > 0, 'emplois sans courant comptés');
   // Service publié aux autres modules : part servie par bâtiment.
   const usine = sim.buildings.id[[...Array(sim.buildings.count).keys()].find((i) => sim.catalog!.assets[sim.buildings.assetIndex[i]!]!.id === 'usine')!]!;

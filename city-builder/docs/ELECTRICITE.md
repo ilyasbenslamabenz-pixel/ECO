@@ -240,6 +240,13 @@ Demande joueur : « pour les éoliennes je dois pouvoir les raccorder avec des c
    moins prioritaires d'abord. Dans une classe partiellement servie, les bâtiments sont alimentés dans un **ordre
    tournant** (hachage identifiant × heure : délestage tournant) ; l'énergie inutilisable (bâtiment trop gros pour le
    reliquat) est rendue aux classes suivantes (ré-itération).
+   **Baisse de régime des lieux de travail** (commerces, industrie) : pas de coupure bâtiment par bâtiment ; tous
+   reçoivent la même part du courant attribué à leur classe et tournent au ralenti (`powerFactor` = part, état
+   `coupe` pour l'icône et le panneau). La démographie plafonne l'embauche à cette part (`activity` ∈ ]0, 1]) ; les
+   salariés en poste restent. Sous `BROWNOUT_MIN_SHARE` (10 %), la classe est délestée. Avant : toute l'industrie
+   était coupée d'un coup (mesuré sur une partie type de 7 000 hab. : 2 602 emplois sans courant, chômage 30–47 %).
+   **Réserve faible** : le module `alertes` publie `powerReserve` (marge la plus basse sur 24 h, sous 15 %, sans
+   coupure en cours) ; la fenêtre « Problèmes à régler » prévient le joueur avant la baisse de régime.
 6. **Effets** : bâtiments coupés (service `electricite`, `cutIds`, calque), emplois / habitants sans courant, pollution
    de l'air (thermique) et bruit (grilles municipales), satisfaction (pénalité réversible et bornée : +3/h quand coupé,
    jusqu'à 20, −1,5/h une fois rétabli), registre d'effets, notifications.
