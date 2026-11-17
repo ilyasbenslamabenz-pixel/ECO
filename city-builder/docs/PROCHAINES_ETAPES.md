@@ -1,6 +1,6 @@
 # Prochaines étapes (brief pour une nouvelle session)
 
-Jeu : `city-builder/` ; branche `claude/amazing-meitner-vtryts` ; artifact joueur https://claude.ai/artifact/YTQu5U1EvibeTY3fRQpexH (v35).
+Jeu : `city-builder/` ; branche `claude/amazing-meitner-vtryts` ; artifact joueur https://claude.ai/artifact/YTQu5U1EvibeTY3fRQpexH (v36).
 Publication : `npm run build`, `node scripts/pack-artifact.mjs dist <dossier>`, publier `artifact.html` + fichiers modifiés.
 Règles : ne rien supprimer, ne pas changer l'architecture sans accord, aucun résultat inventé, tsc + tests avant commit.
 
@@ -22,3 +22,8 @@ Règles : ne rien supprimer, ne pas changer l'architecture sans accord, aucun r�
 - Gameplay mesuré (`tests/perf/equilibre-economie.ts --debug --sauver=…`) : passé ~1 500 habitants, l'industrie
   consomme l'essentiel du courant (12,9 MW sur 19,9 MW à 7 000 hab.) ; sans centrale à gaz, tout l'industriel est
   délesté → chômage 30–47 %, satisfaction 11–18, départs. L'indice de croissance affiche maintenant « need-power ».
+
+## Priorité joueur (17/11) : ORDINATEUR seulement, fluidité au maximum
+- Le joueur a abandonné le mobile. Machine : PC Windows, GPU Intel intégré, Edge, 1280×755 densité 1,5.
+- Fait (v36) : résolution dynamique + paliers aussi en qualité Moyenne sur GPU intégré, ombres 1 image sur 2,
+  baisse de régime électrique, fiche bâtiment sans chevauchement. À faire : nouvelle mesure ?bench du joueur.
