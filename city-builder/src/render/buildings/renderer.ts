@@ -298,6 +298,20 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     return { x: m[i * 16 + 12]!, y: m[i * 16 + 13]!, z: m[i * 16 + 14]!, rotY: Math.atan2(-m[i * 16 + 2]!, m[i * 16]!), width: b.asset.dimensions.width, depth: b.asset.dimensions.depth };
   }
 
+  /**
+   * Diagnostic (e2e) : état de rendu d'un bâtiment — masqué (chantier), états de ses LOD (0 non demandé, 1 en
+   * cours, 2 prêt, 3 échec), LOD dessiné en lots par matériau (−1 : aucun), nombre d'instances dessinées par LOD.
+   */
+  debugInstance(id: number): { key: string; hidden: boolean; lods: number[]; drawnLod: number; counts: number[]; pool: boolean } | null {
+    const b = this.idToBatch.get(id);
+    if (!b) return null;
+    const i = b.ids.indexOf(id);
+    return {
+      key: b.key, hidden: this.hidden.has(id), lods: b.lods.map((s) => s.state),
+      drawnLod: this.pool ? (b.mVis[i] ? b.mLod[i]! : -1) : -1, counts: b.lods.map((s) => s.count), pool: this.pool !== null,
+    };
+  }
+
   /** Caméra pour le culling par instance (facultatif). */
   attachCamera(camera: THREE.Camera | null): void { this.camera = camera; this.forceUpdate = true; }
 
@@ -351,7 +365,8 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     for (const r of records) {
       const a = this.assets.get(r.assetId);
       if (!a) { this.errors.push(`asset inconnu ${r.assetId}`); continue; }
-      if (this.idToBatch.has(r.id)) this.remove([r.id]);
+      // Bâtiment remplacé (même identifiant) : il garde son masquage de chantier éventuel.
+      if (this.idToBatch.has(r.id)) { const masked = this.hidden.has(r.id); this.remove([r.id]); if (masked) this.hidden.add(r.id); }
       const vi = r.variant >= 0 && r.variant < a.variants.length ? r.variant : 0;
       const key = `${a.id}#${vi}`;
       let b = this.batches.get(key);
@@ -424,6 +439,10 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   remove(ids: readonly number[]): void {
     for (const id of ids) {
       this.yards.remove(id);
+      // Un bâtiment retiré n'est plus masqué : les identifiants repartent de 1 à chaque nouvelle partie et reprennent
+      // ceux de la sauvegarde au chargement ; un masque de chantier gardé ici rendait invisible, sans chantier, le
+      // bâtiment de même identifiant de la partie suivante (« la maison n'apparaît pas »).
+      this.hidden.delete(id);
       const b = this.idToBatch.get(id);
       if (!b) continue;
       const i = b.ids.indexOf(id);

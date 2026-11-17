@@ -26,6 +26,8 @@ const LINEAR = [0, 1, 2, 4, 5, 6, 8, 9, 10] as const;
 
 export class BuildingMask {
   private readonly hidden = new Map<number, Hidden>();
+  /** Bâtiments masqués par l'API de visibilité du rendu de base (rétablis par clear()). */
+  private readonly apiHidden = new Set<number>();
   /** Instances à rétablir (le rendu de base ne réécrit pas une matrice qu'il croit à jour). */
   private restores: (Saved & { x: number; y: number; z: number })[] = [];
   private group: THREE.Object3D | null = null;
@@ -41,7 +43,7 @@ export class BuildingMask {
 
   /** Déclare qu'un bâtiment doit être masqué (chantier en cours). */
   hide(buildingId: number, assetId: string, variant: number, x: number, y: number, z: number): void {
-    if (this.api) { this.api.setBuildingsVisible([buildingId], false); return; }
+    if (this.api) { this.apiHidden.add(buildingId); this.api.setBuildingsVisible([buildingId], false); return; }
     if (this.hidden.has(buildingId)) return;
     const v = variant >= 0 ? variant : 0;
     this.hidden.set(buildingId, { prefix: `${assetId}#${v}_lod`, x, y, z, saved: [] });
@@ -49,7 +51,7 @@ export class BuildingMask {
 
   /** Le bâtiment redevient visible (chantier achevé ou abandonné). */
   show(buildingId: number): void {
-    if (this.api) { this.api.setBuildingsVisible([buildingId], true); return; }
+    if (this.api) { this.apiHidden.delete(buildingId); this.api.setBuildingsVisible([buildingId], true); return; }
     const h = this.hidden.get(buildingId);
     if (!h) return;
     for (const sv of h.saved) this.restores.push({ ...sv, x: h.x, y: h.y, z: h.z });
@@ -57,7 +59,10 @@ export class BuildingMask {
   }
 
   clear(): void {
-    if (this.api && this.hidden.size > 0) this.api.setBuildingsVisible([...this.hidden.keys()], true);
+    // Instantané complet (nouvelle partie, chargement) : tout bâtiment masqué par l'API redevient visible ; les
+    // chantiers de l'instantané le masquent de nouveau s'il y a lieu. (Avant, `hidden` restait vide avec l'API :
+    // rien n'était rétabli et un bâtiment de même identifiant dans la partie suivante restait invisible.)
+    if (this.api && this.apiHidden.size > 0) { this.api.setBuildingsVisible([...this.apiHidden], true); this.apiHidden.clear(); }
     for (const id of [...this.hidden.keys()]) this.show(id);
     this.restoreAll();
     this.hidden.clear();
