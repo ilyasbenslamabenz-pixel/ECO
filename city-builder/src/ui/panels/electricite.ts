@@ -121,7 +121,14 @@ function zeroReason(s: ElectriciteSummary, st: ElectriciteDelta): string {
   if (s.producedKw > 0) return '';
   const facs = (st.facilities ?? []).filter((f) => f.kind !== 'poste' && f.kind !== 'batterie');
   let why: string;
-  if (facs.length && facs.every((f) => f.failedUntil > 0)) why = 'Vos centrales sont en panne : la réparation est en cours (un meilleur financement de l\'entretien l\'accélère).';
+  // Aucune centrale : le réseau voisin alimente la ville (rien à signaler), sinon dire quoi faire (et non « vos
+  // centrales ne peuvent rien produire », faux quand il n'y en a aucune).
+  if (!facs.length) {
+    if (typeof s.importedKw === 'number' && s.importedKw > 0) return '';
+    why = st.settings?.raccordement === true
+      ? 'Aucune centrale : la ville dépend du réseau voisin, qui ne livre rien en ce moment.'
+      : 'Aucune centrale ni raccordement : vos bâtiments n\'ont pas de courant. Raccordez-vous au réseau voisin (ci-dessous) ou construisez une centrale (Énergie dans la barre d\'outils).';
+  } else if (facs.every((f) => f.failedUntil > 0)) why = 'Vos centrales sont en panne : la réparation est en cours (un meilleur financement de l\'entretien l\'accélère).';
   else if (facs.length && facs.every((f) => !f.siteOk)) why = 'Site invalide : un barrage doit être posé au bord d\'un cours d\'eau.';
   else if (s.availableKw <= 0) {
     const kinds = new Set(facs.map((f) => f.kind));

@@ -167,3 +167,6 @@
 .panel-btns .icon-btn, .ptabs button, .chip, .panel-actions button { transition: background var(--dur-1) ease, color var(--dur-1) ease, box-shadow var(--dur-1) ease; }
 .bar-row .fill, #dash-body .eau-gauge i { transition: width var(--dur-2) var(--ease); }
 .panel, #problems { font-variant-numeric: tabular-nums; }
+
+/* Tableaux du panneau Énergie : la première colonne (libellé) ne se coupe plus au milieu d'un mot (« Commerce / s »). */
+#dash-body .elec td:first-child, #dash-body .elec th:first-child { overflow-wrap: normal; word-break: normal; min-width: 6.5em; }

@@ -243,7 +243,7 @@ export class BuildBar {
   constructor(private d: BuildBarDeps) {
     // Active les outils réellement disponibles ; les catégories prévues ouvrent un aperçu grisé (avec leur phase).
     const tips: Record<string, string> = {
-      road: 'Routes : 6 types (rue, avenue, boulevard, sens unique, piétonne, autoroute), droites ou courbes', building: 'Bâtiments : maisons, immeubles, tours, commerces, industrie',
+      road: `Routes : ${ROAD_KIND_ORDER.length} types (rue, avenue, boulevard, sens unique, piétonne, autoroute, versions à plus de voies), droites ou courbes`, building: 'Bâtiments : maisons, immeubles, tours, commerces, industrie',
       services: 'Services publics : mairie, école, hôpital, pompiers, police…', environment: 'Nature : parcs ; arbres, végétation, mobilier (bientôt)',
       transport: 'Transports : lignes de bus et dépôts, gare de voyageurs, port et aéroport ; tramway (bientôt)',
       bulldoze: 'Démolir : bâtiments et routes (touche B, remboursement 25 %)', select: 'Sélection : cliquer un bâtiment, une route ou un véhicule',
@@ -509,7 +509,7 @@ export class BuildBar {
       b.addEventListener('click', () => { this.d.tools.setTool('road'); m.setRoadSub(id); this.closeDrawer(); });
       more.append(b);
     }
-    this.tabsEl.append(el('span', { cls: 'drawer-note' }, el('span', { text: '6 types · droites ou courbes · quadrillage · carrefours et ponts automatiques' })));
+    this.tabsEl.append(el('span', { cls: 'drawer-note' }, el('span', { text: `${ROAD_KIND_ORDER.length} types · droites ou courbes · quadrillage · carrefours et ponts automatiques` })));
     this.body.append(el('div', { cls: 'drawer-opts' }, mode, more, el('span', { cls: 'hint', text: 'Maj : angle magnétique 15°' }), el('span', { cls: 'hint', text: `Lignes guides parallèles à ${m.gridBlock} m (taille d'îlot)` })));
     this.body.prepend(cards);
   }

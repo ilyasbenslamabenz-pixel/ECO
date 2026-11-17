@@ -494,8 +494,12 @@ export function initUI(h: UIHandlers): UIHandle {
     const reason = $('tc-reason');
     const m = api?.machine;
     const p = m?.preview;
-    const bad = !touchBar.classList.contains('hidden') && !!m && m.tool === 'building' && p?.kind === 'building' && p.validity === 'error';
-    ok.disabled = bad;
+    const shown = !touchBar.classList.contains('hidden') && !!m;
+    const bad = shown && m!.tool === 'building' && p?.kind === 'building' && p.validity === 'error';
+    // Route, quadrillage, giratoire, ligne, terrain refusés : bouton grisé aussi (il restait vert avec « Tracé refusé »).
+    // La démolition garde son bouton (son aperçu rouge signale l'action, pas un refus).
+    const refused = shown && !bad && m!.tool !== 'bulldoze' && !!p && 'validity' in p && (p as { validity?: string }).validity === 'error';
+    ok.disabled = bad || refused;
     ok.textContent = bad ? 'Emplacement invalide' : tcLabel || 'Construire';
     // Avertissement de la simulation sur un emplacement valide (ex. aucune route ne dessert le bâtiment).
     const warn = !bad && !touchBar.classList.contains('hidden') && m?.tool === 'building' && p?.kind === 'building' && p.validity === 'ok' && !!p.message;
