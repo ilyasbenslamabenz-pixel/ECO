@@ -57,7 +57,7 @@ function html({ fragment }) {
     '<title>Meknes City</title>',
     '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">',
     '<meta name="description" content="Meknes City — city-builder 3D">',
-    '<meta name="theme-color" content="#15110d">',
+    '<meta name="theme-color" content="#0d131b">',
     `<style>\n${css}</style>`,
   ].join('\n');
   const body = `${markup}\n<script type="module" src="./game.js"></script>`;
@@ -70,7 +70,7 @@ function html({ fragment }) {
   return `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<link rel="icon" href="./favicon.svg" type="image/svg+xml">\n${head}\n</head>\n<body>\n${bodyFull}\n</body>\n</html>\n`;
 }
 
-const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#1f1a15"/><path d="M16 50V32a16 16 0 0132 0v18M24 50V36a8 8 0 0116 0v14M11 50h42M32 9v7" fill="none" stroke="#d9a441" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>\n';
+const FAVICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#151d29"/><path d="M16 50V32a16 16 0 0132 0v18M24 50V36a8 8 0 0116 0v14M11 50h42M32 9v7" fill="none" stroke="#46bff5" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>\n';
 
 /** Copies 256 px des textures communes (x.webp -> x.256.webp) : le mode allégé ne décode jamais les 1024 px. */
 async function liteTextures(assetsDir) {

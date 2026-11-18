@@ -35,11 +35,10 @@ Règles : ne rien supprimer, ne pas changer l'architecture sans accord, aucun r�
   abandonné par le joueur).
 - Non reproduit : source d'eau « lac prévu 0 m² » dans un cratère de la partie du joueur → demander l'export .meknes.
 
-## Identité visuelle « Meknès » (refonte du design)
+## Identité visuelle (refonte du design)
 
 - Feuille `src/ui/styles-identite.css`, chargée en dernier par `scripts/build.mjs` : aucune règle existante retirée ; elle redéfinit les jetons (thèmes nuit/sombre et clair) et l'habillage.
-- Palette : encre brune et parchemin, laiton (sélection), terre cuite (action principale), olive (bon), brique (problème). Angles 2–4 px, surfaces opaques, pas de verre ni de lueur, double filet laiton en tête des grandes fenêtres.
-- Typographie : Barlow (interface), Barlow Condensed (chiffres, intitulés de section), Spectral (titres, surtitres en italique). Polices SIL OFL intégrées en data: URI (`src/ui/fonts/`), aucun serveur tiers.
-- Icônes de la barre d'outils et du rail monochromes (la couleur de catégorie n'apparaît qu'au survol) ; couleurs de catégorie sourdes ailleurs.
-- Menu principal : liste à filets, trame de zellige discrète en fond.
+- v41 : palette chaude « Meknès » (brun, laiton) — refusée par le joueur (« j'aime pas le marron »).
+- v42 : palette froide inspirée de l'esprit des city-builders récents : ardoise bleutée, texte blanc, accent cyan (sélection et action principale), vert / corail pour bon / problème, couleurs de catégorie franches sur les outils. Angles 4–6 px, en-têtes de fenêtre en bandeau, surfaces quasi opaques sans flou (fluidité iGPU), anneau cyan pour le guidage du tutoriel.
+- Typographie : Barlow (interface), Barlow Condensed (chiffres, intitulés de section). Polices SIL OFL intégrées en data: URI (`src/ui/fonts/`), aucun serveur tiers.
 - Vérifié : tsc, 753 tests unitaires, e2e interface PC, audit 31/31.
