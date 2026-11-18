@@ -236,6 +236,8 @@ export class BuildBar {
   private finishBtn = $<HTMLButtonElement>('road-finish');
   private wasDrawing = false;
   private lastJunction = -2;
+  /** Outil Routes : rangée « Ouvrages » dépliée. */
+  private ouvragesOpen = false;
   private open: DrawerId | null = null;
   private tab: Record<string, string> = {};
   /** Onglet « Lignes de bus » ajouté après les onglets du catalogue du tiroir Transports. */
@@ -546,6 +548,9 @@ export class BuildBar {
     const [main = '', tip] = this.hintText().split('\n');
     this.hint.textContent = main;
     if (tip) this.hint.append(el('span', { cls: 'hint-tip', text: ` ${tip}` }));
+    // Copie dans la barre (outil Routes) : même texte, placé sur la rangée des modes.
+    const mirror = this.actions.querySelector('.ta-hint');
+    if (mirror) mirror.replaceChildren(...Array.from(this.hint.cloneNode(true).childNodes));
   }
 
   private hintText(): string {
@@ -605,11 +610,13 @@ export class BuildBar {
     this.markActive();
     this.syncUndo();
     this.actions.replaceChildren();
+    // Conteneur courant des boutons : la barre, ou un groupe insécable (outil Routes).
+    let host: HTMLElement = this.actions;
     const act = (label: string, tip: string, fn: () => void, active = false): void => {
       const b = el('button', { cls: active ? 'active' : '', text: label });
       b.dataset['tip'] = tip;
       b.addEventListener('click', () => { fn(); this.sync(); });
-      this.actions.append(b);
+      host.append(b);
     };
     if (t === 'select') { this.opts.classList.add('hidden'); document.body.classList.remove('tool-opts'); return; }
     this.opts.classList.remove('hidden');
@@ -619,51 +626,76 @@ export class BuildBar {
       if (m.asset.variants.length > 1) act('Variante', `Variante suivante (X) — ${m.asset.variants.length} disponibles`, () => m.cycleVariant());
       act('Façade → route', 'Alignement automatique de la façade côté route (G)', () => m.setAutoAlign(!m.autoAlign), m.autoAlign);
     } else if (t === 'road') {
+      // Barre contextuelle : les modes de l'outil, puis les réglages du mode choisi seulement, en groupes insécables
+      // (un groupe ne se coupe jamais en fin de ligne) ; une seule rangée quand la place suffit, pour ne pas masquer
+      // la carte. Ouvrages (pont, viaduc, tunnel, digue, giratoire) repliés derrière un bouton « Ouvrages ».
       const sub = m.roadSub;
+      const grp = (label?: string): void => {
+        host = el('span', { cls: 'ta-grp' });
+        if (label) host.append(el('span', { cls: 'ta-lbl', text: label }));
+        this.actions.append(host);
+      };
+      grp();
       act('Droite', 'Tracé droit (le tracé continue depuis l’extrémité)', () => m.setRoadMode('straight'), sub === 'draw' && m.draft.mode === 'straight');
       act('Courbe', 'Tracé courbe : départ, point de courbure, arrivée', () => m.setRoadMode('curve'), sub === 'draw' && m.draft.mode === 'curve');
       act('Quadrillage', 'Quadrillage : un rectangle devient un îlot de rues sur la grille de 8 m', () => m.setRoadSub(sub === 'grid' ? 'draw' : 'grid'), sub === 'grid');
-      act('Améliorer', 'Améliorer : changer le type ou le sens d’une route sans la démolir', () => m.setRoadSub(sub === 'upgrade' ? 'draw' : 'upgrade'), sub === 'upgrade');
-      // Parallèle et Carrefour : toujours à portée dans la barre d'options (aussi dans le tiroir Routes).
       act('Parallèle', 'Route parallèle : touchez à côté d’une route existante, sa copie décalée est proposée de ce côté', () => m.setRoadSub(sub === 'parallel' ? 'draw' : 'parallel'), sub === 'parallel');
+      grp();
+      act('Améliorer', 'Améliorer : changer le type ou le sens d’une route sans la démolir', () => m.setRoadSub(sub === 'upgrade' ? 'draw' : 'upgrade'), sub === 'upgrade');
       act('Carrefour', 'Carrefour : touchez un carrefour pour choisir automatique, feux, stop ou priorité', () => m.setRoadSub(sub === 'junction' ? 'draw' : 'junction'), sub === 'junction');
       if (sub === 'junction' && m.junction) {
-        this.actions.append(el('span', { cls: 'ta-break', attrs: { 'aria-hidden': 'true' } }));
+        grp('Régime');
         const cur = m.junctionModeOf(m.junction.id);
         for (const c of ['auto', 'signal', 'stop', 'priority'] as const) act(JUNCTION_LABELS[c], c === 'auto' ? 'Choix automatique selon les routes (feux, cédez-le-passage ou priorité)' : c === 'signal' ? 'Feux tricolores (phases par direction)' : c === 'stop' ? 'Toutes les branches cèdent le passage' : 'Axe principal prioritaire, les autres branches cèdent le passage', () => { void m.setJunctionMode(c).then(() => this.sync()); }, cur === c);
       }
-      this.actions.append(el('span', { cls: 'ta-break', attrs: { 'aria-hidden': 'true' } }));
       if (sub === 'grid' || sub === 'draw') {
+        grp('Îlot');
         for (const b of GRID_BLOCK_SIZES) act(`${b} m`, `Taille d’îlot ${b} m (quadrillage et lignes guides parallèles)`, () => m.setGridBlock(b), m.gridBlock === b);
+        if (sub === 'draw') act('Guides', `Lignes guides parallèles aux routes, à ${m.gridBlock} m (avec l’aimantation)`, () => m.setGuides(!m.guides), m.guides && m.magnet);
       }
       if (sub === 'parallel') {
+        grp('Écart');
         for (const d of PARALLEL_DISTANCES) act(`${d} m`, `Distance entre les deux routes (d’axe à axe) : ${d} m`, () => m.setParallelDist(d), m.parallelDist === d);
       }
-      if (sub === 'draw') act('Guides', `Lignes guides parallèles aux routes, à ${m.gridBlock} m (avec l’aimantation)`, () => m.setGuides(!m.guides), m.guides && m.magnet);
       if (sub === 'upgrade') {
+        grp('Vers');
         for (const [id, label] of Object.entries(UPGRADE_LABELS) as [UpgradeTarget, string][]) act(label, UPGRADE_TIPS[id as keyof typeof UPGRADE_TIPS] ?? label, () => m.setUpgradeTarget(id), m.upgradeTarget === id);
+        grp();
         // Élargir une rue bordée de maisons : sans cette option, le premier bâtiment riverain bloque tout.
         act('Démolir les gênants', 'Gamme + : les bâtiments qui empiètent sur la nouvelle emprise sont démolis (nombre affiché avant de valider ; les lots du zonage repoussent en retrait). Désactivé : l\'élargissement est refusé', () => m.setUpgradeDemolish(!m.upgradeDemolish), m.upgradeDemolish);
       }
       if (sub === 'draw') {
         // Hauteur du tracé (pas de 4 m) : viaduc / passage supérieur au-dessus, tranchée / tunnel en dessous.
+        grp('Hauteur');
         const h = m.draft.elevation;
         act('▼', 'Descendre le tracé de 4 m (tranchée, tunnel)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(-1); });
         act(h === 0 ? '0 m' : `${h > 0 ? '+' : ''}${h} m`, 'Hauteur du tracé par rapport au terrain', () => { while (m.draft.elevation !== 0) m.setRoadElevation(m.draft.elevation > 0 ? -1 : 1); }, h !== 0);
         act('▲', 'Monter le tracé de 4 m (viaduc, passage supérieur)', () => { if (m.draft.mode === 'roundabout') m.setRoadMode('straight'); m.setRoadElevation(1); });
-        // Boutons de hauteur : cible tactile de 40 px au moins (classe ta-elev).
-        for (const b of Array.from(this.actions.children).slice(-3)) b.classList.add('ta-elev');
-        // Ouvrage sur un lac ou une retenue créés en jeu (tracé sans hauteur imposée).
+        // Boutons de hauteur : cible tactile de 40 px au moins sur téléphone (classe ta-elev).
+        for (const b of Array.from(host.querySelectorAll('button'))) b.classList.add('ta-elev');
+        // Ouvrages : repliés derrière un bouton ; le libellé rappelle le choix en cours (ouvrage sur l'eau, giratoire).
         const wc = m.draft.waterCrossing;
-        act('Pont', 'Sur un lac ou une retenue : pont bas, 3 m au-dessus de l\'eau', () => m.setWaterCrossing('pont'), wc === 'pont');
-        act('Viaduc', 'Sur un lac ou une retenue : viaduc haut, 12 m au-dessus de l\'eau', () => m.setWaterCrossing('viaduc'), wc === 'viaduc');
-        act('Tunnel', 'Sur un lac ou une retenue : tunnel sous le fond du lac', () => m.setWaterCrossing('tunnel'), wc === 'tunnel');
-        act('Digue', 'Sur un lac ou une retenue : route sur un remblai qui coupe la retenue (coût selon le volume de remblai, 30 m de profondeur au plus)', () => m.setWaterCrossing('digue'), wc === 'digue');
-        // Giratoire : un bouton à trois états (petit Ø 36 m → grand Ø 56 m → retour au tracé droit).
         const rb = m.draft.mode === 'roundabout' ? m.draft.roundaboutSize : null;
-        act(rb === 'large' ? 'Grand giratoire' : 'Giratoire', 'Giratoire posé d\'un clic sur un carrefour ou une route (cliquer à nouveau : grand modèle, puis tracé droit)',
-          () => { if (rb === null) m.setRoundaboutSize('small'); else if (rb === 'small') m.setRoundaboutSize('large'); else m.setRoadMode('straight'); }, rb !== null);
+        const WC: Record<string, string> = { pont: 'Pont', viaduc: 'Viaduc', tunnel: 'Tunnel', digue: 'Digue' };
+        const cur = rb ? (rb === 'large' ? 'Grand giratoire' : 'Giratoire') : `sur l’eau : ${WC[wc] ?? 'Pont'}`;
+        grp();
+        act(`Ouvrages · ${cur} ${this.ouvragesOpen ? '▴' : '▾'}`, 'Ouvrages : franchissement d’un lac ou d’une retenue (pont, viaduc, tunnel, digue) et giratoire', () => { this.ouvragesOpen = !this.ouvragesOpen; }, this.ouvragesOpen || rb !== null);
+        if (this.ouvragesOpen) {
+          grp('Sur l’eau');
+          // Ouvrage sur un lac ou une retenue créés en jeu (tracé sans hauteur imposée).
+          act('Pont', 'Sur un lac ou une retenue : pont bas, 3 m au-dessus de l\'eau', () => m.setWaterCrossing('pont'), wc === 'pont');
+          act('Viaduc', 'Sur un lac ou une retenue : viaduc haut, 12 m au-dessus de l\'eau', () => m.setWaterCrossing('viaduc'), wc === 'viaduc');
+          act('Tunnel', 'Sur un lac ou une retenue : tunnel sous le fond du lac', () => m.setWaterCrossing('tunnel'), wc === 'tunnel');
+          act('Digue', 'Sur un lac ou une retenue : route sur un remblai qui coupe la retenue (coût selon le volume de remblai, 30 m de profondeur au plus)', () => m.setWaterCrossing('digue'), wc === 'digue');
+          grp();
+          // Giratoire : un bouton à trois états (petit Ø 36 m → grand Ø 56 m → retour au tracé droit).
+          act(rb === 'large' ? 'Grand giratoire' : 'Giratoire', 'Giratoire posé d\'un clic sur un carrefour ou une route (cliquer à nouveau : grand modèle, puis tracé droit)',
+            () => { if (rb === null) m.setRoundaboutSize('small'); else if (rb === 'small') m.setRoundaboutSize('large'); else m.setRoadMode('straight'); }, rb !== null);
+        }
       }
+      // Aide de l'outil dans la barre (ordinateur), juste avant « Terminer » : jamais tronquée en plein mot.
+      host = this.actions;
+      this.actions.append(el('span', { cls: 'ta-tail' }, el('span', { cls: 'ta-hint' })));
     } else if (t === 'terraform') {
       terrainToolActions(m, act);
     } else if (t === 'bulldoze') {
@@ -676,6 +708,10 @@ export class BuildBar {
       if ((t === 'road' || t === 'terraform') && m.finishRoad()) { this.d.tools.cancel(); return; }
       this.d.tools.setTool('select'); this.closeDrawer();
     });
+    this.actions.lastElementChild?.classList.add('ta-end');
+    // Outil Routes : « Terminer » reste accolé à l'aide (bloc insécable en fin de barre).
+    const tail = this.actions.querySelector('.ta-tail');
+    if (tail && this.actions.lastElementChild) tail.append(this.actions.lastElementChild);
     this.syncFinish();
   }
 

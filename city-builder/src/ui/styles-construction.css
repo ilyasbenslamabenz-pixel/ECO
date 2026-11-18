@@ -192,3 +192,26 @@
 #card-detail .cd-variants { flex-direction: row; flex-wrap: wrap; gap: 5px; }
 #card-detail .cd-variants h6 { flex-basis: 100%; }
 #card-detail .cd-var { width: auto; min-height: 28px; padding: 3px 9px 3px 6px; font-size: 11.5px; gap: 6px; }
+
+/* ---------- Barre d'options contextuelle (ordinateur) ----------
+   Aide sur sa propre ligne (jamais tronquée), puis les boutons en rangées : `.ta-row` force un retour à la ligne,
+   `.ta-lbl` titre un groupe, `.ta-break` sépare deux groupes d'une même rangée, `.ta-end` (Terminer) est poussé à droite. */
+.tool-actions .ta-row { flex-basis: 100%; height: 0; }
+.tool-actions .ta-tail { display: flex; align-items: center; gap: 10px; flex: 1 1 340px; min-width: 0; }
+.tool-actions .ta-grp { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.tool-actions .ta-lbl { align-self: center; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 2px 0 4px; white-space: nowrap; }
+@media (min-width: 761px) {
+  #tool-options { flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 10px; border-radius: var(--r-lg); max-width: 100%; }
+  #tool-options .tool-hint { white-space: normal; overflow: visible; font-size: 12.5px; line-height: 1.35; color: var(--text); }
+  #tool-options .tool-actions { justify-content: flex-start; align-items: center; row-gap: 6px; }
+  #tool-options .tool-actions:has(.ta-grp) { column-gap: 14px; }
+  .tool-actions .ta-end { margin-left: auto; }
+  .tool-actions .ta-break { margin: 4px 6px; }
+  /* Outil Routes : l'aide passe à droite des modes (copie `.ta-hint`), la ligne d'aide du haut est masquée. */
+  #tool-options:has(.ta-hint) > #tool-hint { display: none; }
+  .tool-actions .ta-hint { flex: 1 1 auto; min-width: 0; align-self: center; padding: 0 2px; font-size: 12.5px; line-height: 1.3; color: var(--text); }
+  .tool-actions .ta-hint .hint-tip { display: inline; color: var(--warn); }
+  /* Souris : boutons de hauteur à la taille des autres (la cible tactile de 40 px reste sur téléphone). */
+  .tool-actions button.ta-elev { min-height: 32px; min-width: 34px; }
+}
+@media (max-width: 760px) { .tool-actions .ta-lbl, .tool-actions .ta-hint { display: none; } }

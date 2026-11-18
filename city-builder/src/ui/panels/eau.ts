@@ -9,6 +9,8 @@ import { WATER_EXPORT, WATER_FACILITIES, WATER_IMPORT, type WaterSettings } from
 import { waterView, WATER_LEGEND, WATER_VIEW_MODES } from '../../render/water-network/view';
 import { el, fmt, money } from '../dom';
 import type { UiPanel, UiPanelApi } from './types';
+import { adviceEl, waterAdvice } from '../needs-advice';
+import { goBuild } from '../goto';
 
 type State = EauDelta | EauSnapshot;
 
@@ -93,6 +95,8 @@ function mount(root: HTMLElement, api: UiPanelApi): () => void {
       }
       parts.push(leg);
     }
+    // « Ce qu'il faut faire » : en tête, avant les calques.
+    parts.unshift(adviceEl(waterAdvice(s?.balance, s?.settings?.raccordement === true), goBuild));
     if (!s) {
       parts.push(raccordement());
       parts.push(el('p', { cls: 'muted', text: 'Service non créé. Posez une station de pompage (catalogue « public ») près d\'une rivière ou d\'un lac — à défaut, elle fore la nappe — puis une usine de potabilisation, un château d\'eau, une station d\'épuration et un émissaire. Canalisations et égouts suivent les routes.' }));

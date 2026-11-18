@@ -162,8 +162,12 @@ try {
   const m2 = await money(page);
   const up = await scr(page, sx, sz);
   await page.mouse.click(up.x, up.y);
-  const m3 = await waitMoney(page, m2);
+  // « Rue entière » : les tronçons sont élargis un à un (débits successifs) ; on attend le débit complet, comme
+  // pour le quadrillage, avant de comparer au coût annoncé.
+  await waitMoney(page, m2);
+  await page.waitForFunction(([a, c]) => a - window.__aube.lastStats.money >= c, [m2, p.cost], { timeout: 20000 }).catch(() => undefined);
   await page.waitForTimeout(600);
+  const m3 = await money(page);
   rd = await roads(page);
   check(m2 - m3 === p.cost, `différence facturée (${m2 - m3} ¢)`);
   check(rd.edges.some((e) => e.kind === 'avenue'), 'le tronçon est devenu une avenue sans démolition');

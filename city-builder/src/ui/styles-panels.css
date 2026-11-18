@@ -190,3 +190,13 @@
 .why-list .why-go .why-go-k { flex: 0 0 auto; font-size: 11px; font-weight: 700; color: var(--accent); white-space: nowrap; }
 .why-list .why-go:hover { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
 .why-list .why-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* « Ce qu'il faut faire » (src/ui/needs-advice.ts) : en tête des tableaux Énergie, Eau, Déchets. */
+.todo-box { --todo: var(--accent); display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 9px 10px 9px 12px;
+  border-radius: var(--r-md); background: color-mix(in srgb, var(--todo) 11%, transparent); box-shadow: inset 3px 0 0 var(--todo); }
+.todo-box.ok { --todo: var(--ok); } .todo-box.warn { --todo: var(--warn); } .todo-box.bad { --todo: var(--danger); }
+.todo-box .todo-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.4; color: var(--text); }
+.todo-box .todo-h { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--todo); }
+#dash-body .todo-box .todo-go, .panel .todo-box .todo-go, .todo-box .todo-go { flex: 0 0 auto; min-height: 32px; padding: 4px 12px; font-weight: 600; white-space: nowrap;
+  background: var(--clay, var(--accent)); border-color: transparent; color: var(--on-clay, #fff); }
+#dash-body .todo-box .todo-go:hover:not(:disabled), .todo-box .todo-go:hover:not(:disabled) { background: var(--clay-hi, var(--accent)); }

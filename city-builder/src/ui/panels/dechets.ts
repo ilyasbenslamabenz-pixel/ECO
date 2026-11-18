@@ -7,6 +7,8 @@
  * (src/render/plugins/dechets.ts : touche J, `window.__dechets.openPanel()`).
  */
 import type { DechetsDelta } from '../../shared/protocol-ext/dechets';
+import { adviceEl, wasteAdvice } from '../needs-advice';
+import { goBuild } from '../goto';
 import { facilityLabels, type WasteSummary } from '../../shared/waste/types';
 import { el, fmt, money } from '../dom';
 import type { UiPanel, UiPanelApi } from './types';
@@ -43,7 +45,8 @@ function rows(pairs: [string, string][]): HTMLDListElement {
 /** Contenu du panneau (DOM pur, testable) à partir d'une synthèse. */
 export function renderSummary(s: WasteSummary, dayIndex?: number): HTMLElement {
   const box = el('div', { cls: 'dechets-content' });
-  if (s.blocked) box.append(el('div', { cls: 'blocked', text: `Collecte arrêtée : ${s.blocked}` }));
+  // « Ce qu'il faut faire » reprend « Collecte arrêtée : … » (raison et bouton) : plus de bandeau en double.
+  box.append(adviceEl(wasteAdvice(s), goBuild));
   // Diagnostics en clair (ce qui cloche, et le réglage ou l'action à toucher).
   for (const g of s.diagnostics ?? []) {
     box.append(el('div', { cls: `diag ${g.level}`, attrs: { 'data-diag': g.level } }, g.text, ...(g.fix ? [el('small', { text: `→ ${g.fix}` })] : [])));

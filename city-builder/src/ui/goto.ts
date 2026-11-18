@@ -53,3 +53,6 @@ export function goTo(t: { open: string; tab?: string }): void {
   if (b && !isOpen) b.click();
   if (t.tab) requestAnimationFrame(() => document.querySelector<HTMLElement>(`#drawer-tabs [data-tab="${t.tab}"]:not(.active)`)?.click());
 }
+
+/** Ouvre la famille de construction `k` (bouton « Construire › » des tableaux de bord). */
+export function goBuild(k: keyof typeof BUILD): void { goTo({ open: BUILD[k] }); }

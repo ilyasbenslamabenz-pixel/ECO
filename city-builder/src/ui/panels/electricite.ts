@@ -15,6 +15,8 @@ import {
 import { powerView } from '../../shared/power/view';
 import { EXPORT_SPEC, IMPORT_SPEC, clampExportPrice, exportDemandShare } from '../../shared/power/model';
 import type { UiPanel, UiPanelApi } from './types';
+import { adviceHtml, powerAdvice } from '../needs-advice';
+import { goBuild } from '../goto';
 
 /* --------------------------------- Formats --------------------------------- */
 
@@ -71,7 +73,7 @@ const CSS = `
 
 function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta): string {
   if (!s) {
-    return `<p class="muted">Aucune installation électrique. Construisez une centrale (onglet Énergie) au bord d'une route :
+    return `${adviceHtml(powerAdvice(undefined, st))}<p class="muted">Aucune installation électrique. Construisez une centrale (onglet Énergie) au bord d'une route :
       le courant suit les routes et alimente tous les bâtiments du réseau routier connecté, sans rien poser d'autre.
       Centrale thermique, éolienne, ferme solaire ou barrage (au bord d'un cours d'eau), batteries pour la nuit ; les
       lignes haute tension ne servent qu'à relier un site éloigné. Pour démarrer, le raccordement au réseau voisin suffit.</p>`;
@@ -84,7 +86,9 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
   const cls = s.byClass.filter((b) => b.buildings > 0).map((b) => `<tr><td>${esc(CLASS_LABELS_FR[b.cls])}</td><td>${fmtPower(b.demandKw)}</td><td>${fmtPower(b.deliveredKw)}</td>
       <td class="${b.cut ? 'warn' : 'ok'}">${b.cut}</td><td class="${b.unlinked ? 'warn' : 'muted'}">${b.unlinked}</td></tr>`).join('');
   const bud = st.budget;
-  return `${isolatedWarning(s, st)}${zeroReason(s, st)}${raccordCta(s, st)}
+  // Sans aucune centrale, « Ce qu'il faut faire » dit déjà tout : l'explication « Production à 0 » ferait doublon.
+  const hasPlant = (st.facilities ?? []).some((f) => f.kind !== 'poste' && f.kind !== 'batterie');
+  return `${adviceHtml(powerAdvice(s, st))}${isolatedWarning(s, st)}${hasPlant ? zeroReason(s, st) : ''}${raccordCta(s, st)}
   <div class="kpis">
     <div class="kpi"><span>Production</span><b data-k="production">${fmtPower(s.producedKw)}</b><span>dispo. ${fmtPower(s.availableKw)}</span></div>
     <div class="kpi"><span>Consommation</span><b data-k="demande">${fmtPower(s.demandKw)}</b><span>livré ${fmtPower(s.deliveredKw)} · pertes ${fmtPower(s.lossesKw)}</span></div>
@@ -280,6 +284,7 @@ function mountPanel(root: HTMLElement, api: UiPanelApi): () => void {
     const act = b.dataset['act'];
     const sel = (id: string): number => Number((root.querySelector(`#${id}`) as HTMLSelectElement | null)?.value);
     const set = state.settings;
+    if (act === 'goto') { const k = b.dataset['build']; if (k === 'energy' || k === 'road') goBuild(k); return; }
     if (act === 'close') { root.dispatchEvent(new CustomEvent('elec-close', { bubbles: true })); return; }
     if (act === 'overlay') { powerView.setOverlay(!powerView.overlay); draw(); return; }
     if ((act === 'prio-up' || act === 'prio-down') && set) {
