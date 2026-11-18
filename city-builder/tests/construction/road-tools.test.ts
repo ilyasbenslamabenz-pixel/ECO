@@ -237,9 +237,16 @@ test('Améliorer : rue → avenue facturée, refus motivé par un bâtiment, sen
   assert.equal(edgeKind(e1), 'avenue');
   assert.equal(port.sim.economy.money, money0 - Math.round(diff));
   assert.ok(notes.some((n) => /Rue \(2 voies\) → Avenue/.test(n)), notes.join(' | '));
-  // Une maison au bord : l'élargissement en boulevard est refusé avec son nom ; la maison reste.
+  // Une maison au bord. Option « Démolir les gênants » (active par défaut) : l'aperçu annonce la démolition.
   const b = await port.send('placeBuilding', { assetId: 'maison_test', x: -100, z: 11.5 + 0.6 + 8, rot: 2 });
   assert.ok(b.buildingId > 0);
+  assert.equal(tools.upgradeDemolish, true, 'option active par défaut');
+  tools.hover({ x: -100, z: 1 }, { ox: -100, oy: 300, oz: 1, dx: 0, dy: -1, dz: 0 });
+  await settle();
+  const q0 = tools.preview;
+  assert.ok(q0.kind === 'upgrade' && q0.validity === 'ok' && /démolit 1 bâtiment/.test(q0.message), q0.kind === 'upgrade' ? q0.message : q0.kind);
+  // Option désactivée : l'élargissement en boulevard est refusé avec son nom ; la maison reste.
+  tools.setUpgradeDemolish(false);
   tools.hover({ x: -100, z: 1 }, { ox: -100, oy: 300, oz: 1, dx: 0, dy: -1, dz: 0 });
   await settle();
   const q = tools.preview;

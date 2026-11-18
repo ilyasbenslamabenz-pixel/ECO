@@ -11,6 +11,7 @@ import { iconEl } from './icons';
 import { journal } from './notify';
 import { lastAlertes } from '../render/plugins/alertes';
 import { ALERT_BITS, type AlertKind } from '../shared/protocol-ext/alertes';
+import { BUILD, goTo } from './goto';
 
 export type ProblemSeverity = 'urgent' | 'important';
 
@@ -25,8 +26,10 @@ export interface Problem {
   /** Poids de tri à gravité égale (bâtiments touchés, ou équivalent). */
   weight: number;
   icon: string;
-  /** Sélecteur du bouton qui ouvre l'endroit où le problème se règle. */
+  /** Sélecteur du bouton qui ouvre l'endroit où le problème se règle (de préférence l'outil qui le règle). */
   open: string;
+  /** Onglet du tiroir de construction à sélectionner après l'ouverture (ex. « securite » dans Services). */
+  tab?: string;
   /** Alerte localisée : la caméra se centre sur les bâtiments qui portent ce bit. */
   alert?: AlertKind;
 }
@@ -41,15 +44,15 @@ interface ReportLike {
   };
 }
 
-const ALERT_PROBLEMS: { kind: AlertKind; severity: ProblemSeverity; icon: string; open: string; short: string; text: (n: number) => string }[] = [
-  { kind: 'fire', severity: 'urgent', icon: 'fire', open: '#sidebar [data-dash="services"]', short: 'En feu', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} en feu` },
-  { kind: 'power', severity: 'urgent', icon: 'energy', open: '#sidebar [data-dash="energy"]', short: 'Sans électricité', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans électricité` },
-  { kind: 'water', severity: 'urgent', icon: 'water', open: '#sidebar [data-dash="water"]', short: 'Sans eau', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans eau` },
+const ALERT_PROBLEMS: { kind: AlertKind; severity: ProblemSeverity; icon: string; open: string; tab?: string; short: string; text: (n: number) => string }[] = [
+  { kind: 'fire', severity: 'urgent', icon: 'fire', open: BUILD.services, tab: 'securite', short: 'En feu', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} en feu` },
+  { kind: 'power', severity: 'urgent', icon: 'energy', open: BUILD.energy, short: 'Sans électricité', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans électricité` },
+  { kind: 'water', severity: 'urgent', icon: 'water', open: BUILD.water, short: 'Sans eau', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans eau` },
   { kind: 'road', severity: 'important', icon: 'road', open: '#toolbar [data-tool="road"]', short: 'Sans accès routier', text: (n) => `${n} bâtiment${n > 1 ? 's' : ''} sans accès routier` },
-  { kind: 'waste', severity: 'important', icon: 'waste', open: '#sidebar [data-dash="waste"]', short: 'Bacs pleins', text: (n) => `Bacs pleins : ${n}` },
-  { kind: 'isolated', severity: 'important', icon: 'truck', open: '#sidebar [data-dash="waste"]', short: 'Dépôt de déchets isolé', text: () => 'Dépôt de déchets isolé' },
+  { kind: 'waste', severity: 'important', icon: 'waste', open: BUILD.waste, short: 'Bacs pleins', text: (n) => `Bacs pleins : ${n}` },
+  { kind: 'isolated', severity: 'important', icon: 'truck', open: '#toolbar [data-tool="road"]', short: 'Dépôt de déchets isolé', text: () => 'Dépôt de déchets isolé' },
   { kind: 'ruin', severity: 'important', icon: 'demolish', open: '#sidebar [data-dash="services"]', short: 'Ruines à reconstruire', text: (n) => `${n} ruine${n > 1 ? 's' : ''} à reconstruire` },
-  { kind: 'crime', severity: 'important', icon: 'police', open: '#sidebar [data-dash="services"]', short: 'Criminalité élevée', text: (n) => `Criminalité élevée : ${n} bâtiment${n > 1 ? 's' : ''}` },
+  { kind: 'crime', severity: 'important', icon: 'police', open: BUILD.services, tab: 'securite', short: 'Criminalité élevée', text: (n) => `Criminalité élevée : ${n} bâtiment${n > 1 ? 's' : ''}` },
 ];
 
 const nf = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
@@ -65,17 +68,17 @@ export function collectProblems(counts: Partial<Record<AlertKind, number>> | nul
   // Réserve de courant faible : prévenir AVANT la baisse de régime des commerces et de l'industrie.
   if (powerReserve !== undefined) {
     const pct = Math.round(powerReserve * 100);
-    out.push({ id: 'reserve-courant', severity: 'important', short: 'Réserve de courant faible', count: `${pct} %`, weight: 1, icon: 'energy', open: '#sidebar [data-dash="energy"]',
+    out.push({ id: 'reserve-courant', severity: 'important', short: 'Réserve de courant faible', count: `${pct} %`, weight: 1, icon: 'energy', open: BUILD.energy,
       text: `Réserve de courant faible : ${pct} % de marge (au plus bas sur 24 h). Au-delà, commerces et industrie tournent au ralenti et embauchent moins. Ajoutez une centrale (Énergie).` });
   }
   // Aucun dépôt de camions-bennes : un seul message clair (pas d'icône sur chaque bâtiment).
   if (noCollection > 0) {
     out.push({ id: 'collecte', severity: 'important', text: `Aucune collecte des déchets : ${noCollection} bâtiment${noCollection > 1 ? 's ont leurs' : ' a ses'} bacs pleins. Construisez un dépôt de camions-bennes et une décharge reliés aux rues (aucun branchement : les camions passent par les routes).`,
-      short: 'Aucune collecte des déchets', count: nf.format(noCollection), weight: noCollection, icon: 'waste', open: '#sidebar [data-dash="waste"]' });
+      short: 'Aucune collecte des déchets', count: nf.format(noCollection), weight: noCollection, icon: 'waste', open: BUILD.waste });
   }
   for (const a of ALERT_PROBLEMS) {
     const n = counts?.[a.kind] ?? 0;
-    if (n > 0) out.push({ id: a.kind, severity: a.severity, text: a.text(n), short: a.short, count: nf.format(n), weight: n, icon: a.icon, open: a.open, alert: a.kind });
+    if (n > 0) out.push({ id: a.kind, severity: a.severity, text: a.text(n), short: a.short, count: nf.format(n), weight: n, icon: a.icon, open: a.open, ...(a.tab ? { tab: a.tab } : {}), alert: a.kind });
   }
   const balance = report?.economy?.forecast?.balance;
   if (typeof balance === 'number' && balance < 0) {
@@ -87,7 +90,7 @@ export function collectProblems(counts: Partial<Record<AlertKind, number>> | nul
   const ur = report?.demography?.unemploymentRate ?? 0;
   if (pop >= 50 && ur >= 0.08) {
     out.push({ id: 'chomage', severity: ur >= 0.2 ? 'urgent' : 'important', text: `Chômage ${Math.round(ur * 100)} %`, short: 'Chômage', count: `${Math.round(ur * 100)} %`, weight: Math.round(ur * pop),
-      icon: 'people', open: '#sidebar [data-dash="population"]' });
+      icon: 'people', open: BUILD.zones });
   }
   const cov = report?.demography?.cityServices?.coverage;
   if (cov && pop >= 100) {
@@ -96,7 +99,7 @@ export function collectProblems(counts: Partial<Record<AlertKind, number>> | nul
       const name = { police: 'police', fire: 'pompiers', health: 'soins' }[worst.k];
       const share = Math.round((1 - worst.v) * 100);
       out.push({ id: `couverture-${worst.k}`, severity: 'important', text: `Pas de couverture ${name} : ${share} % des habitants`, short: `Sans ${name === 'soins' ? 'soins' : name} à proximité`, count: `${share} %`, weight: Math.round((1 - worst.v) * pop),
-        icon: worst.k === 'police' ? 'police' : worst.k === 'fire' ? 'fire' : 'hospital', open: '#sidebar [data-dash="services"]' });
+        icon: worst.k === 'police' ? 'police' : worst.k === 'fire' ? 'fire' : 'hospital', open: BUILD.services, tab: worst.k === 'health' ? 'sante' : 'securite' });
     }
   }
   if (trafficAlert) out.push({ id: 'trafic', severity: 'important', text: 'Circulation très lente', short: 'Circulation très lente', count: '!', weight: 1, icon: 'transport', open: '#sidebar [data-dash="transport"]' });
@@ -137,9 +140,7 @@ export function initProblems(): void {
   let current: Problem[] = [];
 
   const run = (p: Problem): void => {
-    const b = document.querySelector<HTMLElement>(p.open);
-    // Le tableau de bord n'est ouvert que s'il ne l'est pas déjà (le bouton du rail est une bascule).
-    if (b && !b.classList.contains('active')) b.click();
+    goTo(p);
     if (p.alert) {
       const f = alertFocus(p.alert);
       const dbg = (window as unknown as { __aube?: DebugLike }).__aube;

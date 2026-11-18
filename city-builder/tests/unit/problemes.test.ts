@@ -40,3 +40,15 @@ test('réserve de courant faible : prévenue avant les coupures, ouvre le tablea
   assert.match(p[0]!.open, /energy/);
   assert.equal(collectProblems(null, null, 1e6, false, 0, undefined).length, 0);
 });
+
+test('action directe : chaque problème ouvre l’outil qui le règle (tiroir de construction et onglet)', () => {
+  const p = collectProblems({ power: 2, water: 1, waste: 1, crime: 3, fire: 1 }, { demography: { population: 400, unemploymentRate: 0.15, cityServices: { coverage: { police: 1, fire: 1, health: 0.2 } } } }, 1e6, false);
+  const by = (id: string) => p.find((x) => x.id === id)!;
+  assert.match(by('power').open, /#toolbar \[data-cat="energy"\]/);
+  assert.match(by('water').open, /data-cat="water"/);
+  assert.match(by('waste').open, /data-cat="waste"/);
+  assert.equal(by('crime').tab, 'securite');
+  assert.equal(by('fire').tab, 'securite');
+  assert.match(by('chomage').open, /data-cat="zones"/);
+  assert.equal(by('couverture-health').tab, 'sante');
+});

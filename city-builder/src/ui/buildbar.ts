@@ -21,6 +21,7 @@ import { zonageDrawer } from './panels/zonage';
 import { busEditor } from './bus-editor';
 import { cardInfo } from './card-info';
 import { groupAssets } from './build-groups';
+import { CardDetail } from './card-detail';
 import { renderTerrainDrawer, terrainHint, terrainToolActions } from './terrain-drawer';
 
 export type DrawerId = 'road' | 'building' | 'services' | 'transport' | 'environment' | 'zones' | 'energy' | 'water' | 'waste' | 'terrain';
@@ -239,6 +240,14 @@ export class BuildBar {
   private tab: Record<string, string> = {};
   /** Onglet « Lignes de bus » ajouté après les onglets du catalogue du tiroir Transports. */
   private pendingBusChip: HTMLButtonElement | null = null;
+  /** Fiche détaillée au survol d'une carte (tout ce que la carte tronque, variantes cliquables). */
+  private detail = new CardDetail(() => ({
+    thumb: (id) => this.d.thumbs?.get(id) ?? null,
+    place: (a, v) => { this.d.tools.setTool('building', { assetId: a.id }); this.d.machine.setVariant(v); this.closeDrawer(); },
+    lock: (id) => progressionView.assetLock(id),
+    category: this.detailCategory,
+  }));
+  private detailCategory = '';
 
   constructor(private d: BuildBarDeps) {
     // Active les outils réellement disponibles ; les catégories prévues ouvrent un aperçu grisé (avec leur phase).
@@ -309,6 +318,7 @@ export class BuildBar {
   }
 
   closeDrawer(): void {
+    this.detail.hide();
     if (this.open) DRAWER_PROVIDERS[this.open]?.closed?.();
     busEditor.closed();
     this.open = null;
@@ -387,6 +397,7 @@ export class BuildBar {
       }
       // Sous-catégories : groupes titrés dans la rangée (une seule rangée sans titre si l'onglet n'en a pas).
       for (const g of groupAssets(current.id, assetsForTab(this.d.catalog, current))) {
+        this.detailCategory = current.label;
         const cards = g.assets.map((a) => this.card(a, current.placeable, current.color));
         if (!g.label) { this.body.append(...cards); continue; }
         this.body.append(el('section', { cls: 'card-grp', attrs: { 'aria-label': g.label, style: `--ic:${current.color}` } },
@@ -438,6 +449,11 @@ export class BuildBar {
         stats.length ? el('span', { cls: 'kf' }, ...stats.map((x) => el('span', { cls: 'st' }, iconEl(x.icon), el('span', { text: x.text })))) : null,
         el('span', { cls: 'sz', text: fp }),
         info.depends ? el('span', { cls: 'dep' }, iconEl('info'), el('span', { text: info.depends })) : null));
+    // Fiche détaillée : survol (souris) ou focus (clavier) ; elle reste ouverte quand la souris passe dessus.
+    b.addEventListener('mouseenter', () => this.detail.show(a, b, placeable));
+    b.addEventListener('focus', () => this.detail.show(a, b, placeable));
+    b.addEventListener('mouseleave', () => this.detail.hideSoon());
+    b.addEventListener('blur', () => this.detail.hideSoon());
     const lockAt = placeable ? progressionView.assetLock(a.id) : null;
     if (lockAt) {
       // Déblocages progressifs : modèle encore verrouillé (la simulation refuse aussi la pose).
@@ -451,7 +467,8 @@ export class BuildBar {
       thumb.append(el('span', { cls: 'badge' }, phaseBadge(DECOR_PLACEMENT_PHASE)));
       // Pas de transparence sur la vignette elle-même : le modèle reste lisible.
     } else {
-      b.dataset['tip'] = `${a.nameFr} — ${money(a.cost)}, entretien ${money(a.upkeepPerMonth)}/mois${a.variants.length > 1 ? ` · ${a.variants.length} variantes` : ''}${info.lines.length ? ` · ${info.lines.join(' · ')}` : ''}${cap && info.lines.length ? ` · ${cap}` : ''}${info.depends ? ` — ${info.depends}` : ''}`;
+      // Pas d'info-bulle : la fiche détaillée (survol) montre tout, l'info-bulle s'affichait en double par-dessus.
+      b.setAttribute('aria-label', `${a.nameFr} — ${money(a.cost)}, entretien ${money(a.upkeepPerMonth)}/mois${cap ? ` · ${cap}` : ''}`);
       b.addEventListener('click', () => {
         this.d.tools.setTool('building', { assetId: a.id });
         // On libère la vue pour viser (le tiroir se rouvre d'un clic ; la barre d'options de l'outil prend le relais).
@@ -626,7 +643,7 @@ export class BuildBar {
       if (sub === 'upgrade') {
         for (const [id, label] of Object.entries(UPGRADE_LABELS) as [UpgradeTarget, string][]) act(label, UPGRADE_TIPS[id as keyof typeof UPGRADE_TIPS] ?? label, () => m.setUpgradeTarget(id), m.upgradeTarget === id);
         // Élargir une rue bordée de maisons : sans cette option, le premier bâtiment riverain bloque tout.
-        act('Démolir les bâtiments gênants', 'Gamme + : les bâtiments qui empiètent sur la nouvelle emprise sont démolis (nombre affiché avant de valider ; les lots du zonage repoussent en retrait). Désactivé : l\'élargissement est refusé', () => m.setUpgradeDemolish(!m.upgradeDemolish), m.upgradeDemolish);
+        act('Démolir les gênants', 'Gamme + : les bâtiments qui empiètent sur la nouvelle emprise sont démolis (nombre affiché avant de valider ; les lots du zonage repoussent en retrait). Désactivé : l\'élargissement est refusé', () => m.setUpgradeDemolish(!m.upgradeDemolish), m.upgradeDemolish);
       }
       if (sub === 'draw') {
         // Hauteur du tracé (pas de 4 m) : viaduc / passage supérieur au-dessus, tranchée / tunnel en dessous.

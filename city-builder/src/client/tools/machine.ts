@@ -257,8 +257,12 @@ export class ConstructionTools {
   setGridBlock(b: number): void { this.gridBlock = b; this.gridKey = ''; this.refresh(); }
   setGuides(on: boolean): void { this.guides = on; this.refresh(); }
   setUpgradeTarget(t: UpgradeTarget): void { this.upgradeTarget = t; this.upgradeKey = ''; this.refresh(); }
-  /** Outil Améliorer : un élargissement démolit les bâtiments riverains qui gênent (sinon il est refusé). */
-  upgradeDemolish = false;
+  /**
+   * Outil Améliorer : un élargissement démolit les bâtiments riverains qui gênent (sinon il est refusé). Activé par
+   * défaut : l'aperçu annonce « démolit N bâtiments » avant le clic (le bouton, sur la 2e ligne des options, passait
+   * inaperçu et chaque élargissement d'une rue zonée était refusé).
+   */
+  upgradeDemolish = true;
   setUpgradeDemolish(on: boolean): void { this.upgradeDemolish = on; this.upgradeKey = ''; this.refresh(); }
 
   /** Vrai si un tracé (ou un quadrillage) est en cours : le bouton « Terminer » l'arrête. */
@@ -306,6 +310,13 @@ export class ConstructionTools {
   setAutoAlign(on: boolean): void { this.autoAlign = on; this.refresh(); }
 
   setMagnet(on: boolean): void { this.magnet = on; this.refresh(); }
+
+  /** Variante choisie dans la fiche du menu de construction (index borné aux variantes du modèle courant). */
+  setVariant(i: number): void {
+    if (!this.asset || this.asset.variants.length === 0) return;
+    this.variant = Math.max(0, Math.min(this.asset.variants.length - 1, i | 0));
+    this.refresh();
+  }
 
   cycleVariant(): void {
     if (!this.asset || this.asset.variants.length === 0) return;

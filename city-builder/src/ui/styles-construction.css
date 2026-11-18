@@ -137,3 +137,58 @@
   .grp-h { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .drawer-body .card { transition: none; } .drawer-body .card:hover:not(:disabled) { transform: none; } }
+
+/* ==================== Fiche détaillée d'un modèle (#card-detail, src/ui/card-detail.ts) ====================
+   Au-dessus du tiroir, alignée sur la carte survolée : rien n'est tronqué (nom, dépendances, variantes). */
+#card-detail {
+  position: fixed; z-index: 30; width: 360px; overflow-y: auto; padding: 12px 14px 12px;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .38); font-size: var(--fs-sm); color: var(--text);
+  display: flex; flex-direction: column; gap: 9px; animation: pn-in var(--dur-2) var(--ease);
+  scrollbar-width: thin;
+}
+#card-detail.hidden { display: none; }
+#card-detail header { display: flex; flex-direction: column; gap: 2px; }
+#card-detail .cd-kicker { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+#card-detail h4 { margin: 0; font-size: var(--fs-lg); font-weight: 650; color: var(--text-strong); line-height: 1.25; }
+#card-detail .cd-thumb { aspect-ratio: 16 / 9; border-radius: var(--r-md); background: radial-gradient(ellipse at 50% 30%, #2a3644, #141a21); overflow: hidden; display: grid; place-items: center; }
+#card-detail .cd-thumb img { width: 100%; height: 100%; object-fit: contain; }
+#card-detail .cd-rows { display: grid; grid-template-columns: auto 1fr; gap: 0 12px; margin: 0; }
+#card-detail .cd-rows dt, #card-detail .cd-rows dd { padding: 4px 0; border-bottom: 1px solid var(--line); margin: 0; }
+#card-detail .cd-rows dt { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+#card-detail .cd-rows dt svg.ic { width: 14px; height: 14px; }
+#card-detail .cd-rows dd { text-align: right; color: var(--text-strong); font-weight: 600; font-variant-numeric: tabular-nums; }
+#card-detail ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#card-detail li { display: flex; align-items: flex-start; gap: 7px; line-height: 1.35; }
+#card-detail li svg.ic { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--accent); }
+#card-detail .cd-stats li { font-weight: 600; color: var(--text-strong); }
+#card-detail .cd-fx li.bad svg.ic { color: var(--warn); }
+#card-detail .cd-dep, #card-detail .cd-lock { display: flex; gap: 7px; margin: 0; line-height: 1.4; color: var(--text); }
+#card-detail .cd-dep svg.ic, #card-detail .cd-lock svg.ic { flex: 0 0 auto; width: 14px; height: 14px; margin-top: 2px; color: var(--accent-2); }
+#card-detail .cd-lock { color: var(--warn); }
+#card-detail .cd-variants { display: flex; flex-direction: column; gap: 5px; }
+#card-detail h6 { margin: 2px 0 0; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+#card-detail .cd-var { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 34px; padding: 5px 9px; text-align: left; justify-content: flex-start;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: rgba(var(--ink), .035); color: var(--text-strong); font-size: var(--fs-sm); font-weight: 550; }
+#card-detail .cd-var:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+#card-detail .cd-var:disabled { opacity: .7; }
+#card-detail .cd-sw { display: inline-flex; flex: 0 0 auto; }
+#card-detail .cd-sw i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(var(--ink), .35); margin-left: -4px; }
+#card-detail .cd-sw i:first-child { margin-left: 0; }
+#card-detail .cd-sw i[style*="transparent"] { background: repeating-linear-gradient(45deg, rgba(var(--ink), .25) 0 3px, transparent 3px 6px) !important; }
+#card-detail .cd-hint { margin: 0; font-size: 11px; color: var(--muted); }
+:root[data-theme="clair"] #card-detail .cd-thumb { background: radial-gradient(ellipse at 50% 30%, #f3f6fa, #d9e1ea); }
+@media (max-width: 760px) { #card-detail { display: none !important; } }
+@media (prefers-reduced-motion: reduce) { #card-detail { animation: none; } }
+/* Contenu plus haut que la place au-dessus du tiroir : la fiche défile, rien ne se tasse (la vignette restait à 0 px). */
+#card-detail > * { flex-shrink: 0; }
+/* Fiche compacte : vignette à côté du titre (prix dessous), variantes en pastilles sur plusieurs lignes. */
+#card-detail { width: 400px; }
+#card-detail header { display: grid; grid-template-columns: 112px 1fr; gap: 12px; align-items: center; }
+#card-detail .cd-thumb { width: 112px; height: 84px; aspect-ratio: auto; }
+#card-detail .cd-head { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+#card-detail .cd-price b { color: var(--accent); font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
+#card-detail .cd-price span { color: var(--muted); font-size: 11.5px; }
+#card-detail .cd-variants { flex-direction: row; flex-wrap: wrap; gap: 5px; }
+#card-detail .cd-variants h6 { flex-basis: 100%; }
+#card-detail .cd-var { width: auto; min-height: 28px; padding: 3px 9px 3px 6px; font-size: 11.5px; gap: 6px; }

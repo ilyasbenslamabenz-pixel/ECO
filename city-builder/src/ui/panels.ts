@@ -4,6 +4,7 @@
  * (occupants réels, trafic, trajets) est affiché avec sa phase, jamais inventé.
  * Propriétaire : agent construction/caméra/UI.
  */
+import { goTo, whyTarget } from './goto';
 import type { BuildingRecord } from '../shared/contracts';
 import type { BuildingOccupancy } from '../sim/demography';
 import { alertMaskOf } from '../render/plugins/alertes';
@@ -205,6 +206,16 @@ export class InfoPanel {
     }
   }
 
+  /** Conseil de la fiche « Pourquoi » : cliquable quand un outil le règle (ouvre directement le bon tiroir / onglet). */
+  private whyAction(key: string, text: string): HTMLElement {
+    const t = whyTarget(key);
+    if (!t) return el('span', { cls: 'why-act', text });
+    const b = el('button', { cls: 'why-act why-go', attrs: { type: 'button', 'data-go': t.open } }, el('span', { text }), el('span', { cls: 'why-go-k', text: `${t.label} ›` }));
+    b.dataset['tip'] = `Ouvrir ${t.label}`;
+    b.addEventListener('click', () => goTo(t));
+    return b;
+  }
+
   /** Fiche « Pourquoi » : raisons classées par importance, action conseillée pour chacune (src/ui/why.ts). */
   private renderWhy(o: BuildingOccupancy, alertMask: number, isService: boolean): void {
     const sections = explainBuilding(o, alertMask, { isService });
@@ -212,7 +223,7 @@ export class InfoPanel {
     for (const s of sections) {
       nodes.push(el('section', { cls: 'why-box', attrs: { 'data-why': s.kind } },
         el('p', { cls: 'why-title', text: s.title }),
-        el('ul', { cls: 'why-list' }, ...s.items.map((it) => el('li', { cls: it.severity, attrs: { 'data-key': it.key } }, el('span', { cls: 'why-cause', text: it.cause }), ...(it.action ? [el('span', { cls: 'why-act', text: it.action })] : []))))));
+        el('ul', { cls: 'why-list' }, ...s.items.map((it) => el('li', { cls: it.severity, attrs: { 'data-key': it.key } }, el('span', { cls: 'why-cause', text: it.cause }), ...(it.action ? [this.whyAction(it.key, it.action)] : []))))));
     }
     // Logement habité sans raison de mécontentement notable : le dire aussi (le joueur sait que tout va bien).
     if (!sections.length && o.diagnosis && o.residents > 0 && o.diagnosis.factors.length) {
