@@ -80,7 +80,9 @@ export class ThumbnailRenderer implements ThumbnailSource {
     this.running = true;
     window.clearTimeout(this.idleTimer);
     while (this.queue.length) {
-      const job = this.queue.shift()!;
+      // Dernier demandé, premier servi : les cartes qui viennent d'apparaître (onglet affiché) passent devant
+      // celles d'un onglet déjà quitté.
+      const job = this.queue.pop()!;
       await job();
       // Laisse respirer la boucle de rendu principale entre deux vignettes.
       await new Promise((r) => setTimeout(r, 0));

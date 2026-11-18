@@ -71,6 +71,15 @@ const CSS = `
 
 /* --------------------------------- Panneau --------------------------------- */
 
+/**
+ * Sections repliables (détail technique sous « Ce qu'il faut faire ») : fermées par défaut, état conservé entre
+ * deux rendus (le panneau est reconstruit à chaque relevé).
+ */
+const openSecs = new Set<string>();
+const sec = (id: string, title: string, html: string): string => (html.trim()
+  ? `<details class="elec-sec" data-sec="${id}" ${openSecs.has(id) ? 'open' : ''}><summary>${title}</summary>${html}</details>` : '');
+
+
 function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta): string {
   if (!s) {
     return `${adviceHtml(powerAdvice(undefined, st))}<p class="muted">Aucune installation électrique. Construisez une centrale (onglet Énergie) au bord d'une route :
@@ -99,12 +108,12 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
   ${renderExport(s, st)}
   <p class="muted" style="margin:6px 0">Relevé ${hhmm(s.at)} · vent ${nf1.format(s.windMs)} m/s (${s.windSource === 'meteo' ? 'météo' : s.windSource === 'force' ? 'forcé' : 'profil'}) · soleil ${(s.sun * 100).toFixed(0)} %
     · sans courant : ${nf0.format(s.jobsWithoutPower)} emplois, ${nf0.format(s.residentsWithoutPower)} habitants</p>
-  <h4>Part par source</h4>
+  ${sec('detail', 'Production et consommation en détail', `<h4>Part par source</h4>
   <div class="bar">${bar}</div>
   <table><tr><th>Source</th><th>Produit</th><th>Dispo / nominal</th><th>Part</th></tr>${src}</table>
   <h4>Consommation et délestage</h4>
-  <table><tr><th>Classe</th><th>Demande</th><th>Livré</th><th>Coupés</th><th>Hors réseau</th></tr>${cls}</table>
-  ${bud ? `<h4>Budget du service</h4>
+  <table><tr><th>Classe</th><th>Demande</th><th>Livré</th><th>Coupés</th><th>Hors réseau</th></tr>${cls}</table>`)}
+  ${bud ? sec('budget', 'Budget du service', `
   <table>
     <tr><td>Entretien du réseau (mois)</td><td>${fmtChf(bud.upkeepActual)} <span class="muted">/ ${fmtChf(bud.upkeepNominal)} nominal</span></td></tr>
     <tr><td>Entretien des installations (catalogue)</td><td>${fmtChf(bud.facilitiesUpkeep)}</td></tr>
@@ -114,7 +123,7 @@ function renderSummary(s: ElectriciteSummary | undefined, st: ElectriciteDelta):
     <tr><td>Investissements (lignes, toitures)</td><td>${fmtChf(bud.investments)}</td></tr>
     <tr><td>Ce mois : produit / livré / délesté</td><td>${fmtEnergy(bud.monthProducedKwh)} / ${fmtEnergy(bud.monthDeliveredKwh)} / ${fmtEnergy(bud.monthShedKwh)}</td></tr>
     <tr><td>Pannes : ce mois / mois passé</td><td>${bud.monthFailures} / ${bud.lastMonthFailures}</td></tr>
-  </table>` : ''}`;
+  </table>`) : ''}`;
 }
 
 /**
@@ -267,7 +276,7 @@ function mountPanel(root: HTMLElement, api: UiPanelApi): () => void {
     const keepScroll = root.scrollTop;
     root.innerHTML = `<h3>⚡ Énergie <span><button data-act="overlay" class="${powerView.overlay ? 'primary' : ''}">Calque réseau</button>
       <button data-act="close" aria-label="Fermer">✕</button></span></h3>
-      ${renderSummary(state.summary, state)}${renderSettings(state)}${renderNetwork(state)}${renderLog(state)}
+      ${renderSummary(state.summary, state)}${sec('reglages', 'Réglages (raccordement, vente, entretien, délestage)', renderSettings(state).replace('<h4>Réglages</h4>', ''))}${sec('reseau', 'Installations et lignes', renderNetwork(state))}${sec('journal', 'Journal', renderLog(state).replace('<h4>Journal</h4>', ''))}
       ${state.municipal === 'integre' ? '<p class="muted" style="margin-top:8px">Contrat municipal hébergé par le module (module « municipal » non enregistré).</p>' : ''}`;
     root.scrollTop = keepScroll;
   };
@@ -278,6 +287,8 @@ function mountPanel(root: HTMLElement, api: UiPanelApi): () => void {
     const r = await run('state');
     if (r && typeof r === 'object') { state = r as ElectriciteDelta; draw(); }
   };
+  // Sections repliables : mémorise l'état ouvert / fermé (l'événement « toggle » ne remonte pas : capture).
+  root.addEventListener('toggle', (ev) => { const d = ev.target as HTMLDetailsElement; const id = d.dataset?.['sec']; if (id) { if (d.open) openSecs.add(id); else openSecs.delete(id); } }, true);
   const onClick = (ev: Event): void => {
     const b = (ev.target as HTMLElement).closest('button');
     if (!b) return;

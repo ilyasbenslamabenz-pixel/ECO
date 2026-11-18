@@ -200,3 +200,14 @@
 #dash-body .todo-box .todo-go, .panel .todo-box .todo-go, .todo-box .todo-go { flex: 0 0 auto; min-height: 32px; padding: 4px 12px; font-weight: 600; white-space: nowrap;
   background: var(--clay, var(--accent)); border-color: transparent; color: var(--on-clay, #fff); }
 #dash-body .todo-box .todo-go:hover:not(:disabled), .todo-box .todo-go:hover:not(:disabled) { background: var(--clay-hi, var(--accent)); }
+/* « Construire › » dans l'en-tête d'un tableau de bord de service. */
+.panel-head .ph-build { min-height: 30px; padding: 3px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--accent-soft); border-color: rgba(var(--accent-rgb), .55); color: var(--text-strong); }
+.panel-head .ph-build:hover:not(:disabled) { background: rgba(var(--accent-rgb), .28); }
+/* Tableau Énergie : sections repliables (détail technique fermé par défaut). */
+.elec details.elec-sec { margin: 8px 0 0; border-top: 1px solid var(--line); }
+.elec details.elec-sec > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; padding: 9px 2px; font-size: 12px; font-weight: 700;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.elec details.elec-sec > summary::-webkit-details-marker { display: none; }
+.elec details.elec-sec > summary::before { content: '▸'; color: var(--accent); transition: transform .15s; }
+.elec details.elec-sec[open] > summary::before { transform: rotate(90deg); }
+.elec details.elec-sec > summary:hover { color: var(--text-strong); }

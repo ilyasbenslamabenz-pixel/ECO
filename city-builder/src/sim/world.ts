@@ -45,7 +45,9 @@ import { terrainBounds, terrainHeightAt } from '../shared/terrain-gen';
 import { GameClock, MINUTES_PER_DAY, MINUTES_PER_MONTH, MINUTES_PER_YEAR, formatDateFr } from './clock';
 import { DEMOLISH_REFUND_RATE, EDU_TAX_NAMES_FR, Economy } from './economy';
 import { BuildingStore, ChunkIndex, VehicleStore } from './ecs';
-import { DemographySystem, ROAD_ACCESS_MARGIN_M, Service } from './demography';
+import { DemographySystem, POLLUTION_RADIUS_M, ROAD_ACCESS_MARGIN_M, Service } from './demography';
+import { BOREHOLE_FACTOR, SURFACE_INTAKE_RADIUS } from './water-network/model';
+import { WATER_FACILITIES, facilityKindOf as waterKindOf } from '../shared/water-network/types';
 import { TrafficSystem, inputFromRoadNetwork, buildingsFromStore, createRoadInputCache } from './traffic';
 import {
   ROAD_KINDS, RoadNetwork, commitRoadPlan, cubic, cubicBounds, gradeTerrainForRoads, halfWidth, isRoadKind,
@@ -670,7 +672,11 @@ export class Simulation {
     // Avertissement (pas un refus) : aucune route assez proche pour desservir le bâtiment.
     const margin = privateDev ? PRIVATE_ACCESS_MARGIN_M : ROAD_ACCESS_MARGIN_M;
     const access = this.roadClearance(o, MAX_ROAD_HALF_WIDTH + margin) <= margin;
-    const warn = access ? {} : { noRoadAccess: true as const, warning: 'Pas d’accès routier : le bâtiment ne sera ni desservi ni occupé tant qu’aucune route ne passe à proximité' };
+    // Avertissements de pose (pas des refus), affichés dans l'aperçu avant le clic : accès routier, puis site.
+    const notes: string[] = [];
+    if (!access) notes.push('Pas d’accès routier : le bâtiment ne sera ni desservi ni occupé tant qu’aucune route ne passe à proximité');
+    if (!privateDev) notes.push(...this.siteWarnings(asset, x, z));
+    const warn = { ...(access ? {} : { noRoadAccess: true as const }), ...(notes.length ? { warning: notes.join(' · ') } : {}) };
     if (a.dryRun) return { ok: true, data: { buildingId: 0, cost, ...warn } };
 
     const id = this.nextBuildingId++;
@@ -681,6 +687,52 @@ export class Simulation {
     if (receipt) this.restoreReceipts.delete(a.restoreToken!);
     if (cost > 0) this.economy.spend(cost);
     return { ok: true, data: { buildingId: id, cost, ...warn } };
+  }
+
+  /** Eau (rivière, lac) à moins de `radius` m de (x, z) : anneaux d'échantillons, du plus proche au plus loin. */
+  private waterWithin(x: number, z: number, radius: number): boolean {
+    if (this.wetAt(x, z)) return true;
+    for (let r = 8; r <= radius + 1e-6; r += r < 64 ? 8 : 16) {
+      const n = Math.max(12, Math.ceil((2 * Math.PI * r) / 16));
+      for (let k = 0; k < n; k++) { const a = (2 * Math.PI * k) / n; if (this.wetAt(x + r * Math.cos(a), z + r * Math.sin(a))) return true; }
+    }
+    return false;
+  }
+
+  /**
+   * Avertissements liés au site (aperçu et pose) — mêmes règles que la simulation :
+   * station de pompage loin de l'eau (forage, débit réduit), station d'épuration / émissaire loin de l'eau (rejet
+   * au sol), bâtiment polluant près de logements, logement près d'un bâtiment polluant (portée POLLUTION_RADIUS_M).
+   */
+  private siteWarnings(asset: CatalogAsset, x: number, z: number): string[] {
+    const out: string[] = [];
+    const wk = waterKindOf(asset.id);
+    if (wk === 'pompage' && !this.waterWithin(x, z, SURFACE_INTAKE_RADIUS)) {
+      const cap = WATER_FACILITIES.pompage.capacity;
+      out.push(`Loin de l’eau (plus de ${SURFACE_INTAKE_RADIUS} m) : la station forera la nappe, au plus ${Math.round(cap * BOREHOLE_FACTOR)} m³/h au lieu de ${cap} m³/h au bord d’une rivière ou d’un lac`);
+    }
+    if ((wk === 'epuration' || wk === 'emissaire') && !this.waterWithin(x, z, wk === 'emissaire' ? 120 : 400)) {
+      out.push('Loin de l’eau : les eaux usées seront rejetées au sol (pollution du sol), rapprochez-la d’une rivière ou d’un lac');
+    }
+    const pol = (a: CatalogAsset | undefined): number => { const t = a?.tags.find((g) => g.startsWith('pollution:')); return t ? Number(t.slice(10)) || 0 : 0; };
+    const selfPol = pol(asset), selfHomes = isBuildingCategory(asset.category) && asset.capacity.residents > 0;
+    if (selfPol > 0 || selfHomes) {
+      const R = POLLUTION_RADIUS_M;
+      this.buildingIndex.query(x - R, z - R, x + R, z + R, this.q2);
+      let homes = 0, nearest = Infinity;
+      for (const id of this.q2) {
+        const o = this.obbs.get(id), bi = this.buildings.indexOf(id);
+        const b = bi >= 0 ? this.catalog?.assets[this.buildings.assetIndex[bi]!] : undefined;
+        if (!o || !b) continue;
+        const d = Math.hypot(o.cx - x, o.cz - z);
+        if (d > R) continue;
+        if (selfPol > 0 && isBuildingCategory(b.category) && b.capacity.residents > 0) homes++;
+        if (selfHomes && pol(b) > 0) nearest = Math.min(nearest, d);
+      }
+      if (homes > 0) out.push(`Pollution : ${homes} bâtiment${homes > 1 ? 's' : ''} d’habitation à moins de ${R} m perdr${homes > 1 ? 'ont' : 'a'} en satisfaction ; éloignez-le des quartiers résidentiels`);
+      if (Number.isFinite(nearest)) out.push(`Pollution : bâtiment polluant à ${Math.round(nearest)} m (portée ${R} m), les habitants seront moins satisfaits`);
+    }
+    return out;
   }
 
   /**

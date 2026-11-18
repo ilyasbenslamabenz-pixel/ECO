@@ -215,3 +215,11 @@
   .tool-actions button.ta-elev { min-height: 32px; min-width: 34px; }
 }
 @media (max-width: 760px) { .tool-actions .ta-lbl, .tool-actions .ta-hint { display: none; } }
+
+/* « Premiers pas » / objectif en cours (ordinateur) : réduit à sa ligne de titre (étape, progression) pendant la
+   construction (outil actif ou tiroir ouvert) ; le détail revient au survol, et de lui-même en revenant à Sélection. */
+@media (min-width: 761px) {
+  body.tool-opts #objectives:not(:hover):not(:focus-within) #obj-body,
+  body.drawer-open #objectives:not(:hover):not(:focus-within) #obj-body { display: none; }
+  body.tool-opts #objectives, body.drawer-open #objectives { opacity: .92; }
+}

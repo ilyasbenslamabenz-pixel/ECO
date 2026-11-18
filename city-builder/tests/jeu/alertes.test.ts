@@ -119,5 +119,6 @@ test('pose sans accès routier : avertissement dans le résultat (aperçu dryRun
   const r = s.placeBuilding({ assetId: 'maison', x, z, rot, dryRun: true });
   assert.ok(r.ok);
   assert.equal(r.data.noRoadAccess, undefined);
-  assert.equal(r.data.warning, undefined);
+  // Pas d'avertissement d'accès routier (un avertissement de pollution reste possible : usine du bourg à 119 m).
+  assert.doesNotMatch(r.data.warning ?? '', /accès routier/);
 });

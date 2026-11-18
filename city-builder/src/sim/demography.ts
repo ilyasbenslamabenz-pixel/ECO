@@ -46,6 +46,8 @@ export const JOB_SEARCHES_PER_DAY = 4000;
 export const MAX_ARRIVALS_PER_WAVE = 60;
 /** Distance façade-route maximale pour être desservi (m), en plus de la demi-largeur de la route. */
 export const ROAD_ACCESS_MARGIN_M = TILE_SIZE;
+/** Portée (m) de la pollution d'un bâtiment sur la satisfaction des logements voisins (décroissance linéaire). */
+export const POLLUTION_RADIUS_M = 400;
 export const TRIP_QUEUE_CAPACITY = 4096;
 /**
  * Simulation agrégée (docs/SIMULATION.md, « Grandes villes ») : au-delà de AGGREGATE_THRESHOLD habitants, les NOUVEAUX
@@ -648,7 +650,7 @@ export class DemographySystem {
       if (!affects) continue;
       const lvl = m.service >= 0 ? this.serviceLevel(b.id[s]!) : 1;
       const rad = m.radius * (1 + 0.25 * (lvl - 1)) * (m.service >= 0 ? this.devRadius[m.service]! : 1);
-      const R = Math.max(m.service >= 0 ? rad : 0, m.attract > 0 ? Math.max(m.radius, 800) : 0, m.pollution > 0 ? 400 : 0, m.leisureVenue ? 1500 : 0);
+      const R = Math.max(m.service >= 0 ? rad : 0, m.attract > 0 ? Math.max(m.radius, 800) : 0, m.pollution > 0 ? POLLUTION_RADIUS_M : 0, m.leisureVenue ? 1500 : 0);
       this.ctx.buildingIndex.query(sx - R, sz - R, sx + R, sz + R, this.tmp);
       // Capacité (lits, patrouilles, engins) : habitants couverts au plus, logements les plus proches d'abord.
       const perUnit = m.service >= 0 && m.serviceCapacity > 0 ? RESIDENTS_PER_SERVICE_UNIT[m.service] ?? 0 : 0;
@@ -664,7 +666,7 @@ export class DemographySystem {
           else { this.coverage[m.service]![j] = 1; const q = 1 - 0.5 * d / rad; if (q > this.coverageQ[m.service]![j]!) this.coverageQ[m.service]![j] = q; }
         }
         if (m.attract > 0 && d <= Math.max(m.radius, 800)) this.attractAt[j]! += m.attract * (1 - d / Math.max(m.radius, 800));
-        if (m.pollution > 0 && d <= 400) this.pollutionAt[j]! += m.pollution * (1 - d / 400) * this.pollutionFactor * this.pollutionFactorOf(id);
+        if (m.pollution > 0 && d <= POLLUTION_RADIUS_M) this.pollutionAt[j]! += m.pollution * (1 - d / POLLUTION_RADIUS_M) * this.pollutionFactor * this.pollutionFactorOf(id);
         if (m.leisureVenue && j !== s && d <= 1500 && d < bestLeisure[j]!) { bestLeisure[j] = d; this.leisureTarget[j] = b.id[s]!; }
       }
       if (capped) {

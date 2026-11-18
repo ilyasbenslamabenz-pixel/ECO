@@ -20,12 +20,19 @@ import { barRow } from './city-panels';
 import { drawChart, MONTHS_SHORT } from './charts';
 import { $, el, fmt, money, moneyShort, pct, signedMoney } from './dom';
 import { iconEl } from './icons';
+import { goTo } from './goto';
 import { clearLog, journal, markAllRead, markEntryRead, markSeverityRead, notifyLog, onNotify, unreadCount, type NotifyEntry, type Severity } from './notify';
 import { SEVERITY_FR, SEVERITY_ORDER } from './notify-log';
 import { HistoryView, type HistTab } from './history-view';
 
 export type DashId = 'city' | 'services' | 'transport' | 'environment' | 'stats' | 'notifications' | 'policy' | 'research' | 'energy' | 'water' | 'waste' | 'progression';
 
+/** Tableau de bord → menu de construction du même service (bouton « Construire › » de l'en-tête). */
+const DASH_BUILD: Partial<Record<DashId, { open: string; tab?: string }>> = {
+  services: { open: '#toolbar [data-cat="services"]' }, transport: { open: '#toolbar [data-cat="transport"]' },
+  environment: { open: '#toolbar [data-cat="environment"]' }, energy: { open: '#toolbar [data-cat="energy"]' },
+  water: { open: '#toolbar [data-cat="water"]' }, waste: { open: '#toolbar [data-cat="waste"]' },
+};
 const META: Record<DashId, { title: string; icon: string; cls: string; kicker: string }> = {
   city: { title: 'Vue ville', icon: 'home', cls: 't-city', kicker: 'Tableau de bord' },
   services: { title: 'Services publics', icon: 'services', cls: 't-services', kicker: 'Tableau de bord' },
@@ -124,6 +131,8 @@ export class Dashboards {
       });
     }
     $('dash-close').addEventListener('click', () => this.close());
+    // « Construire › » : du tableau de bord d'un service au menu de construction correspondant (et l'onglet).
+    $('dash-build').addEventListener('click', () => { const t = this.current ? DASH_BUILD[this.current] : undefined; if (t) goTo(t); });
     // Bouton ✕ intégré au panneau Énergie : ferme le tableau de bord qui l'héberge.
     this.body.addEventListener('elec-close', () => this.close());
     // Tiroirs de construction (Énergie, Eau, Déchets) : « Tableau de bord » ouvre le même panneau.
@@ -175,6 +184,7 @@ export class Dashboards {
     const ico = $('dash-ico');
     ico.className = `ph-ico ${m.cls}`;
     ico.replaceChildren(iconEl(m.icon));
+    $('dash-build').classList.toggle('hidden', !DASH_BUILD[id]);
     this.panel.classList.remove('hidden', 'folded');
     this.panel.dataset['dash'] = id;
     // Journal : les infos sont lues à l'ouverture ; urgentes et importantes restent signalées jusqu'à « Tout marquer comme lu ».

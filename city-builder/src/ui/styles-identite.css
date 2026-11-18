@@ -265,3 +265,7 @@
 :root:not([data-x]) #toolbar button.tuto-target { box-shadow: 0 0 0 2px var(--accent); animation: id-tuto 1.6s ease-in-out infinite; }
 @keyframes id-tuto { 50% { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px rgba(var(--accent-rgb), .22); } }
 :root:not([data-x]) .menu-card .menu-screen > button.primary svg.ic { color: var(--on-clay); }
+
+/* Encadré « Pourquoi les habitants sont mécontents » : liseré à gauche (même langage que « Ce qu'il faut faire »). */
+:root:not([data-x]) .why-box { border: 0; border-radius: var(--r-md); box-shadow: inset 3px 0 0 var(--st-warn); background: color-mix(in srgb, var(--st-warn) 8%, transparent); }
+:root:not([data-x]) .why-box.ok { box-shadow: inset 3px 0 0 var(--st-ok); background: color-mix(in srgb, var(--st-ok) 7%, transparent); }

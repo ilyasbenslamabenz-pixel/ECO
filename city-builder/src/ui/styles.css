@@ -1321,12 +1321,15 @@ body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !impor
 }
 /* Rail d'icônes (bureau, hors téléphone en paysage qui garde le tiroir). */
 @media (min-width: 761px) and (min-height: 501px) {
-  body.ui-rail #sidebar { top: calc(var(--hud-h) + 8px); left: max(10px, var(--safe-l)); width: 54px; max-height: calc(100dvh - var(--hud-h) - 20px);
-    padding: 5px; gap: 1px; align-items: center; border-radius: 16px; }
-  body.ui-rail #sidebar button { width: 42px; height: 40px; min-height: 40px; padding: 0; border-radius: 11px; }
-  body.ui-rail #sidebar button svg.ic { width: 21px; height: 21px; }
-  body.ui-rail #sidebar button .tl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  body.ui-rail #sidebar .rail-h, body.ui-rail #sidebar .rail-h.rail-sep { display: block; width: 30px; height: 1px; margin: 5px 0; padding: 0; font-size: 0; background: var(--line-2); }
+  /* Icône + libellé sous l'icône (on sait ce qu'ouvre chaque entrée sans la survoler). */
+  body.ui-rail #sidebar { top: calc(var(--hud-h) + 8px); left: max(10px, var(--safe-l)); width: 78px; max-height: calc(100dvh - var(--hud-h) - 20px);
+    padding: 4px; gap: 1px; align-items: center; border-radius: 16px; }
+  body.ui-rail #sidebar button { width: 70px; height: 46px; min-height: 46px; padding: 4px 1px 3px; gap: 3px; border-radius: 11px; flex-direction: column; }
+  body.ui-rail #sidebar button svg.ic { width: 20px; height: 20px; }
+  body.ui-rail #sidebar button .tl { position: static; width: auto; height: auto; overflow: hidden; clip: auto; white-space: nowrap; text-overflow: ellipsis; max-width: 100%;
+    font-size: 10px; letter-spacing: -.01em; line-height: 1.1; font-weight: 500; color: var(--muted); }
+  body.ui-rail #sidebar button:hover .tl, body.ui-rail #sidebar button.active .tl { color: var(--text-strong); }
+  body.ui-rail #sidebar .rail-h, body.ui-rail #sidebar .rail-h.rail-sep { display: block; width: 44px; height: 1px; margin: 4px 0; padding: 0; font-size: 0; background: var(--line-2); }
   body.ui-rail #sidebar .rail-h:first-child { display: none; }
   /* Couleur d'icône par entrée (mêmes teintes que les outils). */
   body.ui-rail #sidebar [data-dash="city"] svg.ic { color: #8fd0ff; } body.ui-rail #sidebar [data-dash="finance"] svg.ic { color: #3ddc84; }
@@ -1338,9 +1341,9 @@ body.ui-rail .hud-demand b { font-size: 11.5px !important; line-height: 1 !impor
   body.ui-rail #sidebar .rail-layers svg.ic { color: #9fb8ff; }
   body.ui-rail #sidebar button.active svg.ic { color: #fff; }
   /* Tableaux de bord : ouverts à côté du rail (la carte reste visible à droite) ; la fiche d'un objet reste à droite. */
-  body.ui-rail .panel.dash { left: calc(max(10px, var(--safe-l)) + 62px); right: auto; }
+  body.ui-rail .panel.dash { left: calc(max(10px, var(--safe-l)) + 86px); right: auto; }
   /* Bas d'écran (sous-barre, outils) : commence après le rail, la sous-barre ne passe plus dessous. */
-  body.ui-rail #bottom { left: calc(max(10px, var(--safe-l)) + 62px); }
+  body.ui-rail #bottom { left: calc(max(10px, var(--safe-l)) + 86px); }
 }
 
 /* ------------------------------ Téléphone ------------------------------ */
