@@ -1,0 +1,271 @@
+/* ==========================================================================================================
+ * Identité visuelle « Meknès » — feuille chargée en dernier (scripts/build.mjs), elle n'enlève aucune règle :
+ * elle redéfinit les jetons et l'habillage des surfaces.
+ *   Encre brune et parchemin (fond, texte), laiton pour la sélection, terre cuite pour l'action principale,
+ *   olive pour « bon », brique pour « problème ». Angles nets (3–4 px), surfaces opaques sans verre ni lueur,
+ *   filets fins, titres en serif (Spectral), interface en Barlow (signalétique), chiffres en Barlow Condensed.
+ *   Polices libres (SIL OFL, voir src/ui/fonts/LICENCE.txt), intégrées au jeu par la construction : aucun serveur tiers.
+ * Sélecteur racine `:root:not([data-x])` (toujours vrai) : même poids que les règles de thème existantes,
+ * qu'il remplace puisqu'il vient après ; `[data-theme="clair"]` ajoute la variante claire.
+ * ========================================================================================================== */
+@font-face { font-family: "Barlow"; font-weight: 400; font-style: normal; font-display: swap; src: url("fonts/barlow-400.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 500; font-style: normal; font-display: swap; src: url("fonts/barlow-500.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 600; font-style: normal; font-display: swap; src: url("fonts/barlow-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 700 900; font-style: normal; font-display: swap; src: url("fonts/barlow-700.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 500 600; font-style: normal; font-display: swap; src: url("fonts/barlow-cond-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-weight: 700 900; font-style: normal; font-display: swap; src: url("fonts/barlow-cond-700.woff2") format("woff2"); }
+@font-face { font-family: "Spectral"; font-weight: 500 700; font-style: normal; font-display: swap; src: url("fonts/spectral-600.woff2") format("woff2"); }
+@font-face { font-family: "Spectral"; font-weight: 400 600; font-style: italic; font-display: swap; src: url("fonts/spectral-500i.woff2") format("woff2"); }
+
+/* ------------------------------------------------ Jetons ------------------------------------------------ */
+:root:not([data-x]), :root[data-theme="nuit"]:not([data-x]), :root[data-theme="sombre"]:not([data-x]) {
+  --bg: #15110d;
+  --panel: #1f1a15;
+  --panel-solid: #1f1a15;
+  --panel-2: rgba(236, 222, 196, 0.035);
+  --glass: #1f1a15;
+  --glass-2: #211b16;
+  --bar: #1f1a15;
+  --sunk: #17130f;                         /* creux : champs, vignettes, pistes de jauge */
+  --ink: 236, 222, 196;
+  --line: rgba(236, 222, 196, 0.11);
+  --line-2: rgba(236, 222, 196, 0.2);
+  --bar-line: rgba(236, 222, 196, 0.2);
+  --text: #e9dfcc;
+  --text-strong: #faf3e6;
+  --muted: #a4957d;
+  --accent: #d9a441;                       /* laiton : sélection, valeurs mises en avant */
+  --accent-2: #e6bd6a;
+  --accent-strong: #c08a2a;
+  --accent-ink: #21160a;
+  --accent-rgb: 217, 164, 65;
+  --accent-soft: rgba(217, 164, 65, 0.14);
+  --accent-glow: 0 0 0 1px rgba(217, 164, 65, 0.7);
+  --clay: #b9512f;                         /* terre cuite : action principale */
+  --clay-hi: #cc6140;
+  --on-clay: #fff4e6;
+  --on-accent: #21160a;
+  --ok: #8fb35a;
+  --warn: #e0a03a;
+  --danger: #d9634e;
+  --st-ok: var(--ok); --st-warn: var(--warn); --st-bad: var(--danger);
+  --radius: 4px;
+  --r-sm: 2px; --r-md: 3px; --r-lg: 4px;
+  --shadow: 0 1px 0 rgba(0, 0, 0, 0.55), 0 10px 24px -8px rgba(0, 0, 0, 0.6);
+  --bar-shadow: var(--shadow);
+  --blur: none;
+  --font: "Barlow", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-num: "Barlow Condensed", "Barlow", "Arial Narrow", sans-serif;
+  --font-title: "Spectral", Georgia, "Times New Roman", serif;
+  color-scheme: dark;
+}
+:root[data-theme="clair"]:not([data-x]) {
+  --bg: #e9e0cd;
+  --panel: #f7f1e4;
+  --panel-solid: #f7f1e4;
+  --panel-2: rgba(70, 48, 24, 0.035);
+  --glass: #f7f1e4;
+  --glass-2: #f8f2e6;
+  --bar: #f7f1e4;
+  --sunk: #ece3d1;
+  --ink: 70, 48, 24;
+  --line: rgba(70, 48, 24, 0.13);
+  --line-2: rgba(70, 48, 24, 0.24);
+  --bar-line: rgba(70, 48, 24, 0.24);
+  --text: #2d241a;
+  --text-strong: #1c150e;
+  --muted: #73644f;
+  --accent: #9a6514;
+  --accent-2: #8a5a10;
+  --accent-strong: #7d520f;
+  --accent-ink: #fff8ec;
+  --accent-rgb: 154, 101, 20;
+  --accent-soft: rgba(154, 101, 20, 0.12);
+  --accent-glow: 0 0 0 1px rgba(154, 101, 20, 0.6);
+  --clay: #ad4527;
+  --clay-hi: #bf5333;
+  --on-clay: #fff6ea;
+  --ok: #4f7a23;
+  --warn: #9a6200;
+  --danger: #b23b27;
+  --shadow: 0 1px 0 rgba(70, 48, 24, 0.18), 0 10px 22px -10px rgba(70, 48, 24, 0.35);
+  color-scheme: light;
+}
+/* Couleurs de catégories : terres et pigments, sourdes (au lieu d'un arc-en-ciel néon). */
+:root:not([data-x]) .t-select { --ic: var(--text); } :root:not([data-x]) .t-zones { --ic: #9db36a; } :root:not([data-x]) .t-road { --ic: #b8ad99; }
+:root:not([data-x]) .t-building { --ic: #d9a441; } :root:not([data-x]) .t-services { --ic: #d27a62; } :root:not([data-x]) .t-energy { --ic: #e2bb4c; }
+:root:not([data-x]) .t-water { --ic: #6aa6b8; } :root:not([data-x]) .t-waste { --ic: #ad9068; } :root:not([data-x]) .t-transport { --ic: #69a89c; }
+:root:not([data-x]) .t-nature { --ic: #8fae6a; } :root:not([data-x]) .t-terrain { --ic: #c8a777; } :root:not([data-x]) .t-demolish { --ic: #d27a62; }
+:root:not([data-x]) .t-undo { --ic: var(--muted); } :root:not([data-x]) .t-fin { --ic: #9db36a; } :root:not([data-x]) .t-pop { --ic: #b8ad99; }
+:root:not([data-x]) .t-city { --ic: #d9a441; } :root:not([data-x]) .t-stats { --ic: #c39a8a; } :root:not([data-x]) .t-notif { --ic: #e2bb4c; }
+:root[data-theme="clair"]:not([data-x]) svg.ic { filter: none; }
+
+/* ------------------------------------------------ Base ------------------------------------------------ */
+:root:not([data-x]) body { font-family: var(--font); font-size: 14px; letter-spacing: 0; font-feature-settings: "tnum" 0; }
+:root:not([data-x]) ::selection { background: rgba(var(--accent-rgb), .35); }
+:root:not([data-x]) * { scrollbar-width: thin; scrollbar-color: rgba(var(--ink), .22) transparent; }
+:root:not([data-x]) svg.ic { stroke-width: 1.7; }
+:root:not([data-x]) svg.ic .f { fill-opacity: .16; }
+
+/* Boutons : plats, angle net ; enfoncé = laiton ; principal = terre cuite. */
+:root:not([data-x]) button { border-radius: var(--r-md); background: rgba(var(--ink), .045); border-color: var(--line); box-shadow: none; }
+:root:not([data-x]) button:hover:not(:disabled) { background: rgba(var(--ink), .09); border-color: var(--line-2); }
+:root:not([data-x]) button:active:not(:disabled) { transform: none; background: rgba(var(--ink), .13); }
+:root:not([data-x]) button:focus-visible, :root:not([data-x]) input:focus-visible, :root:not([data-x]) select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+:root:not([data-x]) button.active { background: var(--accent-soft); border-color: rgba(var(--accent-rgb), .75); color: var(--text-strong); box-shadow: none; }
+:root:not([data-x]) button.primary, :root:not([data-x]) #dash-body .elec button.primary { background: var(--clay); border-color: var(--clay); color: var(--on-clay); font-weight: 600; box-shadow: none; }
+:root:not([data-x]) button.primary:hover:not(:disabled) { background: var(--clay-hi); border-color: var(--clay-hi); }
+:root:not([data-x]) button.primary svg.ic, :root:not([data-x]) .menu-screen > button.primary svg.ic { color: var(--on-clay); }
+:root:not([data-x]) button.danger { border-color: rgba(217, 99, 78, .5); color: var(--danger); }
+:root:not([data-x]) .badge { background: var(--clay); color: var(--on-clay); border-radius: 2px; box-shadow: 0 0 0 2px var(--panel); font-family: var(--font-num); font-weight: 700; }
+:root:not([data-x]) .phase { border-radius: 2px; font-family: var(--font-num); letter-spacing: .02em; }
+:root:not([data-x]) .form input, :root:not([data-x]) .form select, :root:not([data-x]) .loan-form input, :root:not([data-x]) .loan-form select {
+  background: var(--sunk); border-radius: var(--r-md); border-color: var(--line-2); }
+:root:not([data-x]) input[type=range] { accent-color: var(--accent); }
+
+/* Surfaces flottantes : opaques, angle de 4 px, filet de 1 px, ombre courte. */
+:root:not([data-x]) .panel, :root:not([data-x]) #toolbar, :root:not([data-x]) #minimap, :root:not([data-x]) #sidebar, :root:not([data-x]) #layers-pop,
+:root:not([data-x]) #family-pop, :root:not([data-x]) #tool-options, :root:not([data-x]) #build-drawer, :root:not([data-x]) #objectives, :root:not([data-x]) #problems,
+:root:not([data-x]) #card-detail, :root:not([data-x]) .menu-card, :root:not([data-x]) .loading-card, :root:not([data-x]) body.ui-rail .hud-cap {
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow); backdrop-filter: none; -webkit-backdrop-filter: none; }
+/* Grandes fenêtres (tableaux, fiche, tiroir, menu) : double filet laiton en tête, signature de l'interface. */
+:root:not([data-x]) .panel, :root:not([data-x]) #build-drawer, :root:not([data-x]) .menu-card, :root:not([data-x]) .loading-card, :root:not([data-x]) #card-detail {
+  box-shadow: inset 0 2px 0 rgba(var(--accent-rgb), .75), inset 0 4px 0 var(--panel), inset 0 5px 0 rgba(var(--accent-rgb), .3), var(--shadow); }
+
+/* ------------------------------------------------ Typographie ------------------------------------------------ */
+:root:not([data-x]) .panel-head h3, :root:not([data-x]) .menu-card h1, :root:not([data-x]) .menu-card h2, :root:not([data-x]) .brand,
+:root:not([data-x]) #card-detail h4, :root:not([data-x]) .loading-card h1 { font-family: var(--font-title); font-weight: 600; letter-spacing: 0; }
+:root:not([data-x]) .panel-head h3 { font-size: 19px; line-height: 1.15; color: var(--text-strong); }
+/* Surtitre : italique serif au lieu des capitales espacées. */
+:root:not([data-x]) .kicker, :root:not([data-x]) .panel .kicker, :root:not([data-x]) #card-detail .cd-kicker {
+  font-family: var(--font-title); font-style: italic; font-weight: 500; font-size: 12.5px; letter-spacing: 0; text-transform: none; color: var(--accent); }
+/* Intitulés de section : capitales étroites, filet qui court jusqu'au bord (registre de comptes). */
+:root:not([data-x]) .panel .sec-title, :root:not([data-x]) .panel-body h4, :root:not([data-x]) #dash-body .elec h4, :root:not([data-x]) .grp-h,
+:root:not([data-x]) #card-detail h6 { font-family: var(--font-num); font-weight: 700; font-size: 12px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+:root:not([data-x]) .grp-h { display: flex; align-items: center; gap: 8px; }
+:root:not([data-x]) .grp-h::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+:root:not([data-x]) .grp-h::before { display: none; }
+/* Chiffres : étroits et tabulaires. */
+:root:not([data-x]) .kpi b, :root:not([data-x]) .hud-stat b, :root:not([data-x]) .hud-time .clock, :root:not([data-x]) #hud-date .clock,
+:root:not([data-x]) .card .ct, :root:not([data-x]) #card-detail .cd-price b, :root:not([data-x]) .lg-amt, :root:not([data-x]) .seg button.spd-x {
+  font-family: var(--font-num); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+:root:not([data-x]) .kpi b { font-size: 22px; font-weight: 700; }
+:root:not([data-x]) body.ui-rail .cap-kpi .hud-stat b { font-size: 19px; font-weight: 700; }
+
+/* ------------------------------------------------ Barre du haut ------------------------------------------------ */
+:root:not([data-x]) body.ui-rail .brand-txt .city { font-family: var(--font-title); font-weight: 600; font-size: 16px; letter-spacing: 0; }
+:root:not([data-x]) .hud-brand .logo { color: var(--accent); }
+:root:not([data-x]) .seg, :root:not([data-x]) body.ui-rail #hud .speed { border-radius: var(--r-md); background: var(--sunk); border: 1px solid var(--line); }
+:root:not([data-x]) body.ui-rail #hud .speed button { border-radius: 2px; }
+:root:not([data-x]) .seg button.active, :root:not([data-x]) body.ui-rail #hud .speed button.active { background: var(--accent); color: var(--accent-ink); }
+:root:not([data-x]) .seg button.active svg.ic { color: var(--accent-ink); }
+:root:not([data-x]) body.ui-rail .cap-kpi .hud-stat { border-radius: var(--r-md) !important; }
+:root:not([data-x]) .ic-cash, :root:not([data-x]) .ic-happy { color: var(--ok); }
+:root:not([data-x]) body.ui-rail .hud-actions .hud-btn, :root:not([data-x]) .hud-btn { border-radius: var(--r-md); }
+:root:not([data-x]) body.ui-rail .happy-bar, :root:not([data-x]) body.ui-rail .happy-bar i { border-radius: 0; }
+
+/* ------------------------------------------------ Rail des tableaux de bord ------------------------------------------------ */
+:root:not([data-x]) body.ui-rail #sidebar button, :root:not([data-x]) #sidebar button { border-radius: var(--r-md); }
+:root:not([data-x]) body #sidebar button svg.ic { color: var(--text); }
+:root:not([data-x]) body #sidebar button:hover:not(:disabled) svg.ic { color: var(--text-strong); }
+:root:not([data-x]) #sidebar button.active { background: var(--accent-soft); border-color: transparent; box-shadow: inset 2px 0 0 var(--accent); }
+:root:not([data-x]) #sidebar button.active svg.ic, :root:not([data-x]) #sidebar button.active .tl { color: var(--accent); }
+:root:not([data-x]) body.ui-rail #sidebar .rail-h { font-family: var(--font-num); color: var(--muted); letter-spacing: .07em; }
+
+/* ------------------------------------------------ Barre d'outils ------------------------------------------------ */
+:root:not([data-x]) #toolbar button { border-radius: var(--r-md); font-weight: 500; color: var(--text); }
+:root:not([data-x]) #toolbar button svg.ic { color: var(--text); }
+:root:not([data-x]) #toolbar button:hover:not(:disabled) svg.ic { color: var(--ic, var(--text-strong)); }
+:root:not([data-x]) #toolbar button.active, :root:not([data-x]) body.ui-rail #toolbar button.active {
+  background: var(--accent-soft); border-color: transparent; box-shadow: inset 0 -2px 0 var(--accent); color: var(--accent); }
+:root:not([data-x]) #toolbar button.active svg.ic { color: var(--accent); filter: none; }
+:root:not([data-x]) .tb-sep { background: var(--line-2); }
+:root:not([data-x]) body.ui-rail #toolbar .tb-grp::after { font-family: var(--font-num); font-weight: 700; font-size: 11px; letter-spacing: .08em; color: rgba(250, 243, 230, .85);
+  text-shadow: 0 1px 2px rgba(20, 14, 8, .95), 0 0 6px rgba(20, 14, 8, .6); }
+:root[data-theme="clair"]:not([data-x]) body.ui-rail #toolbar .tb-grp::after { color: rgba(40, 28, 16, .85); text-shadow: 0 1px 2px rgba(255, 250, 240, .95); }
+/* Mise en avant du tutoriel : anneau laiton, sans halo. */
+:root:not([data-x]) #toolbar button.tuto-hl, :root:not([data-x]) .tuto-hl { box-shadow: 0 0 0 2px var(--accent) !important; }
+
+/* ------------------------------------------------ Options d'outil, tiroir, cartes ------------------------------------------------ */
+:root:not([data-x]) #tool-options, :root:not([data-x]) #tool-options:has(.tool-actions > button:nth-child(12)) { border-radius: var(--r-lg); }
+:root:not([data-x]) .chip-tab { border-radius: var(--r-md); }
+:root:not([data-x]) .chip-tab svg.ic { color: var(--ic, var(--muted)); }
+:root:not([data-x]) .chip-tab.active { background: var(--accent-soft); border-color: rgba(var(--accent-rgb), .7); box-shadow: none; color: var(--text-strong); }
+:root:not([data-x]) .chip-tab .n, :root:not([data-x]) .chip-tab.active .n { border-radius: 2px; font-family: var(--font-num); font-weight: 700; }
+:root:not([data-x]) .card { border-radius: var(--r-md); background: rgba(var(--ink), .03); border-color: var(--line); }
+:root:not([data-x]) .card:hover:not(:disabled) { border-color: rgba(var(--accent-rgb), .6); background: rgba(var(--ink), .06); }
+:root:not([data-x]) .card .thumb, :root:not([data-x]) #card-detail .cd-thumb, :root:not([data-x]) .info-thumb { background: var(--sunk); }
+:root:not([data-x]) .card .thumb::after { height: 2px; background: var(--ic, var(--accent)); opacity: .7; }
+:root:not([data-x]) .card .thumb .spin { border-top-color: var(--accent); }
+:root:not([data-x]) .card .ct { color: var(--accent); font-size: 14px; font-weight: 700; }
+:root:not([data-x]) .card .fp-badge, :root:not([data-x]) .card .var-badge { border-radius: 2px; font-family: var(--font-num); font-weight: 600; letter-spacing: .02em;
+  background: rgba(21, 17, 13, .82); color: #f1e8d6; }
+:root:not([data-x]) .card .kf .st { border-radius: 2px; }
+:root:not([data-x]) .card .dep svg.ic { color: var(--warn); }
+:root:not([data-x]) #card-detail .cd-var { border-radius: var(--r-md); }
+:root:not([data-x]) #card-detail .cd-sw i { border-radius: 1px; }
+
+/* ------------------------------------------------ Fenêtres ------------------------------------------------ */
+:root:not([data-x]) .panel-head { border-bottom: 1px solid var(--line); padding-top: 14px; }
+:root:not([data-x]) .ph-ico { border-radius: var(--r-md); background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); }
+:root:not([data-x]) .ph-ico svg.ic { color: var(--ic, var(--accent)); }
+:root:not([data-x]) .ptabs { border-radius: var(--r-md); background: var(--sunk); }
+:root:not([data-x]) .ptabs button { border-radius: 2px; }
+:root:not([data-x]) .ptabs button.active { background: transparent; color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+:root:not([data-x]) .ptabs button.active svg.ic { color: var(--accent); }
+:root:not([data-x]) .kpi, :root:not([data-x]) .gov-card { background: transparent; border-radius: var(--r-md); }
+:root:not([data-x]) .gov-card.on { background: var(--accent-soft); border-color: rgba(var(--accent-rgb), .6); }
+:root:not([data-x]) .kpi b { color: var(--text-strong); }
+:root:not([data-x]) .ledger, :root:not([data-x]) .chart-wrap { border-radius: var(--r-md); background: var(--panel-2); }
+:root:not([data-x]) .lg-head.inc { background: rgba(143, 179, 90, .12); box-shadow: inset 2px 0 0 var(--ok); color: var(--text-strong); }
+:root:not([data-x]) .lg-head.exp { background: rgba(217, 99, 78, .12); box-shadow: inset 2px 0 0 var(--danger); color: var(--text-strong); }
+:root:not([data-x]) .lg-head.svc { background: rgba(106, 166, 184, .12); box-shadow: inset 2px 0 0 #6aa6b8; }
+:root:not([data-x]) .bar-row .fill, :root:not([data-x]) .gov-bar > i { background: var(--accent); border-radius: 0; }
+:root:not([data-x]) .why-box.ok { border-color: rgba(143, 179, 90, .45); background: rgba(143, 179, 90, .07); }
+:root:not([data-x]) .slot, :root:not([data-x]) .slot-empty { border-radius: var(--r-md); }
+
+/* Info-bulle du curseur : fiche d'arpenteur, liseré d'état à gauche. */
+:root:not([data-x]) #cursor-tag { background: var(--panel); color: var(--text); border: 1px solid var(--line-2); border-left: 3px solid var(--ct-state, var(--accent)); border-radius: var(--r-md); box-shadow: var(--shadow); }
+:root:not([data-x]) #cursor-tag .ct-head::before { border-radius: 0; }
+
+/* « Premiers pas » et problèmes */
+:root:not([data-x]) #objectives .obj-title, :root:not([data-x]) #objectives h4, :root:not([data-x]) #objectives strong { font-family: var(--font-title); font-weight: 600; }
+:root:not([data-x]) #problems .pb-head, :root:not([data-x]) #problems header { font-family: var(--font-num); letter-spacing: .07em; }
+
+/* Mini-carte */
+:root:not([data-x]) .mm-map { border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line-2); }
+:root:not([data-x]) .mm-ctrl button, :root:not([data-x]) body.ui-rail .mm-orient button, :root:not([data-x]) body.ui-rail .mm-ctrl button { border-radius: var(--r-md); }
+
+/* ------------------------------------------------ Menu principal et chargement ------------------------------------------------ */
+/* Fond : trame de zellige (deux réseaux de filets croisés à 45°, motif « khatam »), à peine visible. */
+:root:not([data-x]) .overlay {
+  background:
+    repeating-linear-gradient(45deg, rgba(217, 164, 65, .045) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(-45deg, rgba(217, 164, 65, .045) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(0deg, rgba(217, 164, 65, .03) 0 1px, transparent 1px 48px),
+    repeating-linear-gradient(90deg, rgba(217, 164, 65, .03) 0 1px, transparent 1px 48px),
+    rgba(16, 12, 9, .93); }
+:root[data-theme="clair"]:not([data-x]) .overlay {
+  background:
+    repeating-linear-gradient(45deg, rgba(154, 101, 20, .07) 0 1px, transparent 1px 34px),
+    repeating-linear-gradient(-45deg, rgba(154, 101, 20, .07) 0 1px, transparent 1px 34px),
+    rgba(233, 224, 205, .94); }
+:root:not([data-x]) .menu-card, :root:not([data-x]) .loading-card { padding: 30px 30px 24px; }
+:root:not([data-x]) .brand { font-size: 34px; gap: 14px; }
+:root:not([data-x]) .brand span { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--accent); font-style: italic; }
+:root:not([data-x]) .brand-logo { color: var(--accent); }
+:root:not([data-x]) .tagline { font-family: var(--font-title); font-style: italic; font-size: 15px; color: var(--muted); margin-bottom: 14px; }
+/* Entrées du menu : liste à filets plutôt qu'une pile de pilules. */
+:root:not([data-x]) .menu-screen { gap: 0; }
+:root:not([data-x]) .menu-screen > button { border-radius: 0; border: 0; border-top: 1px solid var(--line); background: transparent; min-height: 46px; font-size: 15.5px; font-weight: 500; }
+:root:not([data-x]) .menu-screen > button:hover:not(:disabled) { background: rgba(var(--ink), .05); padding-left: 20px; }
+:root:not([data-x]) .menu-screen > button svg.ic { color: var(--muted); }
+:root:not([data-x]) .menu-screen > button:hover:not(:disabled) svg.ic { color: var(--accent); }
+:root:not([data-x]) .menu-screen > button.primary { border: 0; border-radius: var(--r-md); margin-bottom: 12px; background: var(--clay); color: var(--on-clay); font-weight: 600; }
+:root:not([data-x]) .menu-screen > button.primary:hover:not(:disabled) { background: var(--clay-hi); padding-left: 16px; }
+:root:not([data-x]) .menu-screen > button.primary + button { border-top: 0; }
+:root:not([data-x]) .menu-screen > button:last-of-type { border-bottom: 1px solid var(--line); }
+:root:not([data-x]) .menu-screen > button.primary:last-of-type { border-bottom: 0; }
+:root:not([data-x]) .menu-foot { margin-top: 14px; }
+:root:not([data-x]) .progress { border-radius: 0; height: 4px; background: var(--sunk); }
+:root:not([data-x]) #loading-bar { background: var(--accent); }

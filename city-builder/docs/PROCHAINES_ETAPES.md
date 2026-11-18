@@ -34,3 +34,12 @@ Règles : ne rien supprimer, ne pas changer l'architecture sans accord, aucun r�
   electricite, zonage, dechets, actions). Restent en échec : parties iPhone de tests/construction/demo.mjs (mobile
   abandonné par le joueur).
 - Non reproduit : source d'eau « lac prévu 0 m² » dans un cratère de la partie du joueur → demander l'export .meknes.
+
+## Identité visuelle « Meknès » (refonte du design)
+
+- Feuille `src/ui/styles-identite.css`, chargée en dernier par `scripts/build.mjs` : aucune règle existante retirée ; elle redéfinit les jetons (thèmes nuit/sombre et clair) et l'habillage.
+- Palette : encre brune et parchemin, laiton (sélection), terre cuite (action principale), olive (bon), brique (problème). Angles 2–4 px, surfaces opaques, pas de verre ni de lueur, double filet laiton en tête des grandes fenêtres.
+- Typographie : Barlow (interface), Barlow Condensed (chiffres, intitulés de section), Spectral (titres, surtitres en italique). Polices SIL OFL intégrées en data: URI (`src/ui/fonts/`), aucun serveur tiers.
+- Icônes de la barre d'outils et du rail monochromes (la couleur de catégorie n'apparaît qu'au survol) ; couleurs de catégorie sourdes ailleurs.
+- Menu principal : liste à filets, trame de zellige discrète en fond.
+- Vérifié : tsc, 753 tests unitaires, e2e interface PC, audit 31/31.
