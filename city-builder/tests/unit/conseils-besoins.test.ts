@@ -37,6 +37,17 @@ test('énergie : gros déficit déjà raccordé → nombre de centrales thermiqu
   assert.match(a.text, /Il manque 11 MW/);
   assert.match(a.text, /une centrale thermique \(60 MW/);
   assert.match(a.text, /≈ 5 éoliennes/);
+  assert.doesNotMatch(a.text, /emprunt/, 'sans trésorerie connue : pas de montant');
+});
+
+test('énergie : centrale hors de portée de la trésorerie → emprunt proposé, montants affichés', () => {
+  const s = elec({ buildings: 400, demandKw: 20_000, deliveredKw: 9_000, shortfallKw: 11_000, cut: 120 });
+  const st = { facilities: [plant()], settings: { raccordement: true } as never };
+  const poor = powerAdvice(s, st, { treasury: 170_000, thermalCost: 3_500_000 });
+  assert.match(poor.text, /3,5 M CHF pour 170 k CHF en caisse/);
+  assert.match(poor.text, /emprunt/);
+  const rich = powerAdvice(s, st, { treasury: 4_000_000, thermalCost: 3_500_000 });
+  assert.doesNotMatch(rich.text, /emprunt/);
 });
 
 test('énergie : installation isolée → bouton Routes', () => {

@@ -66,3 +66,48 @@ export const carteScale = {
 };
 
 export const clampCarte = (v: number): number => (v < 0 ? 0 : v > 100 ? 100 : Math.round(v));
+
+/** Nom court de chaque carte (étiquette au survol). */
+export const CARTE_LABEL_FR: Record<CarteKind, string> = {
+  foncier: 'Valeur foncière', pollution: 'Pollution', bruit: 'Bruit', chomage: 'Chômage', education: 'Éducation',
+  satisfaction: 'Satisfaction', ecoles: 'Écoles', dechets: 'Bacs à déchets',
+};
+
+const pct0 = (v: number): string => `${Math.round(v)} %`;
+const dec1 = (v: number): string => v.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/**
+ * Valeur d'une cellule en clair, dans l'unité du jeu (inverse des échelles `carteScale`) : affichée au survol de la
+ * carte, comme une infobulle. `v` : valeur 0..100 de la cellule ; CARTE_NO_DATA : aucun bâtiment concerné.
+ */
+export function carteReadout(kind: CarteKind, v: number): string {
+  const name = CARTE_LABEL_FR[kind];
+  if (v === CARTE_NO_DATA) return `${name} : aucun bâtiment ici`;
+  switch (kind) {
+    case 'foncier': {
+      const idx = 0.4 + (v / 100) * 1.2;
+      return `${name} : indice ${dec1(idx)} (1,0 = moyenne) — loyers ${idx >= 1.2 ? 'chers' : idx <= 0.8 ? 'faibles' : 'moyens'}`;
+    }
+    case 'chomage': return `${name} : ${v >= 100 ? '25 % et plus' : pct0(v / 4)} des actifs du quartier`;
+    case 'education': {
+      const avg = (100 - v) / 25;
+      const lvl = ['sans diplôme', 'primaire', 'brevet / CAP', 'baccalauréat', 'études supérieures'][Math.max(0, Math.min(4, Math.round(avg)))];
+      return `${name} : niveau moyen ${dec1(avg)} / 4 (${lvl})`;
+    }
+    case 'satisfaction': {
+      const h = 75 - (v / 100) * 50;
+      return `${name} : ${v <= 0 ? '75 et plus' : v >= 100 ? '25 et moins' : Math.round(h)} / 100 (logement le moins satisfait)`;
+    }
+    case 'ecoles': return v >= 100 ? `${name} : aucune école à portée` : `${name} : école à portée (qualité ${pct0((1 - v / 60) * 100)})`;
+    case 'dechets': return `${name} : remplis à ${v >= 100 ? '100 % ou plus' : pct0(v)}`;
+    case 'pollution': return `${name} : ${Math.round(v)} / 100 (${v >= 67 ? 'très pollué' : v >= 34 ? 'pollué' : 'air sain'})`;
+    case 'bruit': return `${name} : ${Math.round(v)} / 100 (${v >= 67 ? 'bruyant' : v >= 34 ? 'gênant' : 'calme'})`;
+  }
+}
+
+/** Valeur (0..100, ou CARTE_NO_DATA) de la cellule sous un point monde ; null hors de la grille. */
+export function carteValueAt(l: CarteLayer, x: number, z: number): number | null {
+  const c = Math.floor((x - l.originX) / l.cellSize), r = Math.floor((z - l.originZ) / l.cellSize);
+  if (c < 0 || r < 0 || c >= l.cols || r >= l.rows) return null;
+  return l.values[r * l.cols + c] ?? null;
+}

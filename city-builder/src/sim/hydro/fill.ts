@@ -158,6 +158,11 @@ export class HydroSolver {
   private ownStamp = 0;
   private readonly heap = new MinHeap();
   private readonly cells: number[] = [];
+  /**
+   * Cols de débordement du dernier solve() : paires (niveau de la cuvette, case juste au-delà du col) dans l'ordre
+   * des cuvettes. Sert à montrer au joueur par où l'eau contourne un barrage.
+   */
+  readonly spills: number[] = [];
 
   private ensure(n: number): void {
     if (this.E.length === n) return;
@@ -179,6 +184,7 @@ export class HydroSolver {
       E[k] = b !== NO_WATER && b > h + 0.05 ? b : h;
     }
     water.fill(NO_WATER);
+    this.spills.length = 0;
     if (g.dug && g.dug.length && g.dugMask) this.spread(g);
     const out: FeedResult[] = [];
     for (const f of feeds) out.push(this.cascade(g, f));
@@ -301,6 +307,7 @@ export class HydroSolver {
         }
       }
       if (lake === 0) res.level = cells.length > 1 ? level : NaN;
+      if (status === 'sink' && cells.length > 1) this.spills.push(level, outflow >= 0 ? outflow : cells[cells.length - 1]!);
       if (status !== 'sink' || outflow < 0) { res.status = status; return res; }
       // Débordement : ruisseau par la plus grande pente jusqu'au creux suivant, une eau existante ou le bord.
       let c = outflow;

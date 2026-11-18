@@ -26,7 +26,14 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${nf0.form
 
 /* --------------------------------------------- Énergie --------------------------------------------- */
 
-export function powerAdvice(s: ElectriciteSummary | undefined, st: Pick<ElectriciteDelta, 'facilities' | 'settings'>): Advice {
+/** Trésorerie et prix d'une centrale thermique (catalogue) : pour dire quand un emprunt est nécessaire. */
+export interface AdviceMoney { treasury: number; thermalCost: number }
+let moneySource: () => AdviceMoney | null = () => null;
+/** Branché par l'interface (statistiques reçues + catalogue) ; sans source : conseil sans montant. */
+export function setAdviceMoney(f: () => AdviceMoney | null): void { moneySource = f; }
+const chf = (v: number): string => (Math.abs(v) >= 1e6 ? `${nf1.format(v / 1e6)} M CHF` : Math.abs(v) >= 1e3 ? `${nf0.format(v / 1e3)} k CHF` : `${nf0.format(v)} CHF`);
+
+export function powerAdvice(s: ElectriciteSummary | undefined, st: Pick<ElectriciteDelta, 'facilities' | 'settings'>, money: AdviceMoney | null = moneySource()): Advice {
   const build = { label: 'Construire', build: 'energy' as const };
   const plants = (st.facilities ?? []).filter((f) => f.kind !== 'poste' && f.kind !== 'batterie');
   const raccorde = st.settings?.raccordement === true;
@@ -45,7 +52,11 @@ export function powerAdvice(s: ElectriciteSummary | undefined, st: Pick<Electric
     }
     const th = FACILITY_SPECS.thermique.nominalKw, wind = FACILITY_SPECS.eolien.nominalKw;
     const nWind = Math.ceil(missing / wind);
-    return { level: 'bad', text: `Il manque ${power(missing)} (${plural(s.cut, 'bâtiment coupé', 'bâtiments coupés')}) : ${Math.ceil(missing / th) > 1 ? `${Math.ceil(missing / th)} centrales thermiques` : 'une centrale thermique'} (${power(th)}, pilotable)${nWind <= 12 ? ` ou ≈ ${nWind} éolienne${nWind > 1 ? 's' : ''} (${power(wind)} chacune, selon le vent)` : ''}.`, action: build };
+    // Centrale hors de portée de la trésorerie : le dire, avec le levier (emprunt) plutôt que laisser la ville se vider.
+    const loan = money && money.thermalCost > 0 && money.treasury < money.thermalCost
+      ? ` La centrale coûte ${chf(money.thermalCost)} pour ${chf(Math.max(0, money.treasury))} en caisse : un emprunt (Finances › Emprunts) la paie tout de suite, le courant revenu fait repartir l'emploi.`
+      : '';
+    return { level: 'bad', text: `Il manque ${power(missing)} (${plural(s.cut, 'bâtiment coupé', 'bâtiments coupés')}) : ${Math.ceil(missing / th) > 1 ? `${Math.ceil(missing / th)} centrales thermiques` : 'une centrale thermique'} (${power(th)}, pilotable)${nWind <= 12 ? ` ou ≈ ${nWind} éolienne${nWind > 1 ? 's' : ''} (${power(wind)} chacune, selon le vent)` : ''}.${loan}`, action: build };
   }
   if (s.unlinked > 0) return { level: 'warn', text: `${plural(s.unlinked, 'bâtiment')} hors réseau : prolongez la route jusqu'à eux (le courant suit les routes).`, action: { label: 'Routes', build: 'road' } };
   const margin = s.availableKw + (s.importedKw ?? 0) - s.demandKw;

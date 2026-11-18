@@ -103,6 +103,8 @@ export interface TerrainPreview {
   removing: boolean;
   /** Mode Source : le point visé est aimanté sur le bord de la carte (source de rivière). */
   edgeSource: boolean;
+  /** Mode Barrage : point par où l'eau contourne l'ouvrage (repère rouge) ; null sinon. */
+  spill: { x: number; z: number } | null;
 }
 
 /** Ce dont l'outil a besoin de la simulation. */
@@ -147,7 +149,7 @@ export class TerrainTool {
   angleSnap = false;
   private start: { x: number; z: number } | null = null;
   private hover: { x: number; z: number } | null = null;
-  private result: { key: string; validity: TerrainValidity; cost: number; outline: number[] | null; message: string } | null = null;
+  private result: { key: string; validity: TerrainValidity; cost: number; outline: number[] | null; message: string; spill?: { x: number; z: number } | null } | null = null;
   private inFlight = false;
   private queued: (() => Promise<void>) | null = null;
   private busy = false;
@@ -322,6 +324,7 @@ export class TerrainTool {
       sources: this.mode === 'source' || this.mode === 'dam' ? this.hydro.sources : [], dams: this.mode === 'source' || this.mode === 'dam' ? this.hydro.dams : [],
       removing: this.mode === 'source' && this.sourceRemove,
       edgeSource: this.mode === 'source' && this.edgeHover,
+      spill: this.mode === 'dam' ? r?.spill ?? null : null,
     };
   }
 
@@ -340,10 +343,11 @@ export class TerrainTool {
   private validate(e: TerrainEdit, key: string): void {
     const job = async (): Promise<void> => {
       if (this.result?.key !== key) return; // un aperçu plus récent attend
-      let res: { validity: TerrainValidity; cost: number; outline: number[] | null; message: string };
+      let res: { validity: TerrainValidity; cost: number; outline: number[] | null; message: string; spill?: { x: number; z: number } | null };
       try {
         const r = await this.port.terrainEdit({ edit: e, dryRun: true });
-        res = { validity: 'ok', cost: r.cost, outline: r.outline, message: describe(e, r) };
+        const w = r.water;
+        res = { validity: 'ok', cost: r.cost, outline: r.outline, message: describe(e, r), spill: w && w.spillX !== undefined && w.spillZ !== undefined ? { x: w.spillX, z: w.spillZ } : null };
       } catch (err) {
         res = { validity: 'error', cost: 0, outline: null, message: errMessage(err) };
       }
@@ -481,7 +485,7 @@ function describeWater(e: TerrainEdit, r: TerrainEditResult): string[] {
     out.push(`chute ${m1(w.headM ?? 0)} m · débit ${m1(w.flowM3s ?? 0)} m³/s`);
     const mw = w.powerMW ?? damPlantKw(w.headM ?? 0, w.flowM3s ?? 0, 'printemps') / 1000;
     out.push(mw > 0 ? `puissance prévue ${m1(mw)} MW${w.season ? ` (${SEASON_FR[w.season] ?? w.season})` : ''}, raccordée au réseau électrique` : 'chute nulle : l\'eau contourne l\'ouvrage (prolongez-le jusqu\'aux rives hautes)');
-    if (w.level !== null && r.crest !== undefined && w.level < r.crest - 0.5) out.push(`l'eau déborde par un col à ${m1(w.level)} m, sous la crête`);
+    if (w.level !== null && r.crest !== undefined && w.level < r.crest - 0.5) out.push(`l'eau déborde par un col à ${m1(w.level)} m, sous la crête${w.spillX !== undefined ? ' (repère rouge) : prolongez le barrage jusque-là ou fermez ce passage par une digue' : ''}`);
   }
   return out;
 }

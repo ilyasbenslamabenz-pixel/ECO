@@ -44,6 +44,8 @@ export interface ToolUiHooks {
   touchConfirm(o: { label: string; canRotate: boolean } | null): void;
   /** Sélection courante (panneau d'information). */
   selection(p: PickResult | null): void;
+  /** Carte d'information affichée : valeur en clair sous le point visé (outil Sélection) ; null sinon. */
+  mapReadout?(x: number, z: number): string | null;
 }
 
 /** Noms courts des types de route (étiquette de l'outil Améliorer). */
@@ -634,7 +636,11 @@ export class ToolController implements IToolController, PointerToolSink {
         this.hoverMarker.setColor(COLORS.select);
         if (p.hover && this.lastType !== 'touch' && !(this.selected && samePick(p.hover, this.selected))) this.showMarker(this.hoverMarker, p.hover);
         else this.hoverMarker.hide();
-        tag(null, 'info');
+        {
+          // Carte d'information affichée : sa valeur sous le curseur (souris seulement).
+          const g = this.lastType !== 'touch' && this.hooks?.mapReadout ? d.camera.groundAt(this.lastScreen.x, this.lastScreen.y) : null;
+          tag(g ? this.hooks!.mapReadout!(g.x, g.z) : null, 'info');
+        }
         break;
       default:
         tag(null, 'info');

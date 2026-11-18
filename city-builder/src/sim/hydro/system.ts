@@ -140,6 +140,9 @@ export interface HydroPreview {
   /** Barrage : chute et débit en régime établi, crête. */
   headM?: number;
   flowM3s?: number;
+  /** Barrage : point par où l'eau contourne l'ouvrage (col sous la crête), coordonnées monde ; absent sinon. */
+  spillX?: number;
+  spillZ?: number;
 }
 
 /** Alimentations d'un calcul et ce qu'il faut pour mesurer les débits des barrages. */
@@ -566,6 +569,17 @@ export class HydroSystem {
         out.headM = Number.isFinite(level) && Number.isFinite(tail) ? Math.max(0, Math.round((level - tail) * 10) / 10) : 0;
         out.flowM3s = Math.round(flow * 10) / 10;
         if (Number.isFinite(level)) out.level = level;
+        // Col de débordement sous la crête : la cuvette dont le niveau est celui de la retenue.
+        if (Number.isFinite(level) && level < newDam.crest - 0.5) {
+          const sp = this.previewSolver.spills;
+          for (let i = 0; i < sp.length; i += 2) {
+            if (Math.abs(sp[i]! - level) > 0.05) continue;
+            const k = sp[i + 1]!;
+            out.spillX = t.originX + (k % W) * t.spacing;
+            out.spillZ = t.originZ + Math.floor(k / W) * t.spacing;
+            break;
+          }
+        }
       }
       return out;
     } finally {

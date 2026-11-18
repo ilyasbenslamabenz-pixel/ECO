@@ -22,6 +22,9 @@ Règles : ne rien supprimer, ne pas changer l'architecture sans accord, aucun r�
 - Gameplay mesuré (`tests/perf/equilibre-economie.ts --debug --sauver=…`) : passé ~1 500 habitants, l'industrie
   consomme l'essentiel du courant (12,9 MW sur 19,9 MW à 7 000 hab.) ; sans centrale à gaz, tout l'industriel est
   délesté → chômage 30–47 %, satisfaction 11–18, départs. L'indice de croissance affiche maintenant « need-power ».
+  Mis à jour (v47) : déjà traité depuis — baisse de régime des lieux de travail, alerte « réserve faible », conseil
+  chiffré (« Il manque X MW : une centrale thermique… »). Reste le vrai frein : la centrale au gaz (3,5 M CHF) arrive
+  quand la caisse tourne autour de 100–300 k CHF ; le conseil propose désormais l'emprunt avec les montants.
 
 ## Priorité joueur (17/11) : ORDINATEUR seulement, fluidité au maximum
 - Le joueur a abandonné le mobile. Machine : PC Windows, GPU Intel intégré, Edge, 1280×755 densité 1,5.
@@ -82,3 +85,17 @@ Non fait (à décider) : l'érosion du relief (≈ 40 % de la génération) pour
 Signalement : « ça veut pas ajouter l'eau » (source de 100 m³/s, aperçu « lac prévu 0 m² »). Reproduit : sur une pente sans creux, l'eau partait en ruisseau d'**une seule case (8 m) et 35 cm**, quel que soit le débit — à l'écran, un chenal de sable presque sec.
 Correction (`src/sim/hydro/fill.ts`, `streamShape`) : largeur ≈ 2,7·Q^0,56 m et profondeur ≈ 0,39·Q^0,34 m (relations de Leopold et Maddock ; au moins 35 cm) ; le ruisseau s'élargit sur les cases voisines plus basses que sa surface (jamais à travers une barrière ni sur l'eau de base), cases marquées comme lui appartenant (pas d'exutoire prématuré). 100 m³/s : ≈ 35 m × 1,9 m ; surface en eau ×5 dans le cas reproduit. Alimentations sans débit : comportement d'origine. Test : `tests/terrain/ruisseau-debit.test.ts`.
 Note : le volume d'une source croît avec le temps de jeu écoulé depuis sa pose (débit × temps) ; partie en pause, un creux ne se remplit pas.
+
+## Jouabilité inspirée de CS2 (v47)
+- Barrage : repère rouge sur le col par où l'eau contourne l'ouvrage (solveur `spills`, aperçu `spillX/spillZ`,
+  `TerrainEditPreview.spill`), et la phrase « l'eau déborde par un col… (repère rouge) : prolongez le barrage jusque-là
+  ou fermez ce passage par une digue ». Test : tests/terrain/col-debordement.test.ts.
+- Cartes d'information (valeur foncière, pollution, bruit, chômage, éducation, satisfaction, écoles, déchets) : valeur
+  en clair sous le curseur avec l'outil Sélection (`carteReadout`, inverse des échelles). Test :
+  tests/unit/cartes-survol.test.ts. Les cartes pilotées par d'autres modules (électricité, eau, trafic…) n'ont pas
+  encore cette lecture.
+- Énergie : quand la centrale thermique dépasse la trésorerie, « Ce qu'il faut faire » donne prix et caisse et propose
+  un emprunt (`setAdviceMoney`, branché dans hud.ts). Test : conseils-besoins.
+- Proposé, non fait (accord nécessaire, touche l'architecture ou l'équilibre) : budget par service, suivre un
+  habitant / véhicule, cimetière, université, métro / train de voyageurs, stationnement, petite centrale pilotable
+  intermédiaire entre le raccordement (3 MW) et la centrale au gaz (60 MW, 3,5 M CHF).

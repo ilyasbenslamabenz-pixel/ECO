@@ -47,6 +47,9 @@ export interface TerrainEditResult {
     /** Barrage : puissance prévue de l'ouvrage (MW, saison `season`), injectée dans le réseau électrique. */
     powerMW?: number;
     season?: string;
+    /** Barrage : point (monde) par où l'eau contourne l'ouvrage, sous la crête ; absent si l'eau ne le contourne pas. */
+    spillX?: number;
+    spillZ?: number;
   };
   /** Source de rivière : position aimantée sur le bord de la carte. */
   x?: number;

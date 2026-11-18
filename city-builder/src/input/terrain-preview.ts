@@ -16,6 +16,8 @@ export class TerrainEditPreview {
   private readonly ring: SelectionMarker;
   private readonly inner: SelectionMarker;
   private readonly zone: SelectionMarker;
+  /** Col par où l'eau contourne le barrage prévu (repère rouge). */
+  private readonly spill: SelectionMarker;
   private readonly markers: SelectionMarker[] = [];
   private markerKey = '';
 
@@ -34,6 +36,7 @@ export class TerrainEditPreview {
     this.ring = new SelectionMarker(scene, this.surfaceAt, COLORS.pending);
     this.inner = new SelectionMarker(scene, this.surfaceAt, COLORS.pending);
     this.zone = new SelectionMarker(scene, this.surfaceAt, COLORS.pending);
+    this.spill = new SelectionMarker(scene, this.surfaceAt, COLORS.error);
   }
   private readonly surfaceAt: HeightFn;
 
@@ -43,6 +46,7 @@ export class TerrainEditPreview {
     this.inner.setColor(c);
     this.zone.setColor(c);
     this.showMarkers(p);
+    if (p.spill) this.spill.showPoint(p.spill.x, p.spill.z, 10); else this.spill.hide();
     const h = p.hover;
     if (p.mode === 'clear' || p.mode === 'raise' || p.mode === 'lower' || p.mode === 'flatten' || p.mode === 'smooth') {
       this.zone.hide();
@@ -86,12 +90,12 @@ export class TerrainEditPreview {
   }
 
   hide(): void {
-    this.ring.hide(); this.inner.hide(); this.zone.hide();
+    this.ring.hide(); this.inner.hide(); this.zone.hide(); this.spill.hide();
     for (const m of this.markers) m.hide();
     this.markerKey = '';
   }
 
-  update(dt: number): void { this.ring.update(dt); this.inner.update(dt); this.zone.update(dt); for (const m of this.markers) m.update(dt); }
+  update(dt: number): void { this.ring.update(dt); this.inner.update(dt); this.zone.update(dt); this.spill.update(dt); for (const m of this.markers) m.update(dt); }
 
-  dispose(): void { this.ring.dispose(); this.inner.dispose(); this.zone.dispose(); for (const m of this.markers) m.dispose(); }
+  dispose(): void { this.ring.dispose(); this.inner.dispose(); this.zone.dispose(); this.spill.dispose(); for (const m of this.markers) m.dispose(); }
 }

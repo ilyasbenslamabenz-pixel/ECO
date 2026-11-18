@@ -1801,6 +1801,7 @@ export class Simulation {
       data.water = { level: Number.isFinite(pv.level) ? Math.round(pv.level * 10) / 10 : null, areaM2: pv.area, storedM3: pv.stored, outlet: pv.outlet, status: pv.status };
       if (pv.headM !== undefined) data.water.headM = pv.headM;
       if (pv.flowM3s !== undefined) data.water.flowM3s = pv.flowM3s;
+      if (pv.spillX !== undefined && pv.spillZ !== undefined) { data.water.spillX = Math.round(pv.spillX); data.water.spillZ = Math.round(pv.spillZ); }
       // Barrage : puissance prévue de l'ouvrage (centrale du barrage), saison en cours.
       if (plan.edit.k === 'dam') {
         data.water.powerMW = Math.round(damPlantKw(pv.headM ?? 0, pv.flowM3s ?? 0, this.clock.season) / 100) / 10;

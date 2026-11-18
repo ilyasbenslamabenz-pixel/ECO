@@ -19,6 +19,9 @@ import { cityDemand, DEMAND_NOTE, DEMAND_ORDER, demandPct } from './demand';
 import { closeFloatingModulePanels, Dashboards, ModuleHost, type ModuleBridge } from './dashboards';
 import { hydrateIcons, iconEl } from './icons';
 import { Minimap } from './minimap';
+import { setAdviceMoney } from './needs-advice';
+import { cartesLastLayer, cartesLayerKind } from '../render/plugins/cartes';
+import { carteReadout, carteValueAt } from '../shared/protocol-ext/cartes';
 import type { SimReport } from '../sim/sim-protocol';
 import type { CameraMode, SimStats } from '../shared/contracts';
 import { DEFAULT_MAP_CHUNKS, type SimSpeed } from '../shared/constants';
@@ -703,6 +706,12 @@ export function initUI(h: UIHandlers): UIHandle {
     setMenuFoot(text) { $('menu-foot').textContent = text.replace(/\s*·\s*sauvegardes\s*:\s*\S+/i, ' · sauvegardes dans ce navigateur'); },
     toolHooks() {
       return {
+        mapReadout(x, z) {
+          const kind = cartesLayerKind(), l = cartesLastLayer();
+          if (!kind || !l || l.kind !== kind) return null;
+          const v = carteValueAt(l, x, z);
+          return v === null ? null : carteReadout(kind, v);
+        },
         cursorTag(text, kind, sx, sy) {
           if (!text) { cursorTag.classList.add('hidden'); tagKey = ''; return; }
           // Étiquette structurée : une ligne par rangée (1re = coût et longueur/surface, suivantes = angle, pente, aides) ;
@@ -767,6 +776,9 @@ export function initUI(h: UIHandlers): UIHandle {
     },
     enableConstruction(a) {
       api = a;
+      // « Ce qu'il faut faire » (Énergie) : trésorerie et prix de la centrale thermique, pour proposer un emprunt.
+      const gas = a.mirror.catalog.assets.find((x) => x.id === 'elec_centrale_gaz');
+      setAdviceMoney(() => (lastStats && gas ? { treasury: lastStats.money, thermalCost: gas.cost } : null));
       buildBar = new BuildBar({ catalog: a.mirror.catalog, tools: a.tools, machine: a.machine, thumbs: a.thumbs, notify: showToast, onDrawerOpen: () => opened('drawer') });
       info = new InfoPanel({ mirror: a.mirror, camera: a.camera, thumbs: a.thumbs, demolish: (p) => a.machine.demolishTarget(p).then((ok) => { if (ok) a.tools.select(null); return ok; }), move: (rec) => { a.tools.select(null); a.machine.startMove(rec); },
         serviceInfo: async (id) => (await a.machine.pluginCommand('ameliorations', 'info', { buildingId: id })) as { level: number; max: number; upgradeCost: number | null; radiusFactor: number; capacityFactor: number; extraUpkeep: number },
