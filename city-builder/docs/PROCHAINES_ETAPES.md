@@ -76,3 +76,9 @@ Ce qui a changé :
 - **Nouvelle partie** : écran « Création de la carte… » pendant la génération (≈ 2 s dans la simulation).
 
 Non fait (à décider) : l'érosion du relief (≈ 40 % de la génération) pourrait être accélérée, mais le relief des sauvegardes est régénéré depuis la graine : tout changement d'arrondi le modifierait. Pré-générer la carte pendant que le joueur remplit le formulaire ferait gagner ≈ 2 s mais ajoute une commande au protocole de la simulation.
+
+## Source d'eau : cours d'eau à la mesure du débit (v46)
+
+Signalement : « ça veut pas ajouter l'eau » (source de 100 m³/s, aperçu « lac prévu 0 m² »). Reproduit : sur une pente sans creux, l'eau partait en ruisseau d'**une seule case (8 m) et 35 cm**, quel que soit le débit — à l'écran, un chenal de sable presque sec.
+Correction (`src/sim/hydro/fill.ts`, `streamShape`) : largeur ≈ 2,7·Q^0,56 m et profondeur ≈ 0,39·Q^0,34 m (relations de Leopold et Maddock ; au moins 35 cm) ; le ruisseau s'élargit sur les cases voisines plus basses que sa surface (jamais à travers une barrière ni sur l'eau de base), cases marquées comme lui appartenant (pas d'exutoire prématuré). 100 m³/s : ≈ 35 m × 1,9 m ; surface en eau ×5 dans le cas reproduit. Alimentations sans débit : comportement d'origine. Test : `tests/terrain/ruisseau-debit.test.ts`.
+Note : le volume d'une source croît avec le temps de jeu écoulé depuis sa pose (débit × temps) ; partie en pause, un creux ne se remplit pas.

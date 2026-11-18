@@ -399,11 +399,11 @@ export class HydroSystem {
     const routed = new Float64Array(this.dams.length);
     this.route(g, starts, routed, seaLevel);
     const items: { id: number; feed: HydroFeed; q: number; onBase: boolean }[] = [];
-    this.sources.forEach((s, i) => items.push({ id: s.id, q: s.q, onBase: onBaseSrc[i]!, feed: { cell: s.cell, volume: infinite ? Infinity : s.q * Math.max(0, tq - s.t) * 60, tag: i, ...(s.edge ? { inlet: true } : {}) } }));
+    this.sources.forEach((s, i) => items.push({ id: s.id, q: s.q, onBase: onBaseSrc[i]!, feed: { cell: s.cell, volume: infinite ? Infinity : s.q * Math.max(0, tq - s.t) * 60, tag: i, flow: s.q, ...(s.edge ? { inlet: true } : {}) } }));
     this.dams.forEach((d, i) => {
       const q = routed[i]! > 0 ? Math.min(DAM_FLOW_MAX, Math.round(routed[i]! * 100) / 100) : d.q;
       d.seed = q > 0 ? this.damSeed(d, ground, base) : -1;
-      if (d.seed >= 0) items.push({ id: d.id, q, onBase: false, feed: { cell: d.seed, volume: infinite ? Infinity : q * Math.max(0, tq - d.t) * 60, tag: -(i + 1) } });
+      if (d.seed >= 0) items.push({ id: d.id, q, onBase: false, feed: { cell: d.seed, volume: infinite ? Infinity : q * Math.max(0, tq - d.t) * 60, tag: -(i + 1), flow: q } });
     });
     items.sort((a, b) => a.id - b.id);
     return { feeds: items.map((o) => o.feed), q: items.map((o) => o.q), onBase: items.map((o) => o.onBase) };

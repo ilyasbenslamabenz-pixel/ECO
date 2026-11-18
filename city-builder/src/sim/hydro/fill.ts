@@ -18,8 +18,20 @@
  */
 import { NO_WATER } from '../terrain/types';
 
-/** Profondeur d'un ruisseau de débordement (m). */
+/** Profondeur minimale d'un ruisseau de débordement (m) ; débit inconnu : ruisseau d'une case à cette profondeur. */
 export const STREAM_DEPTH = 0.35;
+
+/**
+ * Géométrie hydraulique d'un cours d'eau selon son débit Q (m³/s), relations de Leopold et Maddock (ordres de
+ * grandeur des rivières naturelles) : largeur ≈ 2,7 · Q^0,56 m, profondeur ≈ 0,39 · Q^0,34 m (au moins
+ * STREAM_DEPTH). 1 m³/s : ≈ 2,7 m × 0,39 m ; 10 m³/s : ≈ 10 m × 0,85 m ; 100 m³/s : ≈ 35 m × 1,9 m.
+ */
+export function streamShape(q: number): { width: number; depth: number } {
+  const Q = Math.max(0, q);
+  return { width: 2.7 * Q ** 0.56, depth: Math.max(STREAM_DEPTH, 0.39 * Q ** 0.34) };
+}
+/** Demi-largeur maximale d'un ruisseau élargi (cases). */
+const STREAM_MAX_HALF = 4;
 /** Taille maximale d'une cuvette (échantillons) : au-delà, le niveau n'augmente plus (≈ 3,8 km² en cases de 8 m). */
 export const MAX_LAKE_CELLS = 60_000;
 /** Nombre maximal de cuvettes enchaînées par alimentation et longueur maximale d'un ruisseau (cases). */
@@ -60,6 +72,11 @@ export interface HydroFeed {
    * INLET_GUARD cases de l'arrivée ne sont pas un exutoire (l'eau ne ressort pas aussitôt par où elle entre).
    */
   inlet?: boolean;
+  /**
+   * Débit (m³/s) : largeur et profondeur du ruisseau de débordement (streamShape). Absent : ruisseau d'une case à
+   * STREAM_DEPTH (comportement d'origine).
+   */
+  flow?: number;
 }
 
 /** Demi-largeur (cases) de la portion de bord qui n'est pas un exutoire autour d'une source de rivière. */
@@ -136,6 +153,9 @@ export class HydroSolver {
   private E = new Float32Array(0);
   private mark = new Int32Array(0);
   private stamp = 0;
+  /** Cases du ruisseau (lit et élargissement) de l'alimentation en cours : jamais prises pour un exutoire. */
+  private own = new Int32Array(0);
+  private ownStamp = 0;
   private readonly heap = new MinHeap();
   private readonly cells: number[] = [];
 
@@ -145,6 +165,8 @@ export class HydroSolver {
     this.water = new Float32Array(n);
     this.mark = new Int32Array(n);
     this.stamp = 0;
+    this.own = new Int32Array(n);
+    this.ownStamp = 0;
   }
 
   /** Calcule l'eau dynamique ; renvoie un résultat par alimentation (même ordre). */
@@ -212,6 +234,13 @@ export class HydroSolver {
     const tm = g.touchMask ?? null;
     const touch = (k: number): void => { const v = tm ? tm[k]! : 0; if (v > 0 && !res.touched.includes(v)) res.touched.push(v); };
     if (f.cell < 0 || f.cell >= W * H || (bar && bar[f.cell])) return res;
+    // Ruisseau à la mesure du débit : profondeur, et demi-largeur en cases (au-delà de la case du lit).
+    const own = this.own;
+    if (++this.ownStamp > 0x7ffffff0) { own.fill(0); this.ownStamp = 1; }
+    const os = this.ownStamp;
+    const shape = f.flow !== undefined && f.flow > 0 ? streamShape(f.flow) : null;
+    const sDepth = shape ? shape.depth : STREAM_DEPTH;
+    const sHalf = shape ? Math.max(0, Math.min(STREAM_MAX_HALF, Math.round((shape.width / 2 - g.spacing / 2) / g.spacing))) : 0;
     let V = f.volume;
     let cur = f.cell;
     const heap = this.heap, cells = this.cells;
@@ -277,7 +306,7 @@ export class HydroSolver {
       let c = outflow;
       let next = -1;
       for (let s = 0; s < MAX_STREAM; s++) {
-        if (this.baseWet(g, c) || (water[c] !== NO_WATER && water[c]! > g.ground[c]! + 0.05 && E[c]! < level - 1e-3 && mark[c] !== st)) {
+        if (this.baseWet(g, c) || (water[c] !== NO_WATER && water[c]! > g.ground[c]! + 0.05 && E[c]! < level - 1e-3 && mark[c] !== st && own[c] !== os)) {
           // Eau de base ou eau dynamique plus basse déjà posée : exutoire.
           res.status = 'sink';
           res.outlet = res.outlet || 'eau';
@@ -293,8 +322,26 @@ export class HydroSolver {
         if (j < H - 1 && !(bar && bar[c + W]) && E[c + W]! < be) { be = E[c + W]!; best = c + W; }
         if (best < 0) { next = c; break; }
         if (tm) touch(c);
-        const sv = g.ground[c]! + STREAM_DEPTH;
+        const sv = g.ground[c]! + sDepth;
         if (water[c] === NO_WATER || water[c]! < sv) { if (water[c] === NO_WATER) res.area += A; water[c] = sv; }
+        own[c] = os;
+        // Élargissement : les cases voisines (disque) plus basses que la surface du ruisseau sont en eau à ce niveau
+        // (jamais à travers une barrière ni sur une eau de base).
+        for (let dj = -sHalf; dj <= sHalf; dj++) {
+          const jj = j + dj;
+          if (jj < 0 || jj >= H) continue;
+          for (let di = -sHalf; di <= sHalf; di++) {
+            if ((di === 0 && dj === 0) || di * di + dj * dj > sHalf * sHalf + sHalf) continue;
+            const ii = i + di;
+            if (ii < 0 || ii >= W) continue;
+            const nb = jj * W + ii;
+            if ((bar && bar[nb]) || this.baseWet(g, nb) || g.ground[nb]! > sv - 0.05) continue;
+            if (tm) touch(nb);
+            if (water[nb] === NO_WATER) res.area += A;
+            if (water[nb] === NO_WATER || water[nb]! < sv) water[nb] = sv;
+            own[nb] = os;
+          }
+        }
         c = best;
       }
       if (next < 0) { res.status = 'capped'; return res; }
