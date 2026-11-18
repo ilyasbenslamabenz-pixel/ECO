@@ -197,7 +197,22 @@ export class VegetationSystem {
     this.species = species ?? speciesFromCatalog(this.lib.catalog.assets);
     if (this.species.length > 255) this.species.length = 255;
     this.renders = [];
-    for (const sp of this.species) {
+    // Nombre de LOD chargés par essence (règles ci-dessous), calculé d'avance : tous les modèles sont demandés EN
+    // PARALLÈLE (au lieu d'une essence après l'autre, réseau compris), puis les essences sont montées dans l'ordre
+    // du catalogue (scène et résultat identiques).
+    const lodCountOf = (sp: VegSpecies): number => {
+      const cardLod = sp.asset.category === 'tree' && sp.asset.lods.length >= 3 && (sp.asset.lods[2]?.triangles ?? 1e9) <= CARD_LOD_TRIANGLES;
+      const light = sp.impostor && !!r && (sp.asset.lods[0]?.triangles ?? 1e9) <= LIGHT_TREE_TRIANGLES;
+      return Math.min(light ? 1 : cardLod ? 2 : 3, sp.asset.lods.length);
+    };
+    // LOD0 (pleine définition, ≈ 70 % des octets des arbres, vu seulement à moins de ~50 m) : chargé APRÈS le
+    // démarrage (loadDetail) ; en attendant, la case LOD0 montre le LOD1. Essences à un seul LOD : inchangées.
+    this.detailQueue = [];
+    const firstLod = (sp: VegSpecies): number => (lodCountOf(sp) >= 2 ? 1 : 0);
+    const pending = this.species.map((sp) => Promise.all(Array.from({ length: lodCountOf(sp) - firstLod(sp) }, (_, k) => this.lib.load(sp.asset.id, k + firstLod(sp)))));
+    // Une essence qui échoue ne doit pas laisser les autres promesses rejetées sans gestionnaire.
+    for (const p of pending) p.catch(() => undefined);
+    for (const [si, sp] of this.species.entries()) {
       // Dernier LOD en « cartes croisées » (≤ 16 triangles, arbres générés) : illisible vu du dessus (lamelles) ;
       // on ne le charge pas, l'imposteur orienté caméra (vraies vues du modèle, dont la vue zénithale) prend le relais.
       // Ce LOD contient aussi une grande carte HORIZONTALE (près de la moitié de l'emprise du houppier) : vue de
@@ -207,8 +222,12 @@ export class VegetationSystem {
       // basses ; le LOD0 sert jusqu'à l'imposteur.
       const light = sp.impostor && !!r && (sp.asset.lods[0]?.triangles ?? 1e9) <= LIGHT_TREE_TRIANGLES;
       const lodCount = Math.min(light ? 1 : cardLod ? 2 : 3, sp.asset.lods.length);
-      const roots = await Promise.all(Array.from({ length: lodCount }, (_, l) => this.lib.load(sp.asset.id, l)));
+      const loadedRoots = await pending[si]!;
+      // LOD0 différé : la case 0 reçoit provisoirement le modèle du LOD1 (mêmes géométries, partagées).
+      const deferred = firstLod(sp) === 1;
+      const roots = deferred ? [loadedRoots[0]!, ...loadedRoots] : loadedRoots;
       const rec: SpeciesRender = { sp, lods: [], imp: null, baseHeight: sp.asset.dimensions.height };
+      if (deferred) this.detailQueue.push(rec);
       roots.forEach((root, l) => {
         const parts = extractParts(root);
         const cap = l === lodCount - 1 && !sp.impostor ? this.o.detailedCapacity * 2 : this.o.detailedCapacity;
@@ -248,6 +267,41 @@ export class VegetationSystem {
       this.renders.push(rec);
     }
     this.loaded = true;
+  }
+
+  /** Essences dont le LOD0 reste à charger (voir loadDetail). */
+  private detailQueue: SpeciesRender[] = [];
+
+  /**
+   * Charge en arrière-plan le LOD0 des essences différées et l'échange avec le LOD1 provisoire : nouveaux
+   * maillages sur les MÊMES tampons d'instances (positions et couleurs inchangées), anciens retirés de la scène
+   * sans dispose (leurs géométries et tampons restent utilisés par le LOD1). Une essence à la fois.
+   */
+  async loadDetail(): Promise<void> {
+    const queue = this.detailQueue;
+    this.detailQueue = [];
+    for (const rec of queue) {
+      if (!this.renders.includes(rec)) continue; // système rechargé entre-temps
+      let root: THREE.Object3D;
+      try { root = await this.lib.load(rec.sp.asset.id, 0); } catch { continue; } // LOD1 conservé
+      if (!this.renders.includes(rec)) continue;
+      const L = rec.lods[0]!;
+      const meshes = extractParts(root).map((p) => {
+        const im = new THREE.InstancedMesh(p.geometry, p.material, L.cap);
+        im.instanceMatrix = L.matrices;
+        im.instanceColor = L.colors;
+        im.count = L.count;
+        im.visible = L.count > 0;
+        im.frustumCulled = false;
+        im.castShadow = L.meshes[0]?.castShadow ?? true;
+        im.receiveShadow = true;
+        im.name = `veg_${rec.sp.asset.id}_lod0`;
+        this.group.add(im);
+        return im;
+      });
+      for (const m of L.meshes) m.removeFromParent();
+      L.meshes = meshes;
+    }
   }
 
   get speciesList(): readonly VegSpecies[] { return this.species; }

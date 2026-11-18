@@ -269,3 +269,10 @@
 /* Encadré « Pourquoi les habitants sont mécontents » : liseré à gauche (même langage que « Ce qu'il faut faire »). */
 :root:not([data-x]) .why-box { border: 0; border-radius: var(--r-md); box-shadow: inset 3px 0 0 var(--st-warn); background: color-mix(in srgb, var(--st-warn) 8%, transparent); }
 :root:not([data-x]) .why-box.ok { box-shadow: inset 3px 0 0 var(--st-ok); background: color-mix(in srgb, var(--st-ok) 7%, transparent); }
+
+/* Menu affiché pendant le chargement : barre fine et texte sous l'accroche. */
+:root:not([data-x]) .menu-boot { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; }
+:root:not([data-x]) .menu-boot.hidden { display: none; }
+:root:not([data-x]) .menu-boot .progress { height: 3px; }
+:root:not([data-x]) .menu-boot-bar { height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+:root:not([data-x]) .menu-boot-text { font-size: 12px; color: var(--muted); }

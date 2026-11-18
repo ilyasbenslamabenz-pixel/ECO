@@ -56,3 +56,23 @@ Règles : ne rien supprimer, ne pas changer l'architecture sans accord, aucun r�
 3. **Premiers pas** : réduit à sa ligne de titre pendant la construction (outil actif ou tiroir ouvert), détail au survol.
 4. **Tableau Énergie** : sous « Ce qu'il faut faire » et les quatre indicateurs, sections repliables fermées par défaut (détail production / consommation, budget, réglages, installations et lignes, journal), état conservé entre deux relevés.
 5. **Finitions** : encadré « Pourquoi » au même langage que les conseils (liseré à gauche) ; file des vignettes « dernier demandé, premier servi » (l'onglet affiché passe devant). Couleurs R/C/I/B conservées : ce sont celles des zones peintes sur la carte.
+
+## Chargement optimisé (v45)
+
+Mesures (Chromium sans carte graphique, réseau limité à 30 Mbit/s, latence 60 ms ; `scratchpad` : load.mjs) :
+
+| | Avant | Après |
+|---|---|---|
+| Menu affiché (version publiée) | 17,3 s | **0,9 s** |
+| Jeu jouable, total (version publiée) | ≈ 23 s | ≈ 14,6 s |
+| Données téléchargées (version publiée) | 37 Mo | 21 Mo |
+| Paquets au démarrage | 13 paquets / 25,8 Mo | 4 paquets / 7,5 Mo bruts |
+
+Ce qui a changé :
+- **Menu immédiat** (`src/main.ts`, `ui.showBootMenu`) : le menu s'affiche dès le début, avec la progression ; le formulaire « Nouvelle partie » se remplit pendant le chargement ; une action demandée avant la fin attend (`afterBoot`). Lancements automatiques (autostart, démo, banc d'essai) : écran de chargement inchangé.
+- **Simulation en parallèle du rendu** : le Worker démarre pendant la préparation du rendu.
+- **Végétation** : modèles de toutes les essences demandés en parallèle ; **LOD0 des arbres différé** (`VegetationSystem.loadDetail`, 4 s après le démarrage ; la case LOD0 montre le LOD1 en attendant ; test `tests/terrain/vegetation-detail.test.ts`).
+- **Paquets de la version publiée** (`scripts/pack-artifact.mjs`) : ordre réel de chargement (`scripts/artifact-order.mjs` → `scripts/artifact-order.json`, à régénérer après un changement d'assets ; une liste périmée reste correcte, moins efficace) ; reste en paquets de 1 Mo par dossier ; noms à empreinte de contenu + **cache du navigateur** (Cache Storage « meknes-paquets ») : une relance ne retélécharge que les paquets modifiés ; décodage base64 natif quand disponible ; garde-fou de syntaxe de l'adaptateur.
+- **Nouvelle partie** : écran « Création de la carte… » pendant la génération (≈ 2 s dans la simulation).
+
+Non fait (à décider) : l'érosion du relief (≈ 40 % de la génération) pourrait être accélérée, mais le relief des sauvegardes est régénéré depuis la graine : tout changement d'arrondi le modifierait. Pré-générer la carte pendant que le joueur remplit le formulaire ferait gagner ≈ 2 s mais ajoute une commande au protocole de la simulation.

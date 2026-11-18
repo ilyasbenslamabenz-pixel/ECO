@@ -90,6 +90,15 @@ export interface UIHandle {
   setLoading(progress: number, text: string): void;
   hideLoading(): void;
   showMenu(opts: { canContinue: boolean; inGame: boolean }): void;
+  /**
+   * Menu affiché dès le début du chargement (au lieu de l'écran de chargement) : barre de progression dans le menu,
+   * formulaire « Nouvelle partie » utilisable. `bootQueued()` : une action a été demandée avant la fin du
+   * chargement → l'écran de chargement reprend la main ; `endBootMenu()` : chargement terminé, menu inchangé
+   * (même écran), état du bouton « Continuer » mis à jour.
+   */
+  showBootMenu(): void;
+  bootQueued(): void;
+  endBootMenu(opts: { canContinue: boolean }): void;
   hideMenu(): void;
   showHud(cityName: string): void;
   updateStats(s: SimStats): void;
@@ -583,11 +592,44 @@ export function initUI(h: UIHandlers): UIHandle {
     } else { elHappy.textContent = '—'; happyBtn.dataset['level'] = ''; }
   };
 
+  // Menu affiché pendant le chargement : progression dans le menu tant qu'aucune action n'est en attente.
+  let bootMenu = false, bootWaiting = false;
+  const bootBox = el('div', { cls: 'menu-boot hidden', attrs: { role: 'status', 'aria-live': 'polite' } },
+    el('div', { cls: 'progress' }, el('div', { cls: 'menu-boot-bar' })), el('span', { cls: 'menu-boot-text', text: 'Chargement…' }));
+  menu.querySelector('.menu-screen[data-screen="home"] .tagline')?.after(bootBox);
   const handle: UIHandle = {
     setLoading(p, text) {
-      $('loading').classList.remove('hidden');
       $('loading-bar').style.width = `${Math.round(p * 100)}%`;
       $('loading-text').textContent = text;
+      if (bootMenu && !bootWaiting) {
+        (bootBox.querySelector('.menu-boot-bar') as HTMLElement).style.width = `${Math.round(p * 100)}%`;
+        (bootBox.querySelector('.menu-boot-text') as HTMLElement).textContent = `Chargement du jeu ${Math.round(p * 100)} % — vous pouvez déjà préparer votre partie`;
+        return;
+      }
+      $('loading').classList.remove('hidden');
+    },
+    showBootMenu() {
+      bootMenu = true; bootWaiting = false;
+      inGameFlag = false;
+      btnContinue.disabled = true;
+      btnContinue.lastChild!.textContent = 'Continuer (chargement…)';
+      btnQuit.classList.add('hidden');
+      bootBox.classList.remove('hidden');
+      showScreen('home');
+      menu.classList.remove('hidden');
+      $('loading').classList.add('hidden');
+    },
+    bootQueued() {
+      if (!bootMenu) return;
+      bootWaiting = true;
+      menu.classList.add('hidden');
+      $('loading').classList.remove('hidden');
+    },
+    endBootMenu({ canContinue }) {
+      bootMenu = false;
+      bootBox.classList.add('hidden');
+      btnContinue.disabled = !canContinue;
+      btnContinue.lastChild!.textContent = canContinue ? 'Continuer (dernière partie)' : 'Continuer — aucune sauvegarde';
     },
     hideLoading() { $('loading').classList.add('hidden'); },
     showMenu({ canContinue, inGame }) {

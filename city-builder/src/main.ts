@@ -189,19 +189,25 @@ async function boot(): Promise<void> {
   let demoRunning = false;
   const needBridge = (): SimBridge => { if (!bridge) throw new Error('Simulation non démarrée'); return bridge; };
 
+  // Menu affiché dès le début du chargement : une partie demandée avant la fin attend `booted` (les fonctions de
+  // lancement utilisent la simulation et le rendu, prêts seulement à la fin du chargement).
+  let isBooted = false;
+  let bootDoneResolve: () => void = () => undefined;
+  const booted = new Promise<void>((r) => { bootDoneResolve = r; });
+  const afterBoot = (fn: () => void): void => { if (isBooted) fn(); else { ui.bootQueued(); void booted.then(fn); } };
   const ui = initUI({
-    onNewGame: () => { void startNewGame(); },
-    onNewGameWith: (p) => { void startNewGame({ cityName: p.cityName, seed: p.seed, mapChunks: p.mapChunks, startMoney: p.startMoney, terrain: { riverMode: p.riverMode ?? 'une', hydrology: p.hydrology ?? 'mer' } }, p.paliers !== false); },
+    onNewGame: () => { afterBoot(() => { void startNewGame(); }); },
+    onNewGameWith: (p) => { afterBoot(() => { void startNewGame({ cityName: p.cityName, seed: p.seed, mapChunks: p.mapChunks, startMoney: p.startMoney, terrain: { riverMode: p.riverMode ?? 'une', hydrology: p.hydrology ?? 'mer' } }, p.paliers !== false); }); },
     onContinue: () => {
       if (state.inGame) { ui.hideMenu(); void needBridge().send('setSpeed', { speed: speedBeforeMenu }); return; }
-      void loadSlot(continueSlot ?? QUICK_SLOT);
+      afterBoot(() => { void loadSlot(continueSlot ?? QUICK_SLOT); });
     },
-    onLoadSlot: (slot) => { void loadSlot(slot); },
+    onLoadSlot: (slot) => { afterBoot(() => { void loadSlot(slot); }); },
     onSaveSlot: (slot) => saveSlot(slot),
-    onDemo: () => { void startDemo(); },
+    onDemo: () => { afterBoot(() => { void startDemo(); }); },
     // « Nouvelle partie (ville de départ) » : remise le 14/11 après les corrections mémoire du mode allégé (images
     // partagées, textures 256 px, qualité Basse sur téléphone) ; retirée le 13/11 après des plantages Safari iPhone.
-    onDemoGame: () => { void startDemo(true); },
+    onDemoGame: () => { afterBoot(() => { void startDemo(true); }); },
     onQuit: () => {
       void autoTriggers?.saveAndFlush();
       autosaver?.stop();
@@ -231,10 +237,15 @@ async function boot(): Promise<void> {
   const setLoadingRaw = ui.setLoading.bind(ui);
   ui.setLoading = (p: number, text: string): void => { traceStep(text.replace(/…$/, '')); setLoadingRaw(p, text); };
   const refreshMenu = async (): Promise<void> => {
+    // Menu affiché pendant le chargement : pas de retour à l'accueil (formulaire en cours) ; fin du chargement : endBootMenu.
+    if (!isBooted && earlyMenu) return;
     continueSlot = store ? latestSlot(await store.list()) : null;
     ui.showMenu({ canContinue: state.inGame || continueSlot !== null, inGame: state.inGame });
   };
 
+  // Menu tout de suite (partie normale) ; lancements automatiques (autostart, démo, banc d'essai) : écran de chargement.
+  const earlyMenu = !params.has('autostart') && !params.has('demo') && !params.has('stress') && !params.has('validate') && !bench;
+  if (earlyMenu) ui.showBootMenu();
   ui.setLoading(0.05, 'Chargement du catalogue d\'assets…');
   const catalog = await fetchCatalog(assetsBase);
   const issues = validateCatalog(catalog);
@@ -259,6 +270,9 @@ async function boot(): Promise<void> {
     return;
   }
 
+  // Simulation (téléchargement et démarrage du Worker) en parallèle de la préparation du rendu.
+  const bridgeStart = SimBridge.create(workerUrl);
+  bridgeStart.catch(() => undefined);
   ui.setLoading(0.2, 'Préparation du rendu 3D (ciel, terrain, végétation)…');
   const canvas = document.getElementById('scene') as HTMLCanvasElement;
   const render = await initRender(canvas, lib, catalog, assetsBase, undefined, ui.currentOptions().quality,
@@ -448,7 +462,7 @@ async function boot(): Promise<void> {
   });
 
   ui.setLoading(0.5, 'Démarrage de la simulation…');
-  bridge = await SimBridge.create(workerUrl);
+  bridge = await bridgeStart;
   const b = bridge;
   // Sauvegarde automatique après construction/démolition (au plus 1/min) : src/save/auto-triggers.ts.
   const rawSend = b.send.bind(b);
@@ -847,6 +861,9 @@ async function boot(): Promise<void> {
   async function startNewGame(p: Partial<NewGameParams> = {}, paliers = params.has('paliers')): Promise<void> {
     try {
       demoRunning = false;
+      // Génération de la carte (≈ 2 s dans la simulation, puis mise en place du rendu) : écran de progression
+      // plutôt qu'un menu figé.
+      ui.setLoading(0.85, 'Création de la carte (relief, rivières, forêts)…');
       const snap = waitSnapshot();
       await b.send('newGame', {
         seed: p.seed ?? (params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 2 ** 31) | 0),
@@ -865,9 +882,11 @@ async function boot(): Promise<void> {
       if (paliers) await b.send('pluginCommand', { plugin: 'paliers', name: 'mode', payload: { verrous: true } }).catch(() => undefined);
       focusCamera(0, 0, 420, 0.6);
       ui.hideMenu();
+      ui.hideLoading();
       autosaver?.start();
       await b.send('setSpeed', { speed: 1 });
     } catch (e) {
+      ui.hideLoading();
       const err = e instanceof SimCommandError ? e.error : ({ code: 'INVALID_ARGS', message: errText(e) } as CommandError);
       ui.toast(`Impossible de créer la partie : ${err.message}`, 'error');
     }
@@ -1006,7 +1025,15 @@ async function boot(): Promise<void> {
   }
   else if (params.has('demo')) await startDemo();
   else if (params.has('autostart')) await startNewGame();
-  else await refreshMenu();
+  else if (earlyMenu) {
+    // Menu déjà affiché : on garde l'écran en cours (formulaire rempli pendant le chargement), « Continuer » activé.
+    continueSlot = latestSlot(await store.list());
+    ui.endBootMenu({ canContinue: continueSlot !== null });
+  } else await refreshMenu();
+  isBooted = true;
+  bootDoneResolve();
+  // Arbres en pleine définition (vus de près seulement) : chargés après le démarrage, sans retarder le jeu.
+  window.setTimeout(() => { void render.veg.loadDetail(); }, 4000);
   debug.ready = true;
   traceStep('prêt');
   // Surveillance continue (menu compris) : un plantage après le chargement est aussi signalé au relancement.
