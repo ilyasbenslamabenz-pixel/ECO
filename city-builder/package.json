@@ -56,7 +56,8 @@
     "waste:build": "tsx tools/waste/build.ts",
     "eau:models": "tsx tools/water-network/build.ts",
     "eau:captures": "node tests/eau/capture.mjs",
-    "e2e:zonage": "node tests/zonage/e2e.mjs"
+    "e2e:zonage": "node tests/zonage/e2e.mjs",
+    "e2e:audit": "node tests/e2e/audit-jeu.mjs"
   },
   "dependencies": {
     "three": "0.187.0"

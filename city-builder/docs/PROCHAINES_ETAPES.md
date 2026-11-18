@@ -27,3 +27,10 @@ Règles : ne rien supprimer, ne pas changer l'architecture sans accord, aucun r�
 - Le joueur a abandonné le mobile. Machine : PC Windows, GPU Intel intégré, Edge, 1280×755 densité 1,5.
 - Fait (v36) : résolution dynamique + paliers aussi en qualité Moyenne sur GPU intégré, ombres 1 image sur 2,
   baisse de régime électrique, fiche bâtiment sans chevauchement. À faire : nouvelle mesure ?bench du joueur.
+
+## Audit complet (18/11)
+- `npm run e2e:audit` (tests/e2e/audit-jeu.mjs) : 31 contrôles à la souris, tout le jeu sur ordinateur — 31/31.
+- Toutes les suites e2e PC passent (smoke, interface-pc, terraform, gate, game, play, problemes, signals, routes,
+  electricite, zonage, dechets, actions). Restent en échec : parties iPhone de tests/construction/demo.mjs (mobile
+  abandonné par le joueur).
+- Non reproduit : source d'eau « lac prévu 0 m² » dans un cratère de la partie du joueur → demander l'export .meknes.

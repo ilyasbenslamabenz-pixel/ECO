@@ -32,7 +32,7 @@ try {
   const clickWorld = async (x, z) => { const p = await screen(x, z); if (p.x < 40 || p.y < 70 || p.x > 1400 || p.y > 760) throw new Error(`point (${x}, ${z}) hors de l'écran (${Math.round(p.x)}, ${Math.round(p.y)})`); await page.mouse.move(p.x - 3, p.y); await render(1); await page.mouse.move(p.x, p.y); await render(1); await page.waitForTimeout(250); await page.mouse.click(p.x, p.y); await page.waitForTimeout(500); await render(1); };
   const hoverWorld = async (x, z) => { const p = await screen(x, z); await page.mouse.move(p.x - 3, p.y); await render(1); await page.mouse.move(p.x, p.y); await render(1); await page.waitForTimeout(400); };
   // Échap : quitte l'outil / le tracé en cours, sans jamais laisser le menu principal ouvert (il masque la barre d'outils).
-  const menuOpen = () => page.evaluate(() => !document.getElementById('menu')?.classList.contains('hidden'));
+  const menuOpen = () => page.evaluate(() => !document.getElementById('main-menu')?.classList.contains('hidden'));
   const esc = async () => {
     // Un Échap arrête un tracé enchaîné ; puis retour explicite à la Sélection (jamais d'Échap « à vide », qui ouvre le menu).
     const drawing = await page.evaluate(() => document.body.classList.contains('road-drawing'));
@@ -41,7 +41,18 @@ try {
     await page.waitForTimeout(150);
     if (await menuOpen()) { await page.evaluate(() => document.getElementById('btn-continue')?.click()); await page.waitForTimeout(300); }
   };
-  const tickHours = async (h) => { await send('setSpeed', { speed: 16 }); await page.waitForTimeout(h * 150); await send('setSpeed', { speed: 0 }); };
+  // Avance réellement de `h` heures de jeu, mesurées sur l'horloge de la SIMULATION (getReport), au plus 3 min réelles.
+  const gameMin = async () => (await send('getReport', {})).r?.date?.totalMinutes ?? 0;
+  const tickHours = async (h) => {
+    const t0 = await gameMin();
+    await send('setSpeed', { speed: 16 });
+    // Tranches de 3 s à ×16 (≈ 8 h de jeu chacune en mesure), horloge relue entre deux tranches.
+    let t1 = t0, k = 0;
+    for (; k < 40; k++) { await page.waitForTimeout(3000); t1 = await gameMin(); if (t1 >= t0 + h * 60) break; }
+    const sp = await page.evaluate(() => window.__aube.lastStats?.speed);
+    if (process.env.AUDIT_TRACE) console.log(`TEMPS ${h} h : ${t0} → ${t1} (${k + 1} tranches, vitesse vue ${sp})`);
+    await send('setSpeed', { speed: 0 });
+  };
   const step = async (name, fn) => {
     try { await fn(); } catch (e) {
       const lines = e.message.split('\n'); const why = lines.find((l) => /intercepts|waiting for/.test(l)) ?? '';
@@ -168,11 +179,13 @@ try {
     if (tabId) await tab(tabId);
     const ok = await pickCard(assetId);
     if (!ok) return { ok: false, why: `carte ${assetId} absente` };
-    const n0 = await buildingCount();
+    // Pose vérifiée sur le modèle exact (le zonage fait aussi pousser des bâtiments : le total ne suffit pas).
+    const countOf = async () => ((await save())?.buildings ?? []).filter((q) => (q.assetId ?? q.asset) === assetId).length;
+    const n0 = await countOf();
     await hoverWorld(x, z); await page.waitForTimeout(600);
     const tag = await page.evaluate(() => document.getElementById('cursor-tag')?.textContent ?? '');
     await clickWorld(x, z); await page.waitForTimeout(800);
-    const n1 = await buildingCount();
+    const n1 = await countOf();
     await esc();
     return { ok: n1 > n0, why: `${tag.replace(/\n/g, ' / ').slice(0, 120)}${n1 > n0 ? '' : ` ; message : ${await toasts()}`}` };
   };
@@ -219,8 +232,11 @@ try {
   });
   await step('eau', async () => {
     await focus(X - 110, Z); const r = await placeAt('#toolbar button[data-cat=water]', null, 'eau_station_pompage', X - 115, Z - 24);
-    const st = await plug('eau', 'state');
-    check(r.ok && (st?.facilities?.length ?? 0) > 0, `station de pompage posée (${r.why}) ; installations : ${st?.facilities?.length}`);
+    // Le réseau d'eau se recalcule à chaque heure de jeu : l'installation apparaît au recalcul suivant la pose.
+    let st = await plug('eau', 'state');
+    for (let h = 0; h < 4 && !(st?.facilities?.length > 0); h++) { await tickHours(1); st = await plug('eau', 'state'); }
+    const pump = ((await save())?.buildings ?? []).filter((q) => (q.assetId ?? q.asset) === 'eau_station_pompage');
+    check(r.ok && (st?.facilities?.length ?? 0) > 0, `station de pompage posée (${r.why}) ; installations : ${st?.facilities?.length}${(st?.facilities?.length ?? 0) > 0 ? '' : ` — diagnostic : actif ${st?.active}, alertes ${JSON.stringify(st?.alerts)}, stations dans la sauvegarde ${JSON.stringify(pump)}, minutes ${await gameMin()}, réponse ${JSON.stringify(st)?.slice(0, 200)}`}`);
   });
   await step('déchets', async () => {
     await focus(X, Z + 80);
@@ -330,7 +346,7 @@ try {
     await page.locator('#load-list .slot', { hasText: /audit complet/i }).locator('button.primary').click();
     await page.waitForFunction(() => window.__aube.snapshotReceived, null, { timeout: 120000 });
     // Le menu se referme une fois les bâtiments visibles préchargés (src/main.ts › loadSlot).
-    const closed = await page.waitForFunction(() => document.getElementById('menu')?.classList.contains('hidden'), null, { timeout: 120000 }).then(() => true, () => false);
+    const closed = await page.waitForFunction(() => document.getElementById('main-menu')?.classList.contains('hidden'), null, { timeout: 120000 }).then(() => true, () => false);
     check(closed, 'menu refermé après le chargement : retour à la partie');
     await page.waitForTimeout(1000);
     const after = await buildingCount();
