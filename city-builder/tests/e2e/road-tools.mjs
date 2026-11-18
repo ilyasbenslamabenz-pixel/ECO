@@ -88,7 +88,8 @@ try {
   p = await preview(page);
   const t1 = await tag(page);
   R.notes.chainTag = t1;
-  check(/m · 90° \/ route · [\d\s\u202f\u00a0]+ (¢|CHF)/.test(t1), `étiquette longueur · angle · coût pendant le tracé (« ${t1.replace(/\n/g, ' | ')} »)`);
+  // Étiquette du curseur (src/ui/styles-construction.css) : ligne 1 coût · longueur, ligne 2 angle par rapport à la route.
+  check(/[\d\s\u202f\u00a0]+ (¢|CHF) · \d+ m/.test(t1) && /90° \/ route/.test(t1), `étiquette coût · longueur · angle pendant le tracé (« ${t1.replace(/\n/g, ' | ')} »)`);
   let fin = await visibleBox(page, '#road-finish');
   check(!!fin, 'bouton « Terminer le tracé » visible pendant l\'enchaînement');
   await shot(page, '01-trace-continu');
@@ -178,6 +179,17 @@ try {
   }, [x0 + 24, z1]);
   R.notes.house = house;
   await page.waitForTimeout(600);
+  // Option « Démolir les gênants » active par défaut : l'aperçu annonce la démolition de la maison.
+  await hoverWorld(page, x0 + 24, z1);
+  await page.waitForTimeout(600);
+  await render(page, 1);
+  const pd = await preview(page);
+  if (house.ok) check(pd.kind === 'upgrade' && pd.validity === 'ok' && /démolit 1 bâtiment/.test(pd.message), `option par défaut : démolition annoncée avant le clic (« ${pd.message} »)`);
+  // Option désactivée : refus motivé, la maison reste.
+  await page.evaluate(() => { const b = [...document.querySelectorAll('#tool-actions button')].find((x) => x.textContent.trim() === 'Démolir les gênants'); if (b && b.classList.contains('active')) b.click(); });
+  await page.waitForTimeout(300);
+  await hoverWorld(page, x0 + 20, z1);
+  await page.waitForTimeout(300);
   await hoverWorld(page, x0 + 24, z1);
   await page.waitForTimeout(600);
   await render(page, 1);

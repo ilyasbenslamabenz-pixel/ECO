@@ -449,6 +449,8 @@ export function initUI(h: UIHandlers): UIHandle {
       if (cityPanels.financeOpen) { cityPanels.finPanel.classList.add('hidden'); dashboards.syncSidebar(); return; }
       if (cityPanels.popOpen) { cityPanels.popPanel.classList.add('hidden'); dashboards.syncSidebar(); return; }
       if (dashboards.current) { dashboards.close(); return; }
+      // Menu de construction ouvert (sans outil actif) : Échap le referme au lieu d'ouvrir le menu principal.
+      if (buildBar?.openDrawerId) { buildBar.closeDrawer(); return; }
       if (!hud.classList.contains('hidden')) h.onMenu();
       return;
     }

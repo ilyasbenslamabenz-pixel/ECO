@@ -463,8 +463,15 @@ function describeWater(e: TerrainEdit, r: TerrainEditResult): string[] {
   const where = w.outlet === 'eau' ? 'puis rejoint l\'eau voisine' : w.outlet === 'bord' ? 'puis s\'écoule hors de la carte' : '';
   if (e.k === 'source') {
     if (e.e === 1) out.push(`source de rivière : ${fmt(e.q)} m³/s entrent par le bord de la carte`);
-    if (w.level === null) out.push(w.outlet === 'bord' ? 'l\'eau ressort aussitôt par le bord : choisissez un bord plus haut que l\'intérieur' : 'l\'eau rejoint aussitôt une eau existante');
-    else out.push(`lac prévu ${area(w.areaM2)} au niveau ${m1(w.level)} m${where ? `, ${where}` : ''}`);
+    if (w.level === null) {
+      if (w.outlet === 'bord') out.push('l\'eau ressort aussitôt par le bord : choisissez un bord plus haut que l\'intérieur');
+      else if (w.outlet === 'eau' && w.areaM2 < 1) out.push('l\'eau rejoint aussitôt une eau existante');
+      // Aucune cuvette au point choisi : l'eau coule en ruisseau vers l'aval (et non « une eau existante », message
+      // affiché à tort sur une carte sans eau).
+      else out.push(`pas de creux ici : l'eau s'écoule en ruisseau vers l'aval${w.areaM2 > 0 ? ` (≈ ${area(w.areaM2)} en eau)` : ''}${where ? `, ${where}` : ''}. Pour un lac : posez la source au fond d'un creux fermé ou barrez la vallée en aval`);
+    } else if (w.areaM2 < 1) {
+      out.push(`le creux ne retient pas l'eau ici (niveau ${m1(w.level)} m) : fond trop plat, ou zone fermée par des routes ou des bâtiments. Posez la source au point le plus bas d'un creux, hors des îlots de routes`);
+    } else out.push(`lac prévu ${area(w.areaM2)} au niveau ${m1(w.level)} m${where ? `, ${where}` : ''}`);
     return out;
   }
   if (e.k === 'dam') {
@@ -478,6 +485,9 @@ function describeWater(e: TerrainEdit, r: TerrainEditResult): string[] {
   }
   return out;
 }
+
+/** Description d'une édition (aperçu et notification) ; exportée pour les tests. */
+export function describeTerrainEdit(e: TerrainEdit, r: TerrainEditResult): string { return describe(e, r); }
 
 function describe(e: TerrainEdit, r: TerrainEditResult): string {
   const parts = [`${fmt(r.cost)} CHF`];

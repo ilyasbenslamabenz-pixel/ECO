@@ -80,9 +80,10 @@ try {
   await page.mouse.up();
   const afterPaint = await waitHydro((st) => st.edits >= 3);
   check(afterPaint.edits >= 3, 'glisser continu : plusieurs passes appliquées', afterPaint.edits);
-  await page.waitForFunction((m) => window.__aube.lastStats.money < m, money0, { timeout: 20000 }).catch(() => undefined);
+  await page.waitForTimeout(1000);
   const money1 = await page.evaluate(() => window.__aube.lastStats.money);
-  check(money1 < money0, 'coût débité', { avant: money0, apres: money1 });
+  // Terrassement au pinceau gratuit (demande du joueur, EDIT_COSTS.earthPerM3 = 0) : aucun débit.
+  check(Math.abs(money1 - money0) < 2, 'terrassement au pinceau gratuit : trésorerie inchangée', { avant: money0, apres: money1 });
   await page.mouse.move(5, 400);
   await shot('apres-pinceau.png', PAINT.x, PAINT.z, 320, 0.9, 0.4);
   // Ctrl+Z : tout le geste est annulé d'un coup (coût remboursé).
@@ -90,7 +91,7 @@ try {
   const afterUndo = await waitHydro((st) => st.edits === 0, 20000);
   check(afterUndo.edits === 0, 'Ctrl+Z annule le geste entier', afterUndo.edits);
   await page.waitForFunction((m) => Math.abs(window.__aube.lastStats.money - m) < 2, money0, { timeout: 20000 }).catch(() => undefined);
-  check(Math.abs((await page.evaluate(() => window.__aube.lastStats.money)) - money0) < 2, 'coût remboursé à l\'annulation');
+  check(Math.abs((await page.evaluate(() => window.__aube.lastStats.money)) - money0) < 2, 'trésorerie inchangée après l\'annulation');
 
   // 2. Vallon : deux crêtes et un mur amont au pinceau Élever (forme dure), passes envoyées à la simulation.
   const sculpt = await page.evaluate(async ([cx, cz]) => {

@@ -114,8 +114,10 @@ try {
     gauge: [...document.querySelectorAll('#build-drawer .zn-col')].map((c) => c.dataset.sector).join(''),
     planned: document.querySelectorAll('#drawer-body .tile:disabled').length,
   }));
-  check(drawer.zones.join(',') === 'res_faible,res_moyen,res_dense,commerce,bureaux,industrie,retirer', `tiroir Zones : ${drawer.zones.join(', ')}`);
-  check(drawer.depth.join('') === '1234' && drawer.gauge === 'RCBI', `profondeur ${drawer.depth.join('/')} · jauge ${drawer.gauge} · ${drawer.planned} zones prévues grisées`);
+  // Zones de base toujours présentes (Forêt, Agricole, Mixte ajoutées depuis), Retirer en dernier.
+  const BASE_ZONES = ['res_faible', 'res_moyen', 'res_dense', 'commerce', 'bureaux', 'industrie'];
+  check(BASE_ZONES.every((z) => drawer.zones.includes(z)) && drawer.zones.at(-1) === 'retirer', `tiroir Zones : ${drawer.zones.join(', ')}`);
+  check(drawer.depth.join('') === '1234' && [...'RCBI'].every((c) => drawer.gauge.includes(c)) && drawer.gauge.length === 4, `profondeur ${drawer.depth.join('/')} · jauge ${drawer.gauge} · ${drawer.planned} zones prévues grisées`);
   check(await page.evaluate(() => window.__zonage.view.toolActive), 'outil Zones actif (gestes capturés)');
 
   // Peinture à la souris : résidentiel faible au nord de la rue principale (profondeur 3 par défaut).
@@ -138,7 +140,7 @@ try {
   await page.waitForTimeout(600);
   let st = (await zon('state')).data;
   const cells0 = zoneCount(st);
-  check(cells0 > 100 && Object.values(st.stats.cells).every((n) => n > 0), `zones peintes à la souris : ${JSON.stringify(st.stats.cells)}`);
+  check(cells0 > 100 && BASE_ZONES.every((z) => st.stats.cells[z] > 0), `zones peintes à la souris : ${JSON.stringify(st.stats.cells)}`);
   check(st.stats.connected === cells0, `toutes les cases peintes sont desservies (${st.stats.connected}/${cells0})`);
   const inst = await page.evaluate(() => ({ n: window.__zonage.instances(), vis: window.__zonage.visible() }));
   // Cases dessinées dans la trame des routes (une case de la trame par case du monde sous son centre) : nombre voisin.

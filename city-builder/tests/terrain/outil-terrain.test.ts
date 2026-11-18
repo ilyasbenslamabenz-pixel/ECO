@@ -69,3 +69,21 @@ test('Creuser : départ, arrivée aimantée (angle 15°), refus expliqué, annul
   assert.equal(tool.back(), true);
   assert.equal(tool.back(), false);
 });
+
+test('source : l\'aperçu dit ce qui va se passer (ruisseau, creux qui ne retient pas, lac)', async () => {
+  const { describeTerrainEdit } = await import('../../src/client/tools/terrain-tool');
+  const src = { k: 'source' as const, x: 0, z: 0, q: 25 };
+  const base = { cost: 5750, volume: 0, forestM2: 0, wallLength: 0, outline: null };
+  // Pas de cuvette, carte sans eau : ruisseau (et non « une eau existante »).
+  const stream = describeTerrainEdit(src, { ...base, water: { level: null, areaM2: 6656, storedM3: 0, outlet: '', status: 'capped' } } as never);
+  assert.match(stream, /pas de creux ici : l'eau s'écoule en ruisseau/);
+  assert.doesNotMatch(stream, /eau existante/);
+  // Rejoint vraiment une eau existante.
+  assert.match(describeTerrainEdit(src, { ...base, water: { level: null, areaM2: 0, storedM3: 0, outlet: 'eau', status: 'sink' } } as never), /rejoint aussitôt une eau existante/);
+  // Niveau trouvé mais aucune surface : le creux ne retient rien (et non « lac prévu 0 m² »).
+  const flat = describeTerrainEdit(src, { ...base, water: { level: -3.7, areaM2: 0, storedM3: 0, outlet: '', status: 'capped' } } as never);
+  assert.match(flat, /le creux ne retient pas l'eau/);
+  assert.doesNotMatch(flat, /lac prévu 0/);
+  // Lac.
+  assert.match(describeTerrainEdit(src, { ...base, water: { level: 12, areaM2: 25152, storedM3: 95621, outlet: '', status: 'capped' } } as never), /lac prévu 2,5 ha au niveau 12 m/);
+});

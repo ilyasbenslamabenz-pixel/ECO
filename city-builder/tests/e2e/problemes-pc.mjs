@@ -49,13 +49,15 @@ try {
   check(order.every((v, i) => i === 0 || order[i - 1] <= v), `triées par gravité (${g.rows.map((x) => x.sev).join(', ')})`);
   await page.screenshot({ path: join(out, 'problemes-1280.png') });
 
-  // Clic sur chaque ligne : le bon tableau de bord s'ouvre ; un problème localisé (alerte) recentre la caméra.
+  // Clic sur chaque ligne : l'outil qui règle le problème s'ouvre (tiroir de construction et son onglet), ou le
+  // tableau de bord quand il n'y a rien à construire (déficit, trafic, ruines) ; un problème localisé recentre la caméra.
+  const D = (drawer, tab) => ({ drawer, tab });
+  const P = (sel, title) => ({ sel, title });
   const EXPECT = {
-    power: { sel: '#dash-panel', title: /Énergie/ }, water: { sel: '#dash-panel', title: /Eau/ }, waste: { sel: '#dash-panel', title: /Déchets/ },
-    isolated: { sel: '#dash-panel', title: /Déchets/ }, fire: { sel: '#dash-panel', title: /Services/ }, ruin: { sel: '#dash-panel', title: /Services/ },
-    crime: { sel: '#dash-panel', title: /Services/ }, deficit: { sel: '#finance-panel', title: /Finances/ }, chomage: { sel: '#pop-panel', title: /Population/ },
-    trafic: { sel: '#dash-panel', title: /Transports/ }, 'couverture-police': { sel: '#dash-panel', title: /Services/ },
-    'couverture-fire': { sel: '#dash-panel', title: /Services/ }, 'couverture-health': { sel: '#dash-panel', title: /Services/ },
+    power: D('energy'), water: D('water'), waste: D('waste'), collecte: D('waste'), 'reserve-courant': D('energy'),
+    isolated: D('road'), fire: D('services', 'securite'), crime: D('services', 'securite'), chomage: D('zones'),
+    'couverture-police': D('services', 'securite'), 'couverture-fire': D('services', 'securite'), 'couverture-health': D('services', 'sante'),
+    ruin: P('#dash-panel', /Services/), deficit: P('#finance-panel', /Finances/), trafic: P('#dash-panel', /Transports/),
   };
   const ids = g.rows.map((x) => x.id);
   for (const id of ids) {
@@ -65,15 +67,19 @@ try {
     await page.evaluate((i) => document.querySelector(`#problems .pb-row[data-problem="${i}"]`)?.click(), id);
     await page.waitForTimeout(800);
     const r = await page.evaluate((sel) => {
-      const p = document.querySelector(sel);
-      return { open: !!p && !p.classList.contains('hidden'), title: p?.querySelector('h3')?.textContent ?? '', pose: window.__aube.cameraPose?.() ?? null };
-    }, exp.sel);
-    check(r.open && exp.title.test(r.title), `clic sur « ${id} » : ${exp.sel} ouvert (« ${r.title} »)`);
+      const d = document.getElementById('build-drawer');
+      const p = sel ? document.querySelector(sel) : null;
+      return { drawer: d && !d.classList.contains('hidden') ? d.dataset.drawer : null, tab: document.querySelector('#drawer-tabs .chip-tab.active')?.dataset.tab ?? null,
+        open: !!p && !p.classList.contains('hidden'), title: p?.querySelector('h3')?.textContent ?? '', pose: window.__aube.cameraPose?.() ?? null };
+    }, exp.sel ?? null);
+    if (exp.drawer) check(r.drawer === exp.drawer && (!exp.tab || r.tab === exp.tab), `clic sur « ${id} » : outil ${exp.drawer}${exp.tab ? ` › ${exp.tab}` : ''} ouvert (${r.drawer ?? 'aucun'}${r.tab ? ` › ${r.tab}` : ''})`);
+    else check(r.open && exp.title.test(r.title), `clic sur « ${id} » : ${exp.sel} ouvert (« ${r.title} »)`);
     if (id === ids[0]) { await render(page, 2); await page.screenshot({ path: join(out, `problemes-clic-${id}.png`) }); }
     if (['power', 'water', 'waste', 'isolated', 'fire', 'ruin', 'crime', 'road'].includes(id) && before && r.pose) {
       const moved = Math.hypot(r.pose.targetX - before.targetX, r.pose.targetZ - before.targetZ);
       check(moved > 1, `« ${id} » : caméra centrée sur les bâtiments touchés (${Math.round(moved)} m)`);
     }
+    await page.evaluate(() => { document.getElementById('drawer-close')?.click(); });
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
   }
