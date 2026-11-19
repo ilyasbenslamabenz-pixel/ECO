@@ -32,7 +32,7 @@ try {
     await page.waitForTimeout(Number(process.env.WAIT ?? 6000));
     await page.evaluate(() => window.__aube.renderNow?.(3, 0.1));
     await page.screenshot({ path: join(outDir, `${name}${tag}.jpg`), quality: 85, timeout: 600000 });
-    console.log('capture', name, JSON.stringify(await page.evaluate(() => window.__aube.buildingTextures?.())));
+    console.log('capture', name, JSON.stringify(await page.evaluate(() => [window.__aube.buildingTextures?.(), window.__aube.qualityTier?.()])));
   }
   console.log('erreurs', errors.length, errors.slice(0, 3));
 } finally {

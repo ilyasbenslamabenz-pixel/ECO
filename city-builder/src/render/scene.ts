@@ -40,6 +40,10 @@ export interface RenderPerf {
   tiersEnabled?: boolean;
   /** Palier fixe hors paliers automatiques (qualité Basse : palier le plus léger ; 0 sinon). */
   fixedTier?: number;
+  /** Effets d'image (occlusion ambiante, src/render/post.ts) : rendu de l'image à la place de `renderer.render`. */
+  post?: { readonly active: boolean; render(): void } | null;
+  /** Effets d'image voulus par l'option du joueur (src/ui/options.ts, `postEnabledFor`). */
+  postWanted?: boolean;
   /** Descend / remonte d'un palier ; vrai si le palier a changé (branché par src/render/index.ts). */
   tierDown?: ((now: number) => boolean) | null;
   /** Palier courant (0 = élevé). */
@@ -163,6 +167,7 @@ export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderCo
       renderer.setSize(w, h, false);
     }
   };
+  const draw = (): void => { const p = perf.post; if (p?.active) p.render(); else renderer.render(scene, camera); };
   let lastDraw = 0;
   const loop = (): void => {
     if (!running) return;
@@ -180,7 +185,7 @@ export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderCo
     updateShadows();
     const t1 = tr ? performance.now() : 0;
     // L'ombre suit la zone regardée par la caméra.
-    renderer.render(scene, camera);
+    draw();
     if (tr) { const t2 = performance.now(); tr('image : mises à jour', t1 - t0); tr('image : rendu three', t2 - t1); }
     frames++;
     if (cap !== 4) adapt(now); else { winStart = now; winFrames = 0; winSlow = 0; lastAdapt = 0; }
@@ -200,7 +205,7 @@ export function initScene(canvas: HTMLCanvasElement, antialias = true): RenderCo
     renderNow(dt = 1 / 30) {
       for (const f of onFrame) f(dt);
       renderer.shadowMap.needsUpdate = true;
-      renderer.render(scene, camera);
+      draw();
       frames++;
     },
     get frames() { return frames; },

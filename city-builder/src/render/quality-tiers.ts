@@ -35,13 +35,15 @@ export interface QualityTier {
   vehicleDist: number;
   /** Distance d'affichage des piétons (m). */
   pedDist: number;
+  /** Effets d'image (occlusion ambiante, src/render/post.ts) autorisés à ce palier. */
+  ao: boolean;
 }
 
 export const QUALITY_TIERS: readonly QualityTier[] = [
-  { name: 'élevé', shadowCap: 4096, smallShadowDist: 320, vegShadowMaxLod: Infinity, buildingLod: 1, vegScale: 1, maxVehicles: Infinity, vehicleDist: Infinity, pedDist: 1400 },
-  { name: 'moyen', shadowCap: 2048, smallShadowDist: 200, vegShadowMaxLod: 1, buildingLod: 0.8, vegScale: 0.85, maxVehicles: 600, vehicleDist: 1800, pedDist: 500 },
-  { name: 'réduit', shadowCap: 1024, smallShadowDist: 140, vegShadowMaxLod: 1, buildingLod: 0.65, vegScale: 0.7, maxVehicles: 400, vehicleDist: 1400, pedDist: 260 },
-  { name: 'minimal', shadowCap: 1024, smallShadowDist: 90, vegShadowMaxLod: 0, buildingLod: 0.5, vegScale: 0.55, maxVehicles: 250, vehicleDist: 1100, pedDist: 160 },
+  { name: 'élevé', shadowCap: 4096, smallShadowDist: 320, vegShadowMaxLod: Infinity, buildingLod: 1, vegScale: 1, maxVehicles: Infinity, vehicleDist: Infinity, pedDist: 1400, ao: true },
+  { name: 'moyen', shadowCap: 2048, smallShadowDist: 200, vegShadowMaxLod: 1, buildingLod: 0.8, vegScale: 0.85, maxVehicles: 600, vehicleDist: 1800, pedDist: 500, ao: true },
+  { name: 'réduit', shadowCap: 1024, smallShadowDist: 140, vegShadowMaxLod: 1, buildingLod: 0.65, vegScale: 0.7, maxVehicles: 400, vehicleDist: 1400, pedDist: 260, ao: false },
+  { name: 'minimal', shadowCap: 1024, smallShadowDist: 90, vegShadowMaxLod: 0, buildingLod: 0.5, vegScale: 0.55, maxVehicles: 250, vehicleDist: 1100, pedDist: 160, ao: false },
 ];
 
 /** Palier imposé par l'adresse (`?palier=0..3`), null sinon. */

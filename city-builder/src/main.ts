@@ -281,7 +281,7 @@ async function boot(): Promise<void> {
   debug.frames = () => render.ctx.frames;
   debug.renderStats = () => render.stats();
   // Diagnostic (docs/PERFORMANCE_PC.md) : palier de qualité automatique, densité de rendu, GPU intégré.
-  (debug as unknown as Record<string, unknown>).qualityTier = () => ({ tier: render.ctx.perf.tier ?? 0, auto: !!render.ctx.perf.tiersEnabled, igpu: render.profile.igpu });
+  (debug as unknown as Record<string, unknown>).qualityTier = () => ({ tier: render.ctx.perf.tier ?? 0, auto: !!render.ctx.perf.tiersEnabled, igpu: render.profile.igpu, effets: !!render.ctx.perf.post?.active, effetsVoulus: !!render.ctx.perf.postWanted });
   (debug as unknown as Record<string, unknown>).pixelRatio = () => render.ctx.renderer.getPixelRatio();
   debug.gpuMemory = () => estimateGpuMemory(render.ctx.scene, render.ctx.renderer);
   debug.memStats = () => {

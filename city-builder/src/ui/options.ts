@@ -6,7 +6,8 @@
  * Propriétaire : agent construction/caméra/UI.
  */
 import * as THREE from 'three';
-import { deviceProfile } from '../render/device-profile';
+import { deviceProfile, gpuRendererName } from '../render/device-profile';
+import { isSoftwareRenderer } from '../render/post-detect';
 import { QUALITY_TIERS } from '../render/quality-tiers';
 import { setColorMode } from '../render/palette';
 
@@ -44,9 +45,14 @@ export interface GraphicsOptions {
   streetTrees: boolean;
   /** Couleurs du rendu : vives (direction artistique actuelle, par défaut) ou naturelles (ancien rendu), src/render/palette.ts. */
   colors: 'vives' | 'naturelles';
+  /**
+   * Effets d'image : occlusion ambiante (recoins et pieds de mur assombris, src/render/post.ts). « auto » : ordinateur
+   * à GPU dédié (jamais sur téléphone, GPU intégré ni rendu logiciel) ; coupés par les paliers quand la cadence décroche.
+   */
+  post: 'auto' | 'on' | 'off';
 }
 
-export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal', pointer: 'auto', edgeScroll: false, streetTrees: false, colors: 'vives' };
+export const DEFAULT_OPTIONS: GraphicsOptions = { quality: 'auto', shadows: 'high', viewDistance: 4500, fps: 'auto', theme: 'nuit', dynRes: 'auto', aa: 'auto', events: 'normal', pointer: 'auto', edgeScroll: false, streetTrees: false, colors: 'vives', post: 'auto' };
 
 /** Applique le thème de l'interface (attribut lu par les feuilles de style). */
 export function applyTheme(t: GraphicsOptions['theme']): void {
@@ -71,6 +77,7 @@ export function sanitizeOptions(o: Partial<GraphicsOptions> | null | undefined):
     edgeScroll: typeof o?.edgeScroll === 'boolean' ? o.edgeScroll : DEFAULT_OPTIONS.edgeScroll,
     streetTrees: typeof o?.streetTrees === 'boolean' ? o.streetTrees : DEFAULT_OPTIONS.streetTrees,
     colors: o?.colors === 'vives' || o?.colors === 'naturelles' ? o.colors : DEFAULT_OPTIONS.colors,
+    post: o?.post === 'auto' || o?.post === 'on' || o?.post === 'off' ? o.post : DEFAULT_OPTIONS.post,
   };
 }
 
@@ -114,6 +121,18 @@ export function urlShadows(search = typeof location !== 'undefined' ? location.s
   return s === 'off' || s === 'low' || s === 'high' || s === 'ultra' ? s : null;
 }
 
+/** Effets d'image voulus : « on » partout sauf téléphone ; « auto » : GPU dédié, hors rendu logiciel. */
+export function postEnabledFor(post: GraphicsOptions['post'], lite: boolean, igpu: boolean, software: boolean): boolean {
+  if (lite || post === 'off') return false;
+  return post === 'on' || (!igpu && !software);
+}
+
+/** Effets d'image imposés par l'adresse (`?effets=1|0`, captures et mesures), jamais mémorisés seuls. */
+export function urlPost(search = typeof location !== 'undefined' ? location.search : ''): GraphicsOptions['post'] | null {
+  const a = new URLSearchParams(search).get('effets');
+  return a === '1' ? 'on' : a === '0' ? 'off' : null;
+}
+
 /** Anticrénelage imposé par l'adresse (`?msaa=1|0`, page de mesure), jamais mémorisé seul. */
 export function urlAa(search = typeof location !== 'undefined' ? location.search : ''): GraphicsOptions['aa'] | null {
   const a = new URLSearchParams(search).get('msaa');
@@ -141,6 +160,8 @@ export function loadOptions(): GraphicsOptions {
   if (aa) o = { ...o, aa };
   if (d) o = { ...o, dynRes: d };
   if (sh) o = { ...o, shadows: sh };
+  const pp = urlPost();
+  if (pp) o = { ...o, post: pp };
   return o;
 }
 
@@ -153,6 +174,8 @@ export function saveOptions(o: GraphicsOptions): void {
     if (d && o.dynRes === d) o = { ...o, dynRes: stored.dynRes };
     if (sh && o.shadows === sh) o = { ...o, shadows: stored.shadows };
     if (aa && o.aa === aa) o = { ...o, aa: stored.aa };
+    const pp = urlPost();
+    if (pp && o.post === pp) o = { ...o, post: stored.post };
     localStorage.setItem(KEY, JSON.stringify(o));
   } catch { /* navigation privée : réglage non mémorisé */ }
 }
@@ -166,7 +189,7 @@ export interface GraphicsTargets {
   /** Contrôleur de caméra : reçoit la distance d'affichage (plan lointain) et les réglages de navigation. */
   camera?: { viewDistance: number; inputPref?: GraphicsOptions['pointer']; edgeScroll?: boolean };
   /** Cadence du rendu (src/render/scene.ts) : plafond d'images, ombres, résolution adaptative. */
-  perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number; tiersEnabled?: boolean; fixedTier?: number };
+  perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number; tiersEnabled?: boolean; fixedTier?: number; postWanted?: boolean };
 }
 
 /**
@@ -203,6 +226,7 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
     // Paliers de qualité automatiques (src/render/quality-tiers.ts) : qualité Auto, et Moyenne sur GPU intégré.
     if ('tiersEnabled' in t.perf) t.perf.tiersEnabled = tiersEnabledFor(o.quality, prof.lite, prof.igpu);
     t.perf.fixedTier = fixedTierFor(o.quality);
+    t.perf.postWanted = postEnabledFor(o.post, prof.lite, prof.igpu, isSoftwareRenderer(gpuRendererName()));
     t.perf.ratio = ratio;
   }
   const size = new THREE.Vector2();

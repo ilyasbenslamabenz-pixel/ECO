@@ -94,3 +94,25 @@ test('Téléphone (mode allégé) : paliers automatiques en qualité Auto ; Bass
   assert.equal(fixedTierFor('moyenne'), 0);
   assert.equal(fixedTierFor('auto'), 0);
 });
+
+test('Effets d\'image (occlusion ambiante) : auto = ordinateur à GPU dédié ; jamais sur téléphone ni en rendu logiciel', async () => {
+  const { postEnabledFor, sanitizeOptions, urlPost } = await import('../../src/ui/options');
+  const { isSoftwareRenderer } = await import('../../src/render/post-detect');
+  const { QUALITY_TIERS } = await import('../../src/render/quality-tiers');
+  assert.equal(postEnabledFor('auto', false, false, false), true, 'GPU dédié');
+  assert.equal(postEnabledFor('auto', false, true, false), false, 'GPU intégré');
+  assert.equal(postEnabledFor('auto', false, false, true), false, 'rendu logiciel');
+  assert.equal(postEnabledFor('auto', true, false, false), false, 'téléphone');
+  assert.equal(postEnabledFor('on', false, true, true), true, 'choix du joueur');
+  assert.equal(postEnabledFor('on', true, false, false), false, 'jamais sur téléphone');
+  assert.equal(postEnabledFor('off', false, false, false), false);
+  assert.equal(isSoftwareRenderer('Google SwiftShader'), true);
+  assert.equal(isSoftwareRenderer('llvmpipe (LLVM 15.0.7, 256 bits)'), true);
+  assert.equal(isSoftwareRenderer('NVIDIA GeForce RTX 3060'), false);
+  assert.equal(sanitizeOptions({}).post, 'auto');
+  assert.equal(sanitizeOptions({ post: 'x' as never }).post, 'auto');
+  assert.equal(urlPost('?effets=1'), 'on');
+  assert.equal(urlPost('?effets=0'), 'off');
+  assert.equal(urlPost(''), null);
+  assert.deepEqual(QUALITY_TIERS.map((t) => t.ao), [true, true, false, false], 'coupés aux paliers réduit et minimal');
+});

@@ -40,6 +40,7 @@ import { QuayRenderer } from './water/quays';
 import { deviceProfile, isSafeMode, type DeviceProfile, type QualitySetting } from './device-profile';
 import { QUALITY_TIERS, TierController, urlTier } from './quality-tiers';
 import { pedRenderBudget } from './pedestrians/crowd';
+import { PostEffects } from './post';
 
 export interface RenderStats {
   /** Appels de rendu et triangles de la dernière image (ombres comprises). */
@@ -214,6 +215,16 @@ export async function initRender(
   let tierBaseShadow = 0;
   let smallShadowDist = QUALITY_TIERS[0]!.smallShadowDist;
   const tierActive = (): boolean => forcedTier !== null || !!ctx.perf.tiersEnabled;
+  // Effets d'image (ordinateur) : créés à la première image qui les demande (aucune cible de rendu allouée sinon).
+  let post: PostEffects | null = null;
+  let tierAo = true;
+  ctx.perf.post = {
+    get active() { return !!ctx.perf.postWanted && tierAo && !profile.lite; },
+    render() {
+      if (!post) post = new PostEffects(ctx.renderer, ctx.scene, ctx.camera);
+      post.render();
+    },
+  };
   const applyTier = (): void => {
     const k = tierActive() ? tierCtl.tier : Math.min(QUALITY_TIERS.length - 1, Math.max(0, ctx.perf.fixedTier ?? 0));
     const t = QUALITY_TIERS[k]!;
@@ -223,6 +234,7 @@ export async function initRender(
     vehicles.maxDrawn = t.maxVehicles;
     vehicles.maxDist = t.vehicleDist;
     pedRenderBudget.maxDist = t.pedDist;
+    tierAo = t.ao;
     smallShadowDist = t.smallShadowDist;
     if (roadShadowCut !== k >= 1) { roadShadowCut = k >= 1; setSmallShadows(!smallShadowsOff); }
     // Carte d'ombre plafonnée sous le réglage du joueur (pas de recompilation : seule la carte est recréée).

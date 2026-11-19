@@ -153,3 +153,14 @@ rue ; `VIEWS`, `WAIT` réglables ; `__aube.buildingTextures()` compte les textur
 - Proposé, non fait (accord nécessaire) : cycle jour / nuit (désactivé à la demande du propriétaire ; fenêtres
   allumées déjà prêtes), occlusion ambiante plein écran (SSAO, coûteuse sur téléphone), profondeur de champ
   « maquette », décor des parcelles (clôtures, jardins arrière), variation de teinte de l'herbe.
+
+## Effets d'image sur ordinateur : occlusion ambiante (v52)
+- `src/render/post.ts` : scène rendue dans une cible HDR (MSAA ×4, profondeur en texture) → GTAO (three/addons) lu
+  depuis cette profondeur (normales reconstruites, aucune seconde passe de la scène) → débruitage → copie à l'écran.
+  Tone mapping, étalonnage et brouillard restent dans les shaders (cibles marquées « XR » : three les y applique comme
+  à l'écran) : à intensité nulle (`?ao=0`), couleurs moyennes identiques au rendu direct (écart ≤ 0,2 / 255).
+- Option « Effets d'image (occlusion ambiante) » : Auto (GPU dédié ; jamais téléphone, GPU intégré ni rendu logiciel),
+  Activés, Désactivés ; `?effets=1|0` pour les mesures. Créés à la première image qui les demande. Coupés par les
+  paliers automatiques « réduit » et « minimal » (`QualityTier.ao`). Test : rendu-pc-integre.
+- Réglages (`AO_PARAMS`) : rayon 4,5 m, épaisseur 2,5 m, intensité 0,85. Coût non mesuré sur vrai GPU (machine de test
+  sans GPU) : à vérifier avec la page `?bench`.
