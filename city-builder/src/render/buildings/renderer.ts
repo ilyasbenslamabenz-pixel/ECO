@@ -17,6 +17,7 @@ import type { AssetCatalog, CatalogAsset } from '../../shared/catalog';
 import type { BuildingRecord, IBuildingRenderer } from '../../shared/contracts';
 import { rotAngle } from '../../shared/footprint';
 import { FrontYardLayer, frontOffset } from './front-yards';
+import { ContactShadowLayer } from './contact-shadows';
 import { BuildingShadowLayer, mergeableForShadow } from './shadow-proxy';
 import { BuildingBatchPool } from './batched-parts';
 
@@ -170,6 +171,8 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   readonly group = new THREE.Group();
   /** Jardinets des maisons (haies, allées) ; modèles avancés vers la rue (front-yards.ts). */
   private readonly yards: FrontYardLayer;
+  /** Ombres de contact au pied des bâtiments (contact-shadows.ts). */
+  readonly contact: ContactShadowLayer;
   readonly materials: BuildingMaterials;
   private readonly batches = new Map<string, Batch>();
   private readonly batchList: Batch[] = [];
@@ -207,6 +210,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     this.group.name = 'batiments';
     scene.add(this.group);
     this.yards = new FrontYardLayer(this.group);
+    this.contact = new ContactShadowLayer(this.group);
     this.assets = new Map(lib.catalog.assets.map((a) => [a.id, a]));
     this.materials = new BuildingMaterials(lib.catalog, (f) => lib.url(f), opts.anisotropy ?? 8);
     this.lodBias = opts.lodBias ?? 1;
@@ -262,7 +266,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
 
   /** Masque / réaffiche des bâtiments (chantiers) : instances et ombres retirées du rendu, sans les supprimer. */
   setBuildingsVisible(ids: readonly number[], visible: boolean): void {
-    for (const id of ids) { if (visible) this.hidden.delete(id); else this.hidden.add(id); }
+    for (const id of ids) { if (visible) this.hidden.delete(id); else this.hidden.add(id); this.contact.setVisible(id, visible); }
     this.forceUpdate = true;
   }
 
@@ -366,7 +370,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       const a = this.assets.get(r.assetId);
       if (!a) { this.errors.push(`asset inconnu ${r.assetId}`); continue; }
       // Bâtiment remplacé (même identifiant) : il garde son masquage de chantier éventuel.
-      if (this.idToBatch.has(r.id)) { const masked = this.hidden.has(r.id); this.remove([r.id]); if (masked) this.hidden.add(r.id); }
+      if (this.idToBatch.has(r.id)) { const masked = this.hidden.has(r.id); this.remove([r.id]); if (masked) { this.hidden.add(r.id); this.contact.setVisible(r.id, false); } }
       const vi = r.variant >= 0 && r.variant < a.variants.length ? r.variant : 0;
       const key = `${a.id}#${vi}`;
       let b = this.batches.get(key);
@@ -393,6 +397,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
       frontOffset(a, r.rot, _off);
       _p.set(r.x + _off.x, r.y, r.z + _off.z);
       this.yards.add(r.id, a, r.x, r.y, r.z, r.rot);
+      this.contact.add(r.id, _p.x, _p.y, _p.z, a.dimensions.width, a.dimensions.depth, r.rot);
       _s.set(1, b.heightScale, 1);
       _m.compose(_p, _q, _s).toArray(b.mats, i * 16);
       const d = a.dimensions;
@@ -439,6 +444,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
   remove(ids: readonly number[]): void {
     for (const id of ids) {
       this.yards.remove(id);
+      this.contact.remove(id);
       // Un bâtiment retiré n'est plus masqué : les identifiants repartent de 1 à chaque nouvelle partie et reprennent
       // ceux de la sauvegarde au chargement ; un masque de chantier gardé ici rendait invisible, sans chantier, le
       // bâtiment de même identifiant de la partie suivante (« la maison n'apparaît pas »).
@@ -620,6 +626,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
 
   update(cx: number, cy: number, cz: number): void {
     this.yards.update();
+    this.contact.update();
     const now = performance.now();
     if (now >= this.nextReleaseCheck) { this.nextReleaseCheck = now + 5000; this.releaseUnusedLods(now); }
     if (this.uploads.length) this.pumpUploads(6);
@@ -724,6 +731,7 @@ export class InstancedBuildingRenderer implements IBuildingRenderer {
     this.idToBatch.clear();
     this.materials.dispose();
     this.yards.dispose();
+    this.contact.dispose();
     this.group.removeFromParent();
   }
 }

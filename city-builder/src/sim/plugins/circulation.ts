@@ -157,7 +157,10 @@ export const circulationPlugin: SimPlugin = {
     const parsed = readCirculationSave(migrateCirculation(data, version));
     state = freshState();
     state.save = parsed;
-    state.overlay = parsed.overlay;
+    // Carte de congestion toujours éteinte au chargement : l'interface (menu Cartes) repart sans couche affichée et ne
+    // pouvait pas l'éteindre, d'où des routes rouges et vertes « à vie » sur une partie sauvegardée couche allumée.
+    // Le champ reste lu et écrit (compatibilité du format).
+    state.overlay = false;
     const t = traffic();
     if (t) {
       t.rerouteEnabled = parsed.reroute;

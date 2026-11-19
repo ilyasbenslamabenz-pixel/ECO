@@ -25,6 +25,20 @@ export interface NightUniforms {
 /** Rôles dont la teinte varie légèrement d'une instance à l'autre (patine, salissures). */
 export const VARYING_ROLES = new Set(['facade', 'facade_b', 'toiture', 'soubassement', 'encadrement', 'cheminee', 'dalle']);
 
+/**
+ * Sources d'attente partagées (1 pixel) : couleur claire neutre (teintée par la couleur du matériau), relief plat,
+ * ARM neutre (occlusion 1, rugosité et métal du matériau inchangés). null hors navigateur (tests).
+ */
+const placeholders = new Map<string, THREE.Source<unknown> | null>();
+function placeholderSource(kind: 'albedo' | 'normal' | 'arm'): THREE.Source<unknown> | null {
+  let s = placeholders.get(kind);
+  if (s !== undefined) return s;
+  const px = kind === 'albedo' ? [226, 222, 214, 255] : kind === 'normal' ? [128, 128, 255, 255] : [255, 255, 255, 255];
+  s = typeof ImageData === 'undefined' ? null : new THREE.Source(new ImageData(new Uint8ClampedArray(px), 1, 1));
+  placeholders.set(kind, s);
+  return s;
+}
+
 export class BuildingMaterials {
   private readonly loader = new THREE.TextureLoader();
   private readonly images = new Map<string, Promise<HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas | ImageData | null>>();
@@ -82,7 +96,15 @@ export class BuildingMaterials {
       });
       this.images.set(file, img);
     }
-    const p = img.then((im) => { if (im) { tex.image = im; tex.needsUpdate = true; } });
+    // En attendant l'image : teinte neutre de 1 pixel (sans image, three échantillonne du noir — occlusion de l'ARM
+    // comprise — et les bâtiments apparaissaient en blocs noirs pendant le chargement, après chaque déplacement).
+    const kind = srgb ? 'albedo' : /_normal\./.test(file) ? 'normal' : 'arm';
+    const ph = placeholderSource(kind);
+    if (ph) { tex.source = ph; tex.needsUpdate = true; }
+    // Image chargée : NOUVELLE source (la place mémoire GPU d'une source est fixée à sa première taille ; la source
+    // d'attente est partagée entre toutes les textures).
+    // `dispose` d'abord : three garde sinon la texture GPU de l'image d'attente (sa clé de cache ignore la source).
+    const p = img.then((im) => { if (im) { if (ph) tex.dispose(); tex.source = new THREE.Source(im); tex.needsUpdate = true; } });
     this.pending.add(p);
     void p.finally(() => this.pending.delete(p));
     this.textures.set(key, tex);

@@ -137,3 +137,19 @@ Mesure : temps de chaque tick sur 2 jours de jeu de la partie « Gotham Citx » 
 - Qualité d'affichage : paliers automatiques (véhicules, piétons, végétation, niveaux de détail, ombres) aussi sur
   téléphone en qualité Auto ; qualité Basse = palier « minimal » imposé. Tests : rendu-pc-integre.
 - Reste possible : réseau d'eau (≈ 10 ms par heure, répartition des débits), décor routier en un seul lot.
+
+## Graphismes inspirés de CS2 (v51)
+Contrôlé sur la partie « Gotham Citx » (`tests/e2e/partie-captures.mjs <sauvegarde> <dossier>` : vues large, moyenne,
+rue ; `VIEWS`, `WAIT` réglables ; `__aube.buildingTextures()` compte les textures encore en attente).
+- Bug : routes rouges / vertes en permanence. La carte de congestion était rechargée allumée depuis la sauvegarde alors
+  que le menu Cartes repart sans couche (impossible de l'éteindre). Elle repart éteinte au chargement (champ toujours
+  lu et écrit). Test : circulation « carte de congestion éteinte au chargement ».
+- Bug : bâtiments en blocs noirs pendant le chargement (après chaque déplacement de la caméra, surtout de loin) :
+  textures sans image échantillonnées en noir (occlusion de l'ARM comprise). Image d'attente neutre de 1 pixel
+  (couleur claire teintée par le matériau, relief plat, ARM neutre), puis vraie image dans une nouvelle source après
+  `dispose` (three garde sinon la texture GPU de l'image d'attente).
+- Ombre de contact au pied des bâtiments (occlusion au sol, `ContactShadowLayer`) : halo doux de 2,6 m, un seul
+  maillage instancié, aucune texture ; masquée pendant un chantier. Test : tests/unit/ombres-contact.test.ts.
+- Proposé, non fait (accord nécessaire) : cycle jour / nuit (désactivé à la demande du propriétaire ; fenêtres
+  allumées déjà prêtes), occlusion ambiante plein écran (SSAO, coûteuse sur téléphone), profondeur de champ
+  « maquette », décor des parcelles (clôtures, jardins arrière), variation de teinte de l'herbe.

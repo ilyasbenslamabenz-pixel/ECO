@@ -161,3 +161,15 @@ test('circulation : le panneau formate les indicateurs en français', () => {
   assert.ok(lignes.find((l) => l.label === 'Vitesse moyenne')!.value.endsWith(' km/h'));
   assert.ok(lignes.find((l) => l.label === 'Réseau saturé')!.value.includes('%'));
 });
+
+test('circulation : carte de congestion éteinte au chargement, même sauvegardée allumée (menu Cartes sans couche)', () => {
+  const s = sim();
+  const r = s.pluginCommand({ plugin: 'circulation', name: 'afficherCongestion', payload: { on: true } } as never) as { ok: boolean };
+  assert.ok(r.ok);
+  assert.equal((s.snapshot().ext?.['circulation'] as CirculationSnapshot).overlay, true);
+  const save = s.toSave();
+  const s2 = new Simulation();
+  s2.setCatalog(townCatalog());
+  assert.equal(s2.fromSave(save as never), null);
+  assert.equal((s2.snapshot().ext?.['circulation'] as CirculationSnapshot).overlay, false, 'routes grises au chargement');
+});

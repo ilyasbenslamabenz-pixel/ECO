@@ -456,6 +456,24 @@ async function boot(): Promise<void> {
     });
     return out;
   };
+  // Diagnostic : textures couleur des bâtiments par taille d'image (1 = image d'attente, encore en chargement).
+  (debug as unknown as Record<string, unknown>)['buildingTextures'] = () => {
+    const out: Record<string, number> = {};
+    const seen = new Set<THREE.Texture>();
+    render.ctx.scene.children.find((o) => o.name === 'batiments')?.traverse((o) => {
+      const mm = (o as THREE.Mesh).material;
+      if (!mm) return;
+      for (const m of Array.isArray(mm) ? mm : [mm]) {
+        const t = (m as THREE.MeshStandardMaterial).map;
+        if (!t || seen.has(t)) continue;
+        seen.add(t);
+        const d = t.source.data as { width?: number } | null;
+        const k = d ? String(d.width ?? '?') : 'aucune';
+        out[k] = (out[k] ?? 0) + 1;
+      }
+    });
+    return out;
+  };
   debug.setLayerVisible = (name, visible) => {
     const names: string[] = [];
     for (const o of render.ctx.scene.children) { names.push(o.name || o.type); if (o.name === name) o.visible = visible; }
