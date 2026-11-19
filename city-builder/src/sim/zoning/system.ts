@@ -88,6 +88,13 @@ const FRONT_ROW_M = TILE_SIZE + 1.5;
 export const BUILD_DEPTH_M = 3 * TILE_SIZE + 1.5;
 /** Échecs consécutifs de croissance résidentielle au-delà desquels la zone est considérée pleine (indice « need-roads »). */
 const FULL_AFTER_FAILS = 6;
+/**
+ * Zone pleine (allègement, partie de 11 000 habitants : ≈ 100 ms de calcul à chaque heure de jeu pour des poses qui
+ * échouent toutes) : après ce nombre d'échecs consécutifs dans une zone, ses tentatives sont suspendues tant que rien
+ * ne change (zonage, routes, bâtiments), et au plus STALL_HOURS heures de jeu (nouvel essai ensuite).
+ */
+const STALL_AFTER_FAILS = 12;
+const STALL_HOURS = 24;
 const SAMPLE_INSET = 1.2;
 const MINUTES_PER_DAY = 1440;
 
@@ -171,6 +178,11 @@ export class ZoningSystem {
   /** Cases résidentielles zonées / libres constructibles (recomptées chaque heure), échecs consécutifs de croissance R. */
   private lots = { zoned: 0, free: 0 };
   private resFails = 0;
+  /** Échecs consécutifs par zone et suspensions en cours (signature du monde, heure de reprise). */
+  private zoneFails = new Array<number>(ZONE_COUNT + 1).fill(0);
+  private stalls = new Map<number, { sig: string; until: number }>();
+  /** Signature du monde du dernier comptage des lots (recompté seulement si elle change). */
+  private lotsSig = '';
   private demandDirty = false;
   private statsDirty = false;
   private settingsDirty = false;
@@ -197,6 +209,9 @@ export class ZoningSystem {
     this.active = false;
     this.lots = { zoned: 0, free: 0 };
     this.resFails = 0;
+    this.zoneFails.fill(0);
+    this.stalls.clear();
+    this.lotsSig = '';
     this.realignPending = false;
     this.lastHour = Math.floor(ctx.clock.totalMinutes / 60);
     this.demandDirty = this.statsDirty = this.settingsDirty = false;
@@ -254,6 +269,9 @@ export class ZoningSystem {
 
   /** Cases résidentielles zonées et libres constructibles (desservies, à trois rangées au plus, non bâties). */
   private countLots(ctx: PluginContext): void {
+    const sig = this.worldSig(ctx);
+    if (sig === this.lotsSig) return;
+    this.lotsSig = sig;
     let zoned = 0, free = 0;
     for (const t of ['res_faible', 'res_moyen', 'res_dense'] as const) {
       const code = ZONE_TYPES.indexOf(t) + 1;
@@ -398,23 +416,52 @@ export class ZoningSystem {
     try { return !!c && typeof c.nombre === 'number' && c.nombre >= this.tuning.maxChantiers; } catch { return false; }
   }
 
+  /**
+   * Signature du monde vue par la croissance : zonage, réseau routier, bâtiments (nombre, identifiants, positions).
+   * Même signature = mêmes cases libres : un comptage ou une tentative refaits donneraient le même résultat.
+   */
+  private worldSig(ctx: PluginContext): string {
+    const st = ctx.buildings.store;
+    let h = 0;
+    for (let i = 0; i < ctx.buildings.count; i++) h = (h * 31 + st.id[i]! + Math.round(st.x[i]! * 4) * 7 + Math.round(st.z[i]! * 4) * 13 + st.rot[i]!) | 0;
+    return `${this.grid.version}|${ctx.roads.version}|${ctx.buildings.count}|${h}`;
+  }
+
   growHour(ctx: PluginContext): number {
     if (!ctx.development || this.chantiersBusy(ctx)) return 0;
     let grown = 0;
+    const hour = Math.floor(ctx.clock.totalMinutes / 60);
+    let sig: string | null = null;
+    this.zoneMemo = new Map();
+    try {
     for (let code = 1; code <= ZONE_COUNT; code++) {
       if (this.grid.counts[code] === 0) continue;
       const zone = zoneOf(code)!;
       const d = this.zoneDemand(zone);
       if (d < this.tuning.demandeMin) continue;
+      // Zone suspendue (pleine) : rien n'a changé depuis et la reprise n'est pas encore due.
+      const stall = this.stalls.get(code);
+      if (stall) {
+        sig ??= this.worldSig(ctx);
+        if (stall.sig === sig && hour < stall.until) continue;
+        this.stalls.delete(code);
+        this.zoneFails[code] = 0;
+      }
       const expected = d * this.tuning.naissancesParHeure;
       const n = Math.min(this.tuning.maxParHeure, Math.floor(expected + ctx.rng.next()));
       const residential = RES_ZONES.includes(zone);
       for (let k = 0; k < n; k++) {
         const ok = this.tryGrow(ctx, code as ZoneCode);
         if (ok) grown++;
+        this.zoneFails[code] = ok ? 0 : this.zoneFails[code]! + 1;
         if (residential) this.resFails = ok ? 0 : this.resFails + 1;
       }
+      if (this.zoneFails[code]! >= STALL_AFTER_FAILS) {
+        if (grown > 0 || sig === null) sig = this.worldSig(ctx); // un bâtiment posé cette heure change la signature
+        this.stalls.set(code, { sig, until: hour + STALL_HOURS });
+      }
     }
+    } finally { this.zoneMemo = null; }
     return grown;
   }
 
@@ -443,6 +490,7 @@ export class ZoningSystem {
       for (const e of order.slice(0, 4)) {
         const id = interior ? this.placeBehind(ctx, e, code, hit, cx, cz, edge) : this.placeFacing(ctx, e, code, hit, cx, cz);
         if (id > 0) {
+          this.zoneMemo?.clear(); // nouveau bâtiment : la trame alentour peut changer
           this.owned.set(id, { zone: code, level: e.level, born: ctx.clock.totalMinutes });
           this.grown++;
           this.statsDirty = true;
@@ -530,9 +578,20 @@ export class ZoningSystem {
 
   /** Zone affichée au point (x, z) : celle de la case du monde sous le centre de la case de la trame qui le contient. */
   private zoneUnder(field: GridField, x: number, z: number): { idx: number; cx: number; cz: number } {
+    const memo = this.zoneMemo;
+    const key = memo ? `${x},${z}` : '';
+    const hit = memo?.get(key);
+    if (hit) return hit;
     const c = field.cellAt(x, z);
-    return { idx: this.grid.index(c.cx, c.cz), cx: c.cx, cz: c.cz };
+    const u = { idx: this.grid.index(c.cx, c.cz), cx: c.cx, cz: c.cz };
+    memo?.set(key, u);
+    return u;
   }
+  /**
+   * Cache de `zoneUnder` pendant une passe de croissance (allègement) : la trame dépend des routes et des bâtiments,
+   * qui ne changent pas pendant la passe sauf quand elle pose un bâtiment (cache alors vidé). Clé : point exact.
+   */
+  private zoneMemo: Map<string, { idx: number; cx: number; cz: number }> | null = null;
 
   /**
    * Vrai si l'emprise tient dans des cases de la zone `code` (ou dans la bande non zonable du bord de route) : cases

@@ -165,52 +165,75 @@ export class ResourceNetwork {
 
   /** Répartit l'offre sur la demande (voir l'en-tête du fichier). N'altère pas le réseau. */
   allocate(): NetworkReport {
+    // Tableaux typés indexés (allègement) : mêmes calculs et même ordre que la version à tables d'association —
+    // les nœuds sont numérotés dans l'ordre croissant des identifiants (départage du tas identique), les arêtes dans
+    // l'ordre d'insertion, les voisins dans l'ordre de `adjacency()`.
     const adj = this.adjacency();
     const nodeIds = this.nodeIds();
+    const N = nodeIds.length;
+    const nIndex = new Map<number, number>();
+    for (let i = 0; i < N; i++) nIndex.set(nodeIds[i]!, i);
+    const nEn = new Uint8Array(N);
     const remaining = new Map<number, number>();
     const produced = new Map<number, number>();
     let supply = 0, demand = 0;
-    for (const id of nodeIds) {
+    for (let i = 0; i < N; i++) {
+      const id = nodeIds[i]!;
       const n = this.nodes.get(id)!;
+      nEn[i] = n.enabled ? 1 : 0;
       if (!n.enabled) continue;
       if (n.role === 'producer') { remaining.set(id, n.capacity); produced.set(id, 0); supply += n.capacity; }
       if (n.role === 'consumer') demand += n.demand;
     }
-    const used = new Map<number, number>();   // capacité consommée (somme des deux sens)
-    const flow = new Map<number, number>();   // flux net entrant, sens a -> b positif
-    for (const id of this.edges.keys()) { used.set(id, 0); flow.set(id, 0); }
+    const eIds = [...this.edges.keys()];
+    const E = eIds.length;
+    const eIndex = new Map<number, number>();
+    const eA = new Int32Array(E), eB = new Int32Array(E), eCap = new Float64Array(E), eCost = new Float64Array(E), eLoss = new Float64Array(E), eEn = new Uint8Array(E);
+    for (let k = 0; k < E; k++) {
+      const e = this.edges.get(eIds[k]!)!;
+      eIndex.set(eIds[k]!, k);
+      eA[k] = nIndex.get(e.a)!; eB[k] = nIndex.get(e.b)!;
+      eCap[k] = e.capacity; eLoss[k] = e.loss; eCost[k] = -Math.log(1 - e.loss); eEn[k] = e.enabled ? 1 : 0;
+    }
+    const adjIdx: Int32Array[] = new Array(N);
+    for (let i = 0; i < N; i++) adjIdx[i] = Int32Array.from(adj.get(nodeIds[i]!)!, (eid) => eIndex.get(eid)!);
+    const used = new Float64Array(E);   // capacité consommée (somme des deux sens)
+    const flow = new Float64Array(E);   // flux net entrant, sens a -> b positif
 
     const consumers = nodeIds.map((id) => this.nodes.get(id)!).filter((n) => n.enabled && n.role === 'consumer');
     consumers.sort((p, q) => q.priority - p.priority || p.id - q.id);
 
-    // Tampons de Dijkstra réutilisés.
-    const dist = new Map<number, number>();
-    const prevEdge = new Map<number, number>();
+    // Tampons de Dijkstra réutilisés (distance valide si `seen[i] === stamp`).
+    const dist = new Float64Array(N), prevEdge = new Int32Array(N), seen = new Int32Array(N);
+    let stamp = 0;
+    const heap = new MinHeap();
     const allocations: ConsumerAllocation[] = [];
     let delivered = 0;
 
     for (const c of consumers) {
       let need = c.demand;
+      const ci = nIndex.get(c.id)!;
       const augs: { producer: number; x: number; path: number[]; enter: number[]; dirs: number[] }[] = [];
       for (let it = 0; it < MAX_AUGMENT_PER_CONSUMER && need > EPS; it++) {
         // Dijkstra depuis le consommateur.
-        dist.clear(); prevEdge.clear();
-        const heap = new MinHeap();
-        dist.set(c.id, 0);
-        heap.push(0, c.id);
+        stamp++;
+        heap.clear();
+        dist[ci] = 0; seen[ci] = stamp;
+        heap.push(0, ci);
         while (heap.size) {
-          const [d, u] = heap.pop();
-          if (d > dist.get(u)! + EPS) continue;
-          for (const eid of adj.get(u)!) {
-            const e = this.edges.get(eid)!;
-            if (!e.enabled || e.capacity - used.get(eid)! <= EPS) continue;
-            const v = e.a === u ? e.b : e.a;
-            if (!this.nodes.get(v)!.enabled) continue;
-            const nd = d - Math.log(1 - e.loss);
-            const old = dist.get(v);
+          const d = heap.popKey();
+          const u = heap.lastVal;
+          if (d > dist[u]! + EPS) continue;
+          const au = adjIdx[u]!;
+          for (let q = 0; q < au.length; q++) {
+            const k = au[q]!;
+            if (!eEn[k] || eCap[k]! - used[k]! <= EPS) continue;
+            const v = eA[k] === u ? eB[k]! : eA[k]!;
+            if (!nEn[v]) continue;
+            const nd = d + eCost[k]!;
             // Inégalité stricte : en cas d'égalité, le premier chemin trouvé (ordre du tas puis des arêtes) est gardé.
-            if (old === undefined || nd < old - EPS) {
-              dist.set(v, nd); prevEdge.set(v, eid); heap.push(nd, v);
+            if (seen[v] !== stamp || nd < dist[v]! - EPS) {
+              dist[v] = nd; seen[v] = stamp; prevEdge[v] = k; heap.push(nd, v);
             }
           }
         }
@@ -218,8 +241,9 @@ export class ResourceNetwork {
         let best = -1, bestCost = Infinity, bestDist = Infinity;
         for (const [pid, rem] of remaining) {
           if (rem <= EPS) continue;
-          const d = dist.get(pid);
-          if (d === undefined) continue;
+          const pi = nIndex.get(pid)!;
+          if (seen[pi] !== stamp) continue;
+          const d = dist[pi]!;
           const pc = this.nodes.get(pid)!.cost;
           if (pc < bestCost - EPS || (Math.abs(pc - bestCost) <= EPS && (d < bestDist - EPS || (Math.abs(d - bestDist) <= EPS && pid < best)))) {
             best = pid; bestCost = pc; bestDist = d;
@@ -228,28 +252,26 @@ export class ResourceNetwork {
         if (best < 0) break;
         // Chemin producteur -> consommateur (en remontant les prédécesseurs depuis le producteur).
         const path: number[] = [], dirs: number[] = [];
-        let u = best;
-        while (u !== c.id) {
-          const eid = prevEdge.get(u)!;
-          const e = this.edges.get(eid)!;
-          path.push(eid);
-          dirs.push(e.a === u ? 1 : -1); // le flux va de u vers l'autre extrémité
-          u = e.a === u ? e.b : e.a;
+        let u = nIndex.get(best)!;
+        while (u !== ci) {
+          const k = prevEdge[u]!;
+          path.push(k);
+          dirs.push(eA[k] === u ? 1 : -1); // le flux va de u vers l'autre extrémité
+          u = eA[k] === u ? eB[k]! : eA[k]!;
         }
         const enter: number[] = [];
         let m = 1, xMax = remaining.get(best)!;
-        for (const eid of path) {
-          const e = this.edges.get(eid)!;
+        for (const k of path) {
           enter.push(m);
-          xMax = Math.min(xMax, (e.capacity - used.get(eid)!) / m);
-          m *= 1 - e.loss;
+          xMax = Math.min(xMax, (eCap[k]! - used[k]!) / m);
+          m *= 1 - eLoss[k]!;
         }
         xMax = Math.min(xMax, need / m);
         if (!(xMax > EPS)) break;
-        for (let k = 0; k < path.length; k++) {
-          const eid = path[k]!;
-          used.set(eid, used.get(eid)! + xMax * enter[k]!);
-          flow.set(eid, flow.get(eid)! + dirs[k]! * xMax * enter[k]!);
+        for (let q = 0; q < path.length; q++) {
+          const k = path[q]!;
+          used[k] = used[k]! + xMax * enter[q]!;
+          flow[k] = flow[k]! + dirs[q]! * xMax * enter[q]!;
         }
         remaining.set(best, remaining.get(best)! - xMax);
         produced.set(best, produced.get(best)! + xMax);
@@ -260,10 +282,10 @@ export class ResourceNetwork {
       if (c.allOrNothing && need > 0) {
         // Annulation : flux rendus aux arêtes et aux producteurs.
         for (const a of augs) {
-          for (let k = 0; k < a.path.length; k++) {
-            const eid = a.path[k]!;
-            used.set(eid, used.get(eid)! - a.x * a.enter[k]!);
-            flow.set(eid, flow.get(eid)! - a.dirs[k]! * a.x * a.enter[k]!);
+          for (let q = 0; q < a.path.length; q++) {
+            const k = a.path[q]!;
+            used[k] = used[k]! - a.x * a.enter[q]!;
+            flow[k] = flow[k]! - a.dirs[q]! * a.x * a.enter[q]!;
           }
           remaining.set(a.producer, remaining.get(a.producer)! + a.x);
           produced.set(a.producer, produced.get(a.producer)! - a.x);
@@ -284,8 +306,9 @@ export class ResourceNetwork {
     }
     const edges: NetworkReport['edges'] = this.edgeIds().map((eid) => {
       const e = this.edges.get(eid)!;
-      const f = flow.get(eid)!;
-      return { edge: eid, flow: Math.abs(f) < EPS ? 0 : f, load: e.capacity > 0 ? used.get(eid)! / e.capacity : 0 };
+      const k = eIndex.get(eid)!;
+      const f = flow[k]!;
+      return { edge: eid, flow: Math.abs(f) < EPS ? 0 : f, load: e.capacity > 0 ? used[k]! / e.capacity : 0 };
     });
     const shedByPriority: Record<number, number> = {};
     for (const a of allocations) if (a.shed) shedByPriority[a.priority] = (shedByPriority[a.priority] ?? 0) + 1;
@@ -326,6 +349,28 @@ class MinHeap {
   private readonly k: number[] = [];
   private readonly v: number[] = [];
   get size(): number { return this.k.length; }
+  /** Valeur du dernier élément retiré par `popKey`. */
+  lastVal = 0;
+  clear(): void { this.k.length = 0; this.v.length = 0; }
+  /** Retire le minimum sans allouer : renvoie sa priorité, sa valeur dans `lastVal`. */
+  popKey(): number {
+    const key = this.k[0]!;
+    this.lastVal = this.v[0]!;
+    const lk = this.k.pop()!, lv = this.v.pop()!;
+    if (this.k.length) {
+      this.k[0] = lk; this.v[0] = lv;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1;
+        let m = i;
+        if (l < this.k.length && this.less(l, m)) m = l;
+        if (r < this.k.length && this.less(r, m)) m = r;
+        if (m === i) break;
+        this.swap(i, m); i = m;
+      }
+    }
+    return key;
+  }
   private less(i: number, j: number): boolean { return this.k[i]! < this.k[j]! || (this.k[i] === this.k[j] && this.v[i]! < this.v[j]!); }
   private swap(i: number, j: number): void {
     const tk = this.k[i]!, tv = this.v[i]!;
