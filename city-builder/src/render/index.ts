@@ -127,6 +127,8 @@ export async function initRender(
   const veg = new VegetationSystem(ctx.scene, lib, { heightAt, renderer: ctx.renderer, distances: profile.vegDistances });
   await veg.load();
   const roads = new RoadNetworkRenderer(ctx.scene, heightAt, { lib, treeImpostor: (id) => veg.impostorMaterial(id) });
+  // Diagnostic e2e : reconstructions des chunks de routes (nombre, durée cumulée en ms).
+  if (typeof window !== 'undefined') (window as unknown as { __routes?: unknown }).__routes = { rebuilds: () => roads.rebuilds, ms: () => roads.rebuildMs, chunks: () => roads.group.children.length };
   // Ordinateur : ombres des bâtiments en lots fusionnés (≈ 1 000 appels de rendu de moins dans la carte d'ombre
   // d'une grande ville) ; téléphone : inchangé (mémoire graphique comptée au plus juste).
   // Ordinateur avec WEBGL_multi_draw : rendu principal en lots par matériau (≈ 1 appel par matériau au lieu

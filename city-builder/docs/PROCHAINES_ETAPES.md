@@ -102,3 +102,19 @@ Note : le volume d'une source croît avec le temps de jeu écoulé depuis sa pos
 - Satisfaction (v48, partie du joueur « Gotham Citx ») : « Eau −0,1 pt → Raccordez-vous au réseau d'eau voisin » alors
   que 587/587 bâtiments sont desservis à 100 %, tous aux égouts : le reste vient d'une qualité de 99,7–100 %. Les
   conseils ne visent plus que les facteurs d'au moins −0,5 pt (`adviceTargets`, `ADVICE_MIN_PTS`).
+
+## Contrôle de la partie du joueur « Gotham Citx » (11 000 hab., v49)
+Outils : `tests/e2e/partie-joueur.mjs <sauvegarde> [s] [vitesse]` (import par le menu, erreurs, images/s, `tickMs`,
+mémoire ; `NORENDER=1` pour la seule simulation) et `tests/e2e/partie-rendu.mjs <sauvegarde>` (appels de dessin et
+triangles par couche, maillages visibles des routes et des bâtiments, `ROADCHUNK=` pour comparer).
+- État : aucune alerte, aucune erreur de module ni de console ; eau et électricité couvertes ; chômage 0,2 %.
+- Simulation (2 jours de jeu chargés depuis la sauvegarde, Node) : 9,3 s → 5,9 s ; pics horaires 50 → 33.
+  Croissance des zones pleines suspendue tant que rien ne change ; lots recomptés seulement si la ville change ;
+  répartition eau/égouts en tableaux typés (identique à l'ancienne). Dans le navigateur sans rendu : ×16 tenu
+  (162 min de jeu/s pour 160).
+- Rendu (vue du chargement) : 948 → 708 appels de dessin (routes 377 → 137, chunks de routes de 512 m ; un tronçon
+  modifié remaille ≈ 16 ms au lieu de 5) ; feux tricolores 168 000 → 93 000 triangles (lentilles 72 triangles).
+- Bug corrigé : la capacité libre de la centrale au gaz était vendue 1,5 ct/kWh (prix par défaut) pour 2 ct de gaz :
+  ≈ −150 000 CHF/mois. Vendue maintenant seulement au-dessus du coût du gaz (sur la partie : +5 100 CHF/jour).
+- Sauvegarde : 4,8 Mo en JSON, 1 Mo compressée (format stocké) ; cache des paquets déjà purgé à chaque version.
+- Reste possible : décor routier lointain (4 000 lampadaires, ≈ 90 maillages) en un seul lot ; bâtiments 265 appels.

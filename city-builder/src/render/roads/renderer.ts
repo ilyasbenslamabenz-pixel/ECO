@@ -14,7 +14,14 @@
  */
 import * as THREE from 'three';
 import { ab } from '../ab';
-import { WATER_LEVEL, CHUNK_SIZE } from '../../shared/constants';
+import { WATER_LEVEL } from '../../shared/constants';
+
+/**
+ * Taille des chunks du réseau routier rendu (m) : une couche de matériau et un lot de décor par chunk. 512 m (avant :
+ * CHUNK_SIZE, 256 m) : quatre fois moins de maillages, donc d'appels de dessin (partie de 11 000 habitants : routes
+ * 377 → voir docs/PROCHAINES_ETAPES.md) ; un tronçon modifié remaille un chunk plus grand.
+ */
+const CHUNK_SIZE = Number((globalThis as { __roadChunk?: number }).__roadChunk ?? 512);
 import type { IRoadRenderer, RoadEdgeRecord, RoadNodeRecord } from '../../shared/contracts';
 import { RoadNetwork, cubic, isRoadKind, type RoadEdgeRecordEx, type RoadKindId } from '../../sim/roads';
 import type { AssetLibrary } from '../assets';

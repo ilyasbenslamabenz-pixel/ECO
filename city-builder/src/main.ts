@@ -442,6 +442,20 @@ async function boot(): Promise<void> {
     gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
     return Math.round(performance.now() - t0);
   };
+  // Diagnostic : maillages visibles d'une couche de la scène, regroupés par nom (sans numéro de chunk).
+  (debug as unknown as Record<string, unknown>)['layerMeshes'] = (name: string) => {
+    const out: Record<string, { n: number; inst: number; tris: number }> = {};
+    const root = render.ctx.scene.children.find((o) => o.name === name);
+    root?.traverseVisible((o) => {
+      const m = o as THREE.Mesh & { count?: number; isInstancedMesh?: boolean };
+      if (!m.isMesh) return;
+      const key = (o.name || o.type).replace(/_\d+/g, '_#');
+      const g = m.geometry, tri = (g.index ? g.index.count : g.getAttribute('position')?.count ?? 0) / 3;
+      const k = (out[key] ??= { n: 0, inst: 0, tris: 0 });
+      k.n++; k.inst += m.isInstancedMesh ? (m.count ?? 0) : 1; k.tris += tri * (m.isInstancedMesh ? (m.count ?? 0) : 1);
+    });
+    return out;
+  };
   debug.setLayerVisible = (name, visible) => {
     const names: string[] = [];
     for (const o of render.ctx.scene.children) { names.push(o.name || o.type); if (o.name === name) o.visible = visible; }

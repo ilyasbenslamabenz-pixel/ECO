@@ -139,6 +139,7 @@ export const IMPORT_SPEC = { capacityKw: 3_000, priceCentsPerKwh: 4.5, connectio
  * joueur (`minPrice`..`maxPrice`, défaut `priceCentsPerKwh`). Les voisins achètent tout le surplus jusqu'au prix de
  * référence (`refPrice`, leur propre prix d'achat), puis une part décroissante jusqu'à `maxPrice` (part nulle).
  */
+export const THERMAL_EXPORT_FUEL_CENTS = 2;
 export const EXPORT_SPEC = { priceCentsPerKwh: 1.5, minPrice: 0.5, maxPrice: 15, refPrice: 4.5 } as const;
 
 /** Prix de vente borné (¢/kWh) ; valeur absente ou invalide → prix par défaut. */

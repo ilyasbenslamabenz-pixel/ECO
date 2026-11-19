@@ -159,3 +159,21 @@ test('sauvegarde : option et notification conservées ; ancienne section (sans c
   assert.equal(m.power!.settings.vente, undefined);
   assert.equal(m.power!.exportNotified, undefined);
 });
+
+test('centrale au gaz : sa capacité inutilisée n\'est vendue que si le prix couvre le gaz (jamais de vente à perte)', () => {
+  const t = powerTown({ days: 2 });
+  placeFacilities(t.sim, 160, -200, 300, ['centrale_gaz']);
+  assert.ok(t.sim.plugins.command('electricite', 'raccordement', { on: false }).ok);
+  advanceToHour(t.sim, 12);
+  // Prix par défaut (1,5 ct) sous le coût du gaz (2 ct) : rien de thermique n'est vendu, aucune perte.
+  const l0 = exportLine(t.sim);
+  advanceHours(t.sim, 6);
+  assert.ok(exportLine(t.sim) - l0 >= 0, `vente au prix par défaut : ${(exportLine(t.sim) - l0).toFixed(2)} CHF`);
+  assert.equal(t.elec.system.summary()!.exportedKw ?? 0, 0);
+  // Prix au-dessus du gaz : la capacité inutilisée est vendue, avec une recette positive.
+  assert.ok(t.sim.plugins.command('electricite', 'prixVente', { price: 4 }).ok);
+  const l1 = exportLine(t.sim);
+  advanceHours(t.sim, 6);
+  assert.ok((t.elec.system.summary()!.exportedKw ?? 0) > 0, 'capacité thermique vendue');
+  assert.ok(exportLine(t.sim) - l1 > 0, 'recette positive');
+});

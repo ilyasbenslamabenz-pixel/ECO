@@ -13,7 +13,7 @@ import {
   SOURCE_LABELS_FR, type FacilityView,
 } from '../../shared/power/types';
 import { powerView } from '../../shared/power/view';
-import { EXPORT_SPEC, IMPORT_SPEC, clampExportPrice, exportDemandShare } from '../../shared/power/model';
+import { EXPORT_SPEC, IMPORT_SPEC, THERMAL_EXPORT_FUEL_CENTS, clampExportPrice, exportDemandShare } from '../../shared/power/model';
 import type { UiPanel, UiPanelApi } from './types';
 import { adviceHtml, powerAdvice } from '../needs-advice';
 import { goBuild } from '../goto';
@@ -225,7 +225,7 @@ function renderSettings(st: ElectriciteDelta): string {
   <div class="row"><label><input id="elec-vente" type="checkbox" ${set.vente !== false ? 'checked' : ''}> <b>Vendre le surplus aux villes voisines</b></label></div>
   <div class="row"><label for="elec-prix">Prix de vente</label><b data-k="prix-vente">${clampExportPrice(set.prixVente).toLocaleString('fr-FR')} ct/kWh · voisins achètent ${Math.round(exportDemandShare(clampExportPrice(set.prixVente)) * 100)} %</b></div>
   <div class="row"><input id="elec-prix" type="range" min="${EXPORT_SPEC.minPrice}" max="${EXPORT_SPEC.maxPrice}" step="0.5" value="${clampExportPrice(set.prixVente)}"></div>
-  <p class="muted" style="margin:2px 0 6px">Automatique et sans limite : chaque heure, tout le surplus éolien, solaire, hydraulique et des toitures (après recharge des batteries) est vendu. Jusqu'à ${EXPORT_SPEC.refPrice.toLocaleString('fr-FR')} ct/kWh les voisins achètent tout ; plus cher, ils achètent moins (rien à ${EXPORT_SPEC.maxPrice} ct).</p>
+  <p class="muted" style="margin:2px 0 6px">Automatique et sans limite : chaque heure, tout le surplus éolien, solaire, hydraulique et des toitures (après recharge des batteries) est vendu. Jusqu'à ${EXPORT_SPEC.refPrice.toLocaleString('fr-FR')} ct/kWh les voisins achètent tout ; plus cher, ils achètent moins (rien à ${EXPORT_SPEC.maxPrice} ct). Centrales au gaz : leur capacité libre n'est vendue qu'au-dessus de ${THERMAL_EXPORT_FUEL_CENTS} ct/kWh (prix du gaz brûlé), jamais à perte.</p>
   <div class="row"><label for="elec-fund">Financement de l'entretien</label><b data-k="financement">${Math.round(set.funding * 100)} %</b></div>
   <div class="row"><input id="elec-fund" type="range" min="${FUNDING_MIN * 100}" max="${FUNDING_MAX * 100}" step="5" value="${Math.round(set.funding * 100)}"></div>
   <p class="muted" style="margin:2px 0 6px">Sous-financer augmente les pannes (×4 à 50 %) et allonge les réparations.</p>

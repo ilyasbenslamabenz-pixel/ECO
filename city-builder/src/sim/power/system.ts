@@ -114,7 +114,8 @@ export interface PowerState {
 export const PLANT_RANDOM_FAILURES = false as boolean;
 
 /** Gaz brûlé pour vendre la capacité inutilisée d'une centrale thermique (¢/kWh vendu). */
-export const THERMAL_EXPORT_FUEL_CENTS = 2;
+export { THERMAL_EXPORT_FUEL_CENTS } from '../../shared/power/model';
+import { THERMAL_EXPORT_FUEL_CENTS } from '../../shared/power/model';
 
 export const INTERMITTENT_ADVICE = 'La nuit sans vent, vos éoliennes et panneaux solaires ne produisent rien. Raccordez-vous au réseau voisin, construisez une centrale thermique ou des batteries.';
 
@@ -1304,8 +1305,12 @@ export class PowerSystem {
   private exportStep(ctx: PluginContext, facs: Facility[], avail: Map<number, number>, outputOf: Map<number, number>, isolated: Set<number>, rooftopSpare: number, importedKw: number, capFactor: number, summary: ElectriciteSummary): number {
     let spare = Math.max(0, rooftopSpare);
     let thermal = 0;
+    // Capacité thermique vendue seulement si le prix couvre le gaz brûlé : sinon chaque kWh vendu fait perdre de
+    // l'argent (partie d'un joueur : prix par défaut 1,5 ct < gaz 2 ct, ≈ −150 000 CHF par mois sans l'avoir choisi).
+    const thermalPays = this.exportPrice > THERMAL_EXPORT_FUEL_CENTS;
     for (const f of facs) {
       if (f.kind !== 'eolien' && f.kind !== 'solaire' && f.kind !== 'hydro' && f.kind !== 'thermique') continue;
+      if (f.kind === 'thermique' && !thermalPays) continue;
       if (isolated.has(f.id) || this.facilityState(f.id).failedUntil > 0) continue;
       const free = Math.max(0, (avail.get(f.id) ?? 0) - (outputOf.get(f.id) ?? 0));
       // Centrales thermiques (demande joueur : vendre TOUT le surplus) : leur capacité inutilisée est aussi vendue,

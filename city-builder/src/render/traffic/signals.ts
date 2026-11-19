@@ -111,8 +111,10 @@ export class TrafficSignalRenderer {
     housing: housingGeometry(),
     housingFar: new THREE.BoxGeometry(0.34, 1.0, 0.25),
     plate: plateGeometry(),
-    lens: new THREE.SphereGeometry(0.1, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.32).rotateX(Math.PI / 2).translate(0, 0, -0.07),
-    halo: new THREE.CircleGeometry(0.3, 20),
+    // Calotte de 10 cm : 12 × 3 facettes (72 triangles) suffisent ; avant 16 × 8 (256 triangles) × 3 lentilles par tête,
+    // dessinées à toute distance (≈ 150 000 triangles par image sur une ville de 11 000 habitants).
+    lens: new THREE.SphereGeometry(0.1, 12, 3, 0, Math.PI * 2, 0, Math.PI * 0.32).rotateX(Math.PI / 2).translate(0, 0, -0.07),
+    halo: new THREE.CircleGeometry(0.3, 12),
   };
   private readonly mat = {
     metal: new THREE.MeshStandardMaterial({ color: 0x3b4146, roughness: 0.45, metalness: 0.7 }),
