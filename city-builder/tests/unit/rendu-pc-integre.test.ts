@@ -83,3 +83,14 @@ test('GPU intégré : résolution dynamique et paliers aussi en Moyenne (fluidit
   assert.equal(tiersEnabledFor('haute', false, true), false);
   assert.equal(tiersEnabledFor('auto', false, false), true);
 });
+
+test('Téléphone (mode allégé) : paliers automatiques en qualité Auto ; Basse impose le palier le plus léger', async () => {
+  const { tiersEnabledFor, fixedTierFor } = await import('../../src/ui/options');
+  const { QUALITY_TIERS } = await import('../../src/render/quality-tiers');
+  assert.equal(tiersEnabledFor('auto', true, false), true, 'qualité Auto sur téléphone : adaptation');
+  assert.equal(tiersEnabledFor('moyenne', true, true), false, 'choix manuel du joueur respecté');
+  assert.equal(tiersEnabledFor('haute', true, false), false);
+  assert.equal(fixedTierFor('basse'), QUALITY_TIERS.length - 1);
+  assert.equal(fixedTierFor('moyenne'), 0);
+  assert.equal(fixedTierFor('auto'), 0);
+});

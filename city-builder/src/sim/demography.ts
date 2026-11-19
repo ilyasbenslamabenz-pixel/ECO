@@ -66,7 +66,7 @@ export const AGGREGATE_MAX_WEIGHT = 16;
  * citoyens, la passe de minuit est répartie sur les ticks suivants (DAILY_SLICES tranches par boucle sur les citoyens,
  * au moins DAILY_MIN_SLICE_ROWS lignes par tranche, plus une étape par traitement lourd) au lieu d'un pic unique.
  */
-export const DAILY_SPREAD_MIN_ROWS = 20_000;
+export const DAILY_SPREAD_MIN_ROWS = 5_000;
 export const DAILY_SLICES = 32;
 export const DAILY_MIN_SLICE_ROWS = 2_000;
 /**

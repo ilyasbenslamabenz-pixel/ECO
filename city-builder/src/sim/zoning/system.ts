@@ -212,7 +212,11 @@ export class ZoningSystem {
     this.zoneFails.fill(0);
     this.stalls.clear();
     this.lotsSig = '';
+    this.lotsGridV = this.lotsRoadsV = -1;
+    this.lotsIds.clear();
+    this.freeCells = [];
     this.realignPending = false;
+    this.densifyDue = -1;
     this.lastHour = Math.floor(ctx.clock.totalMinutes / 60);
     this.demandDirty = this.statsDirty = this.settingsDirty = false;
     this.zcat = buildZoneCatalog(ctx.catalog);
@@ -258,6 +262,10 @@ export class ZoningSystem {
     this.syncRoads(ctx);
     // Partie chargée : anciens lots hors de leur case recalés sur la trame (une fois, au premier tick).
     if (this.realignPending) { this.realignPending = false; this.realign(ctx); }
+    if (this.densifyDue >= 0 && ctx.clock.totalMinutes > this.densifyDue) {
+      this.densifyDue = -1;
+      if (this.growth) this.densifyDay(ctx);
+    }
     const hour = Math.floor(ctx.clock.totalMinutes / 60);
     if (hour === this.lastHour) return;
     this.lastHour = hour;
@@ -272,17 +280,42 @@ export class ZoningSystem {
     const sig = this.worldSig(ctx);
     if (sig === this.lotsSig) return;
     this.lotsSig = sig;
-    let zoned = 0, free = 0;
+    // Bâtiments présents (identifiant -> position) : si la trame et la voirie n'ont pas changé et que des bâtiments ont
+    // seulement été AJOUTÉS, une case occupée le reste ; seules les cases libres au dernier comptage sont revues.
+    const st = ctx.buildings.store;
+    const ids = new Map<number, number>();
+    let onlyAdded = this.lotsGridV === this.grid.version && this.lotsRoadsV === ctx.roads.version;
+    for (let i = 0; i < ctx.buildings.count; i++) {
+      const h = (Math.round(st.x[i]! * 10) * 73856093) ^ (Math.round(st.z[i]! * 10) * 19349663) ^ (st.rot[i]! * 83492791) ^ (st.tilesX[i]! * 7919) ^ st.tilesZ[i]!;
+      ids.set(st.id[i]!, h);
+    }
+    if (onlyAdded) for (const [id, h] of this.lotsIds) if (ids.get(id) !== h) { onlyAdded = false; break; }
+    this.lotsIds = ids;
+    this.lotsGridV = this.grid.version;
+    this.lotsRoadsV = ctx.roads.version;
+    if (onlyAdded) {
+      this.freeCells = this.freeCells.filter((idx) => !this.occupied(ctx, this.grid.centerX(idx), this.grid.centerZ(idx), 2.5));
+      this.lots = { zoned: this.lots.zoned, free: this.freeCells.length };
+      return;
+    }
+    let zoned = 0;
+    const freeCells: number[] = [];
     for (const t of ['res_faible', 'res_moyen', 'res_dense'] as const) {
       const code = ZONE_TYPES.indexOf(t) + 1;
       for (const idx of this.grid.cellsOf(code as ZoneCode)) {
         zoned++;
         if (this.grid.edgeM(idx) > BUILD_DEPTH_M || !this.grid.connected(idx)) continue;
-        if (!this.occupied(ctx, this.grid.centerX(idx), this.grid.centerZ(idx), 2.5)) free++;
+        if (!this.occupied(ctx, this.grid.centerX(idx), this.grid.centerZ(idx), 2.5)) freeCells.push(idx);
       }
     }
-    this.lots = { zoned, free };
+    this.freeCells = freeCells;
+    this.lots = { zoned, free: freeCells.length };
   }
+  /** Comptage incrémental des cases libres (voir `countLots`). */
+  private lotsIds = new Map<number, number>();
+  private lotsGridV = -1;
+  private lotsRoadsV = -1;
+  private freeCells: number[] = [];
 
   /**
    * Zonage résidentiel pour l'indice de croissance de la démographie : cases zonées, cases libres constructibles
@@ -295,9 +328,12 @@ export class ZoningSystem {
 
   day(ctx: PluginContext): void {
     if (!this.active || !ctx.inGame || !this.growth) return;
-    this.syncRoads(ctx);
-    this.densifyDay(ctx);
+    // Densification reportée au tick suivant (voir `tick`) : le tick de minuit porte déjà la croissance horaire et les
+    // passes quotidiennes des autres modules (pic d'environ 20 ms en moins sur une ville de 11 000 habitants).
+    this.densifyDue = ctx.clock.totalMinutes;
   }
+  /** Minute de jeu du début de journée dont la densification reste à faire (-1 : aucune). */
+  private densifyDue = -1;
 
   /** Oublie les bâtiments démolis par le joueur. */
   private prune(ctx: PluginContext): void {
@@ -1016,6 +1052,8 @@ export class ZoningSystem {
     this.grown = s.counters.grown;
     this.densified = s.counters.densified;
     this.lastHour = Math.floor(ctx.clock.totalMinutes / 60);
+    // Sauvegarde prise au tick de minuit : la densification du jour, reportée au tick suivant, reste à faire.
+    this.densifyDue = ctx.clock.totalMinutes % MINUTES_PER_DAY === 0 ? ctx.clock.totalMinutes : -1;
     this.active = true;
     this.realignPending = true;
     this.roads.sync(ctx.roads);

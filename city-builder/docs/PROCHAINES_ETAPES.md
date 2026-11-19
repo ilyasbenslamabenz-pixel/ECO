@@ -118,3 +118,22 @@ triangles par couche, maillages visibles des routes et des bâtiments, `ROADCHUN
   ≈ −150 000 CHF/mois. Vendue maintenant seulement au-dessus du coût du gaz (sur la partie : +5 100 CHF/jour).
 - Sauvegarde : 4,8 Mo en JSON, 1 Mo compressée (format stocké) ; cache des paquets déjà purgé à chaque version.
 - Reste possible : décor routier lointain (4 000 lampadaires, ≈ 90 maillages) en un seul lot ; bâtiments 265 appels.
+
+## Fluidité : pics de simulation lissés, qualité adaptative sur téléphone (v50)
+Mesure : temps de chaque tick sur 2 jours de jeu de la partie « Gotham Citx » (Node, après un jour de chauffe).
+- Tick de minuit : 140–240 ms → ≈ 27 ms. Pire tick de la journée : 243 → 46 ms ; tournées de déchets (6 h) : 70–110 → ≈ 41 ms.
+  - Passe démographique étalée dès 5 000 lignes de citoyens (`DAILY_SPREAD_MIN_ROWS`, 20 000 avant ; mécanisme
+    existant, docs/SIMULATION.md).
+  - Densification des zones reportée au tick qui suit minuit (`ZoningSystem.densifyDue` ; reprise au chargement d'une
+    sauvegarde prise à minuit).
+  - Électricité et eau : rattachement de chaque bâtiment à la voirie mémorisé par position tant que la voirie ne change
+    pas (recherché chaque heure jusque-là) ; électricité 9 → 1 ms par heure.
+  - Version de la voirie propre à chaque réseau (`RoadNetwork.version` part d'une base unique) : aucun cache indexé sur
+    la version ne confond deux parties successives.
+  - Zonage : cases libres recomptées seulement autour des changements (bâtiments seulement ajoutés : seules les cases
+    libres sont revues) ; résultat identique.
+  - Tournées de déchets : recherche du plus court chemin arrêtée dès l'arrêt le plus proche trouvé (exact : même
+    arrêt, même distance, même itinéraire).
+- Qualité d'affichage : paliers automatiques (véhicules, piétons, végétation, niveaux de détail, ombres) aussi sur
+  téléphone en qualité Auto ; qualité Basse = palier « minimal » imposé. Tests : rendu-pc-integre.
+- Reste possible : réseau d'eau (≈ 10 ms par heure, répartition des débits), décor routier en un seul lot.

@@ -1,5 +1,5 @@
 /**
- * Paliers de qualité automatiques (qualité « Auto » sur ordinateur, docs/PERFORMANCE_PC.md).
+ * Paliers de qualité automatiques (qualité « Auto », ordinateur et téléphone, docs/PERFORMANCE_PC.md).
  *
  * La boucle d'affichage (src/render/scene.ts) mesure la cadence réelle. Quand elle décroche :
  *   1. la résolution 3D baisse d'abord (résolution dynamique existante), jusqu'à son plancher ;
@@ -8,7 +8,8 @@
  * Anti-scintillement : au plus un changement de palier toutes les 4 s en descente, 12 s de cadence tenue avant une
  * montée, et pas de remontée vers un palier qui a décroché dans les 2 dernières minutes.
  *
- * Qualités Haute / Moyenne / Basse choisies par le joueur : aucun palier (palier 0, réglages inchangés).
+ * Qualités Haute / Moyenne choisies par le joueur : aucun palier (palier 0, réglages inchangés) ; Basse : palier
+ * « minimal » imposé (src/ui/options.ts, `fixedTierFor`).
  * `?palier=0..3` impose un palier fixe (mesures).
  */
 

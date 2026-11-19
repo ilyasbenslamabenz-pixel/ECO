@@ -213,8 +213,9 @@ Création de route (réseau de 2 501 tronçons, ville de 54 k) :
   +0,6 %, demande résidentielle 0,033 contre 0,033.
 
 ### Passe quotidienne étalée (`beginDaily` / `stepDaily`)
-- **Activation** : à partir de `DAILY_SPREAD_MIN_ROWS` = 20 000 lignes de citoyens. En dessous, la passe s'exécute
-  d'un seul tenant au tick de minuit, exactement comme avant (aucune partie existante ne change). `daily()` reste
+- **Activation** : à partir de `DAILY_SPREAD_MIN_ROWS` = 5 000 lignes de citoyens (20 000 jusqu'à la v49 : une ville de
+  11 000 habitants gardait un pic d'environ 50 ms à minuit). En dessous, la passe s'exécute d'un seul tenant au tick de
+  minuit. `daily()` reste
   disponible et synchrone (commande `settle`, tests).
 - **Découpage** : passe étalée, le tick de minuit ne fait plus que planifier la passe (les modules gardent leur `onDayStart` à
   minuit) ; à partir du tick suivant, `World.tick` exécute **une étape par tick** :

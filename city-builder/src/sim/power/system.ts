@@ -55,6 +55,8 @@ export interface FacilityState { failedUntil: number; failures: number; storedKw
 const ROAD_ATTACH_M = 80;
 /** Repli sans route : installation et bâtiment voisins (m). */
 const LOCAL_FALLBACK_M = 80;
+/** Positions mémorisées au plus pour le rattachement à la voirie (vidé au-delà ; une entrée par bâtiment en pratique). */
+const NEAR_MEMO_MAX = 100_000;
 /**
  * Repli sans route entre deux INSTALLATIONS (m) : un parc éolien posé à l'écart (mâts espacés d'au moins
  * WIND_MIN_SPACING_M = 88 m pour que les rotors ne se chevauchent pas) reste d'un seul tenant ; il suffit qu'une
@@ -459,11 +461,20 @@ export class PowerSystem {
 
   /** Composante routière BRUTE d'un point (tronçon le plus proche dans `reach` m), -1 sinon. */
   private rawCompAt(ctx: PluginContext, x: number, z: number, reach: number): number {
+    // Mémo par position tant que la voirie ne change pas (chaque bâtiment était recherché parmi les tronçons à chaque
+    // heure) ; seulement quand les composantes sont à jour pour cette version de la voirie.
+    const fresh = this.compVersion === ctx.roads.version;
+    if (fresh && this.nearVersion !== ctx.roads.version) { this.nearMemo.clear(); this.nearVersion = ctx.roads.version; }
+    const key = `${x},${z},${reach}`;
+    if (fresh) { const m = this.nearMemo.get(key); if (m !== undefined) return m; }
     const s = ctx.roads.segmentNear(x, z, reach);
-    if (!s) return -1;
-    const [a] = ctx.roads.endpoints(s.segId);
-    return this.nodeComp.get(a) ?? -1;
+    let c = -1;
+    if (s) { const [a] = ctx.roads.endpoints(s.segId); c = this.nodeComp.get(a) ?? -1; }
+    if (fresh) { if (this.nearMemo.size > NEAR_MEMO_MAX) this.nearMemo.clear(); this.nearMemo.set(key, c); }
+    return c;
   }
+  private readonly nearMemo = new Map<string, number>();
+  private nearVersion = -1;
 
   /** Composante routière d'un point, après fusion des réseaux routiers reliés par des câbles souterrains. */
   private compAt(ctx: PluginContext, x: number, z: number, reach: number): number {

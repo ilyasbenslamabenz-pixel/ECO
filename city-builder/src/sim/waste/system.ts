@@ -352,6 +352,9 @@ export class WasteSystem {
       totalKg += kg;
     }
     if (!stops.size) return 0;
+    // Nœuds portant encore un arrêt (recherche du plus proche arrêtée au premier rencontré, voir `shortest`).
+    const stopMask = new Uint8Array(g.n);
+    for (const node of stops.keys()) stopMask[node] = 1;
     const target = totalKg / active;
     // Admissions prévues aux installations (choix de la filière).
     const planned = new Map<number, number>();
@@ -417,7 +420,7 @@ export class WasteSystem {
       run.pts.push(g.attached.get(depot.id)!.x, g.attached.get(depot.id)!.z);
       run.times.push(0);
       while (stops.size && taken < target * 1.05 + 1) {
-        const dist = g.shortest(pos);
+        const dist = g.shortest(pos, stopMask);
         let best: Stop | null = null;
         for (const s of stops.values()) if (Number.isFinite(dist[s.node]!) && (!best || dist[s.node]! < dist[best.node]! || (dist[s.node] === dist[best.node] && s.ref < best.ref))) best = s;
         if (!best) break;
@@ -432,7 +435,7 @@ export class WasteSystem {
         const recPart = b.rec + b.res > 0 ? (take * b.rec) / (b.rec + b.res) : 0;
         load += take; rec += recPart; taken += take;
         best.kg -= take;
-        if (best.kg <= 1) stops.delete(best.node);
+        if (best.kg <= 1) { stops.delete(best.node); stopMask[best.node] = 0; }
         if (load >= P.truckCapacityKg * 0.95) {
           unload();
           if (++trips >= P.maxTripsPerShift) break;

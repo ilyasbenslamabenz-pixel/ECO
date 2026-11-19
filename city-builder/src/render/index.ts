@@ -215,7 +215,7 @@ export async function initRender(
   let smallShadowDist = QUALITY_TIERS[0]!.smallShadowDist;
   const tierActive = (): boolean => forcedTier !== null || !!ctx.perf.tiersEnabled;
   const applyTier = (): void => {
-    const k = tierActive() ? tierCtl.tier : 0;
+    const k = tierActive() ? tierCtl.tier : Math.min(QUALITY_TIERS.length - 1, Math.max(0, ctx.perf.fixedTier ?? 0));
     const t = QUALITY_TIERS[k]!;
     ctx.perf.tier = k;
     buildings.setLodScale(t.buildingLod);

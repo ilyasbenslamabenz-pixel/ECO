@@ -7,6 +7,7 @@
  */
 import * as THREE from 'three';
 import { deviceProfile } from '../render/device-profile';
+import { QUALITY_TIERS } from '../render/quality-tiers';
 import { setColorMode } from '../render/palette';
 
 export interface GraphicsOptions {
@@ -93,9 +94,18 @@ export function dynResEnabled(o: Pick<GraphicsOptions, 'quality' | 'dynRes'>, ig
   return o.dynRes === 'on' || (o.dynRes === 'auto' && (o.quality === 'auto' || (igpu && o.quality !== 'basse')));
 }
 
-/** Paliers de qualité automatiques : qualité Auto sur ordinateur, et Moyenne sur GPU intégré (fluidité d'abord). */
+/**
+ * Paliers de qualité automatiques : qualité Auto (ordinateur ET téléphone : le mode allégé restait au palier le plus
+ * coûteux — tous les véhicules, piétons jusqu'à 1,4 km — même quand la cadence décrochait), et Moyenne sur GPU intégré
+ * (fluidité d'abord).
+ */
 export function tiersEnabledFor(quality: GraphicsOptions['quality'], lite: boolean, igpu: boolean): boolean {
-  return !lite && (quality === 'auto' || (igpu && quality === 'moyenne'));
+  return quality === 'auto' || (!lite && igpu && quality === 'moyenne');
+}
+
+/** Palier imposé hors paliers automatiques : qualité Basse = palier le plus léger (src/render/quality-tiers.ts). */
+export function fixedTierFor(quality: GraphicsOptions['quality']): number {
+  return quality === 'basse' ? QUALITY_TIERS.length - 1 : 0;
 }
 
 /** Ombres imposées par l'adresse (`?ombres=off|low|high|ultra`, page de mesure), jamais mémorisées seules. */
@@ -156,7 +166,7 @@ export interface GraphicsTargets {
   /** Contrôleur de caméra : reçoit la distance d'affichage (plan lointain) et les réglages de navigation. */
   camera?: { viewDistance: number; inputPref?: GraphicsOptions['pointer']; edgeScroll?: boolean };
   /** Cadence du rendu (src/render/scene.ts) : plafond d'images, ombres, résolution adaptative. */
-  perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number; tiersEnabled?: boolean };
+  perf?: { maxFps: number; shadowEvery: number; adaptive: { min: number; max: number } | null; ratio: number; tiersEnabled?: boolean; fixedTier?: number };
 }
 
 /**
@@ -192,6 +202,7 @@ export function applyGraphicsOptions(o: GraphicsOptions, t: GraphicsTargets): vo
       : dynResEnabled(o, prof.igpu) ? desktopDynamic(o.quality, ratio, dpr, prof.igpu) : null;
     // Paliers de qualité automatiques (src/render/quality-tiers.ts) : qualité Auto, et Moyenne sur GPU intégré.
     if ('tiersEnabled' in t.perf) t.perf.tiersEnabled = tiersEnabledFor(o.quality, prof.lite, prof.igpu);
+    t.perf.fixedTier = fixedTierFor(o.quality);
     t.perf.ratio = ratio;
   }
   const size = new THREE.Vector2();

@@ -497,12 +497,24 @@ export class WaterSystem {
 
   /** Nœud routier de branchement d'un point : extrémité la plus proche du tronçon le plus proche (-1 sinon). */
   private attach(ctx: PluginContext, x: number, z: number): number {
+    // Mémo par position tant que la voirie ne change pas : la topologie est reconstruite dès qu'un bâtiment pousse, et
+    // chaque bâtiment était alors recherché de nouveau parmi tous les tronçons.
+    if (this.attachVersion !== ctx.roads.version || this.attachMemo.size > 100_000) { this.attachMemo.clear(); this.attachVersion = ctx.roads.version; }
+    const key = `${x},${z}`;
+    const m = this.attachMemo.get(key);
+    if (m !== undefined) return m;
     const s = ctx.roads.segmentNear(x, z, ATTACH_RADIUS);
-    if (!s) return -1;
-    const [a, b] = ctx.roads.endpoints(s.segId);
-    const pa = ctx.roads.nodePos(a), pb = ctx.roads.nodePos(b);
-    return Math.hypot(pa.x - s.x, pa.z - s.z) <= Math.hypot(pb.x - s.x, pb.z - s.z) ? a : b;
+    let r = -1;
+    if (s) {
+      const [a, b] = ctx.roads.endpoints(s.segId);
+      const pa = ctx.roads.nodePos(a), pb = ctx.roads.nodePos(b);
+      r = Math.hypot(pa.x - s.x, pa.z - s.z) <= Math.hypot(pb.x - s.x, pb.z - s.z) ? a : b;
+    }
+    this.attachMemo.set(key, r);
+    return r;
   }
+  private readonly attachMemo = new Map<string, number>();
+  private attachVersion = -1;
 
   /* ------------------------------------------------------------------ */
   /* Pas horaire                                                          */

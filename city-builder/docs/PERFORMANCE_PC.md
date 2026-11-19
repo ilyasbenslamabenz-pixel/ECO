@@ -169,7 +169,9 @@ Une toute première version (véhicules masqués au-delà de 420 m au palier 3) 
    minutes. Un changement de palier ne recompile aucun shader (seule la carte d'ombre est recréée).
    Plafond de véhicules : sans tri, par une distance de coupure qui se resserre / se relâche de quelques % par image
    (les plus proches restent, seuls les plus lointains apparaissent ou disparaissent).
-   `?palier=0..3` impose un palier fixe (mesures). Qualités Haute / Moyenne / Basse : palier 0, réglages d'avant.
+   `?palier=0..3` impose un palier fixe (mesures). Qualités Haute / Moyenne : palier 0, réglages d'avant. Depuis la
+   v50 : qualité **Auto aussi sur téléphone** (le mode allégé restait au palier 0, tous véhicules et piétons à 1,4 km,
+   même quand la cadence décrochait) et qualité **Basse = palier « minimal » imposé** (choix manuel le plus léger).
 4. **Page `?bench`** : bloc « Rapport à m'envoyer » en tête des résultats, avec bouton « Copier le rapport » :
    configuration (GPU, intégré ou non, navigateur, fenêtre, densité, qualité, paliers, ombres, anticrénelage) et, par
    scène, img/s moyennes, **1 % bas**, appels de dessin, triangles, **palier**, densité. Le tableau détaillé gagne

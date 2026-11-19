@@ -36,8 +36,10 @@ export interface RenderPerf {
   ratio: number;
   /** Trace des durées processeur par phase (page de mesure ?bench ; null hors mesure : aucun coût). */
   trace?: ((phase: string, ms: number) => void) | null;
-  /** Paliers de qualité automatiques actifs (qualité Auto sur ordinateur, src/render/quality-tiers.ts). */
+  /** Paliers de qualité automatiques actifs (qualité Auto, src/render/quality-tiers.ts). */
   tiersEnabled?: boolean;
+  /** Palier fixe hors paliers automatiques (qualité Basse : palier le plus léger ; 0 sinon). */
+  fixedTier?: number;
   /** Descend / remonte d'un palier ; vrai si le palier a changé (branché par src/render/index.ts). */
   tierDown?: ((now: number) => boolean) | null;
   /** Palier courant (0 = élevé). */

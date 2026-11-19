@@ -113,7 +113,13 @@ export class TruckGraph {
   }
 
   /** Dijkstra depuis `src` : temps (min) vers chaque nœud (Infinity si inaccessible). Résultat valable jusqu'au prochain appel. */
-  shortest(src: number): Float64Array {
+  /**
+   * Distances (min) depuis `src`. Avec `targets` (masque de nœuds), la recherche s'arrête dès que tous les nœuds à la
+   * distance du plus proche nœud cible sont définitifs : cette distance, les égalités et l'itinéraire (`pathTo`) vers
+   * ces nœuds sont exacts ; les autres distances sont des majorants supérieurs (ou Infinity). Sert au choix de l'arrêt
+   * le plus proche, sans parcourir toute la ville à chaque arrêt.
+   */
+  shortest(src: number, targets?: Uint8Array): Float64Array {
     const { dist, prevEdge, heap, heapKey } = this;
     dist.fill(Infinity);
     prevEdge.fill(-1);
@@ -144,10 +150,13 @@ export class TruckGraph {
     };
     dist[src] = 0;
     push(src, 0);
+    let bound = Infinity;
     while (size > 0) {
       const k0 = heapKey[0]!;
+      if (k0 > bound) break;
       const u = pop();
       if (k0 > dist[u]!) continue;
+      if (targets && targets[u] && bound === Infinity) bound = k0;
       for (let e = this.start[u]!; e < this.start[u + 1]!; e++) {
         const v = this.to[e]!, nd = k0 + this.w[e]!;
         if (nd < dist[v]!) {

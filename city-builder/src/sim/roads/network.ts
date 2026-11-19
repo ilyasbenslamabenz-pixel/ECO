@@ -22,6 +22,10 @@ function growF32(a: Float32Array, n: number): Float32Array { const b = new Float
 function growI32(a: Int32Array, n: number): Int32Array { const b = new Int32Array(n); b.set(a); return b; }
 function growU8(a: Uint8Array, n: number): Uint8Array { const b = new Uint8Array(n); b.set(a); return b; }
 
+/** Écart entre les versions initiales de deux réseaux successifs (bien plus que les modifications d'une partie). */
+const ROAD_VERSION_STRIDE = 2 ** 30;
+let roadVersionBase = -ROAD_VERSION_STRIDE;
+
 export class RoadNetwork {
   /* ----- nœuds (SoA) ----- */
   nodeCount = 0;
@@ -46,8 +50,11 @@ export class RoadNetwork {
   /** Hauteur imposée au tracé (m, multiple de 4 ; 0 = au niveau du terrain). */
   segElev: Float32Array;
 
-  /** Incrémenté à chaque modification (invalide caches de chemins, maillages…). */
-  version = 0;
+  /**
+   * Incrémenté à chaque modification (invalide caches de chemins, maillages…). Part d'une base propre à chaque réseau
+   * (nouvelle partie, chargement) : un cache indexé sur la version ne confond jamais deux réseaux successifs.
+   */
+  version = (roadVersionBase += ROAD_VERSION_STRIDE);
   nextNodeId = 1;
   nextSegId = 1;
 
