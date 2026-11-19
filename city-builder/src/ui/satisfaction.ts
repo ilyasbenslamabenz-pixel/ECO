@@ -88,6 +88,17 @@ export const GROWTH_HINT_FR: Record<GrowthHint, string> = {
   'traffic-jam': 'Les routes sont saturées : tracez des lignes de bus (Transports › Lignes de bus) pour retirer des voitures, ou élargissez les axes principaux',
 };
 
+/**
+ * Seuil d'un conseil : en dessous de ce poids (points de satisfaction), un facteur négatif est un arrondi ou un reste
+ * (ex. eau livrée à 99,7 % de qualité, −0,1 pt) et un conseil du type « raccordez-vous au réseau d'eau » serait faux.
+ */
+export const ADVICE_MIN_PTS = 0.5;
+
+/** Facteurs qui reçoivent un conseil : les deux pires négatifs d'au moins ADVICE_MIN_PTS (liste déjà triée). */
+export function adviceTargets(factors: readonly SatisfactionFactor[]): SatisfactionFactor[] {
+  return factors.filter((f) => f.delta <= -ADVICE_MIN_PTS).slice(0, 2);
+}
+
 /** Conseil d'action pour un facteur négatif (reconnu par sa clé ou son libellé) ; null si aucun conseil fixe. */
 export function factorAdvice(f: SatisfactionFactor): string | null {
   const s = `${f.key} ${f.label}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -135,8 +146,8 @@ export function renderSatisfaction(r: SimReport | null): HTMLElement | null {
     box.append(el('div', { cls: 'sec-title', text: 'Satisfaction : ce qui compte' }));
     if (!factors.length) box.append(el('p', { cls: 'muted small', text: 'Aucun facteur pour l’instant : la satisfaction apparaît avec les premiers habitants.' }));
     const list = el('ul', { cls: 'satisf-list' });
-    // Conseils : les deux pires facteurs négatifs.
-    const worst = new Set(factors.filter((f) => f.delta < 0).slice(0, 2));
+    // Conseils : les deux pires facteurs négatifs qui pèsent vraiment (une fraction de point n'appelle aucune action).
+    const worst = new Set(adviceTargets(factors));
     const shown = factors.filter((f) => Math.abs(f.delta) >= 0.05);
     for (const f of shown) {
       const li = el('li', { cls: f.delta < 0 ? 'neg' : f.delta > 0 ? 'pos' : '' },

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { stepDone, TUTO_STEPS, type CityFacts } from '../../src/ui/tutorial';
-import { factorAdvice, growthHint, satisfactionFactors, vacancyReasons } from '../../src/ui/satisfaction';
+import { adviceTargets, factorAdvice, growthHint, satisfactionFactors, vacancyReasons } from '../../src/ui/satisfaction';
 import type { SimReport } from '../../src/sim/sim-protocol';
 
 const facts = (o: Partial<CityFacts> = {}): CityFacts => ({ roads: 0, zones: { R: 0, C: 0, I: 0 }, tags: new Set(), ...o });
@@ -57,4 +57,14 @@ test('Premiers pas : le raccordement au réseau voisin valide les étapes élect
   assert.equal(firstOpen(facts(base)), 'power');
   assert.equal(firstOpen(facts({ ...base, raccord: { power: true, water: false } })), 'water');
   assert.equal(firstOpen(facts({ ...base, raccord: { power: true, water: true } })), 'waste');
+});
+
+test('Satisfaction : pas de conseil pour une fraction de point (eau à 99,7 % de qualité : −0,1 pt)', () => {
+  const f = [
+    { key: 'trajet', label: 'Temps de trajet', delta: -0.9 },
+    { key: 'eau', label: 'Eau', delta: -0.1 },
+    { key: 'loyer', label: 'Coût du logement', delta: 1.4 },
+  ];
+  assert.deepEqual(adviceTargets(f).map((x) => x.key), ['trajet']);
+  assert.deepEqual(adviceTargets([{ key: 'eau', label: 'Eau', delta: -6 }, { key: 'sante', label: 'Santé', delta: -3 }, { key: 'police', label: 'Police', delta: -2 }]).map((x) => x.key), ['eau', 'sante']);
 });

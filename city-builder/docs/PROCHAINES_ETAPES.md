@@ -99,3 +99,6 @@ Note : le volume d'une source croît avec le temps de jeu écoulé depuis sa pos
 - Proposé, non fait (accord nécessaire, touche l'architecture ou l'équilibre) : budget par service, suivre un
   habitant / véhicule, cimetière, université, métro / train de voyageurs, stationnement, petite centrale pilotable
   intermédiaire entre le raccordement (3 MW) et la centrale au gaz (60 MW, 3,5 M CHF).
+- Satisfaction (v48, partie du joueur « Gotham Citx ») : « Eau −0,1 pt → Raccordez-vous au réseau d'eau voisin » alors
+  que 587/587 bâtiments sont desservis à 100 %, tous aux égouts : le reste vient d'une qualité de 99,7–100 %. Les
+  conseils ne visent plus que les facteurs d'au moins −0,5 pt (`adviceTargets`, `ADVICE_MIN_PTS`).
