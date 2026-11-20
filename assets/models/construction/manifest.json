@@ -1,0 +1,798 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-13T13:33:38.842Z",
+  "license": {
+    "spdx": "CC0-1.0",
+    "author": "Meknes City — générateur de chantiers (tools/construction)",
+    "note": "Géométrie originale générée par tools/construction ; textures PBR partagées du catalogue (Poly Haven, CC0-1.0) : metal_larme, metal_rideau, metal_conteneur, sol_beton_brut, bardage_bois, terrain_terre, terrain_gravier."
+  },
+  "pivots": {
+    "matHauteur": 6,
+    "teteFleche": [
+      1.2,
+      34
+    ],
+    "teteContreFleche": 9,
+    "teteRailY": 0.82,
+    "teteApex": 6.2,
+    "chariotCable": -0.5,
+    "crochetHauteur": 1.3,
+    "pelleteuseTourelleY": 1,
+    "toupieTambour": [
+      0,
+      2,
+      -0.6
+    ],
+    "echafaudageTravee": [
+      2.5,
+      2,
+      0.9
+    ],
+    "palissadePanneau": [
+      2.4,
+      2
+    ]
+  },
+  "models": [
+    {
+      "id": "grue_base",
+      "nameFr": "Embase lestée de grue à tour",
+      "anchor": "sol, centre du lest",
+      "lods": [
+        {
+          "file": "models/construction/grue_base_lod0.glb",
+          "maxDistance": 180,
+          "triangles": 488,
+          "bytes": 33376
+        },
+        {
+          "file": "models/construction/grue_base_lod1.glb",
+          "maxDistance": 700,
+          "triangles": 392,
+          "bytes": 28188
+        },
+        {
+          "file": "models/construction/grue_base_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 296,
+          "bytes": 21720
+        }
+      ],
+      "dimensions": {
+        "width": 6,
+        "height": 2.65,
+        "depth": 6
+      },
+      "bounds": {
+        "min": [
+          -3,
+          0,
+          -3
+        ],
+        "max": [
+          3,
+          2.65,
+          3
+        ]
+      },
+      "roles": [
+        "acier_jaune",
+        "beton"
+      ]
+    },
+    {
+      "id": "grue_mat",
+      "nameFr": "Élément de mât de grue (6 m)",
+      "anchor": "bas de l'élément, centre",
+      "lods": [
+        {
+          "file": "models/construction/grue_mat_lod0.glb",
+          "maxDistance": 260,
+          "triangles": 988,
+          "bytes": 64684
+        },
+        {
+          "file": "models/construction/grue_mat_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 720,
+          "bytes": 50260
+        },
+        {
+          "file": "models/construction/grue_mat_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 288,
+          "bytes": 20728
+        }
+      ],
+      "dimensions": {
+        "width": 2.465,
+        "height": 6.084,
+        "depth": 1.95
+      },
+      "bounds": {
+        "min": [
+          -1.5,
+          -0.042,
+          -0.975
+        ],
+        "max": [
+          0.965,
+          6.042,
+          0.975
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune"
+      ]
+    },
+    {
+      "id": "grue_tete",
+      "nameFr": "Tête de grue : flèche, contre-flèche, cabine",
+      "anchor": "axe d'orientation, haut du mât",
+      "lods": [
+        {
+          "file": "models/construction/grue_tete_lod0.glb",
+          "maxDistance": 260,
+          "triangles": 3112,
+          "bytes": 198804
+        },
+        {
+          "file": "models/construction/grue_tete_lod1.glb",
+          "maxDistance": 900,
+          "triangles": 2276,
+          "bytes": 153672
+        },
+        {
+          "file": "models/construction/grue_tete_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 1332,
+          "bytes": 91928
+        }
+      ],
+      "dimensions": {
+        "width": 3.425,
+        "height": 6.9,
+        "depth": 45.266
+      },
+      "bounds": {
+        "min": [
+          -1.225,
+          -0.35,
+          -10.032
+        ],
+        "max": [
+          2.2,
+          6.55,
+          35.234
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune",
+        "acier_sombre",
+        "beton",
+        "optique",
+        "verre"
+      ]
+    },
+    {
+      "id": "grue_chariot",
+      "nameFr": "Chariot de distribution",
+      "anchor": "rails de la flèche, centre",
+      "lods": [
+        {
+          "file": "models/construction/grue_chariot_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 200,
+          "bytes": 16668
+        },
+        {
+          "file": "models/construction/grue_chariot_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 116,
+          "bytes": 12140
+        },
+        {
+          "file": "models/construction/grue_chariot_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 92,
+          "bytes": 10868
+        }
+      ],
+      "dimensions": {
+        "width": 1.36,
+        "height": 0.68,
+        "depth": 1.5
+      },
+      "bounds": {
+        "min": [
+          -0.68,
+          -0.67,
+          -0.75
+        ],
+        "max": [
+          0.68,
+          0.01,
+          0.75
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune",
+        "acier_sombre"
+      ]
+    },
+    {
+      "id": "grue_crochet",
+      "nameFr": "Moufle et crochet",
+      "anchor": "attache du câble",
+      "lods": [
+        {
+          "file": "models/construction/grue_crochet_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 264,
+          "bytes": 20668
+        },
+        {
+          "file": "models/construction/grue_crochet_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 112,
+          "bytes": 12084
+        },
+        {
+          "file": "models/construction/grue_crochet_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 104,
+          "bytes": 11636
+        }
+      ],
+      "dimensions": {
+        "width": 0.577,
+        "height": 1.342,
+        "depth": 0.38
+      },
+      "bounds": {
+        "min": [
+          -0.275,
+          -1.342,
+          -0.19
+        ],
+        "max": [
+          0.302,
+          0,
+          0.19
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune",
+        "acier_sombre"
+      ]
+    },
+    {
+      "id": "echafaudage",
+      "nameFr": "Travée d'échafaudage avec filet",
+      "anchor": "sol, centre de la travée",
+      "lods": [
+        {
+          "file": "models/construction/echafaudage_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 424,
+          "bytes": 30796
+        },
+        {
+          "file": "models/construction/echafaudage_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 304,
+          "bytes": 24340
+        },
+        {
+          "file": "models/construction/echafaudage_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 232,
+          "bytes": 19680
+        }
+      ],
+      "dimensions": {
+        "width": 2.55,
+        "height": 3.028,
+        "depth": 0.967
+      },
+      "bounds": {
+        "min": [
+          -1.275,
+          0,
+          -0.472
+        ],
+        "max": [
+          1.275,
+          3.028,
+          0.495
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "bois",
+        "filet"
+      ]
+    },
+    {
+      "id": "palissade",
+      "nameFr": "Panneau de palissade de chantier",
+      "anchor": "sol, centre du panneau",
+      "lods": [
+        {
+          "file": "models/construction/palissade_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 168,
+          "bytes": 16148
+        },
+        {
+          "file": "models/construction/palissade_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 136,
+          "bytes": 14428
+        },
+        {
+          "file": "models/construction/palissade_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 100,
+          "bytes": 10524
+        }
+      ],
+      "dimensions": {
+        "width": 2.98,
+        "height": 2,
+        "depth": 0.42
+      },
+      "bounds": {
+        "min": [
+          -1.49,
+          0,
+          -0.21
+        ],
+        "max": [
+          1.49,
+          2,
+          0.21
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune",
+        "bache",
+        "beton"
+      ]
+    },
+    {
+      "id": "baraque",
+      "nameFr": "Baraque de chantier",
+      "anchor": "sol, centre",
+      "lods": [
+        {
+          "file": "models/construction/baraque_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 392,
+          "bytes": 32936
+        },
+        {
+          "file": "models/construction/baraque_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 392,
+          "bytes": 32936
+        },
+        {
+          "file": "models/construction/baraque_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 104,
+          "bytes": 12752
+        }
+      ],
+      "dimensions": {
+        "width": 6.16,
+        "height": 2.7,
+        "depth": 3.12
+      },
+      "bounds": {
+        "min": [
+          -3.08,
+          0,
+          -1.3
+        ],
+        "max": [
+          3.08,
+          2.7,
+          1.82
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune",
+        "acier_sombre",
+        "verre"
+      ]
+    },
+    {
+      "id": "pelleteuse_base",
+      "nameFr": "Pelle hydraulique : châssis chenillé",
+      "anchor": "sol, centre",
+      "lods": [
+        {
+          "file": "models/construction/pelleteuse_base_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 392,
+          "bytes": 28568
+        },
+        {
+          "file": "models/construction/pelleteuse_base_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 244,
+          "bytes": 20164
+        },
+        {
+          "file": "models/construction/pelleteuse_base_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 140,
+          "bytes": 13768
+        }
+      ],
+      "dimensions": {
+        "width": 2.57,
+        "height": 1.109,
+        "depth": 3.6
+      },
+      "bounds": {
+        "min": [
+          -1.29,
+          0.011,
+          -1.8
+        ],
+        "max": [
+          1.28,
+          1.12,
+          1.8
+        ]
+      },
+      "roles": [
+        "acier_jaune",
+        "acier_sombre",
+        "caoutchouc"
+      ]
+    },
+    {
+      "id": "pelleteuse_tourelle",
+      "nameFr": "Pelle hydraulique : tourelle et bras",
+      "anchor": "axe d'orientation, haut du châssis",
+      "lods": [
+        {
+          "file": "models/construction/pelleteuse_tourelle_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 380,
+          "bytes": 29512
+        },
+        {
+          "file": "models/construction/pelleteuse_tourelle_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 324,
+          "bytes": 26488
+        },
+        {
+          "file": "models/construction/pelleteuse_tourelle_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 248,
+          "bytes": 20392
+        }
+      ],
+      "dimensions": {
+        "width": 2.5,
+        "height": 2.894,
+        "depth": 7.02
+      },
+      "bounds": {
+        "min": [
+          -1.25,
+          0,
+          -2
+        ],
+        "max": [
+          1.25,
+          2.894,
+          5.02
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune",
+        "acier_sombre",
+        "optique",
+        "verre"
+      ]
+    },
+    {
+      "id": "camion_benne",
+      "nameFr": "Camion-benne",
+      "anchor": "sol, centre",
+      "lods": [
+        {
+          "file": "models/construction/camion_benne_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 866,
+          "bytes": 58396
+        },
+        {
+          "file": "models/construction/camion_benne_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 354,
+          "bytes": 30704
+        },
+        {
+          "file": "models/construction/camion_benne_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 178,
+          "bytes": 17380
+        }
+      ],
+      "dimensions": {
+        "width": 3.14,
+        "height": 2.887,
+        "depth": 7.945
+      },
+      "bounds": {
+        "min": [
+          -1.57,
+          0.013,
+          -4.1
+        ],
+        "max": [
+          1.57,
+          2.9,
+          3.845
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune",
+        "acier_rouge",
+        "acier_sombre",
+        "caoutchouc",
+        "optique",
+        "verre"
+      ]
+    },
+    {
+      "id": "toupie_base",
+      "nameFr": "Camion toupie : porteur",
+      "anchor": "sol, centre",
+      "lods": [
+        {
+          "file": "models/construction/toupie_base_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 790,
+          "bytes": 53116
+        },
+        {
+          "file": "models/construction/toupie_base_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 294,
+          "bytes": 26284
+        },
+        {
+          "file": "models/construction/toupie_base_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 158,
+          "bytes": 17172
+        }
+      ],
+      "dimensions": {
+        "width": 3.14,
+        "height": 2.887,
+        "depth": 7.752
+      },
+      "bounds": {
+        "min": [
+          -1.57,
+          0.013,
+          -4.202
+        ],
+        "max": [
+          1.57,
+          2.9,
+          3.55
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_jaune",
+        "acier_sombre",
+        "caoutchouc",
+        "optique",
+        "verre"
+      ]
+    },
+    {
+      "id": "toupie_tambour",
+      "nameFr": "Camion toupie : tambour",
+      "anchor": "axe du tambour",
+      "lods": [
+        {
+          "file": "models/construction/toupie_tambour_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 928,
+          "bytes": 55524
+        },
+        {
+          "file": "models/construction/toupie_tambour_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 416,
+          "bytes": 27608
+        },
+        {
+          "file": "models/construction/toupie_tambour_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 50,
+          "bytes": 3532
+        }
+      ],
+      "dimensions": {
+        "width": 2.513,
+        "height": 2.512,
+        "depth": 3.8
+      },
+      "bounds": {
+        "min": [
+          -1.256,
+          -1.256,
+          -1.9
+        ],
+        "max": [
+          1.256,
+          1.256,
+          1.9
+        ]
+      },
+      "roles": [
+        "acier_galva",
+        "acier_sombre"
+      ]
+    },
+    {
+      "id": "tas_terre",
+      "nameFr": "Tas de terre excavée",
+      "anchor": "sol, centre",
+      "lods": [
+        {
+          "file": "models/construction/tas_terre_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 128,
+          "bytes": 11052
+        },
+        {
+          "file": "models/construction/tas_terre_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 36,
+          "bytes": 4608
+        },
+        {
+          "file": "models/construction/tas_terre_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 24,
+          "bytes": 3764
+        }
+      ],
+      "dimensions": {
+        "width": 5.133,
+        "height": 1.117,
+        "depth": 5.082
+      },
+      "bounds": {
+        "min": [
+          -2.469,
+          0,
+          -2.51
+        ],
+        "max": [
+          2.664,
+          1.117,
+          2.572
+        ]
+      },
+      "roles": [
+        "terre"
+      ]
+    },
+    {
+      "id": "tas_gravats",
+      "nameFr": "Tas de gravats",
+      "anchor": "sol, centre",
+      "lods": [
+        {
+          "file": "models/construction/tas_gravats_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 320,
+          "bytes": 23428
+        },
+        {
+          "file": "models/construction/tas_gravats_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 228,
+          "bytes": 16980
+        },
+        {
+          "file": "models/construction/tas_gravats_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 24,
+          "bytes": 3780
+        }
+      ],
+      "dimensions": {
+        "width": 4.685,
+        "height": 0.955,
+        "depth": 4.402
+      },
+      "bounds": {
+        "min": [
+          -2.242,
+          -0.008,
+          -2.209
+        ],
+        "max": [
+          2.443,
+          0.947,
+          2.193
+        ]
+      },
+      "roles": [
+        "beton",
+        "gravats"
+      ]
+    },
+    {
+      "id": "palettes",
+      "nameFr": "Matériaux bâchés sur palettes",
+      "anchor": "sol, centre",
+      "lods": [
+        {
+          "file": "models/construction/palettes_lod0.glb",
+          "maxDistance": 130,
+          "triangles": 120,
+          "bytes": 12100
+        },
+        {
+          "file": "models/construction/palettes_lod1.glb",
+          "maxDistance": 520,
+          "triangles": 120,
+          "bytes": 12100
+        },
+        {
+          "file": "models/construction/palettes_lod2.glb",
+          "maxDistance": 1000000000,
+          "triangles": 120,
+          "bytes": 12100
+        }
+      ],
+      "dimensions": {
+        "width": 2.7,
+        "height": 0.76,
+        "depth": 1.1
+      },
+      "bounds": {
+        "min": [
+          -1.35,
+          0,
+          -0.55
+        ],
+        "max": [
+          1.35,
+          0.76,
+          0.55
+        ]
+      },
+      "roles": [
+        "bache",
+        "beton",
+        "bois"
+      ]
+    }
+  ]
+}
