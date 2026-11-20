@@ -190,3 +190,17 @@ Contrôlé sur la partie « Gotham Citx » (captures large / moyenne / rue ; `te
   dans la palette « vives » : balance des blancs, saturation, contraste).
 - Outils de diagnostic (`__aube`) : `treeSample`, `buildingsNear(x, y)`, `buildingMaterials()`,
   `tintBuildingRole(rôle, couleur)`, `stripBuildingMaps('normal'|'arm'|'map')`, `pickMaterial(x, y)`.
+
+## Circulation : plafond de capacité du réseau (v54)
+Partie « Gotham Citx » (11 000 habitants), une journée simulée en Node à partir de la sauvegarde.
+- Constat : alerte « Circulation très lente » permanente. 13,7 km/h en moyenne (minimum 9,5), moitié des voitures à
+  l'arrêt, files pare-chocs contre pare-chocs (≈ 145 véh/km) sur 36 voies des axes nord-sud du quadrillage. Aucun
+  véhicule bloqué plus de 150 s (pas d'interblocage). Feux ou stops partout : 12,6 / 12,4 km/h (pas mieux).
+- Cause : une minute de jeu = 0,1 s de conduite. La vague du matin (plafond de demande ≈ 550 voitures, selon la
+  population seule) entrait en une dizaine de secondes de conduite, bien plus vite qu'aucun carrefour ne l'écoule ;
+  un trajet de 1,5 km durant ≈ 30 h de jeu, le réseau restait plein jour et nuit.
+- Correction : plafond de capacité `VEH_PER_LANE_KM = 3` véhicules simultanés par km de voie (plancher 40), en plus
+  du plafond de demande ; plus de routes = plus de voitures. Trajets au-delà : hors réseau (mécanisme existant).
+  Résultat sur la partie : 230 voitures, 20,6 km/h en moyenne, minimum 18,4 ; 131 arrivées par jour au lieu de 108.
+- Tests : circulation/plafond-capacite ; les deux tests de charge (collisions, bouchon émergent) désactivent ce
+  plafond (`vehPerLaneKm: 0`) pour garder leur charge.

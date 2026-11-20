@@ -223,7 +223,7 @@ test('Feux tricolores : arrêt au rouge avant la ligne, passage au vert', () => 
 });
 
 test('Aucune collision : distance minimale entre véhicules sur une grille chargée (feux, priorités, changements de voie)', () => {
-  const t = new TrafficSystem({ seed: 11, maxVehicles: 600, demandScale: 2.5 });
+  const t = new TrafficSystem({ seed: 11, maxVehicles: 600, demandScale: 2.5, vehPerLaneKm: 0 }) // charge voulue : sans plafond de capacité;
   t.setCatalog(vehicleCatalog());
   t.setNetwork(grid(6, 6, 120, (_h, i) => (i === 2 ? 'avenue' : 'rue')));
   t.setBuildings(gridBuildings(6, 6, 120));
@@ -246,7 +246,7 @@ test('Aucune collision : distance minimale entre véhicules sur une grille charg
 
 test('Embouteillage émergent et compteur de densité par tronçon', () => {
   // un seul axe à une voie, deux feux : forte demande -> files d'attente
-  const t = new TrafficSystem({ seed: 5, maxVehicles: 800, demandScale: 8, spawnPerStep: 12 });
+  const t = new TrafficSystem({ seed: 5, maxVehicles: 800, demandScale: 8, spawnPerStep: 12, vehPerLaneKm: 0 }) // charge voulue : sans plafond de capacité;
   t.setCatalog(vehicleCatalog());
   t.setNetwork(grid(5, 2, 110));
   t.setBuildings(gridBuildings(5, 2, 110));

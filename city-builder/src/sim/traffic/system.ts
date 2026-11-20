@@ -66,7 +66,23 @@ export interface TrafficOptions {
   reroute?: boolean;
   /** Paramètres MOBIL des changements de voie de confort. */
   mobil?: Partial<MobilParams>;
+  /**
+   * Véhicules simultanés au plus par km de voie du réseau (défaut VEH_PER_LANE_KM ; 0 = sans plafond de capacité).
+   * Voir `capacityCeiling`.
+   */
+  vehPerLaneKm?: number;
 }
+
+/**
+ * Plafond de capacité du réseau (véhicules simultanés par km de voie). Une minute de jeu ne dure que 0,1 s de
+ * conduite : la vague du matin (≈ 550 voitures pour 11 000 habitants) arrivait en une dizaine de secondes de
+ * conduite, bien plus vite qu'aucun carrefour ne l'écoule, et le réseau restait bouché jour et nuit (partie « Gotham
+ * Citx » : 13,7 km/h en moyenne, moitié des voitures à l'arrêt, même avec feux ou stops partout ; 3 véhicules/km :
+ * 20,6 km/h, minimum 18,4). Les trajets au-delà se font hors réseau, comme ceux au-delà du plafond de demande.
+ */
+export const VEH_PER_LANE_KM = 3;
+/** Plancher du plafond de capacité (petites villes, premiers tronçons). */
+export const CAPACITY_CEILING_MIN = 40;
 
 export interface TrafficStats {
   vehicles: number;
@@ -341,6 +357,7 @@ export class TrafficSystem {
     this.accessDistance = opts.accessDistance ?? 40;
     this.demandEnabled = opts.demand ?? true;
     this.rerouteEnabled = opts.reroute ?? true;
+    this.vehPerLaneKm = opts.vehPerLaneKm ?? VEH_PER_LANE_KM;
     this.mobil = { ...MOBIL_DEFAULT, ...opts.mobil };
     this.growVehicles(256);
     setActiveTraffic(this);
@@ -502,6 +519,7 @@ export class TrafficSystem {
     lr.routesKept = 0; lr.routesRecomputed = 0;
     this.router = new ArcRouter(this.graph);
     this.grid = new EdgeGrid(this.graph);
+    { let m = 0; const gg = this.graph; for (let l = 0; l < gg.linkKind.length; l++) if (gg.linkKind[l] === 0) m += gg.linkLen[l]!; this.laneKm = m / 1000; }
     const g = this.graph;
     {
       // zones modifiées cumulées jusqu'au prochain calcul d'accès (plusieurs reconstructions possibles entre-temps)
@@ -1564,14 +1582,22 @@ export class TrafficSystem {
    * habitants (world.ts) ne sont plus admis au-delà de ce plafond (équilibrage, docs/CIRCULATION.md §1).
    */
   demandCeiling(hour: number): number {
-    return Math.min(this.maxVehicles, Math.round(this.homeWeight * demandShare(hour) * this.carFactor));
+    return Math.min(this.maxVehicles, this.capacityCeiling, Math.round(this.homeWeight * demandShare(hour) * this.carFactor));
+  }
+
+  /** Km de voie du réseau courant (voies seules, sans les connecteurs des carrefours). */
+  laneKm = 0;
+  private readonly vehPerLaneKm: number;
+  /** Véhicules simultanés que le réseau écoule sans se bloquer (VEH_PER_LANE_KM par km de voie). */
+  get capacityCeiling(): number {
+    return this.vehPerLaneKm > 0 ? Math.max(CAPACITY_CEILING_MIN, Math.round(this.laneKm * this.vehPerLaneKm)) : Infinity;
   }
 
   /* ----------------------------- demande ----------------------------- */
 
   private spawn(hour: number): void {
     if (!this.homes.length) return;
-    const target = Math.min(this.maxVehicles, Math.round(this.homeWeight * demandShare(hour) * this.demandScale * this.carFactor));
+    const target = Math.min(this.maxVehicles, this.capacityCeiling, Math.round(this.homeWeight * demandShare(hour) * this.demandScale * this.carFactor));
     let budget = this.spawnPerStep;
     let tries = budget * 3;
     while (this.actCount < target && budget > 0 && tries-- > 0) {
