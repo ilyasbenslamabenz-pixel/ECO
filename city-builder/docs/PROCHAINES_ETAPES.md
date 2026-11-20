@@ -177,7 +177,13 @@ Contrôlé sur la partie « Gotham Citx » (captures large / moyenne / rue ; `te
 - Toits et façades : la teinte du catalogue se multiplie à une texture déjà sombre (tôle 88/255 × #7d8386 ≈ 40/255,
   ardoise × #4e5a67). Plancher de clarté par rôle (`ALBEDO_FLOOR` : toiture, zinc, façades), calculé sur la couleur
   moyenne réelle de la texture une fois chargée, sur le canal le plus fort (teintes saturées intactes) ; métaux
-  (canal métal de l'ARM > 0,2) ramenés au reflet d'un zinc réel (`ALBEDO_FLOOR_METAL`). Qualité Basse inchangée.
+  (canal métal de l'ARM > 0,2) ramenés canal par canal au reflet gris d'un zinc patiné (`metalFloorColor`, 0,22 ;
+  un facteur unique les rendait dorés). Qualité Basse inchangée.
+- Bug : toits d'un noir pur sur une partie des maisons. Trouvé par bisection (`tintBuildingRole` : moitié des rôles en
+  magenta, le reste en noir) : ces modèles couvrent leur toit avec le métal des garde-corps (« metal_larme »,
+  61/255, × #3a3d40). Rôle `garde_corps` ajouté au plancher (garde-corps gris galvanisé au lieu de noir).
+- Herbe plus verte (demande du joueur) : palette « vives », herbe sèche [0.17, 0.175, 0.06] → [0.095, 0.17, 0.045],
+  grasse et pentes de même ; mini-carte assortie.
 - Lumière du ciel (palette « vives ») : hémisphère 1,05 → 1,7 ; les versants à l'ombre ne sont plus noirs
   (toit gris à l'ombre : 47 → 73 / 255).
 - Écartés après mesure : réseau d'eau (≈ 10 ms par heure de jeu, < 3 % du worker à ×16) ; étalonnage d'image (déjà

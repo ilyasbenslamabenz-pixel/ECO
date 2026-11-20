@@ -43,17 +43,18 @@ function placeholderSource(kind: 'albedo' | 'normal' | 'arm'): THREE.Source<unkn
  * Clarté minimale de l'albédo final (texture moyenne × teinte, linéaire, canal le plus fort) par rôle. La teinte du
  * catalogue se multiplie à une texture déjà sombre : tôle (88/255) × gris #7d8386 ≈ 40/255, tuiles grises × beige
  * ≈ 56/255. En vue aérienne, la ville lisait comme une mosaïque de toits noirs. Le canal le plus fort (et non la
- * luminance) laisse intactes les teintes saturées (tuiles rouges, briques). « zinc » : toits de tôle des maisons.
+ * luminance) laisse intactes les teintes saturées (tuiles rouges, briques). « zinc » : toits de tôle des maisons ;
+ * « garde_corps » (métal sombre « metal_larme ») : sert aussi de couverture à des maisons, toits d'un noir pur avant.
  */
-export const ALBEDO_FLOOR: Readonly<Record<string, number>> = { toiture: 0.075, zinc: 0.075, facade: 0.05, facade_b: 0.05 };
+export const ALBEDO_FLOOR: Readonly<Record<string, number>> = { toiture: 0.075, zinc: 0.075, garde_corps: 0.05, facade: 0.05, facade_b: 0.05 };
 /** Éclaircissement maximal appliqué à la teinte. */
 export const ALBEDO_FLOOR_MAX_GAIN = 2.5;
 /**
  * Matériaux métalliques (canal métal de l'ARM en moyenne > METAL_ARM_MIN) : l'albédo est la couleur du reflet. Un
  * métal sombre (tôle « metal_larme », 61/255, × #3a3d40) ne réfléchit presque rien : toits de zinc d'un noir pur.
- * Plancher d'un zinc / acier galvanisé réel (≈ 0,3 en linéaire au moins), gain non plafonné à 2,5.
+ * Plancher d'un zinc patiné (0,22 en linéaire ; 0,3 rendait les versants au soleil presque blancs), gain non plafonné à 2,5.
  */
-export const ALBEDO_FLOOR_METAL = 0.3;
+export const ALBEDO_FLOOR_METAL = 0.22;
 export const ALBEDO_FLOOR_METAL_MAX_GAIN = 200;
 export const METAL_ARM_MIN = 0.2;
 
@@ -65,6 +66,20 @@ export function albedoFloorGain(texMean: readonly [number, number, number], colo
 }
 
 function srgbToLinear(c: number): number { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+
+/**
+ * Teinte d'un métal trop sombre, canal par canal : reflet final (texture moyenne × teinte) = plancher × teinte voulue
+ * normalisée. Un facteur unique gardait la dominante de la texture (metal_larme brun-jaune : toits dorés) ; ici le
+ * reflet suit la teinte du catalogue (gris neutre pour #3a3d40). null = déjà assez clair.
+ */
+export function metalFloorColor(texMean: readonly [number, number, number], color: { r: number; g: number; b: number }, floor = ALBEDO_FLOOR_METAL): [number, number, number] | null {
+  const v = Math.max(texMean[0] * color.r, texMean[1] * color.g, texMean[2] * color.b);
+  if (!(v > 1e-5) || v >= floor) return null;
+  const cm = Math.max(color.r, color.g, color.b, 1e-4);
+  const want = [color.r / cm, color.g / cm, color.b / cm];
+  const t = [texMean[0], texMean[1], texMean[2]];
+  return [0, 1, 2].map((k) => Math.min(ALBEDO_FLOOR_METAL_MAX_GAIN, (floor * want[k]!) / Math.max(t[k]!, 1e-3))) as [number, number, number];
+}
 
 /** Couleur moyenne linéaire d'une image (sRGB), sur une réduction 16 × 16 ; null si illisible (tests, Safari ancien). */
 function imageMeanLinear(im: HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas | ImageData, srgb = true): [number, number, number] | null {
@@ -212,8 +227,12 @@ export class BuildingMaterials {
   private applyAlbedoFloor(mat: THREE.MeshStandardMaterial, file: string, armFile: string | null, floor: number): void {
     const p = Promise.all([this.meanOf(file, true), armFile ? this.meanOf(armFile, false) : Promise.resolve(null)]).then(([mu, arm]) => {
       if (!mu) return;
-      const metal = !!arm && arm[2] > METAL_ARM_MIN;
-      const g = metal ? albedoFloorGain(mu, mat.color, ALBEDO_FLOOR_METAL, ALBEDO_FLOOR_METAL_MAX_GAIN) : albedoFloorGain(mu, mat.color, floor);
+      if (arm && arm[2] > METAL_ARM_MIN) {
+        const c = metalFloorColor(mu, mat.color);
+        if (c) mat.color.setRGB(c[0], c[1], c[2], THREE.LinearSRGBColorSpace);
+        return;
+      }
+      const g = albedoFloorGain(mu, mat.color, floor);
       if (g !== 1) mat.color.multiplyScalar(g);
     });
     this.pending.add(p);

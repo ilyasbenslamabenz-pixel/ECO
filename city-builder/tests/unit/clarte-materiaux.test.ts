@@ -3,7 +3,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ALBEDO_FLOOR, ALBEDO_FLOOR_MAX_GAIN, ALBEDO_FLOOR_METAL, ALBEDO_FLOOR_METAL_MAX_GAIN, albedoFloorGain } from '../../src/render/buildings/materials';
+import { ALBEDO_FLOOR, ALBEDO_FLOOR_MAX_GAIN, ALBEDO_FLOOR_METAL, ALBEDO_FLOOR_METAL_MAX_GAIN, albedoFloorGain, metalFloorColor } from '../../src/render/buildings/materials';
 import { FOLIAGE_MAX_GAIN, FOLIAGE_MIN_LUMA, foliageGain } from '../../src/render/nature/vegetation';
 import { IMP_MAX_LOD } from '../../src/render/nature/impostor';
 
@@ -18,7 +18,7 @@ test('plancher de clarté : tôle teintée gris éclaircie, tuiles rouges intact
   assert.equal(albedoFloorGain(tuiles, { r: 1, g: 1, b: 1 }, ALBEDO_FLOOR['toiture']!), 1);
   assert.equal(albedoFloorGain([0.0001, 0.0001, 0.0001], { r: 0.01, g: 0.01, b: 0.01 }, 0.075), 1, 'noir voulu (ou texture illisible) : inchangé');
   assert.equal(albedoFloorGain([0.01, 0.01, 0.01], { r: 1, g: 1, b: 1 }, 0.075), ALBEDO_FLOOR_MAX_GAIN);
-  assert.ok(ALBEDO_FLOOR['zinc'] && ALBEDO_FLOOR['facade']);
+  assert.ok(ALBEDO_FLOOR['zinc'] && ALBEDO_FLOOR['facade'] && ALBEDO_FLOOR['garde_corps'], 'toits de tôle et de métal sombre');
   assert.equal(ALBEDO_FLOOR['verre'], undefined, 'verres non concernés');
 });
 
@@ -28,6 +28,14 @@ test('toit de zinc métallique sombre : reflet ramené à celui d\'un zinc réel
   const g = albedoFloorGain(larme, teinte, ALBEDO_FLOOR_METAL, ALBEDO_FLOOR_METAL_MAX_GAIN);
   const v = Math.max(larme[0] * teinte.r * g, larme[1] * teinte.g * g, larme[2] * teinte.b * g);
   assert.ok(Math.abs(v - ALBEDO_FLOOR_METAL) < 1e-6 || g === ALBEDO_FLOOR_METAL_MAX_GAIN, `reflet ${v}, gain ${g}`);
+});
+
+test('métal sombre à dominante brune : reflet ramené au gris de la teinte, pas doré', () => {
+  const larme: [number, number, number] = [lin(61), lin(50), lin(28)];
+  const c = metalFloorColor(larme, { r: 0.04, g: 0.04, b: 0.04 })!;
+  const reflet = [0, 1, 2].map((k) => larme[k]! * c[k]!);
+  for (const v of reflet) assert.ok(Math.abs(v - ALBEDO_FLOOR_METAL) < 1e-6, `reflet ${reflet}`);
+  assert.equal(metalFloorColor([0.5, 0.5, 0.5], { r: 1, g: 1, b: 1 }), null, 'métal déjà clair : inchangé');
 });
 
 test('feuillage : seul l\'épicéa (très sombre) est éclairci, sans dépasser les feuillus', () => {
