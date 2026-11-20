@@ -78,10 +78,46 @@ export class AssetLib {
   has(key: string): boolean { return this.loaded.has(key); }
   count(kind?: AssetKind): number { return [...this.loaded.keys()].filter((k) => !kind || ASSETS[k]!.kind === kind).length; }
 
-  /** Charge tous les modèles (progression 0..1). Ne rejette jamais : les échecs sont listés dans `failed`. */
-  load(onProgress: (p: number, label: string) => void, disabled = false): Promise<void> {
+  /**
+   * Charge tous les modèles (progression 0..1). D'abord le paquet models/pack.json (tous les GLB en base64 : la page
+   * publiée ne sert pas les .glb), sinon chaque fichier .glb. Ne rejette jamais : les échecs sont listés dans `failed`.
+   */
+  async load(onProgress: (p: number, label: string) => void, disabled = false): Promise<void> {
     const keys = Object.keys(ASSETS);
-    if (disabled) { this.failed.push(...keys); this.done = true; return Promise.resolve(); }
+    if (disabled) { this.failed.push(...keys); this.done = true; return; }
+    const pack = await fetchPack(CONFIG.modelsDir + 'pack.json', (p) => onProgress(p * 0.8, 'paquet de modèles'));
+    if (pack) {
+      const loader = new GLTFLoader();
+      let n = 0;
+      for (const key of keys) {
+        const def = ASSETS[key]!;
+        const b64 = pack[def.file];
+        try {
+          if (!b64) throw new Error('absent du paquet');
+          const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          const gltf = await loader.parseAsync(bin.buffer, '');
+          this.register(key, gltf.scene, gltf.animations);
+        } catch { this.failed.push(key); }
+        onProgress(0.8 + (0.2 * ++n) / keys.length, def.file);
+      }
+      this.done = true;
+      return;
+    }
+    return this.loadFiles(keys, onProgress);
+  }
+
+  private register(key: string, scene: THREE.Object3D, animations: THREE.AnimationClip[]): void {
+    let skinned = false;
+    scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.geometry.userData['shared'] = true; }
+      if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned = true;
+    });
+    this.loaded.set(key, { scene, animations, skinned });
+  }
+
+  /** Chargement fichier par fichier (GLTFLoader + LoadingManager). */
+  private loadFiles(keys: string[], onProgress: (p: number, label: string) => void): Promise<void> {
     return new Promise((resolve) => {
       const manager = new THREE.LoadingManager();
       let finished = false;
@@ -94,13 +130,7 @@ export class AssetLib {
       for (const key of keys) {
         const def = ASSETS[key]!;
         loader.load(CONFIG.modelsDir + def.file, (gltf) => {
-          let skinned = false;
-          gltf.scene.traverse((o) => {
-            const m = o as THREE.Mesh;
-            if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.geometry.userData['shared'] = true; }
-            if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned = true;
-          });
-          this.loaded.set(key, { scene: gltf.scene, animations: gltf.animations, skinned });
+          this.register(key, gltf.scene, gltf.animations);
           if (--pending === 0) end();
         }, undefined, () => { this.failed.push(key); if (--pending === 0) end(); });
       }
@@ -172,6 +202,29 @@ export class AssetLib {
     const s = new THREE.Box3().setFromObject(l.scene).getSize(new THREE.Vector3());
     return s.y / ((s.x + s.z) / 2);
   }
+}
+
+/** Télécharge le paquet de modèles avec progression ; null s'il est absent ou illisible. */
+async function fetchPack(url: string, onProgress: (p: number) => void): Promise<Record<string, string> | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok || !res.body) return null;
+    const total = Number(res.headers.get('content-length')) || 0;
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      got += value.length;
+      onProgress(total ? Math.min(1, got / total) : 0.5);
+    }
+    const all = new Uint8Array(got);
+    let o = 0;
+    for (const c of chunks) { all.set(c, o); o += c.length; }
+    return JSON.parse(new TextDecoder().decode(all)) as Record<string, string>;
+  } catch { return null; }
 }
 
 /** Ajuste un objet dans une boîte (voir AssetLib.fitted). */

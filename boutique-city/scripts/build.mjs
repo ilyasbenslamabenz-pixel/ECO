@@ -4,7 +4,7 @@
  *   node scripts/build.mjs [--dev]
  */
 import * as esbuild from 'esbuild';
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,4 +35,8 @@ const head = `<title>Boutique City</title>
 writeFileSync(join(dist, 'index.html'), `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`);
 writeFileSync(join(dist, 'artifact.html'), `${head}\n${body}\n`);
 cpSync(join(root, 'models'), join(dist, 'models'), { recursive: true });
+// Paquet unique des modèles (base64 dans du JSON) : servi là où les fichiers .glb ne le sont pas (page publiée).
+const pack = {};
+for (const f of readdirSync(join(root, 'models'))) if (f.endsWith('.glb')) pack[f] = readFileSync(join(root, 'models', f)).toString('base64');
+writeFileSync(join(dist, 'models', 'pack.json'), JSON.stringify(pack));
 console.log('dist : game.js, index.html, artifact.html, models/');
