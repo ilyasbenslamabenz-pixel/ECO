@@ -1,12 +1,13 @@
 /**
  * Boutique City — point d'entrée : menu, partie (simulation), scène 3D, interface, boucle, sauvegarde automatique.
- * Adresse : ?seed=N (quartier), ?nouveau (ignore la sauvegarde), ?vitesse=0..3.
+ * Adresse : ?seed=N (quartier), ?nouveau (ignore la sauvegarde), ?vitesse=0..3, ?auto (partie de test).
+ * Aucune boîte de dialogue du navigateur ni téléchargement : la page doit marcher dans un cadre protégé.
  */
 import { formatClock } from './sim/clock';
 import { Game, type GameSave } from './sim/game';
 import type { Premise } from './sim/district';
 import { Scene3D } from './render/scene';
-import { $, button, chf, el } from './ui/dom';
+import { $, askConfirm, button, chf, el } from './ui/dom';
 import { InteriorEditor } from './ui/editor';
 import { SidePanel } from './ui/panels';
 
@@ -47,8 +48,9 @@ function menu(): void {
     el('div', { cls: 'sec', text: 'Nouvelle entreprise' }),
     el('label', { cls: 'field' }, el('span', { text: 'Nom de l’entreprise' }), name),
     button('Créer — 40 000 CHF de capital', () => {
-      if (save && !params.has('nouveau') && !confirm('Remplacer la partie sauvegardée ?')) return;
-      start(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 1e9) | 0, name.value.trim() || 'Mon entreprise'));
+      const go = (): void => start(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 1e9) | 0, name.value.trim() || 'Mon entreprise'));
+      if (save && !params.has('nouveau')) void askConfirm(`Remplacer la partie sauvegardée (${save.companyName}) ?`, 'Remplacer', true).then((yes) => { if (yes) go(); });
+      else go();
     }, save ? 'wide' : 'primary wide'),
     el('p', { cls: 'muted small', text: 'Sauvegarde automatique chaque jour de jeu (dans ce navigateur).' }),
   ));
@@ -95,11 +97,6 @@ function start(game: Game): void {
     el('div', { cls: 'acts' },
       button('Finances', () => panel.show({ kind: 'finances' })),
       button('Sauvegarder', () => { writeSave(game); toast('Partie sauvegardée', 'ok'); }),
-      button('Exporter', () => {
-        const a = el('a', { attrs: { href: URL.createObjectURL(new Blob([JSON.stringify(game.save())], { type: 'application/json' })), download: `boutique-city_${game.companyName.replace(/\W+/g, '-')}_jour${game.day + 1}.json` } });
-        a.click();
-      }),
-      button('Menu', () => { writeSave(game); location.search = ''; }),
     ));
   const paint = (): void => {
     clock.textContent = formatClock(game.total);

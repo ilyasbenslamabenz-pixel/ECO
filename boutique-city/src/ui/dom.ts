@@ -24,3 +24,19 @@ export const pct = (v: number): string => `${Math.round(v * 100)} %`;
 export function button(text: string, onClick: () => void, cls = ''): HTMLButtonElement {
   return el('button', { cls, text, attrs: { type: 'button' }, on: { click: () => onClick() } });
 }
+
+/**
+ * Confirmation dans la page (la boîte `confirm()` du navigateur n'est pas disponible partout : dans un cadre
+ * protégé, elle répond toujours « non »). Résout vrai si le joueur confirme.
+ */
+export function askConfirm(text: string, okLabel = 'Confirmer', danger = false): Promise<boolean> {
+  return new Promise((resolve) => {
+    const close = (v: boolean): void => { wrap.remove(); resolve(v); };
+    const ok = button(okLabel, () => close(true), danger ? 'danger' : 'primary');
+    const wrap = el('div', { cls: 'confirm', attrs: { role: 'dialog', 'aria-modal': 'true' } },
+      el('div', { cls: 'confirm-card' }, el('p', { text }), el('div', { cls: 'row end' }, button('Annuler', () => close(false)), ok)));
+    wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(false); });
+    document.body.append(wrap);
+    ok.focus();
+  });
+}

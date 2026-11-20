@@ -7,7 +7,7 @@ import { ECONOMY, SHOP_TYPES, SHOP_TYPE_BY_ID, productsOf, type ShopType } from 
 import { formatClock } from '../sim/clock';
 import type { DayStats, Game, Shop } from '../sim/game';
 import type { Premise } from '../sim/district';
-import { $, button, chf, chf2, el, num, pct, signed } from './dom';
+import { $, askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
 
 export type PanelTarget = { kind: 'premise'; premiseId: number } | { kind: 'shop'; shopId: number } | { kind: 'finances' } | { kind: 'building'; buildingId: number } | null;
 type ShopTab = 'apercu' | 'stock' | 'equipe' | 'horaires' | 'resultats';
@@ -26,7 +26,8 @@ export class SidePanel {
   ) {}
 
   show(t: PanelTarget): void {
-    if (t?.kind === 'shop' && (this.target?.kind !== 'shop' || this.target.shopId !== t.shopId)) this.tab = 'apercu';
+    // Autre commerce (ou commerce ouvert depuis le quartier) : retour à l'aperçu.
+    if (t?.kind === 'premise' || (t?.kind === 'shop' && (this.target?.kind !== 'shop' || this.target.shopId !== t.shopId))) this.tab = 'apercu';
     this.target = t;
     this.drawnVersion = -1;
     this.refresh(true);
@@ -138,8 +139,10 @@ export class SidePanel {
       el('div', { cls: 'sec', text: 'Local' }),
       el('p', { cls: 'muted', text: `${p.area} m² · loyer ${chf(p.rent)} / mois · passage ${num(p.footfall)} / h · attrait ${Math.round(g.attractiveness(s) * 100)} (100 = commerce moyen)` }),
       button('Résilier le bail…', () => {
-        if (!confirm(`Résilier le bail de « ${s.name} » ? Le dépôt (${chf(s.deposit)}) est rendu et le mobilier revendu à ${Math.round(ECONOMY.resale * 100)} %.`)) return;
-        const r = g.release(s.id); if (r.ok) { this.act.changed(); this.show(null); }
+        void askConfirm(`Résilier le bail de « ${s.name} » ? Le dépôt (${chf(s.deposit)}) est rendu et le mobilier revendu à ${Math.round(ECONOMY.resale * 100)} %.`, 'Résilier', true).then((yes) => {
+          if (!yes) return;
+          const r = g.release(s.id); if (r.ok) { this.act.changed(); this.show(null); }
+        });
       }, 'danger small'),
     ]);
   }
@@ -182,7 +185,7 @@ export class SidePanel {
       el('div', { cls: 'sec', text: `Équipe (${staff.length})` }),
       staff.length ? el('div', { cls: 'list' }, ...staff.map((e) => el('div', { cls: 'item' },
         el('div', {}, el('b', { text: e.name }), el('div', { cls: 'muted small', text: `compétence ${pct(e.skill)} · ${e.wage} CHF / h · ${chf(e.wage * (s.close - s.open))} / jour` })),
-        button('Licencier', () => { if (!confirm(`Licencier ${e.name} ? Indemnité : ${chf(e.wage * 8 * ECONOMY.severanceDays)}.`)) return; g.fire(e.id); this.refresh(true); }, 'small danger')))) : el('p', { cls: 'warn', text: 'Personne : le commerce ne peut pas servir de clients.' }),
+        button('Licencier', () => { void askConfirm(`Licencier ${e.name} ? Indemnité : ${chf(e.wage * 8 * ECONOMY.severanceDays)}.`, 'Licencier', true).then((yes) => { if (yes) { g.fire(e.id); this.refresh(true); } }); }, 'small danger')))) : el('p', { cls: 'warn', text: 'Personne : le commerce ne peut pas servir de clients.' }),
       others.length ? el('div', { cls: 'sec', text: 'Employés des autres commerces' }) : null,
       ...others.map((e) => el('div', { cls: 'item' }, el('div', {}, el('b', { text: e.name }), el('div', { cls: 'muted small', text: `${e.shopId ? g.shop(e.shopId)?.name ?? '—' : 'sans affectation'} · ${pct(e.skill)} · ${e.wage} CHF / h` })),
         button('Muter ici', () => { g.assign(e.id, s.id); this.refresh(true); }, 'small'))),

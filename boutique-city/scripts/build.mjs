@@ -29,9 +29,9 @@ const body = `<canvas id="scene" aria-label="Quartier en 3D"></canvas>
 <div id="menu" class="hidden"></div>
 <script type="module" src="game.js"></script>`;
 const head = `<title>Boutique City</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="Boutique City — gestion de commerces dans un quartier">
 <style>${css}</style>`;
-writeFileSync(join(dist, 'index.html'), `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`);
+// Page complète : sa propre balise viewport (le fragment artifact.html reçoit celle de l'enveloppe de publication).
+writeFileSync(join(dist, 'index.html'), `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`);
 writeFileSync(join(dist, 'artifact.html'), `${head}\n${body}\n`);
 console.log('dist : game.js, index.html, artifact.html');

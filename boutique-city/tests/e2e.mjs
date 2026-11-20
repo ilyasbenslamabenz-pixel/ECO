@@ -97,6 +97,14 @@ try {
   await page.click('#hud button:has-text("Finances")');
   await page.screenshot({ path: join(out, '8-finances.png') });
 
+  // Confirmation dans la page (pas de confirm() du navigateur) : résiliation annulée.
+  await page.evaluate((id) => window.__bc.select(id), pid);
+  await page.waitForTimeout(300);
+  await page.click('#panel button:has-text("Résilier le bail")');
+  check(await page.locator('.confirm').isVisible(), 'confirmation affichée dans la page');
+  await page.click('.confirm button:has-text("Annuler")');
+  check(await page.evaluate(() => window.__bc.game.shops.length === 1), 'résiliation annulée');
+
   // Sauvegarde et reprise.
   await page.click('#hud button:has-text("Sauvegarder")');
   await page.goto(`${base}/index.html`);

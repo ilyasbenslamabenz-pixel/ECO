@@ -17,7 +17,7 @@ viennent de Meknes City, copiées et non partagées : la caméra (`src/input/cam
    21 h. Prix au-dessus du quartier : moins de clients ; en dessous : marge réduite.
 6. **Résultats** et **Finances** : ventes, marge, salaires, loyers, trésorerie, jour par jour.
 
-Sauvegarde automatique chaque jour de jeu (navigateur), bouton Exporter pour un fichier.
+Sauvegarde automatique chaque jour de jeu (dans le navigateur) et bouton Sauvegarder.
 
 ## Développement
 ```
