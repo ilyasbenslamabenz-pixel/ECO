@@ -3,7 +3,7 @@
  * chaussée), un parc. Chaque local commercial a une surface, un loyer et un passage piéton estimé (habitants et
  * employés proches, avenue centrale). Une partie des locaux est déjà occupée par des concurrents. TypeScript pur.
  */
-import { ECONOMY, SHOP_TYPES, type ShopType } from './catalog';
+import { ECONOMY, HOMES, SHOP_TYPES, type ServiceKind, type ShopType } from './catalog';
 import { Rng } from './rng';
 
 /** Largeur d'une rue (chaussée et trottoirs, m) et taille intérieure d'un îlot (m). */
@@ -31,6 +31,22 @@ export interface Building {
   /** Teinte de façade (0..1, choisie par le rendu dans sa palette). */
   tint: number;
   premise: Premise | null;
+  /** Service du quartier (grossiste, banque…) installé au rez-de-chaussée, ou null. */
+  service: ServiceKind | null;
+  /** Logement à louer dans l'immeuble, ou null. */
+  home: Home | null;
+  /** Porte : point du trottoir devant le milieu de la façade (m). */
+  doorX: number;
+  doorZ: number;
+}
+
+export interface Home {
+  id: number;
+  buildingId: number;
+  /** Type de logement (HOMES). */
+  def: string;
+  doorX: number;
+  doorZ: number;
 }
 
 export interface Premise {
@@ -62,8 +78,14 @@ export interface District {
   avenue: number;
   buildings: Building[];
   premises: Premise[];
+  homes: Home[];
+  /** Logement loué au début de la partie. */
+  startHome: number;
   parkBlock: { i: number; j: number };
 }
+
+/** Services installés (le snack est présent deux fois). */
+export const SERVICE_ORDER: readonly ServiceKind[] = ['grossiste', 'meubles', 'banque', 'emploi', 'garage', 'pub', 'snack', 'snack'];
 
 const COMPETITOR_NAMES: Record<ShopType, string[]> = {
   epicerie: ['Épicerie du Coin', 'Chez Karim', 'Primeur Atlas', 'Mini-Marché Zitoun'],
@@ -112,8 +134,11 @@ export function generateDistrict(seed: number, nx = 6, nz = 5): District {
             id: nextId++, kind, x: pos.x, z: pos.z, w: bw, d: bd, face, floors,
             residents: kind === 'bureaux' ? 0 : Math.round((footprint * upper) / 35),
             workers: kind === 'bureaux' ? Math.round((footprint * floors) / 14) : kind === 'commerce' ? 3 : 0,
-            tint: rng.next(), premise: null,
+            tint: rng.next(), premise: null, service: null, home: null, doorX: 0, doorZ: 0,
           };
+          const fn = FACE_N[face]!, dep = face % 2 === 0 ? bd : bw;
+          b.doorX = b.x + fn[0] * (dep / 2 + SIDEWALK_W / 2);
+          b.doorZ = b.z + fn[1] * (dep / 2 + SIDEWALK_W / 2);
           buildings.push(b);
           s += w;
         }
@@ -154,7 +179,51 @@ export function generateDistrict(seed: number, nx = 6, nz = 5): District {
       p.competitorName = rng.pick(COMPETITOR_NAMES[t]);
     }
   }
-  return { seed, nx, nz, size: { w: nx * PITCH, d: nz * PITCH }, avenue, buildings, premises, parkBlock: park };
+  // Services : locaux répartis dans tout le quartier (le plus éloigné des services déjà placés), retirés des locaux.
+  const taken: Premise[] = [];
+  for (const kind of SERVICE_ORDER) {
+    let best: Premise | null = null, bestScore = -Infinity;
+    for (const p of premises) {
+      if (taken.includes(p)) continue;
+      const score = taken.length === 0 ? -Math.hypot(p.doorX, p.doorZ) : Math.min(...taken.map((q) => Math.hypot(q.doorX - p.doorX, q.doorZ - p.doorZ))) - (p.competitor ? 40 : 0);
+      if (score > bestScore) { bestScore = score; best = p; }
+    }
+    if (!best) break;
+    taken.push(best);
+    const b = buildings.find((x) => x.id === best!.buildingId)!;
+    b.service = kind;
+    b.premise = null;
+  }
+  const shopsLeft = premises.filter((p) => !taken.includes(p));
+  shopsLeft.forEach((p, k) => { p.id = k + 1; });
+  // Logements à louer : immeubles d'habitation répartis, du studio au loft.
+  const homes: Home[] = [];
+  const homePlan = [HOMES[0]!, HOMES[0]!, HOMES[1]!, HOMES[1]!, HOMES[2]!];
+  const housing = buildings.filter((b) => b.kind === 'logement');
+  for (const def of homePlan) {
+    let best: Building | null = null, bestScore = -Infinity;
+    for (const b of housing) {
+      if (b.home) continue;
+      const score = homes.length === 0 ? -Math.hypot(b.x, b.z) : Math.min(...homes.map((h) => Math.hypot(h.doorX - b.doorX, h.doorZ - b.doorZ))) + rng.next();
+      if (score > bestScore) { bestScore = score; best = b; }
+    }
+    if (!best) break;
+    const h: Home = { id: homes.length + 1, buildingId: best.id, def: def.id, doorX: best.doorX, doorZ: best.doorZ };
+    best.home = h;
+    homes.push(h);
+  }
+  return { seed, nx, nz, size: { w: nx * PITCH, d: nz * PITCH }, avenue, buildings, premises: shopsLeft, homes, startHome: homes[0]?.id ?? 0, parkBlock: park };
+}
+
+/** Bâtiment d'un service (le premier, ou le plus proche de (x, z)). */
+export function serviceBuilding(d: District, kind: ServiceKind, x = 0, z = 0): Building | undefined {
+  let best: Building | undefined, bd = Infinity;
+  for (const b of d.buildings) {
+    if (b.service !== kind) continue;
+    const dist = Math.hypot(b.doorX - x, b.doorZ - z);
+    if (dist < bd) { bd = dist; best = b; }
+  }
+  return best;
 }
 
 /** Normale extérieure de chaque façade. */

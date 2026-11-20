@@ -1,6 +1,6 @@
 /**
- * Catalogue du jeu : types de commerce, mobilier (aménagement vu de dessus, grille de 1 m) et produits.
- * Prix en CHF. Valeurs d'équilibrage : docs/EQUILIBRAGE.md. TypeScript pur.
+ * Catalogue du jeu : types de commerce, mobilier (grille de 1 m), produits, services du quartier, véhicules,
+ * prêts, campagnes de publicité, repas et besoins du personnage. Prix en CHF. TypeScript pur.
  */
 
 export type ShopType = 'epicerie' | 'cafe' | 'vetements';
@@ -38,6 +38,8 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: 'plante', nameFr: 'Plante', kind: 'deco', w: 1, d: 1, price: 150, decor: 1, color: '#5fae6a' },
   { id: 'lampe', nameFr: 'Lampadaire design', kind: 'deco', w: 1, d: 1, price: 220, decor: 1.2, color: '#f0d890' },
   { id: 'tapis', nameFr: 'Tapis', kind: 'deco', w: 2, d: 2, price: 300, decor: 2, color: '#c46a5a' },
+  { id: 'etagere', nameFr: 'Étagère murale', kind: 'rayon', w: 2, d: 1, price: 420, capacity: 45, color: '#a7b8cc' },
+  { id: 'tableau', nameFr: 'Tableau décoratif', kind: 'deco', w: 1, d: 1, price: 260, decor: 1.4, color: '#d2a24c' },
 ];
 
 export const FURNITURE_BY_ID: ReadonlyMap<string, FurnitureDef> = new Map(FURNITURE.map((f) => [f.id, f]));
@@ -100,7 +102,7 @@ const H = (pairs: [number, number][]): number[] => { const a = new Array<number>
 
 export const SHOP_TYPES: readonly ShopTypeDef[] = [
   {
-    id: 'epicerie', nameFr: 'Épicerie', capture: 0.06, basket: 2.2, weekend: 1.15, open: 8, close: 20, color: '#4caf6a',
+    id: 'epicerie', nameFr: 'Épicerie', capture: 0.07, basket: 2.2, weekend: 1.15, open: 8, close: 20, color: '#4caf6a',
     hourly: H([[7, 0.35], [8, 0.6], [9, 0.55], [10, 0.5], [11, 0.65], [12, 0.85], [13, 0.7], [14, 0.5], [15, 0.5], [16, 0.65], [17, 0.95], [18, 1], [19, 0.8], [20, 0.45], [21, 0.25]]),
   },
   {
@@ -135,4 +137,95 @@ export const ECONOMY = {
   severanceDays: 3,
   /** Revente du mobilier (part du prix). */
   resale: 0.4,
+  /** Livraison d'une commande du grossiste : forfait + part du montant. */
+  deliveryBase: 40,
+  deliveryRate: 0.06,
+  /** Livraison des meubles achetés au magasin de meubles (par achat). */
+  furnitureDelivery: 60,
+  /** Marchandise portée à pied (unités). */
+  carryOnFoot: 24,
+  /** Distance maximale (m) entre un véhicule et une porte pour charger ou décharger. */
+  loadDistance: 30,
+  /** Revente d'un véhicule (part du prix). */
+  vehicleResale: 0.6,
+  /** Plafond d'endettement total (CHF). */
+  maxDebt: 80_000,
+  /** Taxi de retour quand le personnage s'effondre de fatigue (CHF). */
+  faintCost: 40,
 } as const;
+
+/* ------------------------------ Services du quartier ------------------------------ */
+
+export type ServiceKind = 'grossiste' | 'meubles' | 'banque' | 'emploi' | 'garage' | 'pub' | 'snack';
+export interface ServiceDef { id: ServiceKind; nameFr: string; sign: string; color: string; hint: string }
+export const SERVICES: readonly ServiceDef[] = [
+  { id: 'grossiste', nameFr: 'Grossiste', sign: 'Grossiste Atlas', color: '#d9822b', hint: 'Marchandise : chargez-la dans votre véhicule ou faites-la livrer.' },
+  { id: 'meubles', nameFr: 'Magasin de meubles', sign: 'Meubles & Agencement', color: '#3f8fd9', hint: 'Mobilier de magasin, livré dans la réserve du commerce choisi.' },
+  { id: 'banque', nameFr: 'Banque', sign: 'Banque du Quartier', color: '#2e9e8f', hint: 'Prêts à rembourser chaque jour.' },
+  { id: 'emploi', nameFr: "Agence pour l'emploi", sign: "Agence pour l'emploi", color: '#8c63d9', hint: 'Candidats à embaucher, nouveaux chaque lundi.' },
+  { id: 'garage', nameFr: 'Garage', sign: 'Garage Utilitaires', color: '#c94f4f', hint: 'Scooters et camionnettes pour transporter la marchandise.' },
+  { id: 'pub', nameFr: 'Agence de publicité', sign: 'Agence Pub & Com', color: '#d94fa0', hint: 'Campagnes qui attirent plus de clients.' },
+  { id: 'snack', nameFr: 'Snack', sign: 'Snack Express', color: '#e0b030', hint: 'Manger et boire un café : faim et énergie.' },
+];
+export const SERVICE_BY_ID: ReadonlyMap<ServiceKind, ServiceDef> = new Map(SERVICES.map((s) => [s.id, s]));
+
+/* ------------------------------ Véhicules ------------------------------ */
+
+export type VehicleType = 'scooter' | 'camionnette';
+export interface VehicleDef { id: VehicleType; nameFr: string; price: number; cargo: number; /** Vitesse maximale (m/s). */ speed: number; /** Assurance (CHF / jour). */ insurance: number; color: string }
+export const VEHICLES: readonly VehicleDef[] = [
+  { id: 'scooter', nameFr: 'Scooter utilitaire', price: 2900, cargo: 60, speed: 13, insurance: 4, color: '#e2463a' },
+  { id: 'camionnette', nameFr: 'Camionnette', price: 14500, cargo: 600, speed: 12, insurance: 14, color: '#f2f2ee' },
+];
+export const VEHICLE_BY_ID: ReadonlyMap<VehicleType, VehicleDef> = new Map(VEHICLES.map((v) => [v.id, v]));
+
+/* ------------------------------ Banque ------------------------------ */
+
+export interface LoanOffer { amount: number; days: number; /** Taux annuel. */ rate: number }
+export const LOAN_OFFERS: readonly LoanOffer[] = [
+  { amount: 10_000, days: 60, rate: 0.07 },
+  { amount: 25_000, days: 120, rate: 0.09 },
+  { amount: 50_000, days: 180, rate: 0.11 },
+];
+/** Total à rembourser (capital + intérêts simples). */
+export const loanTotal = (o: LoanOffer): number => Math.round(o.amount * (1 + (o.rate * o.days) / 365));
+
+/* ------------------------------ Publicité ------------------------------ */
+
+export type CampaignKind = 'flyers' | 'affiches' | 'internet';
+export interface CampaignDef { id: CampaignKind; nameFr: string; perDay: number; /** Clients en plus (part). */ boost: number; scope: 'shop' | 'all'; desc: string }
+export const CAMPAIGNS: readonly CampaignDef[] = [
+  { id: 'flyers', nameFr: 'Distribution de flyers', perDay: 90, boost: 0.25, scope: 'shop', desc: 'Un commerce, +25 % de clients.' },
+  { id: 'affiches', nameFr: 'Affiches dans le quartier', perDay: 260, boost: 0.5, scope: 'shop', desc: 'Un commerce, +50 % de clients.' },
+  { id: 'internet', nameFr: 'Publicité sur internet', perDay: 380, boost: 0.22, scope: 'all', desc: 'Tous vos commerces, +22 % de clients.' },
+];
+export const CAMPAIGN_BY_ID: ReadonlyMap<CampaignKind, CampaignDef> = new Map(CAMPAIGNS.map((c) => [c.id, c]));
+
+/* ------------------------------ Personnage ------------------------------ */
+
+export const NEEDS = {
+  /** Perte d'énergie éveillé (points / minute de jeu) : 100 → 0 en 17 h. */
+  energyPerMin: 100 / (17 * 60),
+  /** Perte de satiété (points / minute) : 100 → 0 en 9 h. */
+  hungerPerMin: 100 / (9 * 60),
+  /** Récupération en dormant (points / minute, multipliée par le confort du logement) : 0 → 100 en 7 h. */
+  sleepPerMin: 100 / (7 * 60),
+  /** Seuil bas : marche ralentie, alertes. */
+  low: 15,
+} as const;
+
+export interface FoodDef { id: string; nameFr: string; price: number; hunger: number; energy: number }
+export const FOODS: readonly FoodDef[] = [
+  { id: 'cafe', nameFr: 'Café serré', price: 4, hunger: 3, energy: 15 },
+  { id: 'sandwich', nameFr: 'Sandwich', price: 9, hunger: 45, energy: 0 },
+  { id: 'menu', nameFr: 'Menu du jour', price: 17, hunger: 85, energy: 5 },
+];
+
+/** Logements à louer (prix au jour). */
+export interface HomeDef { id: string; nameFr: string; rentDay: number; comfort: number; gridW: number; gridD: number }
+export const HOMES: readonly HomeDef[] = [
+  { id: 'studio', nameFr: 'Studio', rentDay: 28, comfort: 1, gridW: 7, gridD: 6 },
+  { id: 'deux', nameFr: 'Deux-pièces', rentDay: 55, comfort: 1.2, gridW: 9, gridD: 7 },
+  { id: 'loft', nameFr: 'Loft', rentDay: 110, comfort: 1.45, gridW: 11, gridD: 8 },
+];
+export const HOME_BY_ID: ReadonlyMap<string, HomeDef> = new Map(HOMES.map((h) => [h.id, h]));

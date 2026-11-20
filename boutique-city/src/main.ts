@@ -1,23 +1,40 @@
 /**
- * Boutique City — point d'entrée : menu, partie (simulation), scène 3D, interface, boucle, sauvegarde automatique.
- * Adresse : ?seed=N (quartier), ?nouveau (ignore la sauvegarde), ?vitesse=0..3, ?auto (partie de test).
- * Aucune boîte de dialogue du navigateur ni téléchargement : la page doit marcher dans un cadre protégé.
+ * Boutique City — point d'entrée : menu, partie, personnage à la troisième personne (rue et intérieurs), véhicule,
+ * interactions (portes, caisse, lit, véhicules), mode aménagement en 3D, interface, sauvegarde automatique.
+ * Adresse : ?seed=N, ?nouveau (ignore la sauvegarde), ?auto (partie de test immédiate), ?vitesse=0..3.
+ * Aucune boîte de dialogue du navigateur ni téléchargement : la page marche dans un cadre protégé.
  */
-import { formatClock } from './sim/clock';
-import { Game, type GameSave } from './sim/game';
-import type { Premise } from './sim/district';
+import * as THREE from 'three';
+import { FURNITURE_BY_ID, HOME_BY_ID, SERVICE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf } from './sim/catalog';
+import { clockView, formatClock } from './sim/clock';
+import { FACE_N, type Building } from './sim/district';
+import { Game, type GameSave, type Result, type Shop } from './sim/game';
+import { canPlace, type Rot } from './sim/layout';
+import { Controls } from './input/controls';
+import { PRODUCT_COLORS } from './render/furniture3d';
+import { InteriorAgents } from './render/interior-agents';
+import { InteriorView, type InteriorItem } from './render/interior-view';
 import { Scene3D } from './render/scene';
+import type { BuildingState } from './render/district-view';
+import { drive, type DriveState } from './world/vehicle';
+import { competitorView, homeView, premiseView, serviceView, type UiCtx } from './ui/dialogs';
 import { $, askConfirm, button, chf, el } from './ui/dom';
-import { InteriorEditor } from './ui/editor';
-import { SidePanel } from './ui/panels';
+import { BigMap, MiniMap } from './ui/map';
+import { Panel } from './ui/panel';
+import { companyView, shopView } from './ui/shop-panel';
 
-const SAVE_KEY = 'boutique-city.save.v1';
-/** Minutes de jeu par seconde réelle, pour chaque vitesse (0 = pause). */
-const SPEEDS = [0, 3, 10, 30];
+const SAVE_KEY = 'boutique-city.save.v2';
+/** Minutes de jeu par seconde réelle (0 = pause). */
+const SPEEDS = [0, 1, 4, 15];
+const SLEEP_SPEED = 90;
+const WALK = 4.2, RUN = 7.2, IN_WALK = 2.6, IN_RUN = 4;
 const params = new URLSearchParams(location.search);
 
-interface Debug { game: Game | null; scene: Scene3D | null; ready: boolean; errors: string[]; advance(min: number): void; select(premiseId: number): void }
-const debug: Debug = { game: null, scene: null, ready: false, errors: [], advance: () => undefined, select: () => undefined };
+interface Debug {
+  game: Game | null; ready: boolean; errors: string[];
+  [k: string]: unknown;
+}
+const debug: Debug = { game: null, ready: false, errors: [] };
 (window as unknown as { __bc: Debug }).__bc = debug;
 window.addEventListener('error', (e) => debug.errors.push(String(e.message)));
 window.addEventListener('unhandledrejection', (e) => debug.errors.push(String(e.reason)));
@@ -26,7 +43,7 @@ function readSave(): GameSave | null {
   try { const t = localStorage.getItem(SAVE_KEY); return t ? JSON.parse(t) as GameSave : null; } catch { return null; }
 }
 function writeSave(g: Game): void {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(g.save())); } catch { /* stockage indisponible : la partie continue */ }
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(g.save())); } catch { /* stockage indisponible */ }
 }
 
 function toast(text: string, kind: 'ok' | 'error' | 'info' | 'warn' = 'info'): void {
@@ -34,130 +51,592 @@ function toast(text: string, kind: 'ok' | 'error' | 'info' | 'warn' = 'info'): v
   const t = el('div', { cls: `toast ${kind}`, text });
   box.append(t);
   while (box.children.length > 4) box.firstElementChild?.remove();
-  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, kind === 'error' ? 5000 : 4200);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, kind === 'error' ? 5500 : 4200);
 }
 
 function menu(): void {
   const save = readSave();
   const name = el('input', { attrs: { type: 'text', maxlength: '30', value: 'Mon entreprise', 'aria-label': 'Nom de votre entreprise' } });
   const box = $('menu');
+  const begin = (g: Game): void => start(g);
   box.replaceChildren(el('div', { cls: 'menu-card' },
     el('h1', { text: 'Boutique City' }),
-    el('p', { cls: 'tag', text: 'Louez un local, aménagez-le, embauchez, remplissez les rayons… et bâtissez votre réseau de commerces.' }),
-    save && !params.has('nouveau') ? button(`Continuer : ${save.companyName} (jour ${Math.floor(save.total / 1440) + 1})`, () => start(new Game(save.seed, save.companyName, save)), 'primary wide') : null,
-    el('div', { cls: 'sec', text: 'Nouvelle entreprise' }),
+    el('p', { cls: 'tag', text: 'Partez de rien dans un quartier animé : louez un local, achetez vos meubles et votre marchandise, aménagez, servez vos premiers clients, embauchez… et bâtissez votre empire de commerces.' }),
+    save && !params.has('nouveau') ? button(`Continuer : ${save.companyName} (jour ${Math.floor(save.total / 1440) + 1})`, () => begin(new Game(save.seed, save.companyName, save)), 'primary wide') : null,
+    el('div', { cls: 'sec', text: 'Nouvelle partie' }),
     el('label', { cls: 'field' }, el('span', { text: 'Nom de l’entreprise' }), name),
-    button('Créer — 40 000 CHF de capital', () => {
-      const go = (): void => start(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 1e9) | 0, name.value.trim() || 'Mon entreprise'));
-      if (save && !params.has('nouveau')) void askConfirm(`Remplacer la partie sauvegardée (${save.companyName}) ?`, 'Remplacer', true).then((yes) => { if (yes) go(); });
+    button('Commencer — 40 000 CHF en poche', () => {
+      const go = (): void => begin(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 1e9) | 0, name.value.trim() || 'Mon entreprise'));
+      if (save && !params.has('nouveau')) void askConfirm(`Remplacer la partie sauvegardée (${save.companyName}) ?`, 'Remplacer', true).then((y) => { if (y) go(); });
       else go();
     }, save ? 'wide' : 'primary wide'),
-    el('p', { cls: 'muted small', text: 'Sauvegarde automatique chaque jour de jeu (dans ce navigateur).' }),
+    el('div', { cls: 'keys' },
+      el('div', { cls: 'sec', text: 'Commandes' }),
+      el('p', { cls: 'small', text: 'Z Q S D ou flèches : marcher (Maj : courir) · souris : tourner la caméra, molette : zoom · E : entrer, conduire, tenir la caisse · B : aménager · M : carte · P : pause · Échap : fermer.' })),
   ));
   box.classList.remove('hidden');
 }
+
+type Inside = { kind: 'shop'; shopId: number } | { kind: 'home'; homeId: number };
 
 function start(game: Game): void {
   $('menu').classList.add('hidden');
   debug.game = game;
   const canvas = $<HTMLCanvasElement>('scene');
   const scene = new Scene3D(canvas, game.district);
-  debug.scene = scene;
+  const controls = new Controls();
+  if (matchMedia('(pointer: coarse)').matches) controls.mountJoystick(document.body);
+  const panel = new Panel(game);
   let speed = params.has('vitesse') ? Math.max(0, Math.min(3, Number(params.get('vitesse')) | 0)) : 1;
   let lastDay = game.day;
   let noticeIdx = game.notices.length;
+  let inside: Inside | null = null;
+  let ipos = { x: 0, z: 0, heading: 0 };
+  let car: (DriveState & { id: number }) | null = null;
+  let walkSpeed = 0;
+  let waypoint: { x: number; z: number; label: string } | null = null;
+  const build = { on: false, tool: null as string | null, rot: 0 as Rot, cell: null as [number, number] | null };
+  let agents: InteriorAgents | null = null;
+  let layoutRev = -1;
+  let snapCam = true;
 
-  const editor = new InteriorEditor(game, toast, () => { syncPremises(); panel.refresh(true); });
-  const focusPremise = (premiseId: number): void => {
-    const p = game.premise(premiseId)!;
-    scene.controls.setPose({ targetX: p.doorX, targetZ: p.doorZ, distance: 120 });
-    scene.view.setSelected(p.buildingId);
+  const act = <T,>(r: Result<T>, okText?: string | ((d: T) => string)): boolean => {
+    if (!r.ok) { toast(r.message, 'error'); return false; }
+    if (okText) toast(typeof okText === 'function' ? okText(r.data) : okText, 'ok');
+    panel.paint(true);
+    return true;
   };
-  const panel = new SidePanel(game, { toast, openEditor: (s) => editor.open(s), focus: focusPremise, changed: () => syncPremises() });
+  const ctx: UiCtx = {
+    game, panel, act, toast,
+    enterShop: (id) => { panel.close(); enterShop(id); },
+    openShop: (id) => panel.open(shopView(ctx, id)),
+    waypoint: (x, z, label) => { waypoint = { x, z, label }; scene.setBeacon({ x, z }); toast(`Destination : ${label}`, 'info'); },
+    leave: () => { if (!inside) game.setPlace({ kind: 'rue' }); },
+  };
+  const minimap = new MiniMap(game, document.body);
+  const bigmap = new BigMap(game, (p) => ctx.waypoint(p.b.doorX, p.b.doorZ, p.label));
 
-  /** Étiquettes et auvents des locaux selon leur état. */
-  const syncPremises = (): void => {
-    scene.view.setPremises(game.district.premises.map((p: Premise) => {
-      const sh = game.shopAt(p.id);
-      return { premiseId: p.id, buildingId: p.buildingId, kind: sh ? 'joueur' as const : p.competitor ? 'concurrent' as const : 'libre' as const, type: sh?.type ?? p.competitor, label: sh ? sh.name : 'À louer' };
-    }));
-    renderShops();
+  /* ------------------------------ Rue : états des bâtiments ------------------------------ */
+
+  let statesVersion = -1;
+  const syncStreet = (): void => {
+    if (game.version === statesVersion) return;
+    statesVersion = game.version;
+    const st: BuildingState[] = [];
+    for (const b of game.district.buildings) {
+      if (b.service) { const s = SERVICE_BY_ID.get(b.service)!; st.push({ buildingId: b.id, sign: s.sign, color: s.color, ring: s.color, pin: false, poster: null }); }
+      else if (b.premise) {
+        const sh = game.shopAt(b.premise.id);
+        if (sh) st.push({ buildingId: b.id, sign: sh.name, color: SHOP_TYPE_BY_ID.get(sh.type)!.color, ring: '#5cc77a', pin: false, poster: null });
+        else if (b.premise.competitor) st.push({ buildingId: b.id, sign: b.premise.competitorName, color: mix(SHOP_TYPE_BY_ID.get(b.premise.competitor)!.color), ring: null, pin: false, poster: null });
+        else st.push({ buildingId: b.id, sign: null, color: '#9aa0a6', ring: '#ffd166', pin: true, poster: 'À LOUER' });
+      } else if (b.home) {
+        const mine = b.home.id === game.player.home;
+        st.push({ buildingId: b.id, sign: null, color: '#9aa0a6', ring: mine ? '#ffffff' : '#9ec9ff', pin: false, poster: mine ? null : 'APPART. À LOUER' });
+      }
+    }
+    scene.view.setStates(st);
   };
 
-  // Barre du haut.
+  /* ------------------------------ Intérieurs ------------------------------ */
+
+  const itemsOf = (s: Shop): InteriorItem[] => s.items.map((it) => {
+    const def = FURNITURE_BY_ID.get(it.def)!;
+    let fill = 0;
+    const colors: string[] = [];
+    if (def.capacity) {
+      let stock = 0, cap = 0;
+      for (const p of productsOf(s.type)) {
+        if (p.store !== def.kind) continue;
+        stock += s.products[p.id]!.stock; cap += game.storageFor(s, p);
+        if (s.products[p.id]!.stock > 0 || !colors.length) colors.push(PRODUCT_COLORS[p.id] ?? '#cccccc');
+      }
+      fill = cap > 0 ? stock / cap : 0;
+    }
+    return { ...it, fill, colors: colors.length ? colors : ['#cccccc'] };
+  });
+
+  const enterShop = (shopId: number): void => {
+    const s = game.shop(shopId)!, p = game.premise(s.premiseId)!, t = SHOP_TYPE_BY_ID.get(s.type)!;
+    const b = game.building(p.buildingId)!;
+    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: s.type === 'vetements' ? 'parquet' : 'carrelage', wall: s.type === 'cafe' ? '#efe2cf' : s.type === 'vetements' ? '#ece8f2' : '#eef1ea', accent: t.color, title: s.name, facade: facadeColor(b) });
+    agents = new InteriorAgents(view, t.color);
+    view.setItems(itemsOf(s));
+    agents.refreshLayout();
+    layoutRev = game.layoutRev;
+    scene.enterInterior(view, agents);
+    inside = { kind: 'shop', shopId };
+    const [ox, oz] = view.outside();
+    ipos = { x: ox, z: oz - 2.4, heading: 0 };
+    game.setPlace({ kind: 'commerce', shopId });
+    snapCam = true;
+    const n = game.unloadable(shopId);
+    if (n > 0) toast(`${n} unités de marchandise à décharger : bouton « Décharger ».`, 'info');
+    renderInteriorBar();
+  };
+
+  const enterHome = (homeId: number): void => {
+    const h = game.district.homes.find((x) => x.id === homeId)!, def = HOME_BY_ID.get(h.def)!;
+    const view = new InteriorView({ gridW: def.gridW, gridD: def.gridD, floor: 'parquet', wall: '#e9e1d6', accent: '#2a7fd4', title: `Chez moi · ${def.nameFr}`, facade: facadeColor(game.building(h.buildingId)!) });
+    view.setItems(homeItems(def.gridW, def.gridD));
+    agents = null;
+    scene.enterInterior(view, null);
+    inside = { kind: 'home', homeId };
+    const [ox, oz] = view.outside();
+    ipos = { x: ox, z: oz - 2.4, heading: 0 };
+    game.setPlace({ kind: 'logement', homeId });
+    snapCam = true;
+    renderInteriorBar();
+  };
+
+  const exitInterior = (): void => {
+    if (!inside) return;
+    setBuild(false);
+    let b: Building | undefined;
+    if (inside.kind === 'shop') b = game.building(game.premise(game.shop(inside.shopId)?.premiseId ?? -1)?.buildingId ?? -1);
+    else b = game.building(game.district.homes.find((h) => h.id === (inside as { homeId: number }).homeId)!.buildingId);
+    if (game.player.tending !== null) game.tend(null);
+    scene.exitInterior();
+    agents = null;
+    inside = null;
+    if (b) {
+      const n = FACE_N[b.face]!;
+      game.setPlayerPose(b.doorX + n[0] * 0.3, b.doorZ + n[1] * 0.3, Math.atan2(-n[0], -n[1]));
+      scene.cam.yaw = Math.atan2(-n[0], -n[1]) + Math.PI;
+    }
+    game.setPlace({ kind: 'rue' });
+    snapCam = true;
+    renderInteriorBar();
+  };
+
+  /* ------------------------------ Interactions ------------------------------ */
+
+  interface Action { label: string; run: () => void }
+  const nearestDoor = (x: number, z: number, max: number): Building | null => {
+    let best: Building | null = null, bd = max;
+    for (const b of game.district.buildings) {
+      if (!b.premise && !b.service && !b.home) continue;
+      const d = Math.hypot(b.doorX - x, b.doorZ - z);
+      if (d < bd) { bd = d; best = b; }
+    }
+    return best;
+  };
+  const doorAction = (b: Building): Action => {
+    if (b.service) { const s = SERVICE_BY_ID.get(b.service)!; return { label: `Entrer : ${s.sign}`, run: () => { panel.open(serviceView(ctx, b)); game.setPlace({ kind: 'service', service: b.service!, buildingId: b.id }); } }; }
+    if (b.home) {
+      const h = b.home;
+      if (h.id === game.player.home) return { label: 'Rentrer chez moi', run: () => enterHome(h.id) };
+      return { label: `Visiter : ${HOME_BY_ID.get(h.def)!.nameFr} à louer`, run: () => panel.open(homeView(ctx, h)) };
+    }
+    const p = b.premise!;
+    const sh = game.shopAt(p.id);
+    if (sh) return { label: `Entrer : ${sh.name}`, run: () => enterShop(sh.id) };
+    if (p.competitor) return { label: `Regarder : ${p.competitorName}`, run: () => panel.open(competitorView(ctx, p)) };
+    return { label: `Visiter le local à louer (${p.area} m²)`, run: () => { panel.open(premiseView(ctx, p)); game.setPlace({ kind: 'local', premiseId: p.id }); } };
+  };
+
+  const currentAction = (): Action | null => {
+    if (game.player.sleeping) return null;
+    if (inside) {
+      const view = scene.interior!.view;
+      const [dl, dr] = view.doorSpan();
+      if (game.player.tending !== null) return { label: 'Lâcher la caisse', run: () => act(game.tend(null)) };
+      if (ipos.z > view.D / 2 - 1.3 && ipos.x > dl - 0.4 && ipos.x < dr + 0.4) return { label: 'Sortir', run: exitInterior };
+      if (inside.kind === 'shop' && agents) {
+        const uid = agents.freeRegisterNear(ipos.x, ipos.z, 1.6);
+        if (uid !== null) { const id = inside.shopId; return { label: 'Tenir la caisse', run: () => { if (act(game.tend(id), 'Vous tenez la caisse : les clients passent par vous.')) { agents!.playerRegister = uid; const sp = agents!.registerSpot(uid); if (sp) ipos = sp; } } }; }
+      }
+      if (inside.kind === 'home') {
+        const bed = view.items.find((i) => i.def === 'lit');
+        if (bed) { const [bx, bz] = view.cellCenter(bed.x + 1, bed.z + 1); if (Math.hypot(bx - ipos.x, bz - ipos.z) < 2.4) return { label: 'Dormir', run: () => act(game.sleep(), 'Bonne nuit…') }; }
+      }
+      return null;
+    }
+    if (car) return { label: 'Descendre du véhicule', run: leaveCar };
+    const p = game.player;
+    for (const v of game.vehicles) if (Math.hypot(v.x - p.x, v.z - p.z) < (v.type === 'camionnette' ? 3.4 : 2.2)) return { label: `Conduire : ${VEHICLE_BY_ID.get(v.type)!.nameFr}`, run: () => enterCar(v.id) };
+    const b = nearestDoor(p.x, p.z, 2.6);
+    return b ? doorAction(b) : null;
+  };
+
+  const enterCar = (id: number): void => {
+    const v = game.vehicle(id)!;
+    car = { id, x: v.x, z: v.z, heading: v.heading, speed: 0 };
+    game.setDriving(id);
+    scene.player.group.visible = false;
+    Object.assign(scene.cam, { dist: v.type === 'camionnette' ? 13 : 8, pitch: 0.3 });
+  };
+  const leaveCar = (): void => {
+    if (!car) return;
+    const v = game.vehicle(car.id);
+    game.setVehiclePose(car.id, car.x, car.z, car.heading);
+    const side = v?.type === 'camionnette' ? 1.9 : 1.1;
+    const r = scene.collider.resolve(car.x + Math.cos(car.heading) * side, car.z - Math.sin(car.heading) * side, 0.35);
+    game.setPlayerPose(r.x, r.z, car.heading);
+    car = null;
+    game.setDriving(null);
+    scene.player.group.visible = true;
+    scene.cam.dist = 9;
+  };
+
+  const interact = (): void => { const a = currentAction(); if (a) a.run(); };
+  const prompt = el('button', { cls: 'prompt hidden', attrs: { type: 'button' }, on: { click: () => interact() } });
+  document.body.append(prompt);
+
+  /* ------------------------------ Aménagement ------------------------------ */
+
+  const buildBar = el('div', { cls: 'buildbar hidden' });
+  document.body.append(buildBar);
+  const setBuild = (on: boolean): void => {
+    if (on && !(inside?.kind === 'shop')) return;
+    if (on && game.player.tending !== null) game.tend(null);
+    build.on = on; build.tool = null; build.cell = null;
+    scene.cam.leftRotates = !on;
+    scene.interior?.view.setBuildMode(on);
+    if (on && scene.interior) { scene.cam.pitch = 1.15; scene.cam.yaw = 0; scene.cam.dist = Math.max(scene.interior.view.W, scene.interior.view.D) * 1.35 + 3; } else if (scene.interior) scene.cam.pitch = 0.95;
+    buildBar.classList.toggle('hidden', !on);
+    renderBuildBar();
+    renderInteriorBar();
+  };
+  let buildSig = '';
+  const renderBuildBar = (): void => {
+    if (!build.on || inside?.kind !== 'shop') { buildSig = ''; return; }
+    const s = game.shop(inside.shopId)!;
+    const entries = Object.entries(s.storage);
+    const sig = `${build.tool}|${JSON.stringify(entries)}`;
+    if (sig === buildSig) return;
+    buildSig = sig;
+    buildBar.replaceChildren(
+      el('div', { cls: 'bb-head' }, el('b', { text: 'Aménagement' }), el('span', { cls: 'muted small', text: build.tool ? `Pose : ${FURNITURE_BY_ID.get(build.tool)!.nameFr} — clic pour poser, R pour tourner, clic droit pour annuler` : 'Choisissez un meuble de la réserve, ou cliquez un meuble posé pour le déplacer.' }),
+        button('Terminer (B)', () => setBuild(false), 'small primary')),
+      el('div', { cls: 'bb-items' },
+        ...(entries.length ? entries.map(([id, n]) => {
+          const f = FURNITURE_BY_ID.get(id)!;
+          return el('div', { cls: `bb-item${build.tool === id ? ' on' : ''}` },
+            button(`${f.nameFr} ×${n}`, () => { build.tool = build.tool === id ? null : id; renderBuildBar(); }, 'bb-pick'),
+            button('Vendre', () => { act(game.sellStored(s.id, id), (r) => `Revendu ${chf(r)}.`); if (!s.storage[id]) build.tool = null; renderBuildBar(); }, 'small'));
+        }) : [el('p', { cls: 'muted small', text: 'Réserve vide : achetez des meubles au magasin de meubles (ils sont livrés ici).' })])),
+      el('p', { cls: 'muted small', text: 'Clic sur un meuble posé : le reprendre pour le déplacer (il revient dans la réserve). Chaque meuble doit rester accessible depuis l’entrée.' }),
+    );
+  };
+  const hoverBuild = (sx: number, sy: number): void => {
+    if (!build.on || !scene.interior) return;
+    const view = scene.interior.view;
+    const p = scene.groundAt(sx, sy);
+    if (!p) return;
+    const [cx, cz] = view.cellAt(p.x, p.z);
+    build.cell = [cx, cz];
+    if (build.tool) {
+      const f = FURNITURE_BY_ID.get(build.tool)!;
+      const w = build.rot % 2 ? f.d : f.w, d = build.rot % 2 ? f.w : f.d;
+      const x = cx - Math.floor((w - 1) / 2), z = cz - Math.floor((d - 1) / 2);
+      const s = game.shop((inside as { shopId: number }).shopId)!;
+      const prem = game.premise(s.premiseId)!;
+      const okp = canPlaceUi(s, prem.gridW, prem.gridD, build.tool, x, z, build.rot);
+      view.setGhost({ def: build.tool, x, z, rot: build.rot, ok: okp === null });
+      view.setHighlight(null);
+    } else {
+      view.setGhost(null);
+      view.setHighlight(view.itemAtCell(cx, cz)?.uid ?? null);
+    }
+  };
+  const tapBuild = (sx: number, sy: number, btn: number): void => {
+    if (!build.on || !scene.interior || inside?.kind !== 'shop') return;
+    if (btn === 2) { build.tool = null; scene.interior.view.setGhost(null); renderBuildBar(); return; }
+    hoverBuild(sx, sy);
+    if (!build.cell) return;
+    const view = scene.interior.view, id = inside.shopId;
+    if (build.tool) {
+      const f = FURNITURE_BY_ID.get(build.tool)!;
+      const w = build.rot % 2 ? f.d : f.w, d = build.rot % 2 ? f.w : f.d;
+      const x = build.cell[0] - Math.floor((w - 1) / 2), z = build.cell[1] - Math.floor((d - 1) / 2);
+      if (act(game.place(id, build.tool, x, z, build.rot))) { if (!game.shop(id)!.storage[build.tool]) build.tool = null; refreshInterior(true); }
+    } else {
+      const it = view.itemAtCell(build.cell[0], build.cell[1]);
+      if (it && act(game.pickUp(id, it.uid))) { build.tool = it.def; build.rot = it.rot; refreshInterior(true); }
+    }
+    renderBuildBar();
+    hoverBuild(sx, sy);
+  };
+  scene.cam.onHover = hoverBuild;
+  scene.cam.onTap = tapBuild;
+
+  /* ------------------------------ Interface ------------------------------ */
+
   const hud = $('hud');
   const clock = el('span', { cls: 'clock' });
   const cash = el('b', { cls: 'cash' });
+  const energy = el('i'), hunger = el('i');
+  const carry = el('span', { cls: 'carry small' });
   const speedBtns = ['⏸', '▶', '▶▶', '▶▶▶'].map((t, k) => button(t, () => { speed = k; paint(); }, 'spd'));
   speedBtns.forEach((b, k) => b.setAttribute('aria-label', k === 0 ? 'Pause' : `Vitesse ${k}`));
   hud.replaceChildren(
     el('div', { cls: 'brand' }, el('b', { text: 'Boutique City' }), el('span', { text: game.companyName })),
     el('div', { cls: 'time' }, clock, el('div', { cls: 'speeds' }, ...speedBtns)),
+    el('div', { cls: 'needs' }, el('div', { cls: 'bar e', attrs: { title: 'Énergie' } }, el('span', { text: '⚡' }), el('div', { cls: 'track' }, energy)),
+      el('div', { cls: 'bar h', attrs: { title: 'Faim' } }, el('span', { text: '🍴' }), el('div', { cls: 'track' }, hunger))),
+    carry,
     el('div', { cls: 'money' }, el('span', { text: 'Trésorerie' }), cash),
     el('div', { cls: 'acts' },
-      button('Finances', () => panel.show({ kind: 'finances' })),
-      button('Sauvegarder', () => { writeSave(game); toast('Partie sauvegardée', 'ok'); }),
-    ));
+      button('Carte (M)', () => bigmap.toggle(game.player.x, game.player.z, game.player.heading)),
+      button('Entreprise', () => panel.open(companyView(ctx))),
+      button('Sauvegarder', () => { writeSave(game); toast('Partie sauvegardée', 'ok'); })));
   const paint = (): void => {
     clock.textContent = formatClock(game.total);
     cash.textContent = chf(game.cash);
     cash.classList.toggle('neg', game.cash < 0);
+    energy.style.width = `${game.player.energy}%`;
+    hunger.style.width = `${game.player.hunger}%`;
+    energy.classList.toggle('low', game.player.energy < 15);
+    hunger.classList.toggle('low', game.player.hunger < 15);
+    const n = Object.values(game.player.carry).reduce((a, b) => a + b, 0);
+    carry.textContent = n ? `📦 ${n}` : '';
     speedBtns.forEach((b, k) => b.classList.toggle('on', k === speed));
   };
 
-  // Mes commerces (liste à gauche).
-  const renderShops = (): void => {
-    const list = $('shops');
-    list.replaceChildren(el('div', { cls: 'sec', text: 'Mes commerces' }),
-      ...(game.shops.length ? game.shops.map((s) => button(`${s.name} · ${s.today.customers} clients`, () => { panel.show({ kind: 'shop', shopId: s.id }); focusPremise(s.premiseId); }, 'shop-btn'))
-        : [el('p', { cls: 'muted small', text: 'Cliquez sur un repère rond (local à louer) ou approchez-vous pour lire « À louer ».' })]));
+  const ibar = el('div', { cls: 'ibar hidden' });
+  document.body.append(ibar);
+  let ibarSig = '';
+  const renderInteriorBar = (): void => {
+    if (!inside) { ibar.classList.add('hidden'); ibarSig = ''; return; }
+    ibar.classList.remove('hidden');
+    if (inside.kind === 'home') {
+      if (ibarSig === 'home') return;
+      ibarSig = 'home';
+      ibar.replaceChildren(el('b', { text: 'Chez moi' }), el('span', { cls: 'muted small', text: 'Approchez-vous du lit (E) pour dormir.' }), button('Sortir', exitInterior, 'small'));
+      return;
+    }
+    const s = game.shop(inside.shopId);
+    if (!s) { exitInterior(); return; }
+    const c = clockView(game.total);
+    const open = c.hour >= s.open && c.hour < s.close;
+    const n = game.unloadable(s.id);
+    const id = s.id;
+    const sig = `${id}|${open}|${s.today.customers}|${Math.round(s.today.revenue)}|${n}|${build.on}`;
+    if (sig === ibarSig) return;
+    ibarSig = sig;
+    ibar.replaceChildren(
+      el('div', {}, el('b', { text: s.name }), el('div', { cls: 'muted small', text: `${open ? 'Ouvert' : 'Fermé'} · ${s.today.customers} clients aujourd’hui · ${chf(s.today.revenue)}` })),
+      button(build.on ? 'Terminer (B)' : 'Aménager (B)', () => setBuild(!build.on), build.on ? 'small primary' : 'small'),
+      button('Gestion', () => ctx.openShop(id), 'small'),
+      n > 0 ? button(`Décharger (${n})`, () => { act(game.unload(id)); refreshInterior(true); renderInteriorBar(); }, 'small primary') : '',
+      button('Sortir', exitInterior, 'small'));
   };
 
-  // Sélection au clic, survol.
-  scene.controls.toolSink = {
-    capturesPrimary: () => false,
-    hover: (sx, sy) => { const b = scene.view.pick(scene.ray(sx, sy)); scene.view.setHover(b?.id ?? null); canvas.style.cursor = b ? 'pointer' : ''; },
-    down: () => undefined, move: () => undefined, cancel: () => undefined, secondary: () => panel.show(null),
-    up: (sx, sy, _t, tap) => {
-      if (!tap) return;
-      const b = scene.view.pick(scene.ray(sx, sy));
-      scene.view.setSelected(b?.id ?? null);
-      if (!b) { panel.show(null); return; }
-      panel.show(b.premise ? { kind: 'premise', premiseId: b.premise.id } : { kind: 'building', buildingId: b.id });
-    },
+  const sleepCover = el('div', { cls: 'sleep hidden' }, el('div', { text: 'Zzz…' }), el('p', { cls: 'small', text: 'Vous dormez. Échap pour vous réveiller.' }));
+  document.body.append(sleepCover);
+
+  /* ------------------------------ Clavier ------------------------------ */
+
+  controls.onKey = (k) => {
+    if (k === 'Escape') {
+      if (game.player.sleeping) { game.wake(); return; }
+      if (bigmap.isOpen) { bigmap.close(); return; }
+      if (build.on && build.tool) { build.tool = null; scene.interior?.view.setGhost(null); renderBuildBar(); return; }
+      if (build.on) { setBuild(false); return; }
+      if (panel.isOpen) { panel.close(); return; }
+      return;
+    }
+    if (k === 'm') bigmap.toggle(game.player.x, game.player.z, game.player.heading);
+    else if (k === 'e') interact();
+    else if (k === 'b') setBuild(!build.on);
+    else if (k === 'r' && build.on) { build.rot = ((build.rot + 1) % 4) as Rot; }
+    else if (k === 'p') { speed = speed === 0 ? 1 : 0; paint(); }
   };
-  debug.select = (premiseId) => { panel.show({ kind: 'premise', premiseId }); focusPremise(premiseId); };
-  debug.advance = (min) => { game.advance(min); paint(); panel.refresh(); };
 
-  syncPremises();
-  paint();
-  if (game.shops.length === 0) toast('Bienvenue ! Les repères ronds marquent les locaux à louer : cliquez sur l’immeuble. Le passage devant la vitrine fait les clients.', 'info');
+  /* ------------------------------ Reprise d'une sauvegarde ------------------------------ */
 
-  let acc = 0, last = performance.now(), shopsTick = 0;
+  const pl = game.player.place;
+  if (game.player.driving !== null) game.setDriving(null);
+  if (pl.kind === 'commerce' && game.shop(pl.shopId)) enterShop(pl.shopId);
+  else if (pl.kind === 'logement' && pl.homeId === game.player.home) enterHome(pl.homeId);
+  else game.setPlace({ kind: 'rue' });
+
+  /* ------------------------------ Boucle ------------------------------ */
+
+  let refreshT = 0, interiorT = 0;
+  const focus = new THREE.Vector3();
+  const refreshInterior = (force = false): void => {
+    if (!inside || inside.kind !== 'shop' || !scene.interior) return;
+    const s = game.shop(inside.shopId);
+    if (!s) return;
+    if (!force && interiorT < 0.5) return;
+    interiorT = 0;
+    scene.interior.view.setItems(itemsOf(s));
+    if (game.layoutRev !== layoutRev) { layoutRev = game.layoutRev; agents?.refreshLayout(); }
+    const c = clockView(game.total);
+    const open = c.hour >= s.open && c.hour < s.close;
+    agents?.setStaff(open ? game.staffOf(s.id).map((e) => ({ id: e.id, look: e.look })) : []);
+  };
+
+  let last = performance.now(), acc = 0;
   const loop = (now: number): void => {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
-    if (!editor.isOpen || speed > 0) {
-      acc += SPEEDS[speed]! * dt;
-      const n = Math.min(240, Math.floor(acc));
-      if (n > 0) { acc -= n; game.advance(n); }
-      if (acc > 240) acc = 0;
+    const sleeping = game.player.sleeping;
+    const rate = sleeping ? SLEEP_SPEED : SPEEDS[speed]!;
+    acc += rate * dt;
+    const n = Math.min(600, Math.floor(acc));
+    if (n > 0) { acc -= n; game.advance(n); }
+    sleepCover.classList.toggle('hidden', !sleeping);
+
+    if (game.player.teleportHome) {
+      game.player.teleportHome = false;
+      if (car) leaveCar();
+      if (inside) exitInterior();
+      panel.close();
+      if (game.player.home) enterHome(game.player.home);
     }
-    // Clients : quelques silhouettes par image au plus.
+
+    const canMove = !sleeping && speed > 0 && !bigmap.isOpen && !(panel.isOpen && panel.current?.onClose && !inside);
+    const ax = canMove ? controls.axis() : { x: 0, y: 0 };
+    const { f, r } = scene.cam.basis();
+    walkSpeed = 0;
+    if (inside && scene.interior) {
+      const view = scene.interior.view;
+      if (game.player.tending !== null && agents?.playerRegister != null) {
+        const sp = agents.registerSpot(agents.playerRegister);
+        if (sp) ipos = sp;
+        if (Math.hypot(ax.x, ax.y) > 0.3) game.tend(null);
+        scene.player.reach();
+      } else if (Math.hypot(ax.x, ax.y) > 0.05) {
+        const v = (controls.run ? IN_RUN : IN_WALK) * (game.player.energy < 15 ? 0.6 : 1);
+        const dx = f[0] * ax.y + r[0] * ax.x, dz = f[1] * ax.y + r[1] * ax.x;
+        const res = view.collider.resolve(ipos.x + dx * v * dt, ipos.z + dz * v * dt, 0.3);
+        ipos.x = res.x; ipos.z = res.z;
+        ipos.heading = turnTo(ipos.heading, Math.atan2(-dx, -dz), dt * 12);
+        walkSpeed = v * Math.hypot(ax.x, ax.y);
+      } else {
+        const res = view.collider.resolve(ipos.x, ipos.z, 0.3);
+        ipos.x = res.x; ipos.z = res.z;
+      }
+      if (game.player.tending === null && agents) agents.playerRegister = null;
+      if (ipos.z > view.D / 2 + 1.0) exitInterior();
+    } else if (car) {
+      const v = game.vehicle(car.id);
+      if (!v) { car = null; scene.player.group.visible = true; }
+      else {
+        const def = VEHICLE_BY_ID.get(v.type)!;
+        drive(car, { throttle: ax.y, steer: -ax.x, brake: controls.brake }, dt, def.speed, scene.collider, v.type === 'camionnette' ? 1.25 : 0.6);
+        game.setVehiclePose(car.id, car.x, car.z, car.heading);
+        game.setPlayerPose(car.x, car.z, car.heading);
+        if (Math.abs(car.speed) > 1.5) scene.cam.yaw = turnTo(scene.cam.yaw, car.heading + (car.speed < 0 ? Math.PI : 0), dt * 1.8);
+      }
+    } else if (!sleeping) {
+      const p = game.player;
+      if (Math.hypot(ax.x, ax.y) > 0.05) {
+        const v = (controls.run ? RUN : WALK) * (p.energy < 15 ? 0.6 : 1);
+        const dx = f[0] * ax.y + r[0] * ax.x, dz = f[1] * ax.y + r[1] * ax.x;
+        const res = scene.collider.resolve(p.x + dx * v * dt, p.z + dz * v * dt, 0.35);
+        game.setPlayerPose(res.x, res.z, turnTo(p.heading, Math.atan2(-dx, -dz), dt * 12));
+        walkSpeed = v * Math.hypot(ax.x, ax.y);
+      }
+    }
+    if (waypoint && !inside && Math.hypot(waypoint.x - game.player.x, waypoint.z - game.player.z) < 4) { toast(`Arrivé : ${waypoint.label}`, 'ok'); waypoint = null; scene.setBeacon(null); }
+
+    // Personnage, véhicules, clients.
+    scene.player.update(dt, walkSpeed);
+    if (inside) { scene.player.group.position.set(ipos.x, 0, ipos.z); scene.player.group.rotation.y = ipos.heading; }
+    else { scene.player.group.position.set(game.player.x, 0.16, game.player.z); scene.player.group.rotation.y = game.player.heading; }
+    scene.vehicles.sync(game.vehicles, car ?? undefined);
     const ev = game.events.splice(0);
-    for (const e of ev.slice(0, 4)) { const p = game.premise(e.premiseId); if (p) scene.people.addClient(p.doorX, p.doorZ); }
-    for (; noticeIdx < game.notices.length; noticeIdx++) { const n = game.notices[noticeIdx]!; toast(n.text, n.level === 'warn' ? 'warn' : n.level); }
+    let street = 0;
+    for (const e of ev) {
+      if (inside?.kind === 'shop' && e.shopId === inside.shopId) agents?.spawn(e.products);
+      else if (!inside && street++ < 4) { const p = game.premise(e.premiseId); if (p) scene.people.addClient(p.doorX, p.doorZ); }
+    }
+    if (inside && agents) {
+      const s = game.shop((inside as { shopId: number }).shopId);
+      const c = clockView(game.total);
+      agents.update(dt, sleeping ? 4 : SPEEDS[speed]!, !!s && c.hour >= s.open && c.hour < s.close);
+    }
+    if (!inside) scene.traffic.update(dt, [[game.player.x, game.player.z]]);
+    interiorT += dt;
+    refreshInterior();
+
+    for (; noticeIdx < game.notices.length; noticeIdx++) { const nt = game.notices[noticeIdx]!; toast(nt.text, nt.level === 'warn' ? 'warn' : nt.level); }
     if (noticeIdx > game.notices.length) noticeIdx = game.notices.length;
     if (game.day !== lastDay) { lastDay = game.day; writeSave(game); }
+
+    syncStreet();
     paint();
-    panel.refresh();
-    if ((shopsTick += dt) > 1) { shopsTick = 0; renderShops(); }
-    scene.frame(dt);
+    panel.paint();
+    if ((refreshT += dt) > 0.5) { refreshT = 0; renderInteriorBar(); if (build.on) renderBuildBar(); }
+    const a = currentAction();
+    prompt.classList.toggle('hidden', !a || build.on);
+    if (a) prompt.textContent = `E · ${a.label}`;
+    minimap.visible = !inside;
+    if (!inside) minimap.draw(game.player.x, game.player.z, game.player.heading, waypoint);
+
+    if (inside && build.on) focus.set(0, 0, 0.6);
+    else if (inside) focus.set(ipos.x, 1.2, ipos.z);
+    else if (car) focus.set(car.x, 1.6, car.z);
+    else focus.set(game.player.x, 1.7, game.player.z);
+    scene.frame(dt, focus, snapCam);
+    snapCam = false;
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
   window.addEventListener('beforeunload', () => writeSave(game));
+
+  if (game.shops.length === 0 && game.total < 8 * 60) {
+    toast('Bienvenue ! Sortez de chez vous (E près de la porte), puis cherchez un anneau jaune : un local à louer. La carte (M) montre tout le quartier.', 'info');
+  }
+
+  Object.assign(debug, {
+    scene,
+    teleport: (x: number, z: number) => { if (inside) exitInterior(); game.setPlayerPose(x, z, game.player.heading); snapCam = true; },
+    toDoor: (buildingId: number) => { const b = game.building(buildingId)!; if (inside) exitInterior(); game.setPlayerPose(b.doorX, b.doorZ, 0); snapCam = true; },
+    interact,
+    action: () => currentAction()?.label ?? null,
+    state: () => ({ inside, car: car ? { ...car } : null, ipos: { ...ipos }, build: { ...build }, customers: agents?.customerCount ?? 0, panel: panel.current?.title ?? null }),
+    setIpos: (x: number, z: number) => { ipos.x = x; ipos.z = z; },
+    setBuild,
+    buildTool: (id: string | null, rot: Rot = 0) => { build.tool = id; build.rot = rot; renderBuildBar(); },
+    setSpeed: (k: number) => { speed = k; },
+    advance: (m: number) => game.advance(m),
+    enterShop, exitInterior,
+    cam: scene.cam,
+    /** Position à l'écran (pixels de la page) du centre d'une case de l'intérieur. */
+    cellScreen: (x: number, z: number) => {
+      const view = scene.interior!.view;
+      const [wx, wz] = view.cellCenter(x, z);
+      const v = new THREE.Vector3(wx, 0, wz).project(scene.camera);
+      const r = canvas.getBoundingClientRect();
+      return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
+    },
+    keepAlive: () => { game.player.energy = 100; game.player.hunger = 100; },
+  });
   debug.ready = true;
+}
+
+/* ------------------------------ Aides ------------------------------ */
+
+function turnTo(a: number, b: number, k: number): number {
+  let d = b - a;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return a + d * Math.min(1, k);
+}
+
+function mix(hex: string): string {
+  const c = new THREE.Color(hex).lerp(new THREE.Color(0x777777), 0.45);
+  return `#${c.getHexString()}`;
+}
+
+function facadeColor(b: Building): string {
+  const pal = ['#d9c7a8', '#e6dccb', '#c9a98a', '#b98b6e', '#d7b48c', '#e9e2d6', '#bfc4c8', '#a9b4bd', '#d2a07a', '#cfc0ad'];
+  return pal[Math.floor(b.tint * pal.length) % pal.length]!;
+}
+
+function canPlaceUi(s: Shop, gw: number, gd: number, def: string, x: number, z: number, rot: Rot): string | null {
+  return canPlace(s.items, gw, gd, FURNITURE_BY_ID.get(def)!, x, z, rot);
+}
+
+/** Mobilier fixe du logement. */
+function homeItems(W: number, D: number): InteriorItem[] {
+  const list: [string, number, number, Rot][] = [['lit', 0, 0, 0], ['armoire', 2, 0, 0], ['cuisine', W - 3, 0, 0], ['canape', W - 1, D - 4, 3], ['plante', 0, D - 2, 0], ['table', W - 4, 2, 0]];
+  return list.map(([def, x, z, rot], k) => ({ uid: 100 + k, def, x, z, rot, fill: 0, colors: ['#cccccc'] }));
 }
 
 if (params.has('auto')) start(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : 7, 'Test SA'));

@@ -1,6 +1,9 @@
 /**
- * Parcours navigateur de Boutique City (Playwright, Chromium préinstallé) : menu, nouvelle entreprise, location d'un
- * local par l'interface, aménagement à la souris dans l'éditeur, embauche, commandes, jours simulés, captures.
+ * Parcours navigateur de Boutique City (Playwright, Chromium préinstallé), au clavier et à la souris autant que
+ * possible : réveil dans l'appartement, sortie à pied, location d'un local, magasin de meubles, grossiste,
+ * aménagement en 3D à la souris, déchargement, caisse tenue par le joueur avec clients visibles, embauche, banque,
+ * publicité, snack, garage et conduite, carte, entreprise, sauvegarde et reprise. Les longs trajets à pied sont
+ * remplacés par une téléportation (outil de test) : le déplacement lui-même est vérifié au début.
  * Usage : npm run build && node tests/e2e.mjs [dossier des captures]
  */
 import { createServer } from 'node:http';
@@ -13,7 +16,8 @@ mkdirSync(out, { recursive: true });
 const dist = join(process.cwd(), 'dist');
 const types = { '.html': 'text/html', '.js': 'text/javascript' };
 const server = createServer((req, res) => {
-  const p = join(dist, decodeURIComponent(new URL(req.url, 'http://x').pathname === '/' ? '/index.html' : new URL(req.url, 'http://x').pathname));
+  const u = new URL(req.url, 'http://x').pathname;
+  const p = join(dist, decodeURIComponent(u === '/' ? '/index.html' : u));
   try { res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream' }); res.end(readFileSync(p)); } catch { res.writeHead(404); res.end(); }
 }).listen(0);
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -26,84 +30,189 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  const ev = (f, a) => page.evaluate(f, a);
+  const shot = (n) => page.screenshot({ path: join(out, `${n}.png`) });
+  const service = (kind) => ev((k) => window.__bc.game.district.buildings.find((b) => b.service === k).id, kind);
+  const goIn = async (buildingId) => { await ev((b) => window.__bc.toDoor(b), buildingId); await page.waitForTimeout(250); await page.keyboard.press('e'); await page.waitForTimeout(400); };
+
   await page.goto(`${base}/index.html?seed=7&nouveau`);
   await page.waitForSelector('.menu-card');
-  await page.screenshot({ path: join(out, '1-menu.png') });
+  await shot('01-menu');
   await page.fill('.menu-card input', 'Atlas Commerce');
   await page.click('.menu-card button.primary');
   await page.waitForFunction(() => window.__bc?.ready);
-  await page.waitForTimeout(1500);
-  await page.screenshot({ path: join(out, '2-quartier.png') });
-  check(await page.evaluate(() => window.__bc.game.companyName === 'Atlas Commerce'), 'nouvelle entreprise créée');
+  await page.waitForTimeout(1200);
+  await shot('02-appartement');
+  check(await ev(() => window.__bc.state().inside?.kind === 'home'), 'réveil dans l’appartement');
 
-  // Meilleur local libre : sélection (comme un clic), location par le panneau.
-  const pid = await page.evaluate(() => { const g = window.__bc.game; return g.district.premises.filter((p) => g.isFree(p)).sort((a, b) => b.footfall - a.footfall)[0].id; });
-  await page.evaluate((id) => window.__bc.select(id), pid);
+  // Sortie à pied : la caméra regarde vers le fond, la porte est derrière (touche S).
+  await page.keyboard.down('KeyS');
+  await page.waitForFunction(() => window.__bc.state().inside === null, null, { timeout: 30000 }).catch(() => {});
+  await page.keyboard.up('KeyS');
+  check(await ev(() => window.__bc.state().inside === null), 'sorti dans la rue en marchant');
+  const p0 = await ev(() => [window.__bc.game.player.x, window.__bc.game.player.z]);
+  await page.keyboard.down('KeyD'); await page.waitForTimeout(1200); await page.keyboard.up('KeyD');
+  const p1 = await ev(() => [window.__bc.game.player.x, window.__bc.game.player.z]);
+  check(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) > 0.5, 'le personnage marche dans la rue', JSON.stringify([p0, p1]));
+  await shot('03-rue');
+
+  // Local libre : visite (E), bail signé par le panneau, entrée automatique.
+  const free = await ev(() => { const g = window.__bc.game; return g.district.premises.filter((p) => g.isFree(p)).sort((a, b) => b.footfall - a.footfall)[0].buildingId; });
+  await goIn(free);
   await page.waitForSelector('#panel:not(.hidden)');
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: join(out, '3-local-libre.png') });
+  await shot('04-local-libre');
   await page.selectOption('#panel select', 'epicerie');
   await page.fill('#panel input[type=text]', 'Épicerie Atlas');
-  await page.click('#panel button.primary.wide');
-  await page.waitForTimeout(300);
-  const shopId = await page.evaluate(() => window.__bc.game.shops[0]?.id ?? null);
-  check(shopId !== null, 'local loué par le panneau');
-
-  // Éditeur : poser une caisse, des rayons et des frigos à la souris.
-  await page.click('#panel button:has-text("Aménager le local")');
-  await page.waitForSelector('#editor:not(.hidden) canvas');
-  const place = async (def, cx, cz) => {
-    // Recliquer le meuble déjà choisi le désélectionne : seulement s'il n'est pas actif.
-    if (!(await page.locator(`#editor .ed-item.on[data-def="${def}"]`).count())) await page.click(`#editor .ed-item[data-def="${def}"]`);
-    const box = await page.locator('#editor canvas').boundingBox();
-    const cell = await page.evaluate(() => { const c = document.querySelector('#editor canvas'); return c.getBoundingClientRect().width / (c.width / (c.width / window.__bc.game.premise(window.__bc.game.shops[0].premiseId).gridW)); });
-    await page.mouse.click(box.x + (cx + 0.5) * cell, box.y + (cz + 0.5) * cell);
-    await page.waitForTimeout(120);
-  };
-  const grid = await page.evaluate(() => { const g = window.__bc.game; const p = g.premise(g.shops[0].premiseId); return [p.gridW, p.gridD]; });
-  await place('caisse', 1, 0);
-  await place('rayon', 5, 0);
-  await place('rayon', 1, 2);
-  await place('rayon', 5, 2);
-  await place('frigo', 1, 4);
-  await place('frigo', Math.min(grid[0] - 2, 6), 4);
-  await place('plante', grid[0] - 1, grid[1] - 1);
-  await page.screenshot({ path: join(out, '4-amenagement.png') });
-  const st = await page.evaluate(() => { const g = window.__bc.game; const s = g.shops[0]; return { items: s.items.length, ...g.stats(s) }; });
-  check(st.items >= 7 && st.registers === 1 && st.capacity.rayon > 0 && st.capacity.frigo > 0, 'meubles posés à la souris', JSON.stringify({ items: st.items, caisses: st.registers, cap: st.capacity, bloqués: st.blocked.length }));
-  await page.click('#editor button:has-text("Terminer")');
-
-  // Embauche et stock par le panneau.
-  await page.click('#panel .tabs button:has-text("Employés")');
-  await page.click('#panel button:has-text("Embaucher")');
-  check(await page.evaluate(() => window.__bc.game.employees.length === 1), 'employé embauché');
-  await page.click('#panel .tabs button:has-text("Stock")');
-  for (let k = 0; k < 6; k++) { const b = page.locator('#panel table.stock button:not([disabled])').first(); if (await b.count()) await b.click(); await page.waitForTimeout(80); }
-  for (const cb of await page.locator('#panel table.stock input[type=checkbox]').all()) await cb.check();
-  await page.screenshot({ path: join(out, '5-stock.png') });
-  check(await page.evaluate(() => window.__bc.game.orders.length >= 5), 'commandes passées');
-
-  // Trois jours simulés.
-  await page.evaluate(() => window.__bc.advance(3 * 1440));
+  await page.click('#panel button:has-text("Signer le bail")');
   await page.waitForTimeout(600);
-  await page.click('#panel .tabs button:has-text("Aperçu")');
-  await page.evaluate((id) => window.__bc.select(id), pid);
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: join(out, '6-apres-3-jours.png') });
-  const res = await page.evaluate(() => { const s = window.__bc.game.shops[0]; return { clients: s.history.reduce((a, d) => a + d.customers, 0), ventes: Math.round(s.history.reduce((a, d) => a + d.revenue, 0)), cash: Math.round(window.__bc.game.cash) }; });
-  check(res.clients > 100 && res.ventes > 500, 'des clients achètent', JSON.stringify(res));
-  await page.click('#panel .tabs button:has-text("Résultats")');
-  await page.screenshot({ path: join(out, '7-resultats.png') });
-  await page.click('#hud button:has-text("Finances")');
-  await page.screenshot({ path: join(out, '8-finances.png') });
+  check(await ev(() => window.__bc.state().inside?.kind === 'shop' && window.__bc.game.shops[0]?.name === 'Épicerie Atlas'), 'bail signé, entrée dans le local vide');
+  await shot('05-local-vide');
 
-  // Confirmation dans la page (pas de confirm() du navigateur) : résiliation annulée.
-  await page.evaluate((id) => window.__bc.select(id), pid);
+  // Magasin de meubles : achats par le panneau.
+  await goIn(await service('meubles'));
+  await page.waitForSelector('#panel:not(.hidden)');
+  const buy = async (name, qty) => { const row = page.locator('#panel tr', { has: page.locator(`b:text-is("${name}")`) }); await row.locator('input').fill(String(qty)); await row.locator('button').click(); await page.waitForTimeout(150); };
+  await buy('Caisse', 1); await buy('Rayonnage', 3); await buy('Vitrine réfrigérée', 2); await buy('Plante', 2);
+  await shot('06-meubles');
+  check(await ev(() => JSON.stringify(window.__bc.game.shops[0].storage) === JSON.stringify({ caisse: 1, rayon: 3, frigo: 2, plante: 2 })), 'meubles livrés dans la réserve', await ev(() => JSON.stringify(window.__bc.game.shops[0].storage)));
+  await page.keyboard.press('Escape');
+
+  // Grossiste à pied : 24 pains au plus.
+  await goIn(await service('grossiste'));
+  await page.waitForSelector('#panel:not(.hidden)');
+  const pain = page.locator('#panel tr', { has: page.locator('td:text-is("Pain")') });
+  await pain.locator('input').fill('50');
+  await pain.locator('button:has-text("Emporter")').click();
+  await page.waitForTimeout(200);
+  await shot('07-grossiste');
+  check(await ev(() => window.__bc.game.player.carry.pain === 24), 'marchandise portée (24 au plus à pied)');
+  await page.keyboard.press('Escape');
+
+  // Aménagement en 3D à la souris.
+  const shopB = await ev(() => window.__bc.game.premise(window.__bc.game.shops[0].premiseId).buildingId);
+  await goIn(shopB);
+  check(await ev(() => window.__bc.state().inside?.kind === 'shop'), 'retour dans le commerce (E)');
+  await page.keyboard.press('b');
+  await page.waitForTimeout(400);
+  const grid = await ev(() => { const g = window.__bc.game; const p = g.premise(g.shops[0].premiseId); return [p.gridW, p.gridD]; });
+  const NAMES = { caisse: 'Caisse', rayon: 'Rayonnage', frigo: 'Vitrine réfrigérée', plante: 'Plante' };
+  const placeAt = async (def, x, z, rot = 0) => {
+    // Recliquer le meuble choisi le désélectionne : seulement s'il n'est pas déjà l'outil actif.
+    if (await ev(() => window.__bc.state().build.tool) !== def) await page.click(`.buildbar .bb-pick:has-text("${NAMES[def]}")`);
+    for (let k = 0; k < 4 && await ev(() => window.__bc.state().build.rot) !== rot; k++) await page.keyboard.press('r');
+    const [sx, sy] = await ev(([a, b]) => window.__bc.cellScreen(a, b), [x, z]);
+    await page.mouse.move(sx, sy);
+    await page.waitForTimeout(150);
+    await page.mouse.click(sx, sy);
+    await page.waitForTimeout(250);
+  };
+  await placeAt('rayon', 1, 0);
+  await placeAt('rayon', 5, 0);
+  await placeAt('frigo', grid[0] - 2, 0);
+  await placeAt('caisse', 2, 3);
+  await placeAt('rayon', 0, 4, 1);
+  await placeAt('frigo', grid[0] - 1, 3, 1);
+  await placeAt('plante', 0, grid[1] - 1);
+  await placeAt('plante', grid[0] - 1, grid[1] - 1);
+  await shot('08-amenagement-3d');
+  const st = await ev(() => { const g = window.__bc.game, s = g.shops[0]; return { items: s.items.length, reserve: s.storage, ...g.stats(s) }; });
+  check(st.items >= 7 && st.registers === 1 && st.capacity.rayon > 0 && st.capacity.frigo > 0 && st.blocked.length === 0, 'meubles posés à la souris en 3D', JSON.stringify({ items: st.items, reserve: st.reserve, cap: st.capacity, bloqués: st.blocked }));
+  // Reprendre un meuble posé (clic) puis le reposer ailleurs.
+  const [mx, my] = await ev(() => window.__bc.cellScreen(0, window.__bc.game.premise(window.__bc.game.shops[0].premiseId).gridD - 1));
+  await page.mouse.click(mx, my);
+  await page.waitForTimeout(200);
+  const moving = await ev(() => window.__bc.state().build.tool);
+  const [nx, ny] = await ev(() => window.__bc.cellScreen(0, window.__bc.game.premise(window.__bc.game.shops[0].premiseId).gridD - 2));
+  await page.mouse.click(nx, ny);
+  await page.waitForTimeout(200);
+  check(moving === 'plante' && await ev(() => window.__bc.game.shops[0].items.some((i) => i.def === 'plante' && i.x === 0 && i.z === window.__bc.game.premise(window.__bc.game.shops[0].premiseId).gridD - 2)), 'meuble déplacé à la souris');
+  await page.keyboard.press('b');
+  await page.waitForTimeout(700);
+  await page.click('.ibar button:has-text("Décharger")');
+  check(await ev(() => window.__bc.game.shops[0].products.pain.stock === 24 && !window.__bc.game.player.carry.pain), 'marchandise déchargée en rayon');
+
+  // Commandes livrées depuis la gestion du commerce.
+  await page.click('.ibar button:has-text("Gestion")');
+  await page.click('#panel .tabs button:has-text("Prix et stock")');
+  for (const name of ['Lait', 'Fruits et légumes', 'Boissons fraîches', 'Conserves et épicerie', 'Snacks', 'Pain']) {
+    const row = page.locator('#panel table.stock tr', { has: page.locator(`b:text-is("${name}")`) });
+    await row.locator('button').click();
+    await row.locator('input[type=checkbox]').check();
+    await page.waitForTimeout(120);
+  }
+  await shot('09-stock');
+  check(await ev(() => window.__bc.game.orders.length >= 6), 'commandes passées (livraison demain)');
+  await page.keyboard.press('Escape');
+
+  // Le lendemain matin : livraison, le joueur tient la caisse, des clients entrent.
+  await ev(() => { for (let k = 0; k < 13; k++) { window.__bc.keepAlive(); window.__bc.advance(120); } window.__bc.keepAlive(); });
+  await ev(() => { const b = window.__bc, v = b.scene.interior.view, it = v.items.find((i) => i.def === 'caisse'); const [x, z] = v.cellCenter(it.x, it.z - 1); b.setIpos(x, z); });
   await page.waitForTimeout(300);
-  await page.click('#panel button:has-text("Résilier le bail")');
-  check(await page.locator('.confirm').isVisible(), 'confirmation affichée dans la page');
-  await page.click('.confirm button:has-text("Annuler")');
-  check(await page.evaluate(() => window.__bc.game.shops.length === 1), 'résiliation annulée');
+  check(await ev(() => window.__bc.action()) === 'Tenir la caisse', 'invite « Tenir la caisse » derrière la caisse');
+  await page.keyboard.press('e');
+  await ev(() => window.__bc.setSpeed(2));
+  await page.waitForFunction(() => window.__bc.state().customers >= 2, null, { timeout: 60000 }).catch(() => {});
+  await ev(() => { window.__bc.cam.pitch = 0.7; window.__bc.cam.dist = 11; });
+  await page.waitForTimeout(1500);
+  await shot('10-clients-dans-le-magasin');
+  const cl = await ev(() => ({ visibles: window.__bc.state().customers, servis: window.__bc.game.shops[0].today.customers, caisse: window.__bc.game.player.tending }));
+  check(cl.visibles >= 1 && cl.servis >= 1 && cl.caisse !== null, 'clients visibles et servis par le joueur', JSON.stringify(cl));
+  await ev(() => window.__bc.setSpeed(1));
+  await page.keyboard.press('e');
+
+  // Agence pour l'emploi, banque, publicité, snack (panneaux).
+  await goIn(await service('emploi'));
+  await page.locator('#panel button:has-text("Embaucher")').first().click();
+  await page.waitForTimeout(200);
+  check(await ev(() => window.__bc.game.employees.length === 1), 'employé embauché à l’agence');
+  await page.keyboard.press('Escape');
+  await goIn(await service('banque'));
+  await page.locator('#panel button:has-text("Emprunter")').first().click();
+  await page.waitForTimeout(200);
+  check(await ev(() => window.__bc.game.loans.length === 1), 'prêt accordé');
+  await shot('11-banque');
+  await page.keyboard.press('Escape');
+  await goIn(await service('pub'));
+  await page.locator('#panel button:has-text("Lancer")').first().click();
+  await page.waitForTimeout(200);
+  check(await ev(() => window.__bc.game.campaigns.length === 1), 'campagne de publicité lancée');
+  await page.keyboard.press('Escape');
+  await ev(() => { window.__bc.game.player.hunger = 30; });
+  await goIn(await service('snack'));
+  await page.locator('#panel .item button').last().click();
+  await page.waitForTimeout(200);
+  check(await ev(() => window.__bc.game.player.hunger > 90), 'repas au snack');
+  await page.keyboard.press('Escape');
+
+  // Garage : camionnette, conduite.
+  await goIn(await service('garage'));
+  await page.locator('#panel button:has-text("Acheter")').nth(1).click();
+  await page.waitForTimeout(200);
+  await page.keyboard.press('Escape');
+  const van = await ev(() => window.__bc.game.vehicles[0]);
+  check(van?.type === 'camionnette', 'camionnette achetée');
+  await ev(([x, z]) => window.__bc.teleport(x + 2.6, z), [van.x, van.z]);
+  await page.waitForTimeout(300);
+  await page.keyboard.press('e');
+  await page.keyboard.down('KeyW'); await page.waitForTimeout(2500); await page.keyboard.up('KeyW');
+  await shot('12-conduite');
+  const moved = await ev(([x, z]) => { const v = window.__bc.game.vehicles[0]; return Math.hypot(v.x - x, v.z - z); }, [van.x, van.z]);
+  check(moved > 1, 'la camionnette roule', `${moved.toFixed(1)} m`);
+  await page.keyboard.press('e');
+  check(await ev(() => window.__bc.state().car === null), 'descendu du véhicule');
+
+  // Carte et entreprise.
+  await page.keyboard.press('m');
+  await page.waitForSelector('#map:not(.hidden) canvas');
+  await shot('13-carte');
+  await page.click('#map .legend-btn:has-text("Grossiste")');
+  check(await ev(() => document.getElementById('map').classList.contains('hidden')), 'destination choisie sur la carte');
+  await ev(() => { for (let d = 0; d < 4; d++) { window.__bc.keepAlive(); window.__bc.advance(720); } });
+  await page.click('#hud button:has-text("Entreprise")');
+  await page.waitForTimeout(500);
+  await shot('14-entreprise');
+  const res = await ev(() => { const s = window.__bc.game.shops[0]; return { clients: s.history.reduce((a, d) => a + d.customers, 0), ventes: Math.round(s.history.reduce((a, d) => a + d.revenue, 0)) }; });
+  check(res.clients > 60 && res.ventes > 200, 'le commerce vend avec son employé', JSON.stringify(res));
 
   // Sauvegarde et reprise.
   await page.click('#hud button:has-text("Sauvegarder")');
@@ -113,9 +222,9 @@ try {
   check(/Continuer : Atlas Commerce/.test(label ?? ''), 'reprise proposée', label);
   await page.click('.menu-card button.primary');
   await page.waitForFunction(() => window.__bc?.ready);
-  check(await page.evaluate(() => window.__bc.game.shops.length === 1 && window.__bc.game.employees.length === 1), 'partie reprise');
-  const fps = await page.evaluate(() => new Promise((r) => { let n = 0; const t0 = performance.now(); const f = () => { if (++n >= 60) r(Math.round((n * 1000) / (performance.now() - t0))); else requestAnimationFrame(f); }; requestAnimationFrame(f); }));
-  console.log('images/s (navigateur sans GPU) :', fps);
+  check(await ev(() => window.__bc.game.shops.length === 1 && window.__bc.game.vehicles.length === 1 && window.__bc.game.loans.length === 1), 'partie reprise (commerce, véhicule, prêt)');
+  const fps = await ev(() => new Promise((r) => { let n = 0; const t0 = performance.now(); const f = () => { if (++n >= 40) r(Math.round((n * 1000) / (performance.now() - t0))); else requestAnimationFrame(f); }; requestAnimationFrame(f); }));
+  console.log('images/s (navigateur sans GPU, rendu logiciel) :', fps);
   check(errors.length === 0, 'aucune erreur de page', errors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();

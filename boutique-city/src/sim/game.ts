@@ -1,29 +1,62 @@
 /**
- * Partie de Boutique City : trésorerie de l'entrepreneur, commerces loués dans le quartier, clients minute par
- * minute, employés, stocks et commandes au grossiste, loyers, réputation, historique et sauvegarde.
- * Aucune valeur inventée à l'affichage : l'interface lit uniquement cet état. TypeScript pur (aucun DOM).
+ * Partie de Boutique City : l'entrepreneur (position, faim, énergie, logement, marchandise portée), ses commerces
+ * (aménagement, réserve de meubles, stocks, prix, horaires), ses employés, ses véhicules (cargaison), ses prêts et
+ * ses campagnes de publicité. Clients minute par minute, salaires à l'heure, loyers et remboursements chaque jour.
+ * Les achats se font sur place : l'interface déclare le lieu où se trouve le personnage (setPlace) et la partie
+ * refuse un achat hors du bon service. Aucune valeur inventée à l'affichage : l'interface lit uniquement cet état.
+ * TypeScript pur (aucun DOM).
  */
 import {
-  ECONOMY, FURNITURE_BY_ID, PRODUCT_BY_ID, SHOP_TYPE_BY_ID, productsOf,
-  type ProductDef, type ShopType,
+  CAMPAIGN_BY_ID, ECONOMY, FOODS, FURNITURE_BY_ID, HOME_BY_ID, LOAN_OFFERS, NEEDS, PRODUCT_BY_ID, SHOP_TYPE_BY_ID,
+  VEHICLE_BY_ID, loanTotal, productsOf,
+  type CampaignKind, type ProductDef, type ServiceKind, type ShopType, type VehicleType,
 } from './catalog';
 import { MINUTES_PER_DAY, START_MINUTE, clockView } from './clock';
-import { competitorsNear, generateDistrict, type District, type Premise } from './district';
-import { canPlace, layoutStats, type LayoutStats, type PlacedItem } from './layout';
+import { FACE_N, SIDEWALK_W, competitorsNear, generateDistrict, type Building, type District, type Premise } from './district';
+import { canPlace, layoutStats, type LayoutStats, type PlacedItem, type Rot } from './layout';
 import { randomName } from './names';
 import { Rng } from './rng';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
-export interface Employee { id: number; name: string; skill: number; wage: number; shopId: number | null; hiredDay: number }
-export interface Candidate { id: number; name: string; skill: number; wage: number }
+export interface Employee { id: number; name: string; skill: number; wage: number; shopId: number | null; hiredDay: number; look: number }
+export interface Candidate { id: number; name: string; skill: number; wage: number; look: number }
 export interface ProductState { price: number; stock: number; auto: boolean }
 export interface Order { id: number; shopId: number; productId: string; qty: number; cost: number; deliverAt: number }
+export interface Vehicle { id: number; type: VehicleType; x: number; z: number; heading: number; cargo: Record<string, number> }
+export interface Loan { id: number; amount: number; total: number; remaining: number; daily: number; daysLeft: number }
+export interface Campaign { id: number; kind: CampaignKind; shopId: number | null; daysLeft: number; perDay: number }
+
+/** Lieu du personnage, déclaré par l'interface. */
+export type Place =
+  | { kind: 'rue' }
+  | { kind: 'commerce'; shopId: number }
+  | { kind: 'logement'; homeId: number }
+  | { kind: 'service'; service: ServiceKind; buildingId: number }
+  | { kind: 'local'; premiseId: number };
+
+export interface Player {
+  x: number; z: number; heading: number;
+  /** 0..100 */
+  energy: number;
+  hunger: number;
+  home: number | null;
+  /** Marchandise portée à pied. */
+  carry: Record<string, number>;
+  /** Commerce dont le personnage tient la caisse. */
+  tending: number | null;
+  sleeping: boolean;
+  /** Véhicule conduit. */
+  driving: number | null;
+  place: Place;
+  /** Retour forcé au logement (évanouissement) : l'interface téléporte puis remet à faux. */
+  teleportHome: boolean;
+}
 
 export interface DayStats {
   day: number;
   customers: number;
-  /** Clients perdus : rupture de stock, attente trop longue (caisses), magasin fermé faute d'employé. */
+  /** Clients perdus : rupture de stock, attente trop longue (caisses), personne à la caisse. */
   lostStock: number;
   lostCapacity: number;
   lostStaff: number;
@@ -35,6 +68,11 @@ export interface DayStats {
   wages: number;
   rent: number;
   equipment: number;
+  marketing: number;
+  /** Remboursements de prêts. */
+  finance: number;
+  /** Logement, repas, assurance des véhicules, taxi. */
+  living: number;
 }
 
 export interface Shop {
@@ -44,6 +82,8 @@ export interface Shop {
   name: string;
   items: PlacedItem[];
   nextUid: number;
+  /** Meubles livrés, pas encore posés (id du meuble → nombre). */
+  storage: Record<string, number>;
   products: Record<string, ProductState>;
   open: number;
   close: number;
@@ -51,24 +91,29 @@ export interface Shop {
   deposit: number;
   today: DayStats;
   history: DayStats[];
-  /** Taux d'arrivée et capacité de l'heure courante (clients / h), recalculés chaque heure. */
+  /** Taux d'arrivée et capacité de l'heure courante (clients / h). */
   rate: number;
   capacity: number;
   servedThisHour: number;
-  /** Ruptures déjà signalées aujourd'hui (produits). */
   warned: string[];
 }
 
 export interface Notice { at: number; level: 'info' | 'ok' | 'warn' | 'error'; text: string }
-/** Événement visuel (rendu) : un client entre dans un commerce du joueur. */
-export interface ClientEvent { shopId: number; premiseId: number }
+/** Événement visuel : un client a acheté dans un commerce du joueur. */
+export interface ClientEvent { shopId: number; premiseId: number; products: string[] }
 
 export type Result<T = undefined> = { ok: true; data: T } | { ok: false; message: string };
 const ok = <T>(data: T): Result<T> => ({ ok: true, data });
 const fail = (message: string): Result<never> => ({ ok: false, message });
 
-const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0 });
+const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0, marketing: 0, finance: 0, living: 0 });
 const r2 = (v: number): number => Math.round(v * 100) / 100;
+const sumValues = (r: Record<string, number>): number => Object.values(r).reduce((a, b) => a + b, 0);
+
+/** Résultat d'une journée (toutes dépenses comprises). */
+export function dayProfit(d: DayStats): number {
+  return d.revenue - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living;
+}
 
 export interface GameSave {
   v: number;
@@ -76,10 +121,14 @@ export interface GameSave {
   companyName: string;
   total: number;
   cash: number;
+  player: Player;
   shops: Shop[];
   employees: Employee[];
   candidates: Candidate[];
   orders: Order[];
+  vehicles: Vehicle[];
+  loans: Loan[];
+  campaigns: Campaign[];
   ledger: DayStats[];
   nextId: number;
   rng: number[];
@@ -90,10 +139,14 @@ export class Game {
   companyName: string;
   total: number;
   cash: number;
+  player: Player;
   shops: Shop[] = [];
   employees: Employee[] = [];
   candidates: Candidate[] = [];
   orders: Order[] = [];
+  vehicles: Vehicle[] = [];
+  loans: Loan[] = [];
+  campaigns: Campaign[] = [];
   /** Bilan quotidien de l'entreprise (tous commerces). */
   ledger: DayStats[] = [];
   today: DayStats;
@@ -111,6 +164,11 @@ export class Game {
     this.total = START_MINUTE;
     this.cash = ECONOMY.startCash;
     this.today = emptyDay(0);
+    const home = this.district.homes.find((h) => h.id === this.district.startHome);
+    this.player = {
+      x: home?.doorX ?? 0, z: home?.doorZ ?? 0, heading: 0, energy: 90, hunger: 75, home: home?.id ?? null, carry: {},
+      tending: null, sleeping: false, driving: null, place: home ? { kind: 'logement', homeId: home.id } : { kind: 'rue' }, teleportHome: false,
+    };
     if (save) this.restore(save);
     else this.refreshCandidates();
   }
@@ -118,10 +176,15 @@ export class Game {
   /* ------------------------------ Lecture ------------------------------ */
 
   premise(id: number): Premise | undefined { return this.district.premises.find((p) => p.id === id); }
+  building(id: number): Building | undefined { return this.district.buildings.find((b) => b.id === id); }
   shop(id: number): Shop | undefined { return this.shops.find((s) => s.id === id); }
   shopAt(premiseId: number): Shop | undefined { return this.shops.find((s) => s.premiseId === premiseId); }
   staffOf(shopId: number): Employee[] { return this.employees.filter((e) => e.shopId === shopId); }
-  /** Statistiques d'aménagement (mises en cache jusqu'au prochain changement de mobilier). */
+  vehicle(id: number): Vehicle | undefined { return this.vehicles.find((v) => v.id === id); }
+  get debt(): number { return this.loans.reduce((a, l) => a + l.remaining, 0); }
+  get day(): number { return Math.floor(this.total / MINUTES_PER_DAY); }
+
+  /** Statistiques d'aménagement (en cache jusqu'au prochain changement de mobilier). */
   stats(shop: Shop): LayoutStats {
     const c = this.statsCache.get(shop.id);
     if (c && c.rev === this.layoutRev) return c.st;
@@ -132,9 +195,8 @@ export class Game {
   }
   private readonly statsCache = new Map<number, { rev: number; st: LayoutStats }>();
   /** Incrémenté à chaque changement de mobilier (tous commerces). */
-  private layoutRev = 0;
+  layoutRev = 0;
 
-  /** Local libre (ni concurrent, ni déjà loué par le joueur). */
   isFree(p: Premise): boolean { return !p.competitor && !this.shopAt(p.id); }
 
   /** Unités stockables d'un produit (capacité du meuble partagée entre les produits qu'il présente). */
@@ -147,7 +209,6 @@ export class Game {
     return this.orders.filter((o) => o.shopId === shopId && o.productId === productId).reduce((a, o) => a + o.qty, 0);
   }
 
-  /** Concurrents du même type autour d'un local (commerces du joueur compris). */
   competition(p: Premise, type: ShopType): number {
     return competitorsNear(this.district, p, type, 300, (q) => this.shopAt(q.id)?.type ?? null);
   }
@@ -158,7 +219,56 @@ export class Game {
     return p.footfall * t.capture * (1 / (1 + 0.6 * this.competition(p, type)));
   }
 
-  /* ------------------------------ Commandes du joueur ------------------------------ */
+  /** Capacité de transport (unités) : à pied ou dans un véhicule. */
+  capacityOf(carrier: 'pied' | number): number {
+    if (carrier === 'pied') return ECONOMY.carryOnFoot;
+    const v = this.vehicle(carrier);
+    return v ? VEHICLE_BY_ID.get(v.type)!.cargo : 0;
+  }
+  loadOf(carrier: 'pied' | number): Record<string, number> {
+    if (carrier === 'pied') return this.player.carry;
+    return this.vehicle(carrier)?.cargo ?? {};
+  }
+  freeLoad(carrier: 'pied' | number): number { return this.capacityOf(carrier) - sumValues(this.loadOf(carrier)); }
+
+  /** Véhicules du joueur garés à moins de ECONOMY.loadDistance de (x, z). */
+  vehiclesNear(x: number, z: number): Vehicle[] {
+    return this.vehicles.filter((v) => Math.hypot(v.x - x, v.z - z) <= ECONOMY.loadDistance);
+  }
+
+  /** Service où se trouve le personnage (bâtiment), ou null. */
+  private serviceHere(kind: ServiceKind): Building | null {
+    const pl = this.player.place;
+    if (pl.kind !== 'service' || pl.service !== kind) return null;
+    return this.building(pl.buildingId) ?? null;
+  }
+  private needService(kind: ServiceKind, label: string): Result<Building> {
+    const b = this.serviceHere(kind);
+    return b ? ok(b) : fail(`Rendez-vous ${label} pour cela.`);
+  }
+
+  /** Bonus de clientèle des campagnes en cours pour un commerce. */
+  marketingBoost(shopId: number): number {
+    let b = 0;
+    for (const c of this.campaigns) if (c.shopId === shopId || c.shopId === null) b += CAMPAIGN_BY_ID.get(c.kind)!.boost;
+    return b;
+  }
+
+  /* ------------------------------ Lieu, position ------------------------------ */
+
+  setPlace(place: Place): void {
+    this.player.place = place;
+    if (this.player.tending !== null && !(place.kind === 'commerce' && place.shopId === this.player.tending)) this.tend(null);
+    this.bump();
+  }
+  setPlayerPose(x: number, z: number, heading: number): void { this.player.x = x; this.player.z = z; this.player.heading = heading; }
+  setVehiclePose(id: number, x: number, z: number, heading: number): void {
+    const v = this.vehicle(id);
+    if (v) { v.x = x; v.z = z; v.heading = heading; }
+  }
+  setDriving(id: number | null): void { this.player.driving = id; this.bump(); }
+
+  /* ------------------------------ Locaux et aménagement ------------------------------ */
 
   rent(premiseId: number, type: ShopType, name?: string): Result<Shop> {
     const p = this.premise(premiseId);
@@ -172,11 +282,11 @@ export class Game {
     const products: Record<string, ProductState> = {};
     for (const pr of productsOf(type)) products[pr.id] = { price: pr.basePrice, stock: 0, auto: false };
     const shop: Shop = {
-      id: this.nextId++, premiseId, type, name: name?.trim() || `${t.nameFr} ${this.companyName}`.slice(0, 40), items: [], nextUid: 1, products,
+      id: this.nextId++, premiseId, type, name: name?.trim() || `${t.nameFr} ${this.companyName}`.slice(0, 40), items: [], nextUid: 1, storage: {}, products,
       open: t.open, close: t.close, reputation: 0.5, deposit, today: emptyDay(this.day), history: [], rate: 0, capacity: 0, servedThisHour: 0, warned: [],
     };
     this.shops.push(shop);
-    this.notify('ok', `Local loué : ${shop.name} (${p.area} m², ${p.rent} CHF / mois). Aménagez-le, embauchez et commandez du stock.`);
+    this.notify('ok', `Local loué : ${shop.name} (${p.area} m², ${p.rent} CHF / mois). Achetez des meubles au magasin de meubles, puis aménagez.`);
     this.bump();
     return ok(shop);
   }
@@ -184,33 +294,55 @@ export class Game {
   release(shopId: number): Result<number> {
     const s = this.shop(shopId);
     if (!s) return fail('Commerce introuvable');
-    const resale = Math.round(this.stats(s).value * ECONOMY.resale);
+    let stored = 0;
+    for (const [id, n] of Object.entries(s.storage)) stored += (FURNITURE_BY_ID.get(id)?.price ?? 0) * n;
+    const resale = Math.round((this.stats(s).value + stored) * ECONOMY.resale);
     this.cash += s.deposit + resale;
     for (const e of this.staffOf(s.id)) e.shopId = null;
     this.orders = this.orders.filter((o) => o.shopId !== s.id);
+    this.campaigns = this.campaigns.filter((c) => c.shopId !== s.id);
+    if (this.player.tending === s.id) this.player.tending = null;
     this.shops = this.shops.filter((x) => x !== s);
     this.notify('info', `Bail résilié : ${s.name}. Dépôt rendu (${s.deposit} CHF), mobilier revendu ${resale} CHF.`);
     this.bump();
     return ok(s.deposit + resale);
   }
 
-  place(shopId: number, defId: string, x: number, z: number, rot: 0 | 1): Result<PlacedItem> {
+  /** Achat de meubles au magasin de meubles, livrés dans la réserve du commerce. */
+  buyFurniture(defId: string, qty: number, shopId: number): Result<number> {
+    const here = this.needService('meubles', 'au magasin de meubles');
+    if (!here.ok) return here;
+    const def = FURNITURE_BY_ID.get(defId), s = this.shop(shopId);
+    if (!def || !s) return fail('Meuble ou commerce inconnu');
+    const n = Math.floor(qty);
+    if (!(n > 0 && n <= 20)) return fail('Quantité : de 1 à 20');
+    const cost = def.price * n + ECONOMY.furnitureDelivery;
+    if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
+    this.cash -= cost;
+    s.today.equipment += cost; this.today.equipment += cost;
+    s.storage[defId] = (s.storage[defId] ?? 0) + n;
+    this.notify('ok', `${n} × ${def.nameFr} livré(s) dans la réserve de ${s.name}.`);
+    this.bump();
+    return ok(cost);
+  }
+
+  /** Pose d'un meuble de la réserve. */
+  place(shopId: number, defId: string, x: number, z: number, rot: Rot): Result<PlacedItem> {
     const s = this.shop(shopId), def = FURNITURE_BY_ID.get(defId);
     if (!s || !def) return fail('Commerce ou meuble inconnu');
+    if (!(s.storage[defId]! > 0)) return fail(`Aucun « ${def.nameFr} » en réserve : achetez-en au magasin de meubles.`);
     const p = this.premise(s.premiseId)!;
     const why = canPlace(s.items, p.gridW, p.gridD, def, x, z, rot);
     if (why) return fail(why);
-    if (this.cash < def.price) return fail(`Trésorerie insuffisante (${def.price} CHF)`);
-    this.cash -= def.price;
-    s.today.equipment += def.price; this.today.equipment += def.price;
+    s.storage[defId]!--;
+    if (s.storage[defId] === 0) delete s.storage[defId];
     const it: PlacedItem = { uid: s.nextUid++, def: defId, x, z, rot };
     s.items.push(it);
-    this.layoutRev++;
-    this.bump();
+    this.layoutChanged(s);
     return ok(it);
   }
 
-  moveItem(shopId: number, uid: number, x: number, z: number, rot: 0 | 1): Result<PlacedItem> {
+  moveItem(shopId: number, uid: number, x: number, z: number, rot: Rot): Result<PlacedItem> {
     const s = this.shop(shopId);
     const it = s?.items.find((i) => i.uid === uid);
     if (!s || !it) return fail('Meuble introuvable');
@@ -218,27 +350,43 @@ export class Game {
     const why = canPlace(s.items, p.gridW, p.gridD, FURNITURE_BY_ID.get(it.def)!, x, z, rot, uid);
     if (why) return fail(why);
     it.x = x; it.z = z; it.rot = rot;
-    this.layoutRev++;
-    this.bump();
+    this.layoutChanged(s);
     return ok(it);
   }
 
-  removeItem(shopId: number, uid: number): Result<number> {
+  /** Remet un meuble posé dans la réserve. */
+  pickUp(shopId: number, uid: number): Result<string> {
     const s = this.shop(shopId);
     const it = s?.items.find((i) => i.uid === uid);
     if (!s || !it) return fail('Meuble introuvable');
-    const refund = Math.round(FURNITURE_BY_ID.get(it.def)!.price * ECONOMY.resale);
     s.items = s.items.filter((i) => i !== it);
-    this.layoutRev++;
+    s.storage[it.def] = (s.storage[it.def] ?? 0) + 1;
+    this.layoutChanged(s);
+    return ok(it.def);
+  }
+
+  /** Revend un meuble de la réserve (ECONOMY.resale du prix). */
+  sellStored(shopId: number, defId: string): Result<number> {
+    const s = this.shop(shopId), def = FURNITURE_BY_ID.get(defId);
+    if (!s || !def || !(s.storage[defId]! > 0)) return fail('Aucun meuble de ce type en réserve');
+    s.storage[defId]!--;
+    if (s.storage[defId] === 0) delete s.storage[defId];
+    const refund = Math.round(def.price * ECONOMY.resale);
     this.cash += refund;
-    // Stock en trop pour la nouvelle capacité : perdu (signalé).
+    this.bump();
+    return ok(refund);
+  }
+
+  private layoutChanged(s: Shop): void {
+    this.layoutRev++;
+    // Stock en trop pour la nouvelle capacité : mis de côté dans la réserve n'existe pas, il est perdu (signalé).
     const st = this.stats(s);
     for (const pr of productsOf(s.type)) {
       const ps = s.products[pr.id]!, cap = this.storageFor(s, pr, st);
-      if (ps.stock > cap) { this.notify('warn', `${s.name} : ${ps.stock - cap} ${pr.nameFr.toLowerCase()} jetés (plus de place).`); ps.stock = cap; }
+      if (ps.stock > cap) { this.notify('warn', `${s.name} : ${ps.stock - cap} ${pr.nameFr.toLowerCase()} jetés (plus de place en rayon).`); ps.stock = cap; }
     }
+    s.capacity = this.capacityNow(s);
     this.bump();
-    return ok(refund);
   }
 
   setPrice(shopId: number, productId: string, price: number): Result<number> {
@@ -268,27 +416,57 @@ export class Game {
     return ok(undefined);
   }
 
-  /** Prix d'une commande (remise de gros au-delà de ECONOMY.bulkQty unités). */
+  /* ------------------------------ Marchandise ------------------------------ */
+
+  /** Prix d'achat (remise de gros au-delà de ECONOMY.bulkQty unités). */
   orderCost(productId: string, qty: number): number {
     const pr = PRODUCT_BY_ID.get(productId)!;
     return r2(qty * pr.cost * (qty >= ECONOMY.bulkQty ? 1 - ECONOMY.bulkDiscount : 1));
   }
+  deliveryFee(goods: number): number { return r2(ECONOMY.deliveryBase + goods * ECONOMY.deliveryRate); }
 
-  /** Place libre pour une commande (capacité − stock − commandes en cours). */
+  /** Place libre pour un produit (capacité − stock − commandes en cours). */
   room(shop: Shop, productId: string): number {
     const pr = PRODUCT_BY_ID.get(productId)!;
     return Math.max(0, this.storageFor(shop, pr) - shop.products[productId]!.stock - this.pendingQty(shop.id, productId));
   }
 
+  /** Achat au grossiste, emporté : porté à pied ou chargé dans un véhicule garé devant. */
+  buyStock(productId: string, qty: number, carrier: 'pied' | number): Result<number> {
+    const here = this.needService('grossiste', 'chez le grossiste');
+    if (!here.ok) return here;
+    const pr = PRODUCT_BY_ID.get(productId);
+    if (!pr) return fail('Produit inconnu');
+    if (carrier !== 'pied') {
+      const v = this.vehicle(carrier);
+      if (!v) return fail('Véhicule introuvable');
+      if (Math.hypot(v.x - here.data.doorX, v.z - here.data.doorZ) > ECONOMY.loadDistance) return fail(`${VEHICLE_BY_ID.get(v.type)!.nameFr} trop loin : garez-la devant le grossiste.`);
+    }
+    const free = this.freeLoad(carrier);
+    if (free <= 0) return fail(carrier === 'pied' ? 'Vos bras sont pleins : déposez la marchandise ou prenez un véhicule.' : 'Véhicule plein.');
+    const n = Math.min(Math.floor(qty), free);
+    if (!(n > 0)) return fail('Quantité invalide');
+    const cost = this.orderCost(productId, n);
+    if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
+    this.cash -= cost;
+    this.today.purchases += cost;
+    const load = this.loadOf(carrier);
+    load[productId] = (load[productId] ?? 0) + n;
+    this.bump();
+    return ok(n);
+  }
+
+  /** Commande livrée au commerce le lendemain à 7 h (frais de livraison). */
   order(shopId: number, productId: string, qty: number): Result<Order> {
     const s = this.shop(shopId), pr = PRODUCT_BY_ID.get(productId);
     if (!s || !pr || !s.products[productId]) return fail('Produit inconnu');
     const n = Math.floor(qty);
     if (!(n > 0)) return fail('Quantité invalide');
     const room = this.room(s, productId);
-    if (room <= 0) return fail(`Plus de place pour ${pr.nameFr.toLowerCase()} : ajoutez un meuble « ${pr.store} »`);
+    if (room <= 0) return fail(`Plus de place pour ${pr.nameFr.toLowerCase()} : ajoutez un meuble adapté.`);
     const q = Math.min(n, room);
-    const cost = this.orderCost(productId, q);
+    const goods = this.orderCost(productId, q);
+    const cost = r2(goods + this.deliveryFee(goods));
     if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
     this.cash -= cost;
     s.today.purchases += cost; this.today.purchases += cost;
@@ -298,14 +476,57 @@ export class Game {
     return ok(o);
   }
 
+  /**
+   * Déchargement dans un commerce (le personnage doit y être) : marchandise portée et cargaison des véhicules garés
+   * devant, dans la limite de la place en rayon. Rend le nombre d'unités rangées.
+   */
+  unload(shopId: number): Result<number> {
+    const s = this.shop(shopId);
+    if (!s) return fail('Commerce introuvable');
+    if (!(this.player.place.kind === 'commerce' && this.player.place.shopId === shopId)) return fail('Entrez dans le commerce pour décharger.');
+    const p = this.premise(s.premiseId)!;
+    const loads = [this.player.carry, ...this.vehiclesNear(p.doorX, p.doorZ).map((v) => v.cargo)];
+    let moved = 0;
+    for (const load of loads) {
+      for (const [pid, n] of Object.entries(load)) {
+        if (!s.products[pid]) continue;
+        const q = Math.min(n, this.room(s, pid));
+        if (q <= 0) continue;
+        s.products[pid]!.stock += q;
+        load[pid] = n - q;
+        if (load[pid] === 0) delete load[pid];
+        moved += q;
+      }
+    }
+    if (moved === 0) return fail('Rien à décharger ici (mauvais produits ou rayons pleins).');
+    this.notify('ok', `${moved} unités rangées dans ${s.name}.`);
+    this.bump();
+    return ok(moved);
+  }
+
+  /** Marchandise transportable vers ce commerce (portée + véhicules garés devant). */
+  unloadable(shopId: number): number {
+    const s = this.shop(shopId);
+    if (!s) return 0;
+    const p = this.premise(s.premiseId)!;
+    let n = 0;
+    for (const load of [this.player.carry, ...this.vehiclesNear(p.doorX, p.doorZ).map((v) => v.cargo)]) for (const [pid, q] of Object.entries(load)) if (s.products[pid]) n += q;
+    return n;
+  }
+
+  /* ------------------------------ Employés ------------------------------ */
+
   hire(candidateId: number, shopId: number): Result<Employee> {
+    const here = this.needService('emploi', "à l'agence pour l'emploi");
+    if (!here.ok) return here;
     const c = this.candidates.find((x) => x.id === candidateId);
     if (!c) return fail('Candidat introuvable');
     if (!this.shop(shopId)) return fail('Commerce introuvable');
-    const e: Employee = { id: c.id, name: c.name, skill: c.skill, wage: c.wage, shopId, hiredDay: this.day };
+    const e: Employee = { id: c.id, name: c.name, skill: c.skill, wage: c.wage, shopId, hiredDay: this.day, look: c.look };
     this.employees.push(e);
     this.candidates = this.candidates.filter((x) => x !== c);
     this.notify('ok', `${e.name} rejoint ${this.shop(shopId)!.name} (${e.wage} CHF / h).`);
+    this.refreshCapacities();
     this.bump();
     return ok(e);
   }
@@ -315,6 +536,7 @@ export class Game {
     if (!e) return fail('Employé introuvable');
     if (shopId !== null && !this.shop(shopId)) return fail('Commerce introuvable');
     e.shopId = shopId;
+    this.refreshCapacities();
     this.bump();
     return ok(undefined);
   }
@@ -327,13 +549,161 @@ export class Game {
     this.today.wages += pay;
     this.employees = this.employees.filter((x) => x !== e);
     this.notify('info', `${e.name} quitte l'entreprise (indemnité ${pay} CHF).`);
+    this.refreshCapacities();
     this.bump();
     return ok(pay);
   }
 
-  /* ------------------------------ Simulation ------------------------------ */
+  /** Le personnage tient (ou lâche) la caisse d'un commerce où il se trouve. */
+  tend(shopId: number | null): Result {
+    if (shopId !== null) {
+      const s = this.shop(shopId);
+      if (!s) return fail('Commerce introuvable');
+      if (!(this.player.place.kind === 'commerce' && this.player.place.shopId === shopId)) return fail('Vous devez être dans le commerce.');
+      if (this.stats(s).registers === 0) return fail("Il n'y a pas de caisse.");
+    }
+    this.player.tending = shopId;
+    this.refreshCapacities();
+    this.bump();
+    return ok(undefined);
+  }
 
-  get day(): number { return Math.floor(this.total / MINUTES_PER_DAY); }
+  /* ------------------------------ Véhicules ------------------------------ */
+
+  buyVehicle(type: VehicleType): Result<Vehicle> {
+    const here = this.needService('garage', 'au garage');
+    if (!here.ok) return here;
+    const def = VEHICLE_BY_ID.get(type);
+    if (!def) return fail('Véhicule inconnu');
+    if (this.cash < def.price) return fail(`Trésorerie insuffisante (${def.price} CHF)`);
+    this.cash -= def.price;
+    this.today.equipment += def.price;
+    const b = here.data, n = FACE_N[b.face]!;
+    // Garé sur la chaussée devant le garage, parallèle au trottoir.
+    const off = SIDEWALK_W / 2 + 2.2 + this.vehicles.length * 0.01;
+    const shift = (this.vehicles.length % 3) * 6 - 6;
+    const v: Vehicle = {
+      id: this.nextId++, type, x: b.doorX + n[0] * off + n[1] * shift, z: b.doorZ + n[1] * off - n[0] * shift,
+      heading: Math.atan2(n[1], -n[0]), cargo: {},
+    };
+    this.vehicles.push(v);
+    this.notify('ok', `${def.nameFr} achetée : elle vous attend devant le garage.`);
+    this.bump();
+    return ok(v);
+  }
+
+  sellVehicle(id: number): Result<number> {
+    const here = this.needService('garage', 'au garage');
+    if (!here.ok) return here;
+    const v = this.vehicle(id);
+    if (!v) return fail('Véhicule introuvable');
+    if (sumValues(v.cargo) > 0) return fail('Videz la cargaison avant de vendre.');
+    const def = VEHICLE_BY_ID.get(v.type)!;
+    const price = Math.round(def.price * ECONOMY.vehicleResale);
+    this.cash += price;
+    this.vehicles = this.vehicles.filter((x) => x !== v);
+    if (this.player.driving === id) this.player.driving = null;
+    this.bump();
+    return ok(price);
+  }
+
+  /* ------------------------------ Vie du personnage ------------------------------ */
+
+  eat(foodId: string): Result<number> {
+    const here = this.needService('snack', 'au snack');
+    if (!here.ok) return here;
+    const f = FOODS.find((x) => x.id === foodId);
+    if (!f) return fail('Plat inconnu');
+    if (this.cash < f.price) return fail('Pas assez d’argent');
+    this.cash -= f.price;
+    this.today.living += f.price;
+    this.player.hunger = Math.min(100, this.player.hunger + f.hunger);
+    this.player.energy = Math.min(100, this.player.energy + f.energy);
+    this.bump();
+    return ok(f.price);
+  }
+
+  rentHome(homeId: number): Result {
+    const h = this.district.homes.find((x) => x.id === homeId);
+    if (!h) return fail('Logement introuvable');
+    if (this.player.home === homeId) return fail('Vous habitez déjà ici.');
+    const def = HOME_BY_ID.get(h.def)!;
+    const first = def.rentDay * 7;
+    if (this.cash < first) return fail(`Il faut ${first} CHF (une semaine d'avance).`);
+    this.cash -= first;
+    this.today.living += first;
+    this.player.home = homeId;
+    this.notify('ok', `Nouveau logement : ${def.nameFr} (${def.rentDay} CHF / jour, première semaine payée).`);
+    this.bump();
+    return ok(undefined);
+  }
+
+  sleep(): Result {
+    const pl = this.player.place;
+    if (!(pl.kind === 'logement' && pl.homeId === this.player.home)) return fail('Rentrez chez vous pour dormir.');
+    if (this.player.energy > 85) return fail('Vous n’êtes pas fatigué.');
+    this.player.sleeping = true;
+    this.player.tending = null;
+    this.bump();
+    return ok(undefined);
+  }
+  wake(): void { if (this.player.sleeping) { this.player.sleeping = false; this.bump(); } }
+
+  /* ------------------------------ Banque et publicité ------------------------------ */
+
+  takeLoan(offerIndex: number): Result<Loan> {
+    const here = this.needService('banque', 'à la banque');
+    if (!here.ok) return here;
+    const o = LOAN_OFFERS[offerIndex];
+    if (!o) return fail('Offre inconnue');
+    const total = loanTotal(o);
+    if (this.debt + total > ECONOMY.maxDebt) return fail(`La banque refuse : endettement maximal ${ECONOMY.maxDebt} CHF.`);
+    const l: Loan = { id: this.nextId++, amount: o.amount, total, remaining: total, daily: r2(total / o.days), daysLeft: o.days };
+    this.loans.push(l);
+    this.cash += o.amount;
+    this.notify('ok', `Prêt accordé : ${o.amount} CHF, ${l.daily} CHF par jour pendant ${o.days} jours.`);
+    this.bump();
+    return ok(l);
+  }
+
+  repayLoan(id: number): Result<number> {
+    const here = this.needService('banque', 'à la banque');
+    if (!here.ok) return here;
+    const l = this.loans.find((x) => x.id === id);
+    if (!l) return fail('Prêt introuvable');
+    // Remboursement anticipé : capital restant seulement (intérêts restants remis à moitié).
+    const due = this.repayAmount(l);
+    if (this.cash < due) return fail(`Il faut ${Math.ceil(due)} CHF.`);
+    this.cash -= due;
+    this.today.finance += due;
+    this.loans = this.loans.filter((x) => x !== l);
+    this.bump();
+    return ok(due);
+  }
+
+  /** Remboursement anticipé : reste dû, moins la moitié des intérêts qui restaient à payer. */
+  repayAmount(l: Loan): number { return r2(l.remaining - ((l.total - l.amount) * (l.remaining / l.total)) / 2); }
+
+  startCampaign(kind: CampaignKind, shopId: number | null, days: number): Result<Campaign> {
+    const here = this.needService('pub', "à l'agence de publicité");
+    if (!here.ok) return here;
+    const def = CAMPAIGN_BY_ID.get(kind);
+    if (!def) return fail('Campagne inconnue');
+    if (def.scope === 'shop' && (shopId === null || !this.shop(shopId))) return fail('Choisissez un commerce');
+    if (!(Number.isInteger(days) && days >= 1 && days <= 30)) return fail('Durée : de 1 à 30 jours');
+    const cost = def.perDay * days;
+    if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
+    this.cash -= cost;
+    this.today.marketing += cost;
+    if (def.scope === 'shop') this.shop(shopId!)!.today.marketing += cost;
+    const c: Campaign = { id: this.nextId++, kind, shopId: def.scope === 'all' ? null : shopId, daysLeft: days, perDay: def.perDay };
+    this.campaigns.push(c);
+    this.notify('ok', `${def.nameFr} lancée pour ${days} jour(s).`);
+    this.bump();
+    return ok(c);
+  }
+
+  /* ------------------------------ Simulation ------------------------------ */
 
   /** Avance de `minutes` minutes de jeu (minute par minute). */
   advance(minutes: number): void {
@@ -343,6 +713,7 @@ export class Game {
   private minute(): void {
     this.total++;
     const c = clockView(this.total);
+    this.needs();
     if (c.minute === 0) this.hour(c.hour, c.weekday);
     for (const s of this.shops) {
       if (s.rate <= 0) continue;
@@ -352,8 +723,31 @@ export class Game {
     if (c.hour === 0 && c.minute === 0) this.newDay(c.weekday);
   }
 
+  private needs(): void {
+    const p = this.player;
+    if (p.sleeping) {
+      const comfort = p.home ? HOME_BY_ID.get(this.district.homes.find((h) => h.id === p.home)!.def)!.comfort : 0.7;
+      p.energy = Math.min(100, p.energy + NEEDS.sleepPerMin * comfort);
+      p.hunger = Math.max(0, p.hunger - NEEDS.hungerPerMin * 0.4);
+      if (p.energy >= 100) { p.sleeping = false; this.notify('ok', 'Vous êtes reposé.'); this.bump(); }
+      return;
+    }
+    p.hunger = Math.max(0, p.hunger - NEEDS.hungerPerMin);
+    p.energy = Math.max(0, p.energy - NEEDS.energyPerMin * (p.hunger <= 0 ? 2 : 1));
+    if (p.energy <= 0) {
+      this.cash -= ECONOMY.faintCost;
+      this.today.living += ECONOMY.faintCost;
+      p.tending = null;
+      p.driving = null;
+      p.sleeping = true;
+      if (p.home) { p.teleportHome = true; p.place = { kind: 'logement', homeId: p.home }; }
+      this.notify('error', `Épuisé, vous vous effondrez : taxi jusqu'à chez vous (${ECONOMY.faintCost} CHF) et longue nuit de sommeil.`);
+      this.refreshCapacities();
+      this.bump();
+    }
+  }
+
   private hour(h: number, weekday: number): void {
-    // Livraisons du grossiste.
     const due = this.orders.filter((o) => o.deliverAt <= this.total);
     if (due.length) {
       this.orders = this.orders.filter((o) => o.deliverAt > this.total);
@@ -361,29 +755,40 @@ export class Game {
       this.notify('info', `Livraison reçue : ${due.length} commande(s).`);
     }
     if (h === 21) this.autoReorder();
+    if (this.player.hunger < NEEDS.low && !this.player.sleeping) this.notify('warn', 'Vous avez faim : allez manger au snack.');
+    else if (this.player.energy < NEEDS.low && !this.player.sleeping) this.notify('warn', 'Vous êtes épuisé : rentrez dormir.');
     for (const s of this.shops) {
-      // Réputation : clients servis face aux clients perdus pendant l'heure écoulée.
       this.updateReputation(s);
       s.servedThisHour = 0;
       const open = h >= s.open && h < s.close;
-      const staff = this.staffOf(s.id);
       if (!open) { s.rate = 0; s.capacity = 0; continue; }
-      for (const e of staff) { s.today.wages += e.wage; this.today.wages += e.wage; this.cash -= e.wage; }
+      for (const e of this.staffOf(s.id)) { s.today.wages += e.wage; this.today.wages += e.wage; this.cash -= e.wage; }
       const st = this.stats(s);
       const t = SHOP_TYPE_BY_ID.get(s.type)!;
       const p = this.premise(s.premiseId)!;
-      const att = this.attractiveness(s, st);
       const weekend = weekday >= 5 ? t.weekend : 1;
-      s.rate = p.footfall * t.hourly[h]! * weekend * t.capture * att;
-      // Capacité : une caisse tenue par employé ; compétence moyenne des employés au travail.
-      const tended = Math.min(st.registers, staff.length);
-      const skill = tended ? staff.map((e) => e.skill).sort((a, b) => b - a).slice(0, tended).reduce((a, b) => a + b, 0) : 0;
-      s.capacity = ECONOMY.servePerRegister * skill;
-      if (staff.length === 0 && s.rate > 0) this.warnOnce(s, '__staff', `${s.name} est ouvert mais personne n'y travaille : embauchez (onglet Employés).`);
-      else if (st.registers === 0 && s.rate > 0) this.warnOnce(s, '__caisse', `${s.name} n'a pas de caisse : aucun client ne peut payer (onglet Aménagement).`);
+      s.rate = p.footfall * t.hourly[h]! * weekend * t.capture * this.attractiveness(s, st) * (1 + this.marketingBoost(s.id));
+      s.capacity = this.capacityNow(s);
+      if (s.capacity <= 0 && s.rate > 0) {
+        if (st.registers === 0) this.warnOnce(s, '__caisse', `${s.name} n'a pas de caisse : aucun client ne peut payer (Aménager).`);
+        else this.warnOnce(s, '__staff', `${s.name} est ouvert mais personne ne tient la caisse : embauchez à l'agence pour l'emploi, ou tenez-la vous-même.`);
+      }
     }
     this.bump();
   }
+
+  /** Clients servis par heure : caisses tenues (employés par compétence, le personnage compte pour 1). */
+  capacityNow(s: Shop): number {
+    const c = clockView(this.total);
+    if (!(c.hour >= s.open && c.hour < s.close)) return 0;
+    const st = this.stats(s);
+    const staff = this.staffOf(s.id).map((e) => e.skill).sort((a, b) => b - a);
+    const tended = Math.min(st.registers, staff.length);
+    let skill = staff.slice(0, tended).reduce((a, b) => a + b, 0);
+    if (this.player.tending === s.id && st.registers > tended) skill += 1;
+    return ECONOMY.servePerRegister * skill;
+  }
+  private refreshCapacities(): void { for (const s of this.shops) if (s.rate > 0 || s.capacity > 0) s.capacity = this.capacityNow(s); }
 
   /** Attrait du commerce (1 ≈ commerce moyen du quartier). */
   attractiveness(s: Shop, st = this.stats(s)): number {
@@ -410,32 +815,30 @@ export class Game {
   private customer(s: Shop): void {
     const st = this.stats(s);
     const t = SHOP_TYPE_BY_ID.get(s.type)!;
-    if (st.registers === 0 || this.staffOf(s.id).length === 0) { s.today.lostStaff++; this.today.lostStaff++; return; }
+    if (s.capacity <= 0) { s.today.lostStaff++; this.today.lostStaff++; return; }
     if (s.servedThisHour >= s.capacity) { s.today.lostCapacity++; this.today.lostCapacity++; return; }
     const avail = productsOf(s.type).filter((pr) => this.sellable(s, pr, st));
     if (!avail.length) { s.today.lostStock++; this.today.lostStock++; return; }
     const items = Math.max(1, this.rng.poisson(t.basket - 1) + 1);
-    let bought = 0;
+    const bought: string[] = [];
     for (let k = 0; k < items; k++) {
-      // Produit voulu selon les parts de demande ; en rupture : le client renonce à cet article.
       let r = this.rng.next(), want = productsOf(s.type)[0]!;
       for (const pr of productsOf(s.type)) { r -= pr.share; if (r <= 0) { want = pr; break; } }
       const ps = s.products[want.id]!;
       if (!this.sellable(s, want, st)) {
-        if (!s.warned.includes(want.id) && st.capacity[want.store] > 0 && ps.stock <= 0) this.warnOnce(s, want.id, `${s.name} : rupture de ${want.nameFr.toLowerCase()} (commandez dans l'onglet Stock).`);
+        if (st.capacity[want.store] > 0 && ps.stock <= 0) this.warnOnce(s, want.id, `${s.name} : rupture de ${want.nameFr.toLowerCase()}.`);
         continue;
       }
-      // Prix trop élevé : renonce parfois à l'article.
       if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / want.basePrice - 1)))) continue;
       ps.stock--;
-      bought++;
+      bought.push(want.id);
       s.today.revenue += ps.price; this.today.revenue += ps.price; this.cash += ps.price;
       s.today.costOfSales += want.cost; this.today.costOfSales += want.cost;
     }
-    if (bought === 0) { s.today.lostStock++; this.today.lostStock++; return; }
+    if (bought.length === 0) { s.today.lostStock++; this.today.lostStock++; return; }
     s.servedThisHour++;
     s.today.customers++; this.today.customers++;
-    if (this.events.length < 200) this.events.push({ shopId: s.id, premiseId: s.premiseId });
+    if (this.events.length < 300) this.events.push({ shopId: s.id, premiseId: s.premiseId, products: bought });
   }
 
   private updateReputation(s: Shop): void {
@@ -460,7 +863,6 @@ export class Game {
   }
 
   private newDay(weekday: number): void {
-    // Loyers (au jour), clôture des bilans.
     for (const s of this.shops) {
       const p = this.premise(s.premiseId)!;
       const rent = r2(p.rent / 30);
@@ -470,15 +872,32 @@ export class Game {
       s.today = emptyDay(this.day);
       s.warned = [];
     }
+    // Logement, assurance des véhicules, prêts, campagnes.
+    if (this.player.home) {
+      const def = HOME_BY_ID.get(this.district.homes.find((h) => h.id === this.player.home)!.def)!;
+      this.cash -= def.rentDay; this.today.living += def.rentDay;
+    }
+    for (const v of this.vehicles) { const ins = VEHICLE_BY_ID.get(v.type)!.insurance; this.cash -= ins; this.today.living += ins; }
+    for (const l of this.loans) {
+      const pay = Math.min(l.daily, l.remaining);
+      this.cash -= pay; this.today.finance += pay;
+      l.remaining = r2(l.remaining - pay);
+      l.daysLeft--;
+    }
+    const done = this.loans.filter((l) => l.remaining <= 0.01 || l.daysLeft <= 0);
+    if (done.length) { this.loans = this.loans.filter((l) => !done.includes(l)); this.notify('ok', `Prêt remboursé (${done.length}).`); }
+    for (const c of this.campaigns) c.daysLeft--;
+    const ended = this.campaigns.filter((c) => c.daysLeft <= 0);
+    if (ended.length) { this.campaigns = this.campaigns.filter((c) => c.daysLeft > 0); this.notify('info', `Campagne de publicité terminée (${ended.length}).`); }
     const y = this.today;
     this.ledger.push(y);
     if (this.ledger.length > 120) this.ledger.shift();
     this.today = emptyDay(this.day);
     if (this.shops.length) {
-      const profit = y.revenue - y.purchases - y.wages - y.rent - y.equipment;
+      const profit = dayProfit(y);
       this.notify(profit >= 0 ? 'ok' : 'info', `Bilan du jour ${y.day + 1} : ${Math.round(y.revenue)} CHF de ventes, ${y.customers} clients, solde ${profit >= 0 ? '+' : ''}${Math.round(profit)} CHF.`);
     }
-    if (this.cash < 0) this.notify('error', `Trésorerie négative (${Math.round(this.cash)} CHF) : réduisez les dépenses ou résiliez un bail.`);
+    if (this.cash < 0) this.notify('error', `Trésorerie négative (${Math.round(this.cash)} CHF) : réduisez les dépenses, empruntez ou résiliez un bail.`);
     if (weekday === 0) this.refreshCandidates();
   }
 
@@ -486,7 +905,7 @@ export class Game {
     this.candidates = [];
     for (let k = 0; k < 6; k++) {
       const skill = r2(0.55 + this.rng.next() * 0.45);
-      this.candidates.push({ id: this.nextId++, name: randomName(this.rng), skill, wage: Math.round(20 + skill * 14 + this.rng.next() * 3) });
+      this.candidates.push({ id: this.nextId++, name: randomName(this.rng), skill, wage: Math.round(20 + skill * 14 + this.rng.next() * 3), look: this.rng.int(0, 999) });
     }
   }
 
@@ -514,16 +933,20 @@ export class Game {
   save(): GameSave {
     return {
       v: SAVE_VERSION, seed: this.seed, companyName: this.companyName, total: this.total, cash: this.cash,
-      shops: structuredClone(this.shops), employees: structuredClone(this.employees), candidates: structuredClone(this.candidates),
-      orders: structuredClone(this.orders), ledger: structuredClone([...this.ledger, this.today]), nextId: this.nextId, rng: this.rng.state(),
+      player: structuredClone(this.player), shops: structuredClone(this.shops), employees: structuredClone(this.employees),
+      candidates: structuredClone(this.candidates), orders: structuredClone(this.orders), vehicles: structuredClone(this.vehicles),
+      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]),
+      nextId: this.nextId, rng: this.rng.state(),
     };
   }
 
   private restore(s: GameSave): void {
     if (s.v !== SAVE_VERSION) throw new Error(`Sauvegarde de version ${s.v} non prise en charge`);
     this.companyName = s.companyName; this.total = s.total; this.cash = s.cash;
+    this.player = structuredClone(s.player);
     this.shops = structuredClone(s.shops); this.employees = structuredClone(s.employees); this.candidates = structuredClone(s.candidates);
-    this.orders = structuredClone(s.orders);
+    this.orders = structuredClone(s.orders); this.vehicles = structuredClone(s.vehicles);
+    this.loans = structuredClone(s.loans); this.campaigns = structuredClone(s.campaigns);
     const led = structuredClone(s.ledger);
     this.today = led.pop() ?? emptyDay(this.day);
     this.ledger = led;

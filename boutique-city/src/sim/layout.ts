@@ -11,8 +11,18 @@ export interface PlacedItem {
   /** Case du coin haut-gauche. */
   x: number;
   z: number;
-  /** 0 = sens du catalogue, 1 = tourné d'un quart de tour (largeur et profondeur échangées). */
-  rot: 0 | 1;
+  /**
+   * Quarts de tour (0..3). Face avant du meuble : 0 → +z (vers la porte), 1 → +x, 2 → −z, 3 → −x. Rotation impaire :
+   * largeur et profondeur échangées.
+   */
+  rot: Rot;
+}
+
+export type Rot = 0 | 1 | 2 | 3;
+
+/** Direction de la face avant d'un meuble tourné de `rot` quarts de tour. */
+export function frontDir(rot: Rot): [number, number] {
+  return ([[0, 1], [1, 0], [0, -1], [-1, 0]] as const)[rot] as [number, number];
 }
 
 export interface LayoutStats {
@@ -29,8 +39,42 @@ export interface LayoutStats {
   blocked: number[];
 }
 
-export function footprint(def: FurnitureDef, rot: 0 | 1): { w: number; d: number } {
-  return rot ? { w: def.d, d: def.w } : { w: def.w, d: def.d };
+export function footprint(def: FurnitureDef, rot: Rot): { w: number; d: number } {
+  return rot % 2 ? { w: def.d, d: def.w } : { w: def.w, d: def.d };
+}
+
+/** Cases voisines (hors diagonales) d'un meuble, côté avant d'abord, puis côtés, puis arrière. */
+export function neighbourCells(it: PlacedItem, def: FurnitureDef): [number, number][] {
+  const f = footprint(def, it.rot);
+  const [fx, fz] = frontDir(it.rot);
+  const out: { c: [number, number]; score: number }[] = [];
+  for (let z = it.z - 1; z <= it.z + f.d; z++) {
+    for (let x = it.x - 1; x <= it.x + f.w; x++) {
+      const inside = x >= it.x && x < it.x + f.w && z >= it.z && z < it.z + f.d;
+      const corner = (x === it.x - 1 || x === it.x + f.w) && (z === it.z - 1 || z === it.z + f.d);
+      if (inside || corner) continue;
+      const cx = x + 0.5 - (it.x + f.w / 2), cz = z + 0.5 - (it.z + f.d / 2);
+      out.push({ c: [x, z], score: -(cx * fx + cz * fz) });
+    }
+  }
+  return out.sort((a, b) => a.score - b.score).map((o) => o.c);
+}
+
+/** Cases devant (côté client) et derrière (côté employé) d'une caisse. */
+export function registerSides(it: PlacedItem, def: FurnitureDef): { front: [number, number][]; back: [number, number][] } {
+  const f = footprint(def, it.rot);
+  const [fx, fz] = frontDir(it.rot);
+  const front: [number, number][] = [], back: [number, number][] = [];
+  for (let z = it.z; z < it.z + f.d; z++) {
+    for (let x = it.x; x < it.x + f.w; x++) {
+      const fxC = x + fx, fzC = z + fz, bxC = x - fx, bzC = z - fz;
+      const inF = fxC >= it.x && fxC < it.x + f.w && fzC >= it.z && fzC < it.z + f.d;
+      const inB = bxC >= it.x && bxC < it.x + f.w && bzC >= it.z && bzC < it.z + f.d;
+      if (!inF) front.push([fxC, fzC]);
+      if (!inB) back.push([bxC, bzC]);
+    }
+  }
+  return { front, back };
 }
 
 /** Cases de la porte (2 cases au milieu de la rangée du bas). */
@@ -52,7 +96,7 @@ export function occupancy(items: readonly PlacedItem[], gridW: number, gridD: nu
 }
 
 /** Raison du refus de poser un meuble, ou null si possible. */
-export function canPlace(items: readonly PlacedItem[], gridW: number, gridD: number, def: FurnitureDef, x: number, z: number, rot: 0 | 1, ignoreUid = -1): string | null {
+export function canPlace(items: readonly PlacedItem[], gridW: number, gridD: number, def: FurnitureDef, x: number, z: number, rot: Rot, ignoreUid = -1): string | null {
   const f = footprint(def, rot);
   if (x < 0 || z < 0 || x + f.w > gridW || z + f.d > gridD) return 'Hors du local';
   const occ = occupancy(items.filter((i) => i.uid !== ignoreUid), gridW, gridD);

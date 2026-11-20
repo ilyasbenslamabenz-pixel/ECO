@@ -22,14 +22,13 @@ await esbuild.build({
 const css = readFileSync(join(root, 'src/ui/styles.css'), 'utf8');
 const body = `<canvas id="scene" aria-label="Quartier en 3D"></canvas>
 <header id="hud"></header>
-<aside id="shops"></aside>
 <aside id="panel" class="hidden"></aside>
-<div id="editor" class="hidden"></div>
+<div id="map" class="hidden"></div>
 <div id="toasts" aria-live="polite"></div>
 <div id="menu" class="hidden"></div>
 <script type="module" src="game.js"></script>`;
 const head = `<title>Boutique City</title>
-<meta name="description" content="Boutique City — gestion de commerces dans un quartier">
+<meta name="description" content="Boutique City — partez de rien et bâtissez votre empire de commerces">
 <style>${css}</style>`;
 // Page complète : sa propre balise viewport (le fragment artifact.html reçoit celle de l'enveloppe de publication).
 writeFileSync(join(dist, 'index.html'), `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`);

@@ -31,8 +31,20 @@ function loopParam(cx: number, cz: number, x: number, z: number): number {
   return dx > 0 ? 3 * L - dz : 7 * L + dz;
 }
 
+/** Géométrie à couleur de sommet uniforme. */
+function colored(g: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
+  const ng = g.toNonIndexed();
+  const c = new THREE.Color(hex), n = ng.attributes['position']!.count;
+  const a = new Float32Array(n * 3);
+  for (let k = 0; k < n; k++) { a[k * 3] = c.r; a[k * 3 + 1] = c.g; a[k * 3 + 2] = c.b; }
+  ng.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  return ng;
+}
+
 export class People {
+  /** Torse et bras (couleur du vêtement par instance) ; `rest` : jambes, tête (couleurs fixes). */
   readonly mesh: THREE.InstancedMesh;
+  private readonly rest: THREE.InstancedMesh;
   private walkers: Walker[] = [];
   private readonly m = new THREE.Matrix4();
   private readonly q = new THREE.Quaternion();
@@ -41,14 +53,18 @@ export class People {
   private seed: number;
 
   constructor(private readonly d: District) {
-    const body = new THREE.CylinderGeometry(0.22, 0.26, 1.15, 7).translate(0, 0.78, 0);
-    const legs = new THREE.CylinderGeometry(0.2, 0.16, 0.5, 6).translate(0, 0.25, 0);
-    const head = new THREE.SphereGeometry(0.17, 8, 6).translate(0, 1.55, 0);
-    const geo = mergeGeometries([body.toNonIndexed(), legs.toNonIndexed(), head.toNonIndexed()])!;
-    this.mesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.8 }), WANDERERS + MAX_CLIENTS);
+    const torso = new THREE.BoxGeometry(0.42, 0.62, 0.24).translate(0, 1.2, 0);
+    const armL = new THREE.BoxGeometry(0.1, 0.56, 0.12).translate(-0.27, 1.18, 0);
+    const armR = new THREE.BoxGeometry(0.1, 0.56, 0.12).translate(0.27, 1.18, 0);
+    const legL = new THREE.BoxGeometry(0.15, 0.9, 0.16).translate(-0.11, 0.45, 0);
+    const legR = new THREE.BoxGeometry(0.15, 0.9, 0.16).translate(0.11, 0.45, 0);
+    const head = new THREE.SphereGeometry(0.13, 10, 8).scale(1, 1.1, 1).translate(0, 1.7, 0);
+    const neck = new THREE.BoxGeometry(0.1, 0.1, 0.1).translate(0, 1.55, 0);
+    this.mesh = new THREE.InstancedMesh(mergeGeometries([torso.toNonIndexed(), armL.toNonIndexed(), armR.toNonIndexed()])!, new THREE.MeshStandardMaterial({ roughness: 0.8 }), WANDERERS + MAX_CLIENTS);
+    this.rest = new THREE.InstancedMesh(mergeGeometries([colored(legL, 0x2a3142), colored(legR, 0x2a3142), colored(head, 0xd9a47e), colored(neck, 0xd9a47e)])!, new THREE.MeshStandardMaterial({ roughness: 0.8, vertexColors: true }), WANDERERS + MAX_CLIENTS);
     this.mesh.name = 'passants';
-    this.mesh.castShadow = true;
-    this.mesh.frustumCulled = false;
+    for (const m of [this.mesh, this.rest]) { m.castShadow = true; m.frustumCulled = false; }
+    this.mesh.add(this.rest);
     this.seed = d.seed * 7 + 3;
     for (let k = 0; k < WANDERERS; k++) this.walkers.push(this.spawn(null, -1));
   }
@@ -100,12 +116,15 @@ export class People {
       const [dx, dz] = [Math.cos(rot) * lat, -Math.sin(rot) * lat];
       this.m.compose(new THREE.Vector3(x + dx, 0.16 + bob, z + dz), this.q, new THREE.Vector3(1, 1, 1));
       this.mesh.setMatrixAt(k, this.m);
+      this.rest.setMatrixAt(k, this.m);
       this.mesh.setColorAt(k, this.c.set(w.color));
       k++;
     }
     this.walkers = out;
     this.mesh.count = k;
+    this.rest.count = k;
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.rest.instanceMatrix.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 }

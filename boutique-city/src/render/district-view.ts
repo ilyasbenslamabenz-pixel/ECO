@@ -4,12 +4,15 @@
  * auvents, enseignes, parc, arbres. Repérage des bâtiments (survol, sélection) par rayon. Dépend de three.
  */
 import * as THREE from 'three';
-import { SHOP_TYPE_BY_ID, type ShopType } from '../sim/catalog';
 import { BLOCK, FACE_N, PITCH, SIDEWALK_W, STREET_W, blockCenter, type Building, type District } from '../sim/district';
+import { disposeOwn, textPlane } from './kit';
 
 export const FLOOR_H = 3.2;
-/** Distance caméra (m) en deçà de laquelle les étiquettes « À louer » s'affichent. */
-export const FREE_LABEL_DIST = 260;
+/** Distance caméra (m) au-delà de laquelle les repères ronds des locaux libres s'affichent. */
+export const PIN_MIN_DIST = 45;
+
+/** État affiché d'un bâtiment interactif : enseigne, couleur d'auvent, anneau devant la porte, repère au loin. */
+export interface BuildingState { buildingId: number; sign: string | null; color: string; ring: string | null; pin: boolean; poster: string | null }
 
 const FACADES = [0xd9c7a8, 0xe6dccb, 0xc9a98a, 0xb98b6e, 0xd7b48c, 0xe9e2d6, 0xbfc4c8, 0xa9b4bd, 0xd2a07a, 0xcfc0ad];
 const OFFICES = [0x9fb3c4, 0x8ea2b3, 0xb7c3cc, 0x7e93a6];
@@ -57,11 +60,14 @@ export class DistrictView {
   private readonly baseColors: THREE.Color[] = [];
   private readonly instanceToBuilding: number[] = [];
   private readonly buildingToInstance = new Map<number, number>();
-  private readonly signs = new Map<number, THREE.Sprite>();
+  private readonly signs = new Map<number, { key: string; obj: THREE.Group }>();
   /** Repères des locaux libres en vue éloignée. */
   private readonly pins = new Map<number, THREE.Sprite>();
   private readonly awnings: THREE.InstancedMesh;
   private readonly awningIndex = new Map<number, number>();
+  private readonly rings: THREE.InstancedMesh;
+  private readonly ringIndex = new Map<number, number>();
+  private ringPhase = 0;
   private hovered = -1;
   private selected = -1;
 
@@ -93,7 +99,7 @@ export class DistrictView {
       const h = b.floors * FLOOR_H;
       mats.push(new THREE.Matrix4().compose(new THREE.Vector3(b.x, 0.16, b.z), new THREE.Quaternion(), new THREE.Vector3(b.w, h, b.d)));
       roofs.push(new THREE.Matrix4().compose(new THREE.Vector3(b.x, 0.16 + h, b.z), new THREE.Quaternion(), new THREE.Vector3(b.w + 0.3, 0.45, b.d + 0.3)));
-      shopAttr[k] = b.premise ? 1 : 0;
+      shopAttr[k] = b.premise || b.service ? 1 : 0;
       const pal = b.kind === 'bureaux' ? OFFICES : FACADES;
       this.baseColors.push(new THREE.Color(pal[Math.floor(b.tint * pal.length) % pal.length]!));
       this.instanceToBuilding.push(b.id);
@@ -106,7 +112,7 @@ export class DistrictView {
     this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x5d5b58, roughness: 0.9 }), roofs, 'toits', true, true));
 
     // Auvents des commerces (couleur : type du commerce ; gris : local libre).
-    const shops = d.buildings.filter((b) => b.premise);
+    const shops = d.buildings.filter((b) => b.premise || b.service);
     this.awnings = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.8 }), shops.length);
     this.awnings.name = 'auvents';
     this.awnings.castShadow = true;
@@ -116,10 +122,26 @@ export class DistrictView {
       const pos = new THREE.Vector3(b.x + n[0] * (depth / 2 + 0.7), 0.16 + 2.9, b.z + n[1] * (depth / 2 + 0.7));
       const size = b.face % 2 === 0 ? new THREE.Vector3(front * 0.9, 0.18, 1.4) : new THREE.Vector3(1.4, 0.18, front * 0.9);
       this.awnings.setMatrixAt(k, new THREE.Matrix4().compose(pos, new THREE.Quaternion(), size));
-      this.awningIndex.set(b.premise!.id, k);
+      this.awningIndex.set(b.id, k);
       this.awnings.setColorAt(k, new THREE.Color(0x8a8f96));
     });
     this.group.add(this.awnings);
+    // Portes (cadre sombre sur la façade) et anneaux lumineux sur le trottoir des bâtiments où l'on peut entrer.
+    const doors = d.buildings.filter((b) => b.premise || b.service || b.home);
+    const frames: THREE.Matrix4[] = [];
+    this.rings = new THREE.InstancedMesh(new THREE.RingGeometry(0.75, 1.0, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false }), doors.length);
+    this.rings.name = 'anneaux';
+    doors.forEach((b, k) => {
+      const n = FACE_N[b.face]!, depth = b.face % 2 === 0 ? b.d : b.w;
+      const fx = b.x + n[0] * (depth / 2 + 0.06), fz = b.z + n[1] * (depth / 2 + 0.06);
+      const size = b.face % 2 === 0 ? new THREE.Vector3(1.9, 2.5, 0.14) : new THREE.Vector3(0.14, 2.5, 1.9);
+      frames.push(new THREE.Matrix4().compose(new THREE.Vector3(fx, 0.16, fz), new THREE.Quaternion(), size));
+      this.rings.setMatrixAt(k, new THREE.Matrix4().makeTranslation(b.doorX, 0.19, b.doorZ));
+      this.rings.setColorAt(k, new THREE.Color(0xffffff));
+      this.ringIndex.set(b.id, k);
+    });
+    this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.5, metalness: 0.3 }), frames, 'portes', false, true));
+    this.group.add(this.rings);
     this.group.add(this.trees());
   }
 
@@ -161,61 +183,53 @@ export class DistrictView {
     return g;
   }
 
-  /**
-   * État des locaux : auvent coloré (commerce du joueur : couleur vive du type ; concurrent : couleur atténuée ; libre :
-   * gris) et étiquette au-dessus des locaux libres et des commerces du joueur.
-   */
-  setPremises(states: { premiseId: number; buildingId: number; kind: 'libre' | 'joueur' | 'concurrent'; type: ShopType | null; label: string }[]): void {
+  /** Enseignes, auvents, anneaux et repères selon l'état des bâtiments interactifs. */
+  setStates(states: BuildingState[]): void {
     const c = new THREE.Color();
-    for (const s of states) {
-      const k = this.awningIndex.get(s.premiseId);
-      if (k !== undefined) {
-        if (s.kind === 'libre') c.set(0x9aa0a6);
-        else c.set(SHOP_TYPE_BY_ID.get(s.type!)!.color);
-        if (s.kind === 'concurrent') c.lerp(new THREE.Color(0x777777), 0.45);
-        this.awnings.setColorAt(k, c);
+    for (const st of states) {
+      const b = this.d.buildings.find((x) => x.id === st.buildingId)!;
+      const n = FACE_N[b.face]!, depth = b.face % 2 === 0 ? b.d : b.w, front = b.face % 2 === 0 ? b.w : b.d;
+      const ak = this.awningIndex.get(b.id);
+      if (ak !== undefined) this.awnings.setColorAt(ak, c.set(st.color));
+      const rk = this.ringIndex.get(b.id);
+      if (rk !== undefined) {
+        this.rings.setColorAt(rk, c.set(st.ring ?? '#000000'));
+        const m = new THREE.Matrix4().makeTranslation(b.doorX, st.ring ? 0.19 : -5, b.doorZ);
+        this.rings.setMatrixAt(rk, m);
       }
-      const want = s.kind !== 'concurrent';
-      let pin = this.pins.get(s.premiseId);
-      if (s.kind === 'libre' && !pin) {
+      // Enseigne au-dessus de l'auvent, affiche dans la vitrine.
+      const key = `${st.sign}|${st.color}|${st.poster}`;
+      const cur = this.signs.get(b.id);
+      if (!cur || cur.key !== key) {
+        if (cur) { this.group.remove(cur.obj); disposeOwn(cur.obj); }
+        const g = new THREE.Group();
+        g.position.set(b.x + n[0] * (depth / 2 + 0.08), 0.16, b.z + n[1] * (depth / 2 + 0.08));
+        g.rotation.y = Math.atan2(n[0], n[1]);
+        if (st.sign) { const p = textPlane(st.sign, 0.75, st.color, '#ffffff', front * 0.85); p.position.y = 3.65; g.add(p); }
+        if (st.poster) { const p = textPlane(st.poster, 0.42, '#ffd166', '#2d3440', 2.6); p.position.set(front * 0.22, 1.55, 0.02); g.add(p); }
+        this.group.add(g);
+        this.signs.set(b.id, { key, obj: g });
+      }
+      let pin = this.pins.get(b.id);
+      if (st.pin && !pin) {
         pin = new THREE.Sprite(pinMaterial());
         pin.scale.set(0.014, 0.014, 1);
         pin.renderOrder = 9;
-        const bb = this.d.buildings.find((x) => x.id === s.buildingId)!;
-        const nn = FACE_N[bb.face]!, dd = bb.face % 2 === 0 ? bb.d : bb.w;
-        pin.position.set(bb.x + nn[0] * (dd / 2 + 1), bb.floors * FLOOR_H + 4, bb.z + nn[1] * (dd / 2 + 1));
-        this.pins.set(s.premiseId, pin);
+        pin.position.set(b.x + n[0] * (depth / 2 + 1), b.floors * FLOOR_H + 4, b.z + n[1] * (depth / 2 + 1));
+        this.pins.set(b.id, pin);
         this.group.add(pin);
-      } else if (s.kind !== 'libre' && pin) { this.group.remove(pin); this.pins.delete(s.premiseId); }
-      let sp = this.signs.get(s.premiseId);
-      if (!want) { if (sp) { this.group.remove(sp); sp.material.map?.dispose(); sp.material.dispose(); this.signs.delete(s.premiseId); } continue; }
-      const key = `${s.kind}|${s.label}`;
-      if (sp && sp.userData['key'] === key) continue;
-      if (sp) { this.group.remove(sp); sp.material.map?.dispose(); sp.material.dispose(); }
-      sp = labelSprite(s.label, s.kind === 'joueur' ? SHOP_TYPE_BY_ID.get(s.type!)!.color : '#2d3440', s.kind === 'joueur');
-      sp.userData['key'] = key;
-      sp.userData['free'] = s.kind === 'libre';
-      const b = this.d.buildings.find((x) => x.id === s.buildingId)!;
-      const n = FACE_N[b.face]!, depth = b.face % 2 === 0 ? b.d : b.w;
-      sp.position.set(b.x + n[0] * (depth / 2 + 1), b.floors * FLOOR_H + 5, b.z + n[1] * (depth / 2 + 1));
-      this.signs.set(s.premiseId, sp);
-      this.group.add(sp);
+      } else if (!st.pin && pin) { this.group.remove(pin); this.pins.delete(b.id); }
     }
     if (this.awnings.instanceColor) this.awnings.instanceColor.needsUpdate = true;
+    if (this.rings.instanceColor) this.rings.instanceColor.needsUpdate = true;
+    this.rings.instanceMatrix.needsUpdate = true;
   }
 
-  /**
-   * Étiquettes « À louer » seulement à l'approche (moins de FREE_LABEL_DIST mètres de la caméra) : en vue d'ensemble,
-   * elles recouvraient tout le quartier. Les enseignes du joueur restent toujours visibles.
-   */
-  updateLabels(camera: THREE.Camera): void {
-    for (const [id, sp] of this.signs) {
-      if (!sp.userData['free']) continue;
-      const near = camera.position.distanceTo(sp.position) < FREE_LABEL_DIST;
-      sp.visible = near;
-      const pin = this.pins.get(id);
-      if (pin) pin.visible = !near;
-    }
+  /** Repères des locaux libres seulement au loin ; anneaux qui pulsent. */
+  updateLabels(camera: THREE.Camera, dt: number): void {
+    for (const pin of this.pins.values()) pin.visible = camera.position.distanceTo(pin.position) > PIN_MIN_DIST;
+    this.ringPhase += dt;
+    (this.rings.material as THREE.MeshBasicMaterial).opacity = 0.55 + 0.35 * Math.sin(this.ringPhase * 3);
   }
 
   /** Bâtiment sous un rayon (null : aucun). */
@@ -267,25 +281,3 @@ function pinMaterial(): THREE.SpriteMaterial {
   return pinMat;
 }
 
-/** Étiquette (canevas → sprite), taille constante à l'écran. */
-function labelSprite(text: string, bg: string, strong: boolean): THREE.Sprite {
-  const pad = 14, font = `${strong ? 700 : 600} 30px system-ui, sans-serif`;
-  const cv = document.createElement('canvas');
-  const g = cv.getContext('2d')!;
-  g.font = font;
-  const w = Math.ceil(g.measureText(text).width) + pad * 2;
-  cv.width = w; cv.height = 52;
-  g.font = font;
-  g.fillStyle = bg;
-  g.beginPath(); g.roundRect(0, 0, w, 52, 14); g.fill();
-  g.fillStyle = '#ffffff';
-  g.textBaseline = 'middle';
-  g.fillText(text, pad, 27);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false }));
-  sp.renderOrder = 10;
-  const h = 0.034;
-  sp.scale.set((h * w) / 52, h, 1);
-  return sp;
-}
