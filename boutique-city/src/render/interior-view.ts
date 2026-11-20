@@ -222,7 +222,7 @@ export class InteriorView {
     this.scene.traverse((c) => {
       const me = c as THREE.Mesh;
       if (me.isMesh || (c as THREE.LineSegments).isLineSegments) {
-        if (me.geometry && (me.geometry.type === 'PlaneGeometry' || me.geometry.type === 'BufferGeometry')) me.geometry.dispose();
+        if (me.geometry && !me.geometry.userData['shared'] && (me.geometry.type === 'PlaneGeometry' || me.geometry.type === 'BufferGeometry')) me.geometry.dispose();
       }
     });
     disposeOwn(this.scene);

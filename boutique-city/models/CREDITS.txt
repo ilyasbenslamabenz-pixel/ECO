@@ -1,0 +1,27 @@
+Modèles 3D de Boutique City — tous sous licence Creative Commons Zero (CC0 1.0, domaine public)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+Auteur : Kenney (www.kenney.nl). Le crédit n'est pas obligatoire ; il est donné ici par courtoisie.
+
+Le site kenney.nl refuse les téléchargements automatisés (réponse 403) : les fichiers ont été récupérés,
+inchangés (format GLB), dans la copie des packs Kenney publiée sur GitHub :
+  https://github.com/series-ai/jam-ready-assets (fichiers Git LFS)
+La licence de chaque pack a été lue dans son fichier License.txt d'origine, présent dans cette copie.
+
+1. City Kit (Commercial) 2.1 — Kenney, 21-07-2025, CC0
+   kenney-city-kit-commercial/3D/city/Models/GLB format/
+   building-a.glb, building-d.glb, building-f.glb, building-h.glb, building-l.glb,
+   building-skyscraper-a.glb, building-skyscraper-b.glb
+
+2. Mini Characters 1.0 — Kenney, 17-07-2024, CC0 (animations incluses : idle, walk, sprint, sit…)
+   kenney-mini-characters/3D/characters/Models/GLB format/
+   character-female-a.glb, character-female-c.glb, character-male-a.glb, character-male-c.glb
+
+3. Furniture Kit 2.1 — Kenney, 11-11-2018, CC0
+   kenney-furniture-kit/3D/interior-furniture/Models/GLTF format/
+   desk.glb, computerScreen.glb, bookcaseOpen.glb, kitchenBar.glb, kitchenCabinet.glb,
+   kitchenCoffeeMachine.glb, tableRound.glb, chair.glb, pottedPlant.glb, lampRoundFloor.glb,
+   rugRectangle.glb, bedDouble.glb, loungeSofa.glb, kitchenFridgeLarge.glb
+
+Modification : la texture de chaque pack (Textures/colormap.png, CC0, même source) a été intégrée dans
+chaque fichier GLB qui la référence (scripts/embed-textures.mjs) ; géométrie et animations inchangées.

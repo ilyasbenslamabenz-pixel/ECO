@@ -159,3 +159,16 @@ tr.dim { opacity: 0.55; }
   .map-legend { width: auto; }
   .prompt { bottom: 220px; }
 }
+
+/* Écran de chargement */
+#loading { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: radial-gradient(circle at 30% 20%, #23405e, #0b1119 70%); }
+.load-card { width: min(420px, calc(100vw - 32px)); text-align: center; }
+.load-card h1 { margin: 0 0 18px; font-size: 32px; }
+.bar-track { height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.bar-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.load-label { color: var(--muted); font-size: 13px; }
+
+/* Récapitulatif de fin de journée */
+.recap-card { width: min(680px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow: auto; }
+.recap-card h2 { margin: 2px 0 10px; }
+.recap-card .kpi span.ok, .recap-card .kpi span.bad { font-size: 11px; }

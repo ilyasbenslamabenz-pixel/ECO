@@ -5,6 +5,8 @@
  * Aucune boîte de dialogue du navigateur ni téléchargement : la page marche dans un cadre protégé.
  */
 import * as THREE from 'three';
+import { assets } from './assets';
+import { gallery } from './gallery';
 import { FURNITURE_BY_ID, HOME_BY_ID, SERVICE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf } from './sim/catalog';
 import { clockView, formatClock } from './sim/clock';
 import { FACE_N, type Building } from './sim/district';
@@ -21,6 +23,7 @@ import { competitorView, homeView, premiseView, serviceView, type UiCtx } from '
 import { $, askConfirm, button, chf, el } from './ui/dom';
 import { BigMap, MiniMap } from './ui/map';
 import { Panel } from './ui/panel';
+import { showRecap } from './ui/recap';
 import { companyView, shopView } from './ui/shop-panel';
 
 const SAVE_KEY = 'boutique-city.save.v2';
@@ -99,6 +102,8 @@ function start(game: Game): void {
   let agents: InteriorAgents | null = null;
   let layoutRev = -1;
   let snapCam = true;
+  let recapDue = false;
+  let recapOpen: HTMLElement | null = null;
 
   const act = <T,>(r: Result<T>, okText?: string | ((d: T) => string)): boolean => {
     if (!r.ok) { toast(r.message, 'error'); return false; }
@@ -222,7 +227,7 @@ function start(game: Game): void {
     return best;
   };
   const doorAction = (b: Building): Action => {
-    if (b.service) { const s = SERVICE_BY_ID.get(b.service)!; return { label: `Entrer : ${s.sign}`, run: () => { panel.open(serviceView(ctx, b)); game.setPlace({ kind: 'service', service: b.service!, buildingId: b.id }); } }; }
+    if (b.service) { const s = SERVICE_BY_ID.get(b.service)!; return { label: `Entrer : ${s.sign}`, run: () => { panel.close(); game.setPlace({ kind: 'service', service: b.service!, buildingId: b.id }); panel.open(serviceView(ctx, b)); } }; }
     if (b.home) {
       const h = b.home;
       if (h.id === game.player.home) return { label: 'Rentrer chez moi', run: () => enterHome(h.id) };
@@ -232,7 +237,7 @@ function start(game: Game): void {
     const sh = game.shopAt(p.id);
     if (sh) return { label: `Entrer : ${sh.name}`, run: () => enterShop(sh.id) };
     if (p.competitor) return { label: `Regarder : ${p.competitorName}`, run: () => panel.open(competitorView(ctx, p)) };
-    return { label: `Visiter le local à louer (${p.area} m²)`, run: () => { panel.open(premiseView(ctx, p)); game.setPlace({ kind: 'local', premiseId: p.id }); } };
+    return { label: `Visiter le local à louer (${p.area} m²)`, run: () => { panel.close(); game.setPlace({ kind: 'local', premiseId: p.id }); panel.open(premiseView(ctx, p)); } };
   };
 
   const currentAction = (): Action | null => {
@@ -429,6 +434,7 @@ function start(game: Game): void {
   /* ------------------------------ Clavier ------------------------------ */
 
   controls.onKey = (k) => {
+    if (recapOpen) return;
     if (k === 'Escape') {
       if (game.player.sleeping) { game.wake(); return; }
       if (bigmap.isOpen) { bigmap.close(); return; }
@@ -548,6 +554,7 @@ function start(game: Game): void {
     if (inside && agents) {
       const s = game.shop((inside as { shopId: number }).shopId);
       const c = clockView(game.total);
+      agents.playerPos = [ipos.x, ipos.z];
       agents.update(dt, sleeping ? 4 : SPEEDS[speed]!, !!s && c.hour >= s.open && c.hour < s.close);
     }
     if (!inside) scene.traffic.update(dt, [[game.player.x, game.player.z]]);
@@ -556,7 +563,15 @@ function start(game: Game): void {
 
     for (; noticeIdx < game.notices.length; noticeIdx++) { const nt = game.notices[noticeIdx]!; toast(nt.text, nt.level === 'warn' ? 'warn' : nt.level); }
     if (noticeIdx > game.notices.length) noticeIdx = game.notices.length;
-    if (game.day !== lastDay) { lastDay = game.day; writeSave(game); }
+    if (game.day !== lastDay) { lastDay = game.day; writeSave(game); if (game.shops.length) recapDue = true; }
+    // Récapitulatif de fin de journée : jeu en pause tant qu'il est affiché (après le réveil si l'on dort).
+    if (recapDue && !game.player.sleeping && !recapOpen) {
+      recapDue = false;
+      const before = speed;
+      speed = 0;
+      recapOpen = showRecap(game, () => { recapOpen = null; speed = before || 1; paint(); });
+      if (!recapOpen) speed = before;
+    }
 
     syncStreet();
     paint();
@@ -605,6 +620,7 @@ function start(game: Game): void {
       const r = canvas.getBoundingClientRect();
       return [r.left + ((v.x + 1) / 2) * r.width, r.top + ((1 - v.y) / 2) * r.height];
     },
+    recap: () => !!recapOpen,
     keepAlive: () => { game.player.energy = 100; game.player.hunger = 100; },
   });
   debug.ready = true;
@@ -639,5 +655,17 @@ function homeItems(W: number, D: number): InteriorItem[] {
   return list.map(([def, x, z, rot], k) => ({ uid: 100 + k, def, x, z, rot, fill: 0, colors: ['#cccccc'] }));
 }
 
-if (params.has('auto')) start(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : 7, 'Test SA'));
-else menu();
+/** Écran de chargement : modèles 3D puis menu (ou partie de test). */
+async function boot(): Promise<void> {
+  const box = $('loading');
+  const bar = box.querySelector<HTMLElement>('.bar-fill')!, label = box.querySelector<HTMLElement>('.load-label')!;
+  box.classList.remove('hidden');
+  await assets.load((p, l) => { bar.style.width = `${Math.round(p * 100)}%`; label.textContent = `Chargement des modèles 3D… ${Math.round(p * 100)} % (${l})`; }, params.has('sansmodeles'));
+  box.classList.add('hidden');
+  if (assets.failed.length) console.warn(`Modèles indisponibles (formes de remplacement) : ${assets.failed.join(', ')}`);
+  debug['assets'] = { loaded: assets.count(), failed: [...assets.failed] };
+  if (params.has('galerie')) { gallery($<HTMLCanvasElement>('scene')); debug.ready = true; return; }
+  if (params.has('auto')) start(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : 7, 'Test SA'));
+  else menu();
+}
+void boot();

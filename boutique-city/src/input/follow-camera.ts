@@ -88,6 +88,15 @@ export class FollowCamera {
       }
       pitch = bestP;
       want = Math.max(1.4, this.dist * best - 0.4);
+      // Fortement masqué et le joueur ne tourne pas la caméra : elle pivote d'elle-même vers l'angle dégagé le plus
+      // proche (de 20° en 20°), en douceur.
+      if (best < 0.5 && this.pointers.size === 0 && !snap) {
+        for (const off of [0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4, 1.75, -1.75, 2.1, -2.1, 2.45, -2.45, Math.PI]) {
+          const y = this.yaw + off;
+          const d = new THREE.Vector3(Math.sin(y) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(y) * Math.cos(this.pitch));
+          if (clear(this.focus, this.focus.clone().addScaledVector(d, this.dist)) > 0.9) { this.yaw += off * Math.min(1, dt * 2.5); break; }
+        }
+      }
     }
     this.curPitch += (pitch - this.curPitch) * (snap ? 1 : Math.min(1, dt * 5));
     const dir = dirAt(this.curPitch);

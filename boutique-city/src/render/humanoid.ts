@@ -4,6 +4,7 @@
  * Face avant vers −z : une rotation y = cap fait regarder vers (−sin cap, −cos cap). Dépend de three.
  */
 import * as THREE from 'three';
+import { ASSETS, CONFIG, assets, fitInto } from '../assets';
 import { box, hashRand, mat, sph } from './kit';
 
 export interface Look { skin: string; shirt: string; pants: string; hair: string; shoes: string; hairLong: boolean; apron?: string }
@@ -86,4 +87,88 @@ export class Humanoid {
 
   /** Bras tendus vers l'avant (tenir la caisse, porter). */
   reach(): void { this.armL.rotation.x = this.armR.rotation.x = -0.9; }
+}
+
+/** Personnage du jeu : fait en code (Humanoid) ou modèle animé (KitPerson), même interface. */
+export interface Person { readonly group: THREE.Group; update(dt: number, speed: number): void; sit(on: boolean): void; reach(): void }
+
+/**
+ * Personnage animé des Mini Characters (Kenney) : squelette cloné, AnimationMixer (idle, walk, sprint, sit), teinte
+ * légère propre à chaque personnage pour varier les tenues ; `accent` : tenue de l'employé (teinte plus marquée).
+ */
+export class KitPerson implements Person {
+  readonly group = new THREE.Group();
+  private readonly mixer: THREE.AnimationMixer;
+  private readonly actions = new Map<string, THREE.AnimationAction>();
+  private current = '';
+
+  constructor(key: string, seed: number, accent?: string) {
+    const c = assets.clone(key)!;
+    const r = hashRand(seed + 3);
+    const tint = new THREE.Color().setHSL(r(), 0.55, 0.6);
+    const k = accent ? 0.38 : 0.2;
+    c.obj.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const src = m.material as THREE.MeshStandardMaterial;
+      const own = src.clone();
+      own.color = new THREE.Color(1, 1, 1).lerp(accent ? new THREE.Color(accent) : tint, k);
+      own.userData['own'] = true;
+      m.material = own;
+      m.castShadow = true;
+      m.frustumCulled = false;
+    });
+    // Échelle et décalage calculés une fois par modèle (boîte englobante d'un squelette : coûteuse), puis réutilisés.
+    let fit = FIT_CACHE.get(key);
+    if (!fit) {
+      const probe = fitInto(c.obj, 3, CONFIG.npcHeight, 3, false, ASSETS[key]!.scale);
+      fit = { s: c.obj.scale.x, p: c.obj.position.clone() };
+      FIT_CACHE.set(key, fit);
+      probe.remove(c.obj);
+    }
+    c.obj.scale.setScalar(fit.s);
+    c.obj.position.copy(fit.p);
+    this.group.add(c.obj);
+    this.mixer = new THREE.AnimationMixer(c.obj);
+    for (const clip of c.animations) this.actions.set(clip.name, this.mixer.clipAction(clip));
+    this.mixer.update(r() * 2);
+    this.play('idle');
+  }
+
+  private play(name: string, timeScale = 1): void {
+    const a = this.actions.get(name) ?? this.actions.get('idle');
+    if (!a) return;
+    a.timeScale = timeScale;
+    if (this.current === name) return;
+    const prev = this.actions.get(this.current);
+    a.reset().fadeIn(0.18).play();
+    prev?.fadeOut(0.18);
+    this.current = name;
+  }
+
+  update(dt: number, speed: number): void {
+    if (this.current !== 'sit') {
+      if (speed > 3) this.play('sprint', speed / 5);
+      else if (speed > 0.1) this.play('walk', Math.max(0.6, speed / 1.4));
+      else this.play('idle');
+    }
+    this.mixer.update(dt);
+  }
+
+  sit(on: boolean): void { this.play(on ? 'sit' : 'idle'); }
+  reach(): void { /* pose « au comptoir » : posture de repos du modèle */ }
+}
+
+const FIT_CACHE = new Map<string, { s: number; p: THREE.Vector3 }>();
+const PERSONS = ['perso.f-a', 'perso.f-c', 'perso.h-a', 'perso.h-c'];
+
+/** Client ou employé : modèle animé si chargé, sinon personnage fait en code. */
+export function makePerson(seed: number, accent?: string, scale = 1): Person {
+  const keys = PERSONS.filter((k) => assets.has(k));
+  if (keys.length) {
+    const p = new KitPerson(keys[Math.abs(Math.floor(seed)) % keys.length]!, seed, accent);
+    p.group.scale.setScalar(scale);
+    return p;
+  }
+  return new Humanoid(lookFrom(seed, accent), scale);
 }

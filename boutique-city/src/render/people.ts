@@ -11,7 +11,7 @@ const WANDERERS = 220;
 const MAX_CLIENTS = 60;
 const COLORS = [0x2f5d8a, 0x8a2f3c, 0x3c7a4a, 0xc9a227, 0x6b4a8a, 0x2b2b2b, 0xd06a3a, 0x4a8a8a, 0xe0e0e0, 0x7a5a3a];
 
-interface Walker { i: number; j: number; s: number; v: number; color: number; target: number | null; life: number }
+interface Walker { i: number; j: number; s: number; v: number; color: number; target: number | null; life: number; lat: number; door: string; wait: number }
 
 /** Boucle de trottoir d'un îlot : rectangle de demi-côté L, paramètre s ∈ [0, 8L). */
 const L = BLOCK / 2 + SIDEWALK_W / 2;
@@ -76,13 +76,14 @@ export class People {
     if (blockHint >= 0) { i = blockHint % this.d.nx; j = Math.floor(blockHint / this.d.nx); }
     const v = (1.1 + this.rnd() * 0.5) * (this.rnd() < 0.5 ? 1 : -1);
     const color = COLORS[Math.floor(this.rnd() * COLORS.length)]!;
-    if (!target) return { i, j, s: this.rnd() * 8 * L, v, color, target: null, life: 0 };
+    const lat = (0.35 + this.rnd() * 0.85) * Math.sign(v);
+    if (!target) return { i, j, s: this.rnd() * 8 * L, v, color, target: null, life: 0, lat, door: '', wait: 0 };
     const c = blockCenter(this.d, i, j);
     const ts = loopParam(c.x, c.z, target.x, target.z);
     // Départ à 25–60 m de la porte, marche vers elle.
     const off = 25 + this.rnd() * 35;
     const s = ts - Math.sign(v) * off;
-    return { i, j, s, v, color, target: ts, life: off / Math.abs(v) };
+    return { i, j, s, v, color, target: ts, life: off / Math.abs(v), lat: 0.9 * Math.sign(v), door: `${Math.round(target.x)}|${Math.round(target.z)}`, wait: 0 };
   }
 
   /** Un client se dirige vers la porte (x, z) d'un commerce. */
@@ -103,16 +104,26 @@ export class People {
   update(dt: number): void {
     const out: Walker[] = [];
     let k = 0;
+    // File d'attente devant chaque porte : ordre d'arrivée, 0,85 m entre deux clients, 1,2 s pour entrer.
+    const queues = new Map<string, Walker[]>();
+    for (const w of this.walkers) if (w.target !== null && w.life * Math.abs(w.v) < 7) { const q = queues.get(w.door); if (q) q.push(w); else queues.set(w.door, [w]); }
+    for (const q of queues.values()) q.sort((a, b) => a.life - b.life);
     for (const w of this.walkers) {
-      w.s += w.v * dt;
-      if (w.target !== null) { w.life -= dt; if (w.life <= 0) continue; } // entré dans le commerce
+      if (w.target !== null) {
+        const q = queues.get(w.door);
+        const rank = q ? q.indexOf(w) : -1;
+        const left = w.life * Math.abs(w.v);
+        const stop = rank < 0 ? 0 : 0.35 + rank * 0.85;
+        if (left - Math.abs(w.v) * dt > stop) { w.s += w.v * dt; w.life -= dt; }
+        else if (rank === 0) { w.wait += dt; if (w.wait > 1.2) continue; } // entré dans le commerce
+      } else w.s += w.v * dt;
       out.push(w);
       const c = blockCenter(this.d, w.i, w.j);
       const [x, z, rot] = loopPos(c.x, c.z, w.s);
       const bob = Math.abs(Math.sin(w.s * 3.2)) * 0.05;
       this.q.setFromAxisAngle(this.up, rot + (w.v < 0 ? Math.PI : 0));
       // Décalage latéral : les deux sens de marche se croisent sans se traverser.
-      const lat = w.v > 0 ? 0.6 : -0.6;
+      const lat = w.lat;
       const [dx, dz] = [Math.cos(rot) * lat, -Math.sin(rot) * lat];
       this.m.compose(new THREE.Vector3(x + dx, 0.16 + bob, z + dz), this.q, new THREE.Vector3(1, 1, 1));
       this.mesh.setMatrixAt(k, this.m);

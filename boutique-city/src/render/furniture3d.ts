@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import { FURNITURE_BY_ID } from '../sim/catalog';
+import { assets } from '../assets';
 import { box, cyl, hashRand, mat, sph } from './kit';
 
 /** Couleur d'emballage de chaque produit. */
@@ -36,6 +37,8 @@ export function furnitureSize(id: string): { w: number; d: number } {
  * présentés (alternées).
  */
 export function buildFurniture(id: string, fill = 0, colors: string[] = ['#cccccc'], seed = 1): THREE.Group {
+  const fromKit = kitFurniture(id, fill, colors, seed);
+  if (fromKit) return fromKit;
   const g = new THREE.Group();
   g.name = id;
   const { w, d } = furnitureSize(id);
@@ -206,6 +209,103 @@ export function buildFurniture(id: string, fill = 0, colors: string[] = ['#ccccc
     }
     default:
       box(g, w * 0.9, 0.8, d * 0.9, 0, 0, 0, mat('#999999'));
+  }
+  return g;
+}
+
+/* ------------------------------ Modèles Kenney (Furniture Kit) ------------------------------ */
+
+/** Pose un modèle ajusté dans une boîte, à une position ; faux si le modèle manque. */
+function put(g: THREE.Group, key: string, w: number, h: number | null, d: number, x: number, y: number, z: number, stretch = true, ry = 0): boolean {
+  const o = assets.fitted(key, w, h, d, stretch);
+  if (!o) return false;
+  o.position.set(x, y, z);
+  o.rotation.y = ry;
+  g.add(o);
+  return true;
+}
+
+/** Cap pour qu'un objet dont l'avant regarde vers −z (convention des chaises) regarde vers (dx, dz). */
+const faceTo = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
+
+/**
+ * Meuble fait des modèles du Furniture Kit, avec la marchandise ajoutée par le jeu (remplissage), ou null si un
+ * modèle manque (le meuble fait en code est alors utilisé). Vitrines réfrigérées, vitrines à pâtisseries, portants,
+ * tableaux, armoires et tables basses restent faits en code : leur contenu visible fait partie du jeu.
+ */
+function kitFurniture(id: string, fill: number, colors: string[], seed: number): THREE.Group | null {
+  const need: Record<string, string[]> = {
+    caisse: ['meuble.bureau', 'meuble.ecran'], rayon: ['meuble.bibliotheque'], etagere: ['meuble.bibliotheque'], comptoir: ['meuble.bar'],
+    machine: ['meuble.placard', 'meuble.cafetiere'], table: ['meuble.table-ronde', 'meuble.chaise'], plante: ['meuble.plante'], lampe: ['meuble.lampe'],
+    tapis: ['meuble.tapis'], lit: ['meuble.lit'], canape: ['meuble.canape'], cuisine: ['meuble.placard', 'meuble.frigo'],
+  };
+  const keys = need[id];
+  if (!keys || !keys.every((k) => assets.has(k))) return null;
+  const g = new THREE.Group();
+  g.name = id;
+  const { w, d } = furnitureSize(id);
+  const r = hashRand(seed);
+  const col = (k: number): THREE.Material => mat(colors[k % colors.length]!, { rough: 0.6 });
+  const count = (slots: number): number => Math.round(Math.max(0, Math.min(1, fill)) * slots);
+  switch (id) {
+    case 'caisse':
+      put(g, 'meuble.bureau', w - 0.1, 0.95, 0.75, 0, 0, 0.05);
+      put(g, 'meuble.ecran', 0.5, 0.42, 0.18, -0.45, 0.95, -0.15, false);
+      box(g, 0.18, 0.05, 0.26, 0.4, 0.95, 0.05, mat('#2b2f36'));
+      box(g, w - 0.1, 0.06, 0.04, 0, 0.55, 0.43, mat('#d8a03a'), false);
+      break;
+    case 'rayon':
+    case 'etagere': {
+      const depth = id === 'rayon' ? 0.6 : 0.42, h = id === 'rayon' ? 1.95 : 1.8, z0 = -d / 2 + depth / 2 + 0.05;
+      put(g, 'meuble.bibliotheque', w - 0.08, h, depth, 0, 0, z0);
+      // Planches du modèle : marchandise posée sur chacune, sauf le dessus.
+      const levels = [0.035, 0.36, 0.68].map((f) => f * h + 0.02);
+      const per = Math.round((w - 0.2) / 0.38);
+      let n = count(per * levels.length), k = 0;
+      for (const y of levels) for (let i = 0; i < per; i++, k++) {
+        if (n-- <= 0) continue;
+        const x = -w / 2 + 0.2 + (i + 0.5) * ((w - 0.4) / per);
+        box(g, 0.28, 0.16 + r() * 0.12, depth * 0.62, x, y, z0 + 0.02, col(k));
+      }
+      break;
+    }
+    case 'comptoir': {
+      put(g, 'meuble.bar', w, 1.0, 0.8, 0, 0, 0);
+      let n = count(10);
+      for (let i = 0; i < 10 && n > 0; i++, n--) cyl(g, 0.09, 0.11, -w / 2 + 0.2 + (i % 5) * 0.36, 1.0, -0.2 + Math.floor(i / 5) * 0.2, mat(i % 2 ? '#f4f4f4' : '#d8c8a8'), false);
+      break;
+    }
+    case 'machine':
+      put(g, 'meuble.placard', 0.85, 0.9, 0.65, 0, 0, -0.1);
+      put(g, 'meuble.cafetiere', 0.5, 0.5, 0.45, 0, 0.9, -0.12, false);
+      break;
+    case 'table':
+      put(g, 'meuble.table-ronde', 1.05, 0.75, 1.05, 0, 0, 0);
+      for (const [cx, cz] of [[0, -0.75], [0, 0.75], [-0.75, 0], [0.75, 0]] as const) put(g, 'meuble.chaise', 0.45, 0.95, 0.45, cx, 0, cz, false, faceTo(-cx, -cz));
+      break;
+    case 'plante':
+      put(g, 'meuble.plante', 0.8, 1.4, 0.8, 0, 0, 0, false);
+      break;
+    case 'lampe':
+      put(g, 'meuble.lampe', 0.5, 1.75, 0.5, 0, 0, 0, false);
+      break;
+    case 'tapis':
+      put(g, 'meuble.tapis', w - 0.1, null, d - 0.1, 0, 0.005, 0);
+      break;
+    case 'lit':
+      put(g, 'meuble.lit', w - 0.05, null, d - 0.05, 0, 0, 0);
+      break;
+    case 'canape':
+      put(g, 'meuble.canape', w - 0.1, 0.9, 0.9, 0, 0, 0);
+      break;
+    case 'cuisine':
+      put(g, 'meuble.placard', 0.98, 0.92, 0.65, -1, 0, -0.15);
+      put(g, 'meuble.placard', 0.98, 0.92, 0.65, 0, 0, -0.15);
+      put(g, 'meuble.frigo', 0.95, 2.0, 0.7, 1, 0, -0.12, false);
+      box(g, 2, 0.6, 0.35, -0.5, 1.55, -0.3, mat('#e8e2d8'));
+      break;
+    default:
+      return null;
   }
   return g;
 }

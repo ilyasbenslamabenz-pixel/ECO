@@ -8,16 +8,17 @@ import * as THREE from 'three';
 import { FURNITURE_BY_ID, PRODUCT_BY_ID } from '../sim/catalog';
 import { doorCells, frontDir, neighbourCells, registerSides } from '../sim/layout';
 import { findPath } from '../world/pathfind';
-import { Humanoid, lookFrom, type Look } from './humanoid';
+import { makePerson, type Person } from './humanoid';
 import type { InteriorItem, InteriorView } from './interior-view';
+import { disposeOwn } from './kit';
 
-const MAX_CUSTOMERS = 22;
+const MAX_CUSTOMERS = 14;
 
 type Step = { kind: 'browse'; cell: [number, number]; look: [number, number] } | { kind: 'pay' } | { kind: 'exit' };
 
 interface Register { uid: number; front: [number, number][]; back: [number, number][]; dir: [number, number]; queue: Customer[]; tended: boolean }
 
-interface Mover { h: Humanoid; x: number; z: number; heading: number; route: [number, number][]; speed: number }
+interface Mover { h: Person; x: number; z: number; heading: number; route: [number, number][]; speed: number }
 interface Customer extends Mover { arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
 interface Staff extends Mover { id: number; idle: number }
 
@@ -76,7 +77,7 @@ export class InteriorAgents {
     this.staff = this.staff.filter((s) => ids.has(s.id));
     for (const e of list) {
       if (this.staff.some((s) => s.id === e.id)) continue;
-      const h = new Humanoid(lookFrom(e.look, this.accent));
+      const h = makePerson(e.look, this.accent);
       const [x, z] = this.view.cellCenter(...this.door());
       this.group.add(h.group);
       this.staff.push({ id: e.id, h, x, z, heading: Math.PI, route: [], speed: 0, idle: 0 });
@@ -102,8 +103,7 @@ export class InteriorAgents {
     }
     plan.push({ kind: 'pay' }, { kind: 'exit' });
     const [ox, oz] = this.view.outside();
-    const look: Look = lookFrom(Math.floor(this.rand() * 1e6));
-    const h = new Humanoid(look, 0.94 + this.rand() * 0.1);
+    const h = makePerson(Math.floor(this.rand() * 1e6), undefined, 0.94 + this.rand() * 0.1);
     this.group.add(h.group);
     const [dx, dz] = this.view.cellCenter(...this.door());
     this.customers.push({ h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, route: [[dx, dz]], speed: 1.25 + this.rand() * 0.35, arrive: null, plan, state: 'walk', timer: 0, reg: null, slot: 0, jx: (this.rand() - 0.5) * 0.3, jz: (this.rand() - 0.5) * 0.3 });
@@ -161,13 +161,28 @@ export class InteriorAgents {
     c.arrive = st;
   }
 
+  /**
+   * Case de la k-ième place de la file d'une caisse : cases libres les plus proches du devant de la caisse (en
+   * distance de marche), en privilégiant l'alignement dans l'axe de la caisse. Chaque client a sa case.
+   */
   private slotCell(r: Register, k: number): [number, number] {
     const f = r.front[0]!;
-    for (let i = k; i >= 0; i--) {
-      const c: [number, number] = [f[0] + r.dir[0] * i, f[1] + r.dir[1] * i];
-      if (!this.view.walkBlocked(c[0], c[1])) return c;
+    const W = this.view.W, D = this.view.D;
+    const dist = new Int32Array(W * D).fill(-1);
+    const order: [number, number][] = [];
+    const q: [number, number][] = [f];
+    dist[f[1] * W + f[0]] = 0;
+    for (let h = 0; h < q.length && order.length <= k + 1; h++) {
+      const [x, z] = q[h]!;
+      order.push([x, z]);
+      for (const [dx, dz] of [[r.dir[0], r.dir[1]], [r.dir[1], r.dir[0]], [-r.dir[1], -r.dir[0]], [-r.dir[0], -r.dir[1]]] as const) {
+        const nx = x + dx, nz = z + dz;
+        if (!this.view.inside(nx, nz) || dist[nz * W + nx]! >= 0 || this.view.walkBlocked(nx, nz)) continue;
+        dist[nz * W + nx] = dist[z * W + x]! + 1;
+        q.push([nx, nz]);
+      }
     }
-    return f;
+    return order[Math.min(k, order.length - 1)] ?? f;
   }
 
   /** Avance d'un pas le long de la route ; vrai à l'arrivée. */
@@ -228,14 +243,52 @@ export class InteriorAgents {
         if (c.timer <= 0) { c.reg?.queue.shift(); c.reg = null; this.next(c); }
       } else if (c.state === 'leave' && arrived) {
         this.group.remove(c.h.group);
+        disposeOwn(c.h.group);
         continue;
       }
-      c.h.group.position.set(c.x, 0, c.z);
-      c.h.group.rotation.y = c.heading;
       keep.push(c);
     }
     this.customers = keep;
+    this.separate();
+    this.separate();
+    for (const c of this.customers) { c.h.group.position.set(c.x, 0, c.z); c.h.group.rotation.y = c.heading; }
   }
+
+  /**
+   * Séparation minimale : deux personnes à moins de MIN_GAP m s'écartent l'une de l'autre (jamais dans un meuble).
+   * Les employés et le joueur comptent comme obstacles fixes.
+   */
+  private separate(): void {
+    const MIN_GAP = 0.75;
+    const fixed = this.staff.map((s) => [s.x, s.z] as const);
+    if (this.playerPos) fixed.push([this.playerPos[0], this.playerPos[1]]);
+    const cs = this.customers;
+    const push = (c: Customer, dx: number, dz: number): void => {
+      const nx = c.x + dx, nz = c.z + dz;
+      const [cx, cz] = this.view.cellAt(nx, nz);
+      if (this.view.inside(cx, cz) && this.view.walkBlocked(cx, cz)) return;
+      c.x = nx; c.z = nz;
+    };
+    for (let i = 0; i < cs.length; i++) {
+      const a = cs[i]!;
+      for (let j = i + 1; j < cs.length; j++) {
+        const b = cs[j]!;
+        const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+        if (d >= MIN_GAP) continue;
+        const k = (MIN_GAP - d) / 2, ux = d > 1e-4 ? dx / d : 1, uz = d > 1e-4 ? dz / d : 0;
+        push(a, -ux * k, -uz * k); push(b, ux * k, uz * k);
+      }
+      // En marche, un client contourne au plus près (sans être bloqué par le joueur dans l'entrée).
+      if (a.state === 'walk' || a.state === 'leave') continue;
+      for (const [fx, fz] of fixed) {
+        const dx = a.x - fx, dz = a.z - fz, d = Math.hypot(dx, dz);
+        if (d < MIN_GAP && d > 1e-4) push(a, (dx / d) * (MIN_GAP - d), (dz / d) * (MIN_GAP - d));
+      }
+    }
+  }
+
+  /** Position du joueur dans l'intérieur (obstacle pour les clients). */
+  playerPos: [number, number] | null = null;
 
   clear(): void {
     for (const c of this.customers) this.group.remove(c.h.group);

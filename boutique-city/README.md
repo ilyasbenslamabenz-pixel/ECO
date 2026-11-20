@@ -32,12 +32,23 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
 
 Sauvegarde automatique chaque jour de jeu (dans le navigateur) et bouton Sauvegarder.
 
+## Modèles 3D
+25 modèles **Kenney, licence CC0** (domaine public), dans `models/` (2,3 Mo) : 7 bâtiments du City Kit (Commercial),
+4 personnages animés des Mini Characters, 14 meubles du Furniture Kit. Sources et licences : `models/CREDITS.txt`.
+- `src/assets.ts` : section CONFIG puis ASSETS (clé → fichier, échelle, rotation), chargement unique (GLTFLoader +
+  LoadingManager, écran de chargement avec barre de progression), clones (SkeletonUtils.clone pour les personnages),
+  ajustement automatique par boîte englobante.
+- Repli obligatoire : un modèle absent ou en erreur laisse la forme faite en code (`?sansmodeles` pour l'essayer).
+- `?galerie` : galerie de contrôle (orientation, échelle) de tous les modèles.
+- `node scripts/embed-textures.mjs <texture.png> <modèle.glb>…` : intègre la texture d'un pack dans ses GLB.
+
 ## Développement
 ```
 npm install
 npm run typecheck && npm test      # simulation, collisions, chemins (tsx --test)
 npm run build                      # dist/game.js, dist/index.html, dist/artifact.html
 node tests/e2e.mjs [dossier]       # parcours navigateur complet (Playwright) et captures
+node tests/e2e-boucle.mjs [dossier] # boucle commerce sur 3 jours, récapitulatifs, sauvegarde et rechargement
 ```
 - `src/sim/` : simulation en TypeScript pur (quartier et services, aménagement, achats sur place, clients minute par
   minute, employés, véhicules et cargaison, besoins du personnage, prêts, publicité, sauvegarde).

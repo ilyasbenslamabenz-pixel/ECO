@@ -14,11 +14,13 @@ import { chromium } from 'playwright';
 const out = process.argv[2] ?? 'tests/out';
 mkdirSync(out, { recursive: true });
 const dist = join(process.cwd(), 'dist');
-const types = { '.html': 'text/html', '.js': 'text/javascript' };
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.glb': 'model/gltf-binary' };
 const server = createServer((req, res) => {
   const u = new URL(req.url, 'http://x').pathname;
   const p = join(dist, decodeURIComponent(u === '/' ? '/index.html' : u));
-  try { res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream' }); res.end(readFileSync(p)); } catch { res.writeHead(404); res.end(); }
+  let body;
+  try { body = readFileSync(p); } catch { res.writeHead(404); res.end(); return; }
+  res.writeHead(200, { 'content-type': types[extname(p)] ?? 'application/octet-stream' }); res.end(body);
 }).listen(0);
 const base = `http://127.0.0.1:${server.address().port}`;
 let fails = 0;
@@ -33,6 +35,13 @@ try {
   const ev = (f, a) => page.evaluate(f, a);
   const shot = (n) => page.screenshot({ path: join(out, `${n}.png`) });
   const service = (kind) => ev((k) => window.__bc.game.district.buildings.find((b) => b.service === k).id, kind);
+  /** Clic sur le n-ième bouton du panneau dont le texte contient `text` (clic DOM : le pilote voit par intermittence un
+   * élément détaché sur cette page à faible cadence d'images). */
+  const panelButton = async (text, nth = 0) => {
+    await page.waitForFunction(([t, n]) => [...document.querySelectorAll('#panel button')].filter((b) => b.textContent.includes(t)).length > n, [text, nth], { timeout: 30000 });
+    await ev(([t, n]) => [...document.querySelectorAll('#panel button')].filter((b) => b.textContent.includes(t))[n].click(), [text, nth]);
+    await page.waitForTimeout(250);
+  };
   const goIn = async (buildingId) => { await ev((b) => window.__bc.toDoor(b), buildingId); await page.waitForTimeout(250); await page.keyboard.press('e'); await page.waitForTimeout(400); };
 
   await page.goto(`${base}/index.html?seed=7&nouveau`);
@@ -146,6 +155,8 @@ try {
 
   // Le lendemain matin : livraison, le joueur tient la caisse, des clients entrent.
   await ev(() => { for (let k = 0; k < 13; k++) { window.__bc.keepAlive(); window.__bc.advance(120); } window.__bc.keepAlive(); });
+  await page.waitForSelector('.recap');
+  await page.click('.recap button.primary');
   await ev(() => { const b = window.__bc, v = b.scene.interior.view, it = v.items.find((i) => i.def === 'caisse'); const [x, z] = v.cellCenter(it.x, it.z - 1); b.setIpos(x, z); });
   await page.waitForTimeout(300);
   check(await ev(() => window.__bc.action()) === 'Tenir la caisse', 'invite « Tenir la caisse » derrière la caisse');
@@ -162,31 +173,31 @@ try {
 
   // Agence pour l'emploi, banque, publicité, snack (panneaux).
   await goIn(await service('emploi'));
-  await page.locator('#panel button:has-text("Embaucher")').first().click();
+  await panelButton('Embaucher');
   await page.waitForTimeout(200);
   check(await ev(() => window.__bc.game.employees.length === 1), 'employé embauché à l’agence');
   await page.keyboard.press('Escape');
   await goIn(await service('banque'));
-  await page.locator('#panel button:has-text("Emprunter")').first().click();
+  await panelButton('Emprunter');
   await page.waitForTimeout(200);
   check(await ev(() => window.__bc.game.loans.length === 1), 'prêt accordé');
   await shot('11-banque');
   await page.keyboard.press('Escape');
   await goIn(await service('pub'));
-  await page.locator('#panel button:has-text("Lancer")').first().click();
+  await panelButton('Lancer');
   await page.waitForTimeout(200);
   check(await ev(() => window.__bc.game.campaigns.length === 1), 'campagne de publicité lancée');
   await page.keyboard.press('Escape');
   await ev(() => { window.__bc.game.player.hunger = 30; });
   await goIn(await service('snack'));
-  await page.locator('#panel .item button').last().click();
+  await ev(() => [...document.querySelectorAll('#panel .item button')].at(-1).click());
   await page.waitForTimeout(200);
   check(await ev(() => window.__bc.game.player.hunger > 90), 'repas au snack');
   await page.keyboard.press('Escape');
 
   // Garage : camionnette, conduite.
   await goIn(await service('garage'));
-  await page.locator('#panel button:has-text("Acheter")').nth(1).click();
+  await panelButton('Acheter', 1);
   await page.waitForTimeout(200);
   await page.keyboard.press('Escape');
   const van = await ev(() => window.__bc.game.vehicles[0]);
@@ -208,6 +219,8 @@ try {
   await page.click('#map .legend-btn:has-text("Grossiste")');
   check(await ev(() => document.getElementById('map').classList.contains('hidden')), 'destination choisie sur la carte');
   await ev(() => { for (let d = 0; d < 4; d++) { window.__bc.keepAlive(); window.__bc.advance(720); } });
+  await page.waitForTimeout(400);
+  if (await page.locator('.recap').count()) await page.click('.recap button.primary');
   await page.click('#hud button:has-text("Entreprise")');
   await page.waitForTimeout(500);
   await shot('14-entreprise');

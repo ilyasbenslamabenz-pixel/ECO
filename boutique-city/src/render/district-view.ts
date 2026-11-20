@@ -4,7 +4,9 @@
  * auvents, enseignes, parc, arbres. Repérage des bâtiments (survol, sélection) par rayon. Dépend de three.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCK, FACE_N, PITCH, SIDEWALK_W, STREET_W, blockCenter, type Building, type District } from '../sim/district';
+import { assets } from '../assets';
 import { disposeOwn, textPlane } from './kit';
 
 export const FLOOR_H = 3.2;
@@ -108,8 +110,13 @@ export class DistrictView {
     geo.setAttribute('aShop', new THREE.InstancedBufferAttribute(shopAttr, 1));
     this.buildingMesh = instanced(geo, facadeMaterial(), mats, 'immeubles', true, true);
     this.baseColors.forEach((c, k) => this.buildingMesh.setColorAt(k, c));
-    this.group.add(this.buildingMesh);
-    this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x5d5b58, roughness: 0.9 }), roofs, 'toits', true, true));
+    // Modèles du City Kit chargés : bâtiments instanciés par modèle ; sinon boîtes à fenêtres procédurales.
+    const kit = this.kitBuildings();
+    if (kit) this.group.add(kit);
+    else {
+      this.group.add(this.buildingMesh);
+      this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x5d5b58, roughness: 0.9 }), roofs, 'toits', true, true));
+    }
 
     // Auvents des commerces (couleur : type du commerce ; gris : local libre).
     const shops = d.buildings.filter((b) => b.premise || b.service);
@@ -128,21 +135,71 @@ export class DistrictView {
     this.group.add(this.awnings);
     // Portes (cadre sombre sur la façade) et anneaux lumineux sur le trottoir des bâtiments où l'on peut entrer.
     const doors = d.buildings.filter((b) => b.premise || b.service || b.home);
-    const frames: THREE.Matrix4[] = [];
+    const frames: THREE.Matrix4[] = [], glass: THREE.Matrix4[] = [];
     this.rings = new THREE.InstancedMesh(new THREE.RingGeometry(0.75, 1.0, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.85, depthWrite: false }), doors.length);
     this.rings.name = 'anneaux';
     doors.forEach((b, k) => {
       const n = FACE_N[b.face]!, depth = b.face % 2 === 0 ? b.d : b.w;
-      const fx = b.x + n[0] * (depth / 2 + 0.06), fz = b.z + n[1] * (depth / 2 + 0.06);
-      const size = b.face % 2 === 0 ? new THREE.Vector3(1.9, 2.5, 0.14) : new THREE.Vector3(0.14, 2.5, 1.9);
-      frames.push(new THREE.Matrix4().compose(new THREE.Vector3(fx, 0.16, fz), new THREE.Quaternion(), size));
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(n[0], n[1]));
+      const at = (out: number): THREE.Vector3 => new THREE.Vector3(b.x + n[0] * (depth / 2 + out), 0.16, b.z + n[1] * (depth / 2 + out));
+      frames.push(new THREE.Matrix4().compose(at(0.02), q, new THREE.Vector3(1, 1, 1)));
+      glass.push(new THREE.Matrix4().compose(at(0.0), q, new THREE.Vector3(1, 1, 1)));
       this.rings.setMatrixAt(k, new THREE.Matrix4().makeTranslation(b.doorX, 0.19, b.doorZ));
       this.rings.setColorAt(k, new THREE.Color(0xffffff));
       this.ringIndex.set(b.id, k);
     });
-    this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.5, metalness: 0.3 }), frames, 'portes', false, true));
+    // Vraie porte : chambranle, seuil, deux battants vitrés à montants, poignées ; derrière, un intérieur éclairé.
+    const fg = mergeGeometries([
+      new THREE.BoxGeometry(0.14, 2.5, 0.16).translate(-0.98, 1.25, 0.04), new THREE.BoxGeometry(0.14, 2.5, 0.16).translate(0.98, 1.25, 0.04),
+      new THREE.BoxGeometry(2.1, 0.18, 0.16).translate(0, 2.45, 0.04), new THREE.BoxGeometry(2.1, 0.05, 0.3).translate(0, 0.025, 0.1),
+      new THREE.BoxGeometry(0.06, 2.3, 0.08).translate(0, 1.18, 0.06), new THREE.BoxGeometry(1.86, 0.08, 0.08).translate(0, 0.12, 0.06),
+      new THREE.BoxGeometry(1.86, 0.06, 0.08).translate(0, 2.32, 0.06),
+      new THREE.BoxGeometry(0.04, 0.32, 0.06).translate(-0.12, 1.1, 0.12), new THREE.BoxGeometry(0.04, 0.32, 0.06).translate(0.12, 1.1, 0.12),
+    ].map((g) => g.toNonIndexed()))!;
+    this.group.add(instanced(fg, new THREE.MeshStandardMaterial({ color: 0x3a4048, roughness: 0.35, metalness: 0.6 }), frames, 'portes', true, true));
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x6b5a3a, emissive: 0xffd9a0, emissiveIntensity: 0.55, roughness: 0.15, metalness: 0.2 });
+    this.group.add(instanced(new THREE.PlaneGeometry(1.84, 2.2).translate(0, 1.22, 0.02), glassMat, glass, 'portes-vitrees', false, false));
     this.group.add(this.rings);
     this.group.add(this.trees());
+  }
+
+  /**
+   * Bâtiments du City Kit (Kenney) : pour chaque immeuble, le modèle dont les proportions (hauteur / largeur)
+   * collent le mieux, avec une préférence selon l'usage et le loyer (tours pour les bureaux hauts, façades plus
+   * riches pour les locaux chers). Un InstancedMesh par modèle, étiré à l'emprise et à la hauteur de l'immeuble,
+   * façade tournée vers la rue. Null si aucun modèle n'est chargé.
+   */
+  private kitBuildings(): THREE.Group | null {
+    const low = ['bat.a', 'bat.d', 'bat.h', 'bat.f', 'bat.l'].filter((k) => assets.has(k));
+    const towers = ['bat.tour-a', 'bat.tour-b'].filter((k) => assets.has(k));
+    if (!low.length) return null;
+    const aspect = new Map([...low, ...towers].map((k) => [k, assets.aspect(k)]));
+    const maxRent = Math.max(1, ...this.d.premises.map((p) => p.rent / p.area));
+    const per = new Map<string, THREE.Matrix4[]>();
+    for (const b of this.d.buildings) {
+      const n = FACE_N[b.face]!;
+      const front = b.face % 2 === 0 ? b.w : b.d, depth = b.face % 2 === 0 ? b.d : b.w, h = b.floors * FLOOR_H;
+      const target = h / ((front + depth) / 2);
+      const pool = b.kind === 'bureaux' && b.floors >= 6 && towers.length ? towers : low;
+      // Loyer élevé : modèles plus riches (fin de liste).
+      const lux = b.premise ? (b.premise.rent / b.premise.area) / maxRent : b.kind === 'bureaux' ? 0.7 : 0.3;
+      let best = pool[0]!, bs = Infinity;
+      pool.forEach((k, i) => {
+        const sc = Math.abs(Math.log(aspect.get(k)! / target)) + Math.abs(i / Math.max(1, pool.length - 1) - lux) * 0.5 + ((b.tint * 7.3 + i * 0.37) % 1) * 0.35;
+        if (sc < bs) { bs = sc; best = k; }
+      });
+      const m = new THREE.Matrix4().compose(new THREE.Vector3(b.x, 0.16, b.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(n[0], n[1])), new THREE.Vector3(front, h, depth));
+      if (!per.has(best)) per.set(best, []);
+      per.get(best)!.push(m);
+    }
+    const g = new THREE.Group();
+    g.name = 'immeubles-kit';
+    for (const [k, ms] of per) {
+      const mg = assets.merged(k);
+      if (!mg) return null;
+      g.add(instanced(mg.geo, mg.mat as THREE.Material, ms, `immeuble ${k}`, true, true));
+    }
+    return g;
   }
 
   /** Lignes blanches discontinues au milieu des rues. */
@@ -173,7 +230,10 @@ export class DistrictView {
       for (let z = -d.size.d / 2 + 10; z < d.size.d / 2; z += 18) { pts.push([x - STREET_W / 2 + 1.2, z]); pts.push([x + STREET_W / 2 - 1.2, z + 9]); }
     }
     const trunks: THREE.Matrix4[] = [], crowns: THREE.Matrix4[] = [];
+    // Aucun arbre devant une porte (bâtiments où l'on peut entrer).
+    const doors = d.buildings.filter((b) => b.premise || b.service || b.home).map((b) => [b.doorX, b.doorZ] as const);
     for (const [x, z] of pts) {
+      if (doors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 5.5)) continue;
       const s = 0.8 + rnd() * 0.5;
       trunks.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0.16, z), new THREE.Quaternion(), new THREE.Vector3(s, s, s)));
       crowns.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0.16 + 3.2 * s, z), new THREE.Quaternion(), new THREE.Vector3(s, s * 1.1, s)));
