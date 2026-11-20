@@ -216,3 +216,9 @@ Partie « Gotham Citx » (11 000 habitants), une journée simulée en Node à pa
 - « Circulation très lente » restait dans « Problèmes à régler » tant que l'alerte n'était pas lue, même redevenue
   fluide : affiché seulement si la vitesse moyenne reste sous 18 km/h (`TRAFFIC_OK_KMH`, seuil de réarmement).
 - Contrôlé : interface PC (26 OK), interface iPhone (succès), tests unitaires.
+
+## Parcelles vides : diagnostic, pas de bug (v54)
+Partie « Gotham Citx » : les îlots en herbe du quadrillage ne sont pas zonés. Zones tracées pleines (413 immeubles
+résidentiels, aucun lot constructible restant, croissance suspendue faute de place), demande résidentielle 0,58,
+aucun logement libre ; trois jours simulés : aucun nouveau bâtiment, comme attendu. Indice déjà donné au joueur
+(« need-zones », bouton Demande). Rien à changer dans la simulation : zoner les îlots vides.
