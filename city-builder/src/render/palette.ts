@@ -143,7 +143,9 @@ export const PALETTE_VIVES: Palette = {
   sky: { zenithTint: [0.8, 0.9, 1.06], horizonFog: 0.42 },
   fog: { density: 0.00015, blueMix: 0.4, maxLum: 0.6, duskDesat: 0.45, duskDensity: 0.2, duskDim: 0.4 },
   terrain: {
-    grassDry: [0.17, 0.175, 0.06], grassLush: [0.07, 0.155, 0.038], grassRemap: 0.82, grassSlope: [0.15, 0.15, 0.065],
+    // Herbe plus verte (demande du joueur, v53) : avant, sèche [0.17, 0.175, 0.06] (olive-jaune vue de haut), grasse
+    // [0.07, 0.155, 0.038], pentes [0.15, 0.15, 0.065].
+    grassDry: [0.095, 0.17, 0.045], grassLush: [0.045, 0.165, 0.035], grassRemap: 0.82, grassSlope: [0.11, 0.15, 0.055],
     rockDesat: 0.55, rockTint: [1.08, 1.04, 0.98],
     dirtTint: [1.08, 0.98, 0.86], sandTint: [1.18, 1.1, 0.92], gravelTint: [0.86, 0.86, 0.84],
     dirtPatch: 0.12, macroStrength: 0.2,
@@ -151,7 +153,7 @@ export const PALETTE_VIVES: Palette = {
   water: { shallow: [0.045, 0.2, 0.22], deep: [0.007, 0.036, 0.072] },
   foliage: [0.95, 1.0, 0.88],
   minimap: {
-    plain: [104, 150, 70], hill: [168, 160, 120], beach: [222, 204, 150], forest: [40, 98, 46], forestMax: 0.85,
+    plain: [86, 152, 64], hill: [168, 160, 120], beach: [222, 204, 150], forest: [40, 98, 46], forestMax: 0.85,
     waterShallow: [52, 132, 186], waterDeep: [22, 74, 138], shade: 0.42,
   },
 };
