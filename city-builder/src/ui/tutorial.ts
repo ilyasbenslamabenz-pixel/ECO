@@ -13,6 +13,8 @@ import type { WorldMirror } from '../client/tools/mirror';
 import { $, el } from './dom';
 
 const KEY = 'aube.tutorial.v1';
+/** Repli automatique du message « Premiers pas terminés » (ms) vers l'objectif en cours. */
+export const TUTO_FINISH_AUTO_MS = 20_000;
 
 interface TutoPrefs { skipped: boolean; open: boolean; done: boolean }
 
@@ -118,6 +120,7 @@ export class Tutorial {
   private pending = false;
   private goal: GoalInfo | null = null;
   private goalKey = '';
+  private finishTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly notify: (t: string, k?: 'info' | 'error' | 'ok') => void) {
     this.toggle.addEventListener('click', () => { this.prefs.open = !this.prefs.open; saveTutoPrefs(this.prefs); this.render(true); });
@@ -206,6 +209,7 @@ export class Tutorial {
       const doneStep = TUTO_STEPS[this.current];
       if (doneStep) this.notify(`Objectif atteint : ${doneStep.title}`, 'ok');
     }
+    const prev = this.current;
     this.current = idx;
     this.lastKey = key;
     const n = TUTO_STEPS.length;
@@ -213,6 +217,13 @@ export class Tutorial {
     this.toggle.setAttribute('aria-expanded', String(this.prefs.open));
     this.body.classList.toggle('hidden', !this.prefs.open);
     if (!step) {
+      // Ville chargée déjà avancée (étapes non franchies pendant cette session) : rien à féliciter, le panneau passe
+      // directement à l'objectif en cours (il restait ouvert sur « Premiers pas terminés » jusqu'au clic sur Fermer).
+      const finish = (): void => { if (this.prefs.done) return; this.prefs.done = true; saveTutoPrefs(this.prefs); this.render(true); };
+      if (prev !== n - 1) { finish(); return; }
+      // Terminés à l'instant : message affiché, puis repli automatique.
+      clearTimeout(this.finishTimer);
+      this.finishTimer = setTimeout(() => { if (this.current < 0) finish(); }, TUTO_FINISH_AUTO_MS);
       this.title.textContent = 'Premiers pas terminés';
       this.count.textContent = `${n}/${n}`;
       const close = el('button', { cls: 'primary', text: 'Fermer' });

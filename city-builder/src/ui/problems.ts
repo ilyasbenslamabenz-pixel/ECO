@@ -63,6 +63,9 @@ const kShort = (v: number): string => {
 };
 
 /** Liste des problèmes (pure, testable) : alertes, finances, chômage, couverture, trafic signalé. */
+/** Vitesse moyenne (km/h) au-delà de laquelle la circulation n'est plus un problème (réarmement de l'alerte, hud.ts). */
+export const TRAFFIC_OK_KMH = 18;
+
 export function collectProblems(counts: Partial<Record<AlertKind, number>> | null, report: ReportLike | null, money: number | null, trafficAlert: boolean, noCollection = 0, powerReserve?: number): Problem[] {
   const out: Problem[] = [];
   // Réserve de courant faible : prévenir AVANT la baisse de régime des commerces et de l'industrie.
@@ -151,7 +154,11 @@ export function initProblems(): void {
   const render = (): void => {
     const dbg = (window as unknown as { __aube?: DebugLike }).__aube;
     const stats = dbg?.lastStats as { money?: number } | null | undefined;
-    const traffic = journal.entries.some((e) => e.key === 'r:trafic' && e.unread);
+    // Circulation : alerte non lue ET encore lente maintenant (même seuil de réarmement que l'alerte, 18 km/h) ; sinon
+    // le problème restait affiché après le retour d'une circulation fluide, jusqu'à la lecture du journal.
+    const tr = (dbg?.lastReport as { traffic?: { vehicles: number; meanSpeedKmh: number } } | null | undefined)?.traffic;
+    const slowNow = !tr || !Number.isFinite(tr.meanSpeedKmh) || (tr.vehicles >= 30 && tr.meanSpeedKmh < TRAFFIC_OK_KMH);
+    const traffic = slowNow && journal.entries.some((e) => e.key === 'r:trafic' && e.unread);
     const all = collectProblems(lastAlertes()?.counts ?? null, (dbg?.lastReport as ReportLike | undefined) ?? null, stats?.money ?? null, traffic, lastAlertes()?.noCollection ?? 0, lastAlertes()?.powerReserve);
     current = all.slice(0, 3);
     const s = current.map((p) => `${p.id}|${p.text}|${p.severity}`).join(';') + `#${all.length}`;

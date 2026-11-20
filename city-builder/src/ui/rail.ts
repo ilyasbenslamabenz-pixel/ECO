@@ -184,7 +184,9 @@ function phoneObjectives(): void {
   // Hauteur occupée par l'encadré (0 s'il est masqué) : les boutons flottants du téléphone se placent au-dessus,
   // les notifications du bureau en dessous.
   const measure = (): void => {
-    const h = box.offsetParent !== null ? Math.round(box.getBoundingClientRect().height) + 6 : 0;
+    // Visibilité par getClientRects (offsetParent vaut toujours null pour un élément en position fixe : la hauteur
+    // restait 0 et les notifications du bureau recouvraient l'objectif en cours).
+    const h = box.getClientRects().length > 0 ? Math.round(box.getBoundingClientRect().height) + 6 : 0;
     document.documentElement.style.setProperty('--obj-h', `${h}px`);
   };
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(measure).observe(box);

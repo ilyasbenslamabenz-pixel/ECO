@@ -204,3 +204,15 @@ Partie « Gotham Citx » (11 000 habitants), une journée simulée en Node à pa
   Résultat sur la partie : 230 voitures, 20,6 km/h en moyenne, minimum 18,4 ; 131 arrivées par jour au lieu de 108.
 - Tests : circulation/plafond-capacite ; les deux tests de charge (collisions, bouchon émergent) désactivent ce
   plafond (`vehPerLaneKm: 0`) pour garder leur charge.
+
+## Interface : objectif en cours et notifications (v54)
+- Bug : sur ordinateur, les notifications recouvraient l'encadré d'objectif en haut à droite. Sa hauteur (`--obj-h`)
+  était mesurée à 0 : la visibilité était testée par `offsetParent`, toujours nul pour un élément en position fixe.
+  Mesure par `getClientRects` (rail.ts) : notifications placées sous l'encadré (contrôlé : encadré 64–270 px,
+  notifications à partir de 276 px).
+- « Premiers pas terminés » restait ouvert jusqu'au clic sur Fermer, même au chargement d'une ville déjà avancée :
+  passage direct à l'objectif en cours si les étapes n'ont pas été franchies pendant la session ; sinon message de
+  fin, puis repli automatique après 20 s (`TUTO_FINISH_AUTO_MS`).
+- « Circulation très lente » restait dans « Problèmes à régler » tant que l'alerte n'était pas lue, même redevenue
+  fluide : affiché seulement si la vitesse moyenne reste sous 18 km/h (`TRAFFIC_OK_KMH`, seuil de réarmement).
+- Contrôlé : interface PC (26 OK), interface iPhone (succès), tests unitaires.
