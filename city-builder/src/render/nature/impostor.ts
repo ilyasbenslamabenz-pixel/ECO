@@ -11,6 +11,11 @@ import * as THREE from 'three';
 /** Biais de mip de la capture d'albédo (voir ALBEDO_FRAG). */
 const ALBEDO_MIP_BIAS = -3;
 export const IMP_AZ = 8;
+/**
+ * Niveau de mip maximal lu dans les atlas (case de 128 px → 16 px au niveau 3) : au-delà, la silhouette disparaît
+ * dans la moyenne de la case.
+ */
+export const IMP_MAX_LOD = 3;
 export const IMP_EL = 4;
 /** Élévations des vues (rad) ; la dernière est la vue du dessus (89° : l'azimut garde un sens pour l'orientation). */
 export const IMP_ELEVATIONS = [THREE.MathUtils.degToRad(8), THREE.MathUtils.degToRad(36), THREE.MathUtils.degToRad(63), THREE.MathUtils.degToRad(89)];
@@ -265,13 +270,18 @@ varying vec3 vTint;
 varying vec3 vWorldPos;
 varying vec3 vViewDir;
 void main() {
-  vec4 a = texture2D(tAlb, vUv);
+  // Niveau de mip borné : au-delà, une case de l'atlas tient en quelques texels, l'alpha moyen de toute la case
+  // dépasse le seuil et l'arbre devient un rectangle plein (forêts en blocs sombres en vue aérienne lointaine).
+  vec2 tsz = vec2(textureSize(tAlb, 0));
+  vec2 dx = dFdx(vUv * tsz), dy = dFdy(vUv * tsz);
+  float lod = min(0.5 * log2(max(max(dot(dx, dx), dot(dy, dy)), 1e-8)), ${IMP_MAX_LOD.toFixed(1)});
+  vec4 a = textureLod(tAlb, vUv, lod);
   // Alpha « net » malgré les mipmaps (préserve la couverture du feuillage au loin).
   float al = (a.a - 0.3) / max(fwidth(a.a), 0.0001) + 0.5;
   if (al < 0.5) discard;
   // Pas de division par l'alpha : l'atlas n'est pas prémultiplié et son fond est déjà vert feuillage.
   a.rgb = sRGBTransferEOTF(vec4(a.rgb, 1.0)).rgb; // atlas stocké encodé en sRGB (cible RGBA8)
-  vec3 n = texture2D(tNor, vUv).xyz * 2.0 - 1.0;
+  vec3 n = textureLod(tNor, vUv, lod).xyz * 2.0 - 1.0;
   // Normales capturées pour l'arbre à rotation nulle : on applique la rotation de l'instance.
   float c = cos(vRot), s = sin(vRot);
   n = normalize(vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z));

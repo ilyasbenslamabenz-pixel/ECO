@@ -39,11 +39,59 @@ function placeholderSource(kind: 'albedo' | 'normal' | 'arm'): THREE.Source<unkn
   return s;
 }
 
+/**
+ * Clarté minimale de l'albédo final (texture moyenne × teinte, linéaire, canal le plus fort) par rôle. La teinte du
+ * catalogue se multiplie à une texture déjà sombre : tôle (88/255) × gris #7d8386 ≈ 40/255, tuiles grises × beige
+ * ≈ 56/255. En vue aérienne, la ville lisait comme une mosaïque de toits noirs. Le canal le plus fort (et non la
+ * luminance) laisse intactes les teintes saturées (tuiles rouges, briques). « zinc » : toits de tôle des maisons.
+ */
+export const ALBEDO_FLOOR: Readonly<Record<string, number>> = { toiture: 0.075, zinc: 0.075, facade: 0.05, facade_b: 0.05 };
+/** Éclaircissement maximal appliqué à la teinte. */
+export const ALBEDO_FLOOR_MAX_GAIN = 2.5;
+/**
+ * Matériaux métalliques (canal métal de l'ARM en moyenne > METAL_ARM_MIN) : l'albédo est la couleur du reflet. Un
+ * métal sombre (tôle « metal_larme », 61/255, × #3a3d40) ne réfléchit presque rien : toits de zinc d'un noir pur.
+ * Plancher d'un zinc / acier galvanisé réel (≈ 0,3 en linéaire au moins), gain non plafonné à 2,5.
+ */
+export const ALBEDO_FLOOR_METAL = 0.3;
+export const ALBEDO_FLOOR_METAL_MAX_GAIN = 200;
+export const METAL_ARM_MIN = 0.2;
+
+/** Facteur appliqué à la teinte pour atteindre le plancher (1 = inchangé). Valeurs linéaires (0..1). */
+export function albedoFloorGain(texMean: readonly [number, number, number], color: { r: number; g: number; b: number }, floor: number, maxGain = ALBEDO_FLOOR_MAX_GAIN): number {
+  const v = Math.max(texMean[0] * color.r, texMean[1] * color.g, texMean[2] * color.b);
+  if (!(v > 1e-4) || v >= floor) return 1;
+  return Math.min(maxGain, floor / v);
+}
+
+function srgbToLinear(c: number): number { return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+
+/** Couleur moyenne linéaire d'une image (sRGB), sur une réduction 16 × 16 ; null si illisible (tests, Safari ancien). */
+function imageMeanLinear(im: HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas | ImageData, srgb = true): [number, number, number] | null {
+  let data: Uint8ClampedArray;
+  try {
+    if (typeof ImageData !== 'undefined' && im instanceof ImageData) data = im.data;
+    else {
+      if (typeof OffscreenCanvas === 'undefined') return null;
+      const c = new OffscreenCanvas(16, 16);
+      const g = c.getContext('2d');
+      if (!g) return null;
+      g.drawImage(im as CanvasImageSource, 0, 0, 16, 16);
+      data = g.getImageData(0, 0, 16, 16).data;
+    }
+  } catch { return null; }
+  const acc = [0, 0, 0];
+  const n = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) for (let k = 0; k < 3; k++) acc[k]! += srgb ? srgbToLinear(data[i + k]! / 255) : data[i + k]! / 255;
+  return n ? [acc[0]! / n, acc[1]! / n, acc[2]! / n] : null;
+}
+
 export class BuildingMaterials {
   private readonly loader = new THREE.TextureLoader();
   private readonly images = new Map<string, Promise<HTMLImageElement | ImageBitmap | HTMLCanvasElement | OffscreenCanvas | ImageData | null>>();
   private readonly textures = new Map<string, THREE.Texture>();
   private readonly materials = new Map<string, THREE.Material>();
+  private readonly means = new Map<string, Promise<[number, number, number] | null>>();
   private readonly sets: Map<string, TextureSet>;
   private readonly pending = new Set<Promise<unknown>>();
   readonly errors: string[] = [];
@@ -152,10 +200,36 @@ export class BuildingMaterials {
         mat.aoMap = arm;
         mat.aoMapIntensity = 0.8;
       }
+      const floor = ALBEDO_FLOOR[role];
+      if (floor && !imageLimits.colorMapsOnly) this.applyAlbedoFloor(mat, set.albedo, set.arm ?? null, floor);
       m = mat;
     }
     this.materials.set(key, m);
     return m;
+  }
+
+  /** Teinte éclaircie (plancher de clarté) dès que les couleurs moyennes des textures sont connues. */
+  private applyAlbedoFloor(mat: THREE.MeshStandardMaterial, file: string, armFile: string | null, floor: number): void {
+    const p = Promise.all([this.meanOf(file, true), armFile ? this.meanOf(armFile, false) : Promise.resolve(null)]).then(([mu, arm]) => {
+      if (!mu) return;
+      const metal = !!arm && arm[2] > METAL_ARM_MIN;
+      const g = metal ? albedoFloorGain(mu, mat.color, ALBEDO_FLOOR_METAL, ALBEDO_FLOOR_METAL_MAX_GAIN) : albedoFloorGain(mu, mat.color, floor);
+      if (g !== 1) mat.color.multiplyScalar(g);
+    });
+    this.pending.add(p);
+    void p.finally(() => this.pending.delete(p));
+  }
+
+  /** Couleur moyenne d'une image déjà demandée par texture() (linéaire si sRGB, valeurs brutes sinon). */
+  private meanOf(file: string, srgb: boolean): Promise<[number, number, number] | null> {
+    const key = `${file}|${srgb ? 's' : 'l'}`;
+    let mean = this.means.get(key);
+    if (!mean) {
+      const img = this.images.get(file);
+      mean = img ? img.then((im) => (im ? imageMeanLinear(im, srgb) : null)) : Promise.resolve(null);
+      this.means.set(key, mean);
+    }
+    return mean;
   }
 
   /** Verre avec allumage nocturne par fenêtre et par instance. */
@@ -211,6 +285,31 @@ varying float vAubeHash;`)
     return m;
   }
 
+  /** Diagnostic : matériaux créés (nom, couleur sRGB finale). */
+  debugList(): { name: string; color: string }[] {
+    return [...this.materials.values()].map((m) => ({ name: m.name, color: (m as THREE.MeshStandardMaterial).color?.getHexString() ?? '' }));
+  }
+
+  /** Diagnostic : impose une couleur à tous les matériaux d'un rôle ; renvoie leur nombre. */
+  debugTint(role: string, hex: string): number {
+    let n = 0;
+    for (const m of this.materials.values()) if (m.name.split(':')[0] === role) { (m as THREE.MeshStandardMaterial).color?.set(hex); n++; }
+    return n;
+  }
+
+  /** Diagnostic : retire une carte de tous les matériaux de bâtiments (comparaison visuelle). */
+  debugStrip(what: 'normal' | 'arm' | 'map'): number {
+    let n = 0;
+    for (const m of this.materials.values()) {
+      const s = m as THREE.MeshStandardMaterial;
+      if (what === 'normal' && s.normalMap) { s.normalMap = null; n++; }
+      if (what === 'arm' && s.aoMap) { s.aoMap = null; s.roughnessMap = null; s.metalnessMap = null; n++; }
+      if (what === 'map' && s.map) { s.map = null; n++; }
+      s.needsUpdate = true;
+    }
+    return n;
+  }
+
   async whenReady(): Promise<void> {
     while (this.pending.size) await Promise.all([...this.pending]);
   }
@@ -225,6 +324,7 @@ varying float vAubeHash;`)
     this.materials.clear();
     this.textures.clear();
     this.images.clear();
+    this.means.clear();
   }
 }
 

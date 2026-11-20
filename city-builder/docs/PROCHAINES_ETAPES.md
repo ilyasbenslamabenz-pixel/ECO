@@ -164,3 +164,23 @@ rue ; `VIEWS`, `WAIT` réglables ; `__aube.buildingTextures()` compte les textur
   paliers automatiques « réduit » et « minimal » (`QualityTier.ao`). Test : rendu-pc-integre.
 - Réglages (`AO_PARAMS`) : rayon 4,5 m, épaisseur 2,5 m, intensité 0,85. Coût non mesuré sur vrai GPU (machine de test
   sans GPU) : à vérifier avec la page `?bench`.
+
+## Lisibilité : forêts lointaines, toits sombres, lumière du ciel (v53)
+Contrôlé sur la partie « Gotham Citx » (captures large / moyenne / rue ; `tests/e2e/arbres-loin.mjs <sauvegarde>
+<dossier>` : même arbre de près et de loin, couleur comparée).
+- Bug : en vue aérienne lointaine, les forêts devenaient des rectangles sombres. L'imposteur lisait l'alpha dans un
+  niveau de mipmap où une case de l'atlas (128 px) tient en un texel : l'alpha moyen de la case dépassait le seuil et
+  tout le quad devenait opaque. Niveau de mip borné à 3 (`IMP_MAX_LOD`, case de 16 px).
+- Épicéas presque noirs (luminance moyenne de l'albédo ≈ 55/255, feuillus ≈ 80) : teinte d'instance éclaircie par
+  essence d'après la couleur moyenne de son atlas (`foliageGain`, cible 72, gain ≤ 2) ; modèle 3D et imposteur
+  ensemble (couleurs mesurées identiques de près et de loin).
+- Toits et façades : la teinte du catalogue se multiplie à une texture déjà sombre (tôle 88/255 × #7d8386 ≈ 40/255,
+  ardoise × #4e5a67). Plancher de clarté par rôle (`ALBEDO_FLOOR` : toiture, zinc, façades), calculé sur la couleur
+  moyenne réelle de la texture une fois chargée, sur le canal le plus fort (teintes saturées intactes) ; métaux
+  (canal métal de l'ARM > 0,2) ramenés au reflet d'un zinc réel (`ALBEDO_FLOOR_METAL`). Qualité Basse inchangée.
+- Lumière du ciel (palette « vives ») : hémisphère 1,05 → 1,7 ; les versants à l'ombre ne sont plus noirs
+  (toit gris à l'ombre : 47 → 73 / 255).
+- Écartés après mesure : réseau d'eau (≈ 10 ms par heure de jeu, < 3 % du worker à ×16) ; étalonnage d'image (déjà
+  dans la palette « vives » : balance des blancs, saturation, contraste).
+- Outils de diagnostic (`__aube`) : `treeSample`, `buildingsNear(x, y)`, `buildingMaterials()`,
+  `tintBuildingRole(rôle, couleur)`, `stripBuildingMaps('normal'|'arm'|'map')`, `pickMaterial(x, y)`.

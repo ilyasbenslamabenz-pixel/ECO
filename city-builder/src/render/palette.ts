@@ -139,7 +139,7 @@ export const PALETTE_VIVES: Palette = {
   grade: { whiteBalance: [1.03, 1.0, 0.95], saturation: 1.14, contrast: 1.07 },
   exposure: 0.84,
   sun: { intensity: 3.3, colorHigh: [1.0, 0.93, 0.82], colorLow: [1.0, 0.45, 0.18] },
-  hemi: { skyDay: [0.56, 0.7, 0.98], ground: [0.27, 0.3, 0.18], intensity: 1.05 },
+  hemi: { skyDay: [0.56, 0.7, 0.98], ground: [0.27, 0.3, 0.18], intensity: 1.7 },
   sky: { zenithTint: [0.8, 0.9, 1.06], horizonFog: 0.42 },
   fog: { density: 0.00015, blueMix: 0.4, maxLum: 0.6, duskDesat: 0.45, duskDensity: 0.2, duskDim: 0.4 },
   terrain: {

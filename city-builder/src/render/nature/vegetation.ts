@@ -63,6 +63,23 @@ export const CARD_LOD_TRIANGLES = 16;
 /** Seuil (triangles du LOD0) sous lequel un arbre n'a qu'un LOD détaillé avant l'imposteur. */
 export const LIGHT_TREE_TRIANGLES = 3000;
 
+/** Luminance sRGB (0..255) minimale visée pour le feuillage moyen d'une essence. */
+export const FOLIAGE_MIN_LUMA = 72;
+/** Éclaircissement maximal (facteur linéaire sur l'albédo). */
+export const FOLIAGE_MAX_GAIN = 2;
+
+/**
+ * Éclaircissement d'une essence au feuillage trop sombre (épicéa : luminance ≈ 53/255, contre ≈ 80 pour les
+ * feuillus) : en vue aérienne, ses forêts lisaient comme des taches noires. Calculé sur la couleur moyenne de son
+ * atlas d'imposteur (sRGB), appliqué à la teinte d'instance (modèle 3D et imposteur ensemble, donc cohérents).
+ * L'essence reste plus sombre que les feuillus (cible 72, pas 80).
+ */
+export function foliageGain(meanRgb: readonly [number, number, number]): number {
+  const luma = 0.2126 * meanRgb[0] + 0.7152 * meanRgb[1] + 0.0722 * meanRgb[2];
+  if (!(luma > 1) || luma >= FOLIAGE_MIN_LUMA) return 1;
+  return Math.min(FOLIAGE_MAX_GAIN, Math.pow(FOLIAGE_MIN_LUMA / luma, 2.2));
+}
+
 /** Choisit le rôle d'un asset de végétation d'après sa catégorie et ses tags. */
 export function roleOf(a: CatalogAsset): VegRole | null {
   const tags = a.tags.map((t) => t.toLowerCase());
@@ -143,6 +160,8 @@ export class VegetationSystem {
   private alive = new Uint8Array(0);
   private planted = new Uint8Array(0);
   private tint = new Float32Array(0);
+  /** Éclaircissement par essence (feuillage trop sombre, voir foliageGain), indexé comme `species`. */
+  private gain = new Float32Array(256).fill(1);
   // Structure triée par (cellule, essence) : reconstruite quand `dirty`.
   private dirty = true;
   private sortedMat = new Float32Array(0);
@@ -263,6 +282,8 @@ export class VegetationSystem {
         im.name = `veg_${sp.asset.id}_imposteur`;
         this.group.add(im);
         rec.imp = { mesh: im, atlas, cap: 20000, count: 0, root: impRoot };
+        this.gain[si] = foliageGain(atlas.check.meanRgb);
+        this.dirty = true;
       }
       this.renders.push(rec);
     }
@@ -637,9 +658,10 @@ export class VegetationSystem {
       _m.compose(_p, _q, _s);
       _m.toArray(mats, dst * 16);
       const fol = this.species[this.spc[i]!]?.role === 'rocher' ? NO_TINT : this.foliage;
-      tints[dst * 3] = this.tint[i * 3]! * fol[0];
-      tints[dst * 3 + 1] = this.tint[i * 3 + 1]! * fol[1];
-      tints[dst * 3 + 2] = this.tint[i * 3 + 2]! * fol[2];
+      const g = this.gain[this.spc[i]!]!;
+      tints[dst * 3] = this.tint[i * 3]! * fol[0] * g;
+      tints[dst * 3 + 1] = this.tint[i * 3 + 1]! * fol[1] * g;
+      tints[dst * 3 + 2] = this.tint[i * 3 + 2]! * fol[2] * g;
       const c = Math.floor(k / S);
       cellY[c] = cellY[c]! + this.py[i]!;
       cellN[c]!++;
@@ -797,6 +819,13 @@ export class VegetationSystem {
     if (ambientSky) this.lights.uSky.value.add(ambientSky);
     if (ambientGround) this.lights.uGround.value.add(ambientGround);
     this.lights.uEnv.value = 1;
+  }
+
+  /** Diagnostic : positions de quelques arbres vivants (x, y, z, essence), tous les `step`. */
+  sample(n = 20, step = 97): { x: number; y: number; z: number; sp: string }[] {
+    const out: { x: number; y: number; z: number; sp: string }[] = [];
+    for (let i = 0; i < this.n && out.length < n; i += step) if (this.alive[i]) out.push({ x: this.px[i]!, y: this.py[i]!, z: this.pz[i]!, sp: this.species[this.spc[i]!]?.asset.id ?? '?' });
+    return out;
   }
 
   get settled(): boolean { return this.loaded && !this.dirty; }

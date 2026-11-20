@@ -358,6 +358,21 @@ async function boot(): Promise<void> {
     return { textures: tex.size, images: imgs.size, sources: srcs.size, top: Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 25) };
   };
   const props = new PropLayer(render.ctx.scene, lib);
+  // Diagnostic : objet et matériau sous un point de l'écran (pixels CSS).
+  (debug as unknown as Record<string, unknown>).pickMaterial = (sx: number, sy: number) => {
+    const r = canvas.getBoundingClientRect();
+    const rc = new THREE.Raycaster();
+    rc.setFromCamera(new THREE.Vector2(((sx - r.left) / r.width) * 2 - 1, -((sy - r.top) / r.height) * 2 + 1), render.ctx.camera);
+    const hit = rc.intersectObjects(render.ctx.scene.children, true).find((h) => h.object.visible);
+    if (!hit) return null;
+    const mats = ([] as THREE.Material[]).concat((hit.object as THREE.Mesh).material as THREE.Material);
+    const mat = (mats[hit.face?.materialIndex ?? 0] ?? mats[0]) as THREE.MeshStandardMaterial | undefined;
+    return { object: hit.object.name, material: mat?.name, color: mat?.color?.getHexString(), map: mat?.map?.name ?? null, metalness: mat?.metalness, roughness: mat?.roughness, distance: hit.distance };
+  };
+  (debug as unknown as Record<string, unknown>).stripBuildingMaps = (what: 'normal' | 'arm' | 'map') => render.buildings.materials.debugStrip(what);
+  (debug as unknown as Record<string, unknown>).buildingMaterials = () => render.buildings.materials.debugList();
+  (debug as unknown as Record<string, unknown>).tintBuildingRole = (role: string, hex: string) => render.buildings.materials.debugTint(role, hex);
+  (debug as unknown as Record<string, unknown>).treeSample = (n?: number, step?: number) => render.veg.sample(n, step);
   (debug as unknown as Record<string, unknown>).buildingDebug = (id: number) => render.buildings.debugInstance(id);
   debug.sceneCheck = () => ({
     buildings: render.buildings.count, buildingErrors: render.buildings.errors.slice(0, 20), buildingsLoading: render.buildings.loading,
@@ -597,6 +612,19 @@ async function boot(): Promise<void> {
     return { tx: L.tx, tz: L.tz, pu: L.pu, pv: L.pv, weight: L.weight, kind: L.kind };
   };
   (debug as unknown as Record<string, unknown>).gridFieldFlush = () => { for (let k = 0; k < 4; k++) updateGridField(1e6); return gridTex.box; };
+  // Diagnostic : bâtiments dont le centre est proche d'un point de l'écran (pixels CSS), avec modèle et variante.
+  (debug as unknown as Record<string, unknown>).buildingsNear = (sx: number, sy: number, n = 5) => {
+    const out: { id: number; assetId: string; variant: number; d: number; overrides: unknown }[] = [];
+    const r = canvas.getBoundingClientRect();
+    for (const b of cons.machine.mirror.buildings.values()) {
+      const v = new THREE.Vector3(b.x, b.y + 6, b.z).project(render.ctx.camera);
+      if (v.z > 1) continue;
+      const d = Math.hypot(r.left + ((v.x + 1) / 2) * r.width - sx, r.top + ((1 - v.y) / 2) * r.height - sy);
+      const a = cons.machine.mirror.asset(b.assetId) as { variants?: { materialOverrides?: unknown }[] } | undefined;
+      out.push({ id: b.id, assetId: b.assetId, variant: b.variant, d, overrides: a?.variants?.[b.variant]?.materialOverrides ?? null });
+    }
+    return out.sort((p, q) => p.d - q.d).slice(0, n);
+  };
   debug.worldToScreen = (x, z) => {
     const v = new THREE.Vector3(x, render.terrain.heightAt(x, z), z).project(render.ctx.camera);
     const r = canvas.getBoundingClientRect();
