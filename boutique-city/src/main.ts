@@ -86,6 +86,13 @@ function menu(): void {
 
 type Inside = { kind: 'shop'; shopId: number } | { kind: 'home'; homeId: number };
 
+/** Sol et murs de chaque type de commerce. */
+const INTERIOR_STYLE: Record<Shop['type'], { floor: 'carrelage' | 'parquet'; wall: string }> = {
+  epicerie: { floor: 'carrelage', wall: '#e6efe3' }, cafe: { floor: 'parquet', wall: '#efe2cf' }, vetements: { floor: 'parquet', wall: '#ece8f2' },
+  fleuriste: { floor: 'parquet', wall: '#e9f2e4' }, boulangerie: { floor: 'parquet', wall: '#f6e6cc' }, fastfood: { floor: 'carrelage', wall: '#f6dcd5' },
+  primeur: { floor: 'carrelage', wall: '#e2eed6' },
+};
+
 function start(game: Game): void {
   $('menu').classList.add('hidden');
   debug.game = game;
@@ -170,7 +177,7 @@ function start(game: Game): void {
   const enterShop = (shopId: number): void => {
     const s = game.shop(shopId)!, p = game.premise(s.premiseId)!, t = SHOP_TYPE_BY_ID.get(s.type)!;
     const b = game.building(p.buildingId)!;
-    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: s.type === 'vetements' || s.type === 'fleuriste' ? 'parquet' : 'carrelage', wall: s.type === 'cafe' ? '#efe2cf' : s.type === 'vetements' ? '#ece8f2' : s.type === 'fleuriste' ? '#f3e8ee' : '#eef1ea', accent: t.color, title: s.name, facade: facadeColor(b) });
+    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: INTERIOR_STYLE[s.type].floor, wall: INTERIOR_STYLE[s.type].wall, accent: t.color, title: s.name, facade: facadeColor(b) });
     agents = new InteriorAgents(view, t.color);
     view.setItems(itemsOf(s));
     agents.refreshLayout();
