@@ -106,13 +106,13 @@ export class StreetLife {
     for (const [k, w, h, dd, x, zz, ry] of sp) this.prop(k, w, h, dd, x, zz, ry, 0.2);
     // Deux skateurs désynchronisés : le garçon fait des allers-retours rapides sur un côté de la piste (pauses
     // rares) ; la fille tourne en boucle sur un circuit ovale dans l'autre sens, plus lentement, avec des pauses
-    // et des figures. Départs à des endroits différents du trajet.
+    // et des figures. Départs aux deux bouts opposés de la piste.
     const laneHalf = (sk.x1 - sk.x0) / 2 - 4.6;
     const oval: THREE.Vector2[] = [];
     for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; oval.push(new THREE.Vector2(sx + Math.cos(a) * laneHalf * 0.85, sz + 0.7 + Math.sin(a) * 1.3)); }
     const riders: [string, Parameters<StreetLife['add']>[2]][] = [
-      ['f:skt-character-skate-boy', { a: new THREE.Vector2(sk.x0 + 4.4, sz - 1.5), b: new THREE.Vector2(sk.x1 - 4.4, sz - 1.5), speed: 2.9, t: 0.2 + rnd() * 0.2, walk: 'skate', idle: 'skate-stand', person: true, y: 0.33, rest: 0.25, trick: 'skate-air' }],
-      ['f:skt-character-skate-girl', { loop: oval, idx: 6 + Math.floor(rnd() * 3), speed: 1.9, walk: 'skate', idle: 'skate-stand', person: true, y: 0.33, rest: 0.12, trick: 'skate-grab' }],
+      ['f:skt-character-skate-boy', { a: new THREE.Vector2(sk.x0 + 4.4, sz - 1.5), b: new THREE.Vector2(sk.x1 - 4.4, sz - 1.5), speed: 2.9, t: 0.1 + rnd() * 0.2, walk: 'skate', idle: 'skate-stand', person: true, y: 0.33, rest: 0.25, trick: 'skate-air' }],
+      ['f:skt-character-skate-girl', { loop: oval, idx: 1 + Math.floor(rnd() * 2), speed: 1.9, walk: 'skate', idle: 'skate-stand', person: true, y: 0.33, rest: 0.12, trick: 'skate-grab' }],
     ];
     for (const [k, o] of riders) {
       const m = this.add(k, 1.3, o);

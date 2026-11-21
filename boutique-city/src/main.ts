@@ -298,7 +298,7 @@ function start(game: Game): void {
   const enterShop = (shopId: number): void => {
     const s = game.shop(shopId)!, p = game.premise(s.premiseId)!, t = SHOP_TYPE_BY_ID.get(s.type)!;
     const b = game.building(p.buildingId)!;
-    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: INTERIOR_STYLE[s.type].floor, wall: INTERIOR_STYLE[s.type].wall, accent: t.color, title: s.name, facade: facadeColor(b) });
+    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: INTERIOR_STYLE[s.type].floor, wall: INTERIOR_STYLE[s.type].wall, accent: t.color, title: s.name, kind: s.type, facade: facadeColor(b) });
     agents = new InteriorAgents(view, t.color);
     view.setItems(itemsOf(s));
     agents.refreshLayout();
@@ -317,7 +317,7 @@ function start(game: Game): void {
 
   const enterHome = (homeId: number): void => {
     const h = game.district.homes.find((x) => x.id === homeId)!, def = HOME_BY_ID.get(h.def)!;
-    const view = new InteriorView({ gridW: def.gridW, gridD: def.gridD, floor: 'parquet', wall: '#e9e1d6', accent: '#2a7fd4', title: `Chez moi · ${def.nameFr}`, facade: facadeColor(game.building(h.buildingId)!) });
+    const view = new InteriorView({ gridW: def.gridW, gridD: def.gridD, floor: 'parquet', wall: '#e9e1d6', accent: '#2a7fd4', title: `Chez moi · ${def.nameFr}`, kind: 'logement', facade: facadeColor(game.building(h.buildingId)!) });
     view.setItems(homeItems(def.gridW, def.gridD));
     agents = null;
     scene.enterInterior(view, null);

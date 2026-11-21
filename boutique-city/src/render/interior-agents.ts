@@ -150,8 +150,9 @@ export class InteriorAgents {
     const sp = new THREE.Sprite(moneyMaterial(text));
     sp.scale.set(1.25, 0.4, 1);
     // Plusieurs ventes rapprochées à la même caisse : chaque montant part un cran plus haut (jamais superposés).
-    const near = this.floats.filter((f) => f.t < 0.9 && Math.hypot(f.x - x, f.z - z) < 1.2).length;
-    sp.position.set(x, 1.55 + near * 0.5, z);
+    let y = 1.55;
+    for (const f of this.floats) if (f.t < 1.2 && Math.hypot(f.x - x, f.z - z) < 1.2) y = Math.max(y, f.sp.position.y + 0.5);
+    sp.position.set(x, y, z);
     sp.renderOrder = 22;
     this.group.add(sp);
     this.floats.push({ sp, t: 0, x, z });
