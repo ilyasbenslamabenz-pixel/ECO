@@ -165,7 +165,10 @@ test('Décharger : place réservée par une commande — refus expliqué, puis r
   assert.ok(g.buyStock('pain', 24, 'pied').ok);
   g.setPlace({ kind: 'commerce', shopId: id });
   s.products['pain']!.stock = cap - 24;
-  const left = g.orders.find((x) => x.shopId === id && x.productId === 'pain')!, back = left.cost, cash1 = g.cash;
+  const left = g.orders.find((x) => x.shopId === id && x.productId === 'pain')!;
+  // Ramène le reliquat de la commande à ce que l'on porte (indépendant de la contenance des meubles).
+  if (left.qty > 24) { left.cost = Math.round((left.cost * 24) / left.qty * 100) / 100; left.qty = 24; }
+  const back = left.cost, cash1 = g.cash;
   assert.ok(g.unload(id).ok);
   assert.equal(g.pendingQty(id, 'pain'), 0);
   assert.ok(!g.orders.some((x) => x.shopId === id && x.productId === 'pain'), 'commande annulée');

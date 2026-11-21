@@ -26,7 +26,9 @@ export interface FurnitureDef {
   color: string;
 }
 
-export const FURNITURE: readonly FurnitureDef[] = [
+/** Contenance des meubles de vente : coefficient appliqué au barème (rayons assez grands pour la demande). */
+export const SHELF_FACTOR = 1.5;
+export const FURNITURE: readonly FurnitureDef[] = ([
   { id: 'caisse', nameFr: 'Caisse', kind: 'caisse', w: 2, d: 1, price: 1500, color: '#e0b04a' },
   { id: 'rayon', nameFr: 'Rayonnage', kind: 'rayon', w: 3, d: 1, price: 700, capacity: 80, color: '#8fa7c4' },
   { id: 'frigo', nameFr: 'Vitrine réfrigérée', kind: 'frigo', w: 2, d: 1, price: 1800, capacity: 60, color: '#7fd0e8' },
@@ -71,7 +73,7 @@ export const FURNITURE: readonly FurnitureDef[] = [
     ['tapis-arrondi', 'Tapis arrondi', 2, 2, 300, 1.9], ['accueil', "Bureau d'accueil", 2, 2, 900, 1.0], ['radio', 'Radio rétro', 1, 1, 120, 0.6],
     ['tonneau', 'Tonneau décoratif', 1, 1, 110, 0.5], ['coffre', 'Coffre en bois', 1, 1, 160, 0.6],
   ] as const).map(([id, nameFr, w, d, price, decor]): FurnitureDef => ({ id, nameFr, kind: 'deco', w, d, price, decor, color: '#c9a37a' })),
-];
+] as FurnitureDef[]).map((f) => (f.capacity ? { ...f, capacity: Math.round(f.capacity * SHELF_FACTOR) } : f));
 
 export const FURNITURE_BY_ID: ReadonlyMap<string, FurnitureDef> = new Map(FURNITURE.map((f) => [f.id, f]));
 
@@ -127,7 +129,9 @@ export interface ProductDef {
   share: number;
 }
 
-export const PRODUCTS: readonly ProductDef[] = [
+/** Prix d'achat du grossiste : coefficient appliqué au barème (marges plus confortables pour bien démarrer). */
+export const COST_FACTOR = 0.72;
+export const PRODUCTS: readonly ProductDef[] = ([
   { id: 'pain', nameFr: 'Pain', shop: 'epicerie', cost: 1.2, basePrice: 3, store: 'rayon', share: 0.2 },
   { id: 'lait', nameFr: 'Lait', shop: 'epicerie', cost: 0.9, basePrice: 2.2, store: 'frigo', share: 0.15 },
   { id: 'fruits', nameFr: 'Fruits et légumes', shop: 'epicerie', cost: 1.5, basePrice: 3.9, store: 'rayon', share: 0.2 },
@@ -163,7 +167,7 @@ export const PRODUCTS: readonly ProductDef[] = [
   { id: 'exotiques', nameFr: 'Fruits exotiques', shop: 'primeur', cost: 2.2, basePrice: 6.5, store: 'rayon', share: 0.14 },
   { id: 'herbes', nameFr: 'Herbes et champignons', shop: 'primeur', cost: 0.4, basePrice: 1.8, store: 'rayon', share: 0.1 },
   { id: 'jusfrais', nameFr: 'Jus pressés', shop: 'primeur', cost: 0.9, basePrice: 4.2, store: 'frigo', share: 0.12 },
-];
+] as ProductDef[]).map((p) => ({ ...p, cost: Math.round(p.cost * COST_FACTOR * 100) / 100 }));
 
 export const PRODUCT_BY_ID: ReadonlyMap<string, ProductDef> = new Map(PRODUCTS.map((p) => [p.id, p]));
 
@@ -213,7 +217,7 @@ export const SHOP_TYPES: readonly ShopTypeDef[] = [
     hourly: H([[11, 0.45], [12, 1], [13, 0.9], [14, 0.45], [15, 0.3], [16, 0.35], [17, 0.5], [18, 0.75], [19, 0.95], [20, 0.85], [21, 0.6], [22, 0.4], [23, 0.15]]),
   },
   {
-    id: 'primeur', nameFr: 'Primeur', capture: 0.031, basket: 2.9, weekend: 1.25, open: 8, close: 19, color: '#6aa83a',
+    id: 'primeur', nameFr: 'Primeur', capture: 0.038, basket: 3.1, weekend: 1.25, open: 8, close: 19, color: '#6aa83a',
     hourly: H([[7, 0.2], [8, 0.5], [9, 0.75], [10, 0.85], [11, 0.9], [12, 0.7], [13, 0.45], [14, 0.4], [15, 0.5], [16, 0.75], [17, 1], [18, 0.8], [19, 0.3]]),
   },
 ];
@@ -250,6 +254,8 @@ export const ECONOMY = {
   deliveryHour: 7,
   /** Clients servis par heure et par caisse tenue (employé de compétence 1). */
   servePerRegister: 32,
+  /** Multiplicateur global de la fréquentation (passants qui entrent). */
+  demandMult: 1.2,
   /** Poids d'un client lassé d'attendre en caisse dans la réputation visée (un client perdu ailleurs compte pour 1). */
   waitRepWeight: 1.5,
   /** Indemnité de licenciement (jours de salaire, 8 h / jour). */

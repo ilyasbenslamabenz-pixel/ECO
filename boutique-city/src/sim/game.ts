@@ -2054,7 +2054,7 @@ export class Game {
       const t = SHOP_TYPE_BY_ID.get(s.type)!;
       const p = this.premise(s.premiseId)!;
       const weekend = weekday >= 5 ? t.weekend : 1;
-      s.rate = p.footfall * t.hourly[h]! * weekend * this.weatherFactor(s.type) * (this.marketDay ? 1.25 : 1) * t.capture * this.attractiveness(s, st) * (1 + this.marketingBoost(s.id));
+      s.rate = p.footfall * t.hourly[h]! * weekend * this.weatherFactor(s.type) * (this.marketDay ? 1.25 : 1) * t.capture * ECONOMY.demandMult * this.attractiveness(s, st) * (1 + this.marketingBoost(s.id));
       s.rate *= 1 + this.shelfBonus(s);
       s.capacity = this.capacityNow(s);
       if (s.capacity <= 0 && s.rate > 0) {
