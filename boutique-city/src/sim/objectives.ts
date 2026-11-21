@@ -28,23 +28,24 @@ export function netWorth(g: Game): number {
     for (const [id, n] of Object.entries(s.storage)) v += (FURNITURE_BY_ID.get(id)?.price ?? 0) * ECONOMY.resale * n;
   }
   for (const veh of g.vehicles) v += VEHICLE_BY_ID.get(veh.type)!.price * ECONOMY.vehicleResale;
+  for (const sl of g.sublets) v += sl.deposit;
   return v;
 }
 
 export const OBJECTIVES: readonly Objective[] = [
   { id: 'sortir', title: 'Sortir de chez soi', hint: 'Marchez jusqu’à la porte de l’appartement (E).', progress: (g) => flag(g.player.place.kind !== 'logement' || g.shops.length > 0) },
-  { id: 'louer', title: 'Louer un premier local', hint: 'Les anneaux jaunes marquent les locaux à louer ; comparez passage et concurrence.', progress: (g) => flag(g.shops.length > 0) },
-  { id: 'meubler', title: 'Poser une caisse et un présentoir', hint: 'Magasin de meubles, puis « Aménager » (B) dans votre local.', progress: (g) => flag(g.shops.some((s) => { const st = g.stats(s); return st.registers > 0 && Object.values(st.capacity).some((c) => c > 0); })) },
-  { id: 'stock', title: 'Mettre de la marchandise en rayon', hint: 'Grossiste : emportez-la (puis « Décharger ») ou faites-la livrer.', progress: (g) => flag(g.shops.some((s) => Object.values(s.products).some((p) => p.stock > 0))) },
+  { id: 'louer', title: 'Louer un premier local', hint: 'Téléphone (T) › Immobilier : comparez les locaux, « Voir sur la carte », puis signez le bail devant l’anneau jaune.', progress: (g) => flag(g.shops.length > 0) },
+  { id: 'meubler', title: 'Poser une caisse et un présentoir', hint: 'Achetez une caisse et un présentoir au magasin de meubles, puis dans votre local : « Aménager » (B).', progress: (g) => flag(g.shops.some((s) => { const st = g.stats(s); return st.registers > 0 && Object.values(st.capacity).some((c) => c > 0); })) },
+  { id: 'stock', title: 'Mettre de la marchandise en rayon', hint: 'Grossiste : faites-la livrer (7 h ou 14 h) ou emportez-la puis « Décharger » dans le commerce.', progress: (g) => flag(g.shops.some((s) => Object.values(s.products).some((p) => p.stock > 0))) },
   { id: 'servir10', title: 'Servir 10 clients', hint: 'Tenez la caisse vous-même (E derrière la caisse) pendant les heures d’ouverture.', progress: (g) => step(totalCustomers(g), 10, 'clients') },
   { id: 'embaucher', title: 'Embaucher un employé', hint: 'Agence pour l’emploi : un caissier tient la caisse à votre place.', progress: (g) => flag(g.employees.length > 0) },
   { id: 'jour500', title: 'Vendre pour 500 CHF en une journée', hint: 'Réassort automatique, prix proches du quartier, horaires sur les heures d’affluence.', progress: (g) => step(bestDay(g), 500, 'CHF') },
   { id: 'vehicule', title: 'Acheter un véhicule', hint: 'Garage : une camionnette transporte 600 unités, bien moins cher que la livraison.', progress: (g) => flag(g.vehicles.length > 0) },
   { id: 'pub', title: 'Lancer une campagne de publicité', hint: 'Agence de publicité : plus de clients pendant la campagne.', progress: (g) => flag(g.campaigns.length > 0 || g.ledger.some((d) => d.marketing > 0) || g.today.marketing > 0) },
-  { id: 'deux', title: 'Ouvrir un deuxième commerce', hint: 'Un autre type dans une autre rue évite de vous concurrencer vous-même.', progress: (g) => step(g.shops.length, 2, 'commerces') },
+  { id: 'deux', title: 'Ouvrir un deuxième commerce', hint: 'Téléphone › Immobilier : un autre type dans une autre rue évite de vous concurrencer vous-même.', progress: (g) => step(g.shops.length, 2, 'commerces') },
   { id: 'jour2000', title: 'Vendre pour 2 000 CHF en une journée', hint: 'Plusieurs commerces, une caisse de plus aux heures de pointe.', progress: (g) => step(bestDay(g), 2000, 'CHF') },
   { id: 'trois', title: 'Bâtir un réseau de trois commerces', hint: 'Prêts bancaires pour financer, employés pour tenir les caisses.', progress: (g) => step(g.shops.length, 3, 'commerces') },
-  { id: 'valeur100k', title: 'Atteindre 100 000 CHF de valeur nette', hint: 'Trésorerie, mobilier et véhicules, moins les dettes.', progress: (g) => step(Math.max(0, netWorth(g)), 100_000, 'CHF') },
+  { id: 'valeur100k', title: 'Atteindre 60 000 CHF de valeur nette', hint: 'Trésorerie, mobilier, véhicules et dépôts, moins les dettes. Les sous-locations rapportent chaque jour.', progress: (g) => step(Math.max(0, netWorth(g)), 60_000, 'CHF') },
 ];
 
 /** Titre de l'entrepreneur selon le nombre d'objectifs atteints. */
