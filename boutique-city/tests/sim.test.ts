@@ -25,6 +25,9 @@ const LAYOUTS: Record<ShopType, string[]> = {
   cafe: ['caisse', 'machine', 'comptoir', 'vitrine', 'frigo', 'table', 'table', 'table', 'plante'],
   vetements: ['caisse', 'portant', 'portant', 'portant', 'portant', 'rayon', 'plante', 'lampe'],
   fleuriste: ['caisse', 'frigo', 'frigo', 'rayon', 'plante', 'lampe', 'tapis'],
+  boulangerie: ['caisse', 'rayon', 'rayon', 'vitrine', 'vitrine', 'frigo', 'table', 'plante'],
+  fastfood: ['caisse', 'comptoir', 'comptoir', 'vitrine', 'frigo', 'table', 'table', 'plante'],
+  primeur: ['caisse', 'rayon', 'rayon', 'rayon', 'rayon', 'frigo', 'plante'],
 };
 
 /** Achète au magasin de meubles puis pose chaque meuble à la première place qui garde tout accessible. */
@@ -264,7 +267,7 @@ test('sauvegarde : reprise identique, même suite', () => {
 });
 
 test('équilibrage : chaque type de commerce bien géré est rentable', () => {
-  for (const type of ['epicerie', 'cafe', 'vetements', 'fleuriste'] as ShopType[]) {
+  for (const type of ['epicerie', 'cafe', 'vetements', 'fleuriste', 'boulangerie', 'fastfood', 'primeur'] as ShopType[]) {
     const g = new Game(7);
     const s = g.rent(bestFree(g), type);
     assert.ok(s.ok);

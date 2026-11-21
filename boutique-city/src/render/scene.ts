@@ -12,6 +12,7 @@ import { Humanoid, PLAYER_LOOK } from './humanoid';
 import type { InteriorAgents } from './interior-agents';
 import type { InteriorView } from './interior-view';
 import { People } from './people';
+import { StreetLife } from './life';
 import { PlayerVehicles, Traffic } from './vehicles3d';
 
 export class Scene3D {
@@ -22,6 +23,7 @@ export class Scene3D {
   readonly view: DistrictView;
   readonly people: People;
   readonly traffic: Traffic;
+  readonly life: StreetLife;
   readonly vehicles = new PlayerVehicles();
   readonly player = new Humanoid(PLAYER_LOOK);
   readonly collider: Collider;
@@ -87,10 +89,13 @@ export class Scene3D {
     this.street.add(this.people.mesh);
     this.traffic = new Traffic(district);
     this.street.add(this.traffic.group);
+    this.life = new StreetLife(district);
+    this.street.add(this.life.group);
     this.street.add(this.vehicles.group);
     this.player.group.traverse((c) => { c.castShadow = true; });
     this.street.add(this.player.group);
     this.collider = Collider.fromDistrict(district);
+    for (const r of this.view.parkedRects) this.collider.add(r);
 
     this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 20, 1, true).translate(0, 30, 0), new THREE.MeshBasicMaterial({ color: 0x5fc3ff, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }));
     this.beacon.visible = false;
@@ -153,6 +158,7 @@ export class Scene3D {
     this.sun.position.set(focus.x - 90, 160, focus.z + 60);
     this.sun.target.position.set(focus.x, 0, focus.z);
     this.people.update(dt);
+    this.life.update(dt, focus);
     this.view.updateLabels(this.camera, dt);
     if ((this.lampTimer -= dt) <= 0) {
       this.lampTimer = 0.5;

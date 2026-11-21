@@ -4,7 +4,7 @@
  * Face avant vers −z : une rotation y = cap fait regarder vers (−sin cap, −cos cap). Dépend de three.
  */
 import * as THREE from 'three';
-import { ASSETS, CONFIG, assets, fitInto, keysWith } from '../assets';
+import { ASSETS, CONFIG, assets, filesMatching, fitInto, keysWith } from '../assets';
 import { box, hashRand, mat, sph } from './kit';
 
 export interface Look { skin: string; shirt: string; pants: string; hair: string; shoes: string; hairLong: boolean; apron?: string }
@@ -102,8 +102,12 @@ export class KitPerson implements Person {
   private readonly actions = new Map<string, THREE.AnimationAction>();
   private current = '';
 
-  constructor(key: string, seed: number, accent?: string) {
+  /** Fauteuil roulant : animations « wheelchair-* » à la place de la marche. */
+  private readonly wheel: boolean;
+
+  constructor(key: string, seed: number, accent?: string, opts: { wheelchair?: string; accessory?: string } = {}) {
     const c = assets.clone(key)!;
+    this.wheel = !!opts.wheelchair;
     const r = hashRand(seed + 3);
     const tint = new THREE.Color().setHSL(r(), 0.55, 0.6);
     const k = accent ? 0.38 : 0.2;
@@ -131,13 +135,26 @@ export class KitPerson implements Person {
     c.obj.scale.setScalar(fit.s);
     c.obj.position.copy(fit.p);
     this.group.add(c.obj);
+    // Accessoire sur la tête (lunettes, lunettes de soleil, appareil auditif : modèles prévus pour l'os « head »).
+    if (opts.accessory) {
+      let head: THREE.Object3D | null = null;
+      c.obj.traverse((o) => { if (!head && o.name === 'head') head = o; });
+      const acc = assets.clone(opts.accessory);
+      if (head && acc) { acc.obj.rotation.y = 0; acc.obj.position.set(0, 0.12, 0.085); (head as THREE.Object3D).add(acc.obj); }
+    }
+    // Fauteuil roulant posé au sol sous le personnage assis, à son échelle.
+    if (opts.wheelchair) {
+      const ch = assets.clone(opts.wheelchair);
+      if (ch) { ch.obj.scale.setScalar(fit.s); ch.obj.rotation.y = Math.PI; this.group.add(ch.obj); }
+    }
     this.mixer = new THREE.AnimationMixer(c.obj);
     for (const clip of c.animations) this.actions.set(clip.name, this.mixer.clipAction(clip));
     this.mixer.update(r() * 2);
     this.play('idle');
   }
 
-  private play(name: string, timeScale = 1): void {
+  /** Joue une animation du modèle (repli sur « idle »). */
+  play(name: string, timeScale = 1): void {
     const a = this.actions.get(name) ?? this.actions.get('idle');
     if (!a) return;
     a.timeScale = timeScale;
@@ -149,6 +166,7 @@ export class KitPerson implements Person {
   }
 
   update(dt: number, speed: number): void {
+    if (this.wheel) { this.play(speed > 0.1 ? 'wheelchair-move-forward' : 'wheelchair-sit', Math.max(0.6, speed / 1.2)); this.mixer.update(dt); return; }
     if (this.current !== 'sit') {
       if (speed > 3) this.play('sprint', speed / 5);
       else if (speed > 0.1) this.play('walk', Math.max(0.6, speed / 1.4));
@@ -157,12 +175,15 @@ export class KitPerson implements Person {
     this.mixer.update(dt);
   }
 
-  sit(on: boolean): void { this.play(on ? 'sit' : 'idle'); }
+  sit(on: boolean): void { if (!this.wheel) this.play(on ? 'sit' : 'idle'); }
   reach(): void { /* pose « au comptoir » : posture de repos du modèle */ }
 }
 
 const FIT_CACHE = new Map<string, { s: number; p: THREE.Vector3 }>();
-const PERSONS = keysWith('perso.').filter((k) => k !== 'perso.employe');
+/** Clients : les 12 Mini Characters et les 18 Blocky Characters (Kenney). */
+const PERSONS = [...keysWith('perso.').filter((k) => k !== 'perso.employe'), ...filesMatching(/^blk-character-/)];
+const ACCESSORIES = ['f:aid-glasses', 'f:aid-sunglasses', 'f:aid_hearing', 'f:aid-glasses'];
+const WHEELCHAIRS = ['f:wheelchair', 'f:wheelchair-deluxe', 'f:wheelchair-power', 'f:wheelchair-power-deluxe'];
 
 /**
  * Client ou employé : modèle animé si chargé (douze clients différents ; employés en tenue du Mini Market), sinon
@@ -172,7 +193,15 @@ export function makePerson(seed: number, accent?: string, scale = 1, employee = 
   const keys = PERSONS.filter((k) => assets.has(k));
   if (keys.length) {
     const key = employee && assets.has('perso.employe') ? 'perso.employe' : keys[Math.abs(Math.floor(seed)) % keys.length]!;
-    const p = new KitPerson(key, seed, accent);
+    // Variété : un client sur quatre porte un accessoire (Mini Characters), un sur quinze se déplace en fauteuil.
+    const r = hashRand(seed * 7 + 11);
+    const mini = key.startsWith('perso.');
+    const a = r(), w = r();
+    const opts = employee ? {} : {
+      accessory: mini && a < 0.25 ? ACCESSORIES[Math.floor(a * 16) % ACCESSORIES.length] : undefined,
+      wheelchair: w < 0.065 ? WHEELCHAIRS[Math.floor(w * 61) % WHEELCHAIRS.length] : undefined,
+    };
+    const p = new KitPerson(key, seed, accent, opts);
     p.group.scale.setScalar(scale);
     return p;
   }

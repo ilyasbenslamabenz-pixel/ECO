@@ -12,7 +12,7 @@ import { box, cyl, mat } from './kit';
 
 export function buildVehicle(type: VehicleType): THREE.Group {
   // Modèles du Car Kit à l'échelle (largeur réelle), avant vers −z ; sinon modèle fait en code.
-  const kit: Partial<Record<VehicleType, [string, number]>> = { citadine: ['auto.citadine', 1.8], camionnette: ['auto.camionnette', 2.1], camion: ['auto.camion', 2.4] };
+  const kit: Partial<Record<VehicleType, [string, number]>> = { citadine: ['auto.citadine', 1.8], sportive: ['auto.sport', 1.9], suv: ['auto.suv-luxe', 2.0], camionnette: ['auto.camionnette', 2.1], camion: ['auto.camion', 2.4] };
   const km = kit[type];
   if (km) {
     const sz = assets.size(km[0]);
@@ -22,7 +22,7 @@ export function buildVehicle(type: VehicleType): THREE.Group {
   const paint = mat(VEHICLE_BY_ID.get(type)!.color, { rough: 0.35, metal: 0.2 });
   const dark = mat('#1d2126', { rough: 0.6 }), glass = mat('#2a3a4a', { rough: 0.1, metal: 0.4 }), tire = mat('#151515', { rough: 0.9 });
   const wheel = (x: number, z: number, dia: number, wdt: number): void => { const w = cyl(g, dia, wdt, x, dia / 2, z, tire); w.rotation.z = Math.PI / 2; w.position.y = dia / 2; };
-  if (type === 'camionnette' || type === 'camion' || type === 'citadine') {
+  if (type !== 'scooter') {
     box(g, 2.0, 1.95, 3.4, 0, 0.45, 0.65, paint);
     box(g, 2.0, 1.25, 1.5, 0, 0.45, -1.7, paint);
     box(g, 1.9, 0.6, 0.05, 0, 1.1, -2.46, glass);
@@ -67,7 +67,8 @@ interface Car { axis: 'x' | 'z'; line: number; dir: 1 | -1; s: number; v: number
 /** Modèles de la circulation (fréquence = répétitions) ; largeur réelle de chacun (m). */
 const CAR_KEYS = ['auto.berline', 'auto.taxi', 'auto.suv', 'auto.citadine', 'auto.livraison', 'auto.berline', 'auto.sport', 'auto.suv-luxe',
   'auto.camionnette', 'auto.taxi', 'auto.police', 'auto.camion', 'auto.citadine', 'auto.ambulance', 'auto.poubelles', 'auto.livraison-plateau',
-  'auto.berline', 'auto.camion-vert', 'auto.plateau', 'auto.pompiers', 'auto.suv', 'auto.camion-gris', 'auto.taxi'];
+  'auto.berline', 'auto.camion-vert', 'auto.plateau', 'auto.pompiers', 'auto.suv', 'auto.camion-gris', 'auto.taxi',
+  'f:car-tractor', 'auto.sedan', 'f:car-tractor-police', 'auto.citadine', 'f:car-tractor-shovel', 'auto.suv-luxe'].filter((k) => k !== 'auto.sedan');
 const CAR_WIDTH: Record<string, number> = { 'auto.camion': 2.4, 'auto.pompiers': 2.5, 'auto.poubelles': 2.5, 'auto.plateau': 2.4, 'auto.camion-vert': 2.4,
   'auto.camion-gris': 2.4, 'auto.ambulance': 2.2, 'auto.livraison-plateau': 2.1, 'auto.citadine': 1.8 };
 

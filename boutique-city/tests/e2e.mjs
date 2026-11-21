@@ -209,9 +209,9 @@ try {
   check(await ev(() => window.__bc.game.player.hunger > 90), 'repas au snack');
   await page.keyboard.press('Escape');
 
-  // Garage : camionnette (3e véhicule de la liste : scooter, citadine, camionnette, camion), conduite.
+  // Garage : camionnette (5e véhicule : scooter, citadine, sportive, SUV, camionnette, camion), conduite.
   await goIn(await service('garage'));
-  await panelButton('Acheter', 2);
+  await panelButton('Acheter', 4);
   await page.waitForTimeout(200);
   await page.keyboard.press('Escape');
   const van = await ev(() => window.__bc.game.vehicles[0]);

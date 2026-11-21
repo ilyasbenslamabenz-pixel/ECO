@@ -101,7 +101,8 @@ function meubles(ctx: UiCtx): (Node | null)[] {
     if (!shop) return true;
     const f = FURNITURE.find((x) => x.id === id)!;
     if (f.kind === 'caisse' || f.kind === 'deco') return true;
-    if (f.kind === 'machine' || f.kind === 'table') return shop.type === 'cafe';
+    if (f.kind === 'machine') return shop.type === 'cafe';
+    if (f.kind === 'table') return shop.type === 'cafe' || shop.type === 'fastfood' || shop.type === 'boulangerie';
     return PRODUCTS.some((p) => p.shop === shop.type && p.store === f.kind);
   };
   const tbl = el('table', { cls: 'tbl' }, el('tr', {}, el('th', { text: 'Meuble' }), el('th', { text: 'Taille' }), el('th', { text: 'Prix' }), el('th', { text: 'Qté' }), el('th', { text: '' })));

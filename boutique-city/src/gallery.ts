@@ -15,7 +15,9 @@ export function gallery(canvas: HTMLCanvasElement): void {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.2));
   // ?galerie=N : page N de 40 modèles (8 colonnes).
   const page = Math.max(0, Number(new URLSearchParams(location.search).get('galerie')) || 0);
-  const keys = Object.keys(ASSETS).slice(page * 40, page * 40 + 40);
+  // &filtre=<motif> : seulement les clés qui correspondent (ex. « f:pet- »).
+  const filtre = new URLSearchParams(location.search).get('filtre');
+  const keys = Object.keys(ASSETS).filter((k) => !filtre || k.includes(filtre)).slice(page * 40, page * 40 + 40);
   const cols = 8;
   keys.forEach((k, i) => {
     const x = (i % cols) * 3.4 - 11.9, z = Math.floor(i / cols) * 3.4 - 8;

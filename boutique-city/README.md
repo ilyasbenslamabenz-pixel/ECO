@@ -22,7 +22,7 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
 2. **Meubles** : au magasin de meubles, livrés dans la réserve du commerce choisi.
 3. **Aménager** (B) : poser les meubles de la réserve en 3D sur la grille (R pour tourner, clic sur un meuble posé
    pour le déplacer). Chaque meuble doit rester accessible depuis l'entrée.
-4. **Marchandise** : au grossiste, à emporter (24 unités à pied, 60 en scooter, 140 en citadine, 600 en camionnette, 1 600 en camion garé devant) puis
+4. **Marchandise** : au grossiste, à emporter (24 unités à pied, 60 en scooter, 140 en citadine, 90 en sportive, 320 en SUV, 600 en camionnette, 1 600 en camion garé devant) puis
    « Décharger » dans le commerce ; ou livrée le lendemain à 7 h avec des frais ; ou réassort automatique.
 5. **Caisse** : tenez-la vous-même (E derrière la caisse) ou embauchez à l'agence pour l'emploi.
 6. **Clients** : chaque vente fait entrer un client qui va aux rayons, fait la queue et paie.

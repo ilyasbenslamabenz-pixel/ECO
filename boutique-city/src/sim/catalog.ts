@@ -3,7 +3,7 @@
  * prêts, campagnes de publicité, repas et besoins du personnage. Prix en CHF. TypeScript pur.
  */
 
-export type ShopType = 'epicerie' | 'cafe' | 'vetements' | 'fleuriste';
+export type ShopType = 'epicerie' | 'cafe' | 'vetements' | 'fleuriste' | 'boulangerie' | 'fastfood' | 'primeur';
 /** Meuble qui stocke et présente un produit. */
 export type StoreKind = 'rayon' | 'frigo' | 'comptoir' | 'vitrine' | 'portant';
 export type FurnitureKind = 'caisse' | StoreKind | 'machine' | 'table' | 'deco';
@@ -55,6 +55,22 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: 'ecran', nameFr: 'Écran publicitaire', kind: 'deco', w: 2, d: 1, price: 1200, decor: 1.8, color: '#2b3440' },
   { id: 'fleurs', nameFr: 'Massif de fleurs', kind: 'deco', w: 1, d: 1, price: 140, decor: 0.9, color: '#d8344a' },
   { id: 'bibliotheque', nameFr: 'Bibliothèque décorative', kind: 'deco', w: 2, d: 1, price: 380, decor: 1.3, color: '#a07a5a' },
+  // Décorations (un modèle Kenney chacune : Mini Arcade, Holiday Kit, Furniture Kit, Nature Kit, Mini Characters).
+  ...([
+    ['arcade', "Borne d'arcade", 1, 1, 1800, 1.6], ['flipper', 'Flipper', 1, 2, 2200, 1.8], ['pince', 'Machine à pince', 1, 1, 2000, 1.7],
+    ['airhockey', 'Air hockey', 2, 1, 2500, 1.8], ['danse', 'Jeu de danse', 2, 1, 2600, 1.9], ['basket', 'Jeu de basket', 1, 2, 2400, 1.8],
+    ['distributeur', 'Distributeur de boissons', 1, 1, 1500, 0.9], ['roue', 'Roue des lots', 1, 1, 900, 1.2], ['tickets', 'Machine à tickets', 1, 1, 700, 0.7],
+    ['jackpot', 'Machine à sous', 1, 1, 1600, 1.2], ['lots', 'Vitrine de lots', 1, 1, 650, 1.0],
+    ['sapin', 'Sapin décoré', 1, 1, 300, 1.6], ['bonhomme', 'Bonhomme de neige', 1, 1, 180, 1.0], ['cadeaux', 'Pile de cadeaux', 1, 1, 120, 0.8],
+    ['cassenoisette', 'Casse-noisette', 1, 1, 150, 0.8], ['lanterne', 'Lanterne', 1, 1, 90, 0.6], ['renne', 'Renne décoratif', 1, 1, 220, 1.0],
+    ['traineau', 'Traîneau', 2, 1, 260, 1.0], ['guirlande', 'Guirlande lumineuse', 2, 1, 160, 1.1], ['menorah', 'Chandelier de fête', 1, 1, 140, 0.8],
+    ['nounours', 'Ours en peluche', 1, 1, 80, 0.7], ['tele-vintage', 'Télévision vintage', 1, 1, 350, 1.0], ['canape-angle', "Canapé d'angle", 2, 2, 900, 1.6],
+    ['fauteuil-design', 'Fauteuil design', 1, 1, 380, 1.1], ['lampadaire-carre', 'Lampadaire carré', 1, 1, 240, 1.2],
+    ['plante-grande', 'Grande plante en pot', 1, 1, 260, 1.3], ['palmier', 'Palmier en bac', 1, 1, 420, 1.6], ['statue', 'Statue', 1, 1, 650, 1.8],
+    ['defibrillateur', 'Défibrillateur', 1, 1, 450, 0.5], ['banc', 'Banc', 2, 1, 220, 0.6], ['tapis-carre', 'Tapis carré', 2, 2, 280, 1.8],
+    ['tapis-arrondi', 'Tapis arrondi', 2, 2, 300, 1.9], ['accueil', "Bureau d'accueil", 2, 2, 900, 1.0], ['radio', 'Radio rétro', 1, 1, 120, 0.6],
+    ['tonneau', 'Tonneau décoratif', 1, 1, 110, 0.5], ['coffre', 'Coffre en bois', 1, 1, 160, 0.6],
+  ] as const).map(([id, nameFr, w, d, price, decor]): FurnitureDef => ({ id, nameFr, kind: 'deco', w, d, price, decor, color: '#c9a37a' })),
 ];
 
 export const FURNITURE_BY_ID: ReadonlyMap<string, FurnitureDef> = new Map(FURNITURE.map((f) => [f.id, f]));
@@ -95,6 +111,22 @@ export const PRODUCTS: readonly ProductDef[] = [
   { id: 'bouquet', nameFr: 'Bouquet composé', shop: 'fleuriste', cost: 9, basePrice: 29, store: 'frigo', share: 0.3 },
   { id: 'plantes', nameFr: 'Plante en pot', shop: 'fleuriste', cost: 6.5, basePrice: 19, store: 'rayon', share: 0.24 },
   { id: 'cartes', nameFr: 'Cartes et rubans', shop: 'fleuriste', cost: 0.7, basePrice: 3.5, store: 'rayon', share: 0.12 },
+  { id: 'baguette', nameFr: 'Baguette', shop: 'boulangerie', cost: 0.35, basePrice: 1.6, store: 'rayon', share: 0.34 },
+  { id: 'campagne', nameFr: 'Pain de campagne', shop: 'boulangerie', cost: 1.2, basePrice: 4.5, store: 'rayon', share: 0.16 },
+  { id: 'viennoiseries', nameFr: 'Viennoiseries', shop: 'boulangerie', cost: 0.5, basePrice: 2.2, store: 'vitrine', share: 0.26 },
+  { id: 'patisseries', nameFr: 'Pâtisseries', shop: 'boulangerie', cost: 1.6, basePrice: 5.5, store: 'vitrine', share: 0.16 },
+  { id: 'eau', nameFr: 'Eau et boissons', shop: 'boulangerie', cost: 0.3, basePrice: 1.8, store: 'frigo', share: 0.08 },
+  { id: 'burger', nameFr: 'Burger', shop: 'fastfood', cost: 1.9, basePrice: 8.5, store: 'comptoir', share: 0.32 },
+  { id: 'frites', nameFr: 'Frites', shop: 'fastfood', cost: 0.4, basePrice: 3.9, store: 'comptoir', share: 0.2 },
+  { id: 'hotdog', nameFr: 'Hot-dog', shop: 'fastfood', cost: 1.1, basePrice: 5.5, store: 'comptoir', share: 0.12 },
+  { id: 'pizza', nameFr: 'Part de pizza', shop: 'fastfood', cost: 1.0, basePrice: 4.5, store: 'vitrine', share: 0.12 },
+  { id: 'soda', nameFr: 'Soda', shop: 'fastfood', cost: 0.5, basePrice: 3, store: 'frigo', share: 0.16 },
+  { id: 'glace', nameFr: 'Glace', shop: 'fastfood', cost: 0.6, basePrice: 3.5, store: 'frigo', share: 0.08 },
+  { id: 'legumes', nameFr: 'Légumes', shop: 'primeur', cost: 1.1, basePrice: 3.2, store: 'rayon', share: 0.32 },
+  { id: 'fruitsfrais', nameFr: 'Fruits de saison', shop: 'primeur', cost: 1.3, basePrice: 3.8, store: 'rayon', share: 0.32 },
+  { id: 'exotiques', nameFr: 'Fruits exotiques', shop: 'primeur', cost: 2.2, basePrice: 6.5, store: 'rayon', share: 0.14 },
+  { id: 'herbes', nameFr: 'Herbes et champignons', shop: 'primeur', cost: 0.4, basePrice: 1.8, store: 'rayon', share: 0.1 },
+  { id: 'jusfrais', nameFr: 'Jus pressés', shop: 'primeur', cost: 0.9, basePrice: 4.2, store: 'frigo', share: 0.12 },
 ];
 
 export const PRODUCT_BY_ID: ReadonlyMap<string, ProductDef> = new Map(PRODUCTS.map((p) => [p.id, p]));
@@ -135,6 +167,18 @@ export const SHOP_TYPES: readonly ShopTypeDef[] = [
   {
     id: 'fleuriste', nameFr: 'Fleuriste', capture: 0.013, basket: 1.3, weekend: 1.5, open: 9, close: 19, color: '#d9578a',
     hourly: H([[8, 0.2], [9, 0.4], [10, 0.55], [11, 0.75], [12, 0.8], [13, 0.6], [14, 0.55], [15, 0.6], [16, 0.8], [17, 1], [18, 0.9], [19, 0.4], [20, 0.15]]),
+  },
+  {
+    id: 'boulangerie', nameFr: 'Boulangerie', capture: 0.09, basket: 1.8, weekend: 1.3, open: 6, close: 19, color: '#d9a23a',
+    hourly: H([[6, 0.6], [7, 1], [8, 0.95], [9, 0.6], [10, 0.45], [11, 0.55], [12, 0.75], [13, 0.5], [14, 0.3], [15, 0.35], [16, 0.5], [17, 0.8], [18, 0.75], [19, 0.3]]),
+  },
+  {
+    id: 'fastfood', nameFr: 'Fast-food', capture: 0.032, basket: 1.9, weekend: 1.3, open: 11, close: 23, color: '#e04a3a',
+    hourly: H([[11, 0.45], [12, 1], [13, 0.9], [14, 0.45], [15, 0.3], [16, 0.35], [17, 0.5], [18, 0.75], [19, 0.95], [20, 0.85], [21, 0.6], [22, 0.4], [23, 0.15]]),
+  },
+  {
+    id: 'primeur', nameFr: 'Primeur', capture: 0.028, basket: 2.4, weekend: 1.25, open: 8, close: 19, color: '#6aa83a',
+    hourly: H([[7, 0.2], [8, 0.5], [9, 0.75], [10, 0.85], [11, 0.9], [12, 0.7], [13, 0.45], [14, 0.4], [15, 0.5], [16, 0.75], [17, 1], [18, 0.8], [19, 0.3]]),
   },
 ];
 
@@ -186,7 +230,7 @@ export const SERVICES: readonly ServiceDef[] = [
   { id: 'meubles', nameFr: 'Magasin de meubles', sign: 'Meubles & Agencement', color: '#3f8fd9', hint: 'Mobilier de magasin, livré dans la réserve du commerce choisi.' },
   { id: 'banque', nameFr: 'Banque', sign: 'Banque du Quartier', color: '#2e9e8f', hint: 'Prêts à rembourser chaque jour.' },
   { id: 'emploi', nameFr: "Agence pour l'emploi", sign: "Agence pour l'emploi", color: '#8c63d9', hint: 'Candidats à embaucher, nouveaux chaque lundi.' },
-  { id: 'garage', nameFr: 'Garage', sign: 'Garage Utilitaires', color: '#c94f4f', hint: 'Scooters, citadines, camionnettes et camions pour transporter la marchandise.' },
+  { id: 'garage', nameFr: 'Garage', sign: 'Garage Utilitaires', color: '#c94f4f', hint: 'Scooters, citadines, voitures de luxe, camionnettes et camions.' },
   { id: 'pub', nameFr: 'Agence de publicité', sign: 'Agence Pub & Com', color: '#d94fa0', hint: 'Campagnes qui attirent plus de clients.' },
   { id: 'snack', nameFr: 'Snack', sign: 'Snack Express', color: '#e0b030', hint: 'Manger et boire un café : faim et énergie.' },
 ];
@@ -194,11 +238,13 @@ export const SERVICE_BY_ID: ReadonlyMap<ServiceKind, ServiceDef> = new Map(SERVI
 
 /* ------------------------------ Véhicules ------------------------------ */
 
-export type VehicleType = 'scooter' | 'citadine' | 'camionnette' | 'camion';
+export type VehicleType = 'scooter' | 'citadine' | 'sportive' | 'suv' | 'camionnette' | 'camion';
 export interface VehicleDef { id: VehicleType; nameFr: string; price: number; cargo: number; /** Vitesse maximale (m/s). */ speed: number; /** Assurance (CHF / jour). */ insurance: number; color: string }
 export const VEHICLES: readonly VehicleDef[] = [
   { id: 'scooter', nameFr: 'Scooter utilitaire', price: 2900, cargo: 60, speed: 13, insurance: 4, color: '#e2463a' },
   { id: 'citadine', nameFr: 'Citadine', price: 9800, cargo: 140, speed: 16, insurance: 8, color: '#3f9a5a' },
+  { id: 'sportive', nameFr: 'Berline sportive', price: 38000, cargo: 90, speed: 21, insurance: 26, color: '#d02a2a' },
+  { id: 'suv', nameFr: 'SUV de luxe', price: 46000, cargo: 320, speed: 17, insurance: 30, color: '#e0c040' },
   { id: 'camionnette', nameFr: 'Camionnette', price: 14500, cargo: 600, speed: 12, insurance: 14, color: '#f2f2ee' },
   { id: 'camion', nameFr: 'Camion de livraison', price: 34000, cargo: 1600, speed: 10, insurance: 32, color: '#d8d8d8' },
 ];

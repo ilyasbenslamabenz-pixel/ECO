@@ -698,6 +698,9 @@ function canPlaceUi(s: Shop, gw: number, gd: number, def: string, x: number, z: 
 function homeItems(W: number, D: number): InteriorItem[] {
   const list: [string, number, number, Rot][] = [['lit', 0, 0, 0], ['armoire', 2, 0, 0], ['cuisine', W - 3, 0, 0], ['canape', W - 1, D - 4, 3], ['plante', 0, D - 2, 0], ['table', W - 4, 2, 0],
     ['bureau-perso', 0, D - 1, 2], ['tele', W - 2, D - 1, 2]];
+  // Logements plus grands : salle de bain et buanderie ; loft : baignoire.
+  if (W >= 9) list.push(['salle-de-bain', 0, 3, 1], ['buanderie', 4, 0, 0]);
+  if (W >= 11) list.push(['baignoire', 1, 3, 1]);
   return list.map(([def, x, z, rot], k) => ({ uid: 100 + k, def, x, z, rot, fill: 0, colors: ['#cccccc'] }));
 }
 

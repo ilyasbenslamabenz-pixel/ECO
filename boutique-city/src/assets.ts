@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { MODEL_FILES } from './model-files';
 
 /* ------------------------------ CONFIG ------------------------------ */
 
@@ -94,23 +95,55 @@ export const ASSETS: Record<string, AssetDef> = {};
   // Food Kit : marchandise visible (plusieurs modèles par produit : « produit.<id> », « produit.<id>.2 »…).
   const goods: Record<string, string[]> = {
     pain: ['food-loaf', 'food-loaf-baguette', 'food-loaf-round', 'food-bread'],
-    lait: ['food-carton', 'food-carton-small', 'food-egg'],
-    fruits: ['food-apple', 'food-banana', 'food-orange', 'food-pear', 'food-grapes', 'food-pineapple', 'food-watermelon', 'food-tomato',
-      'food-carrot', 'food-broccoli', 'food-cabbage', 'food-strawberry'],
-    boissons: ['food-soda', 'food-soda-bottle', 'food-soda-can', 'food-wine-red', 'food-wine-white'],
-    conserves: ['food-can', 'food-can-small', 'food-bottle-oil', 'food-bottle-ketchup', 'food-honey', 'food-peanut-butter'],
-    snacks: ['food-cheese', 'food-chocolate', 'food-candy-bar', 'food-cookie'],
+    lait: ['food-carton', 'food-carton-small', 'food-egg', 'food-egg-cup', 'food-cheese-cut', 'food-whipped-cream', 'food-pudding'],
+    fruits: ['food-apple', 'food-banana', 'food-orange', 'food-pear', 'food-grapes', 'food-pineapple', 'food-watermelon', 'food-tomato', 'food-carrot', 'food-broccoli', 'food-cabbage', 'food-strawberry', 'food-cherries', 'food-lemon'],
+    boissons: ['food-soda', 'food-soda-bottle', 'food-soda-can', 'food-wine-red', 'food-wine-white', 'food-glass-wine', 'food-soda-glass'],
+    conserves: ['food-can', 'food-can-small', 'food-bottle-oil', 'food-bottle-ketchup', 'food-bottle-musterd', 'food-honey', 'food-peanut-butter', 'food-soy', 'food-can-open', 'food-shaker-salt', 'food-shaker-pepper', 'food-pepper-mill'],
+    snacks: ['food-cheese', 'food-chocolate', 'food-candy-bar', 'food-cookie', 'food-chocolate-wrapper', 'food-candy-bar-wrapper', 'food-cookie-chocolate', 'food-lollypop', 'food-bag', 'food-bag-flat'],
     cafe: ['food-cup', 'food-cup-coffee', 'food-cup-saucer', 'food-frappe'],
     the: ['food-mug', 'food-cup-tea', 'food-glass'],
-    croissant: ['food-croissant', 'food-donut', 'food-donut-chocolate', 'food-muffin', 'food-cupcake', 'food-cake', 'food-pie', 'food-waffle'],
-    sandwich: ['food-sandwich', 'food-sub', 'food-burger', 'food-hot-dog', 'food-pizza'],
-    jus: ['food-lemon', 'food-orange'],
-    plantes: ['pottedPlant', 'plantSmall1', 'plantSmall2', 'plantSmall3', 'nat-pot-large'],
+    croissant: ['food-croissant', 'food-donut', 'food-donut-chocolate', 'food-donut-sprinkles', 'food-muffin', 'food-cupcake', 'food-cake', 'food-pie', 'food-waffle', 'food-pancakes'],
+    sandwich: ['food-sandwich', 'food-sub', 'food-burger', 'food-hot-dog', 'food-pizza', 'food-taco', 'food-salad', 'food-rice-ball'],
+    jus: ['food-lemon', 'food-orange', 'food-coconut', 'food-lemon-half', 'food-cocktail'],
+    plantes: ['pottedPlant', 'plantSmall1', 'plantSmall2', 'plantSmall3', 'nat-pot_large', 'nat-pot_small', 'nat-plant_bush', 'nat-plant_flatTall'],
     roses: ['nat-flower_redA', 'nat-flower_redB', 'nat-flower_redC'],
-    bouquet: ['nat-flower_purpleA', 'nat-flower_yellowA', 'nat-flower_purpleB', 'nat-flower_yellowB'],
+    bouquet: ['nat-flower_purpleA', 'nat-flower_yellowA', 'nat-flower_purpleB', 'nat-flower_yellowB', 'nat-flower_purpleC', 'nat-flower_yellowC'],
+    cartes: ['books'],
+    baguette: ['food-loaf-baguette', 'food-loaf', 'food-bread'],
+    campagne: ['food-loaf-round', 'food-bread', 'food-loaf', 'food-ginger-bread'],
+    viennoiseries: ['food-croissant', 'food-muffin', 'food-donut-sprinkles', 'food-pancakes', 'food-waffle'],
+    patisseries: ['food-cake', 'food-cake-birthday', 'food-cupcake', 'food-pie', 'food-mincemeat-pie', 'food-donut-chocolate', 'food-sundae'],
+    eau: ['food-soda-bottle', 'food-glass', 'food-carton-small'],
+    burger: ['food-burger', 'food-burger-cheese', 'food-burger-double', 'food-burger-cheese-double'],
+    frites: ['food-fries', 'food-corn-dog', 'food-frikandel-speciaal', 'food-skewer'],
+    hotdog: ['food-hot-dog', 'food-sausage', 'food-meat-sausage', 'food-corn-dog'],
+    pizza: ['food-pizza', 'food-pizza-box', 'food-taco'],
+    soda: ['food-soda-can', 'food-soda', 'food-soda-bottle', 'food-soda-glass'],
+    glace: ['food-ice-cream', 'food-ice-cream-cup', 'food-ice-cream-cne', 'food-popsicle', 'food-popsicle-chocolate', 'food-sundae', 'food-ice-cream-scoop-mint', 'food-ice-cream-scoop-chocolate'],
+    legumes: ['food-carrot', 'food-broccoli', 'food-cabbage', 'food-cauliflower', 'food-eggplant', 'food-leek', 'food-onion', 'food-paprika', 'food-pepper', 'food-pumpkin', 'food-radish', 'food-tomato', 'food-corn', 'food-beet', 'food-celery-stick'],
+    fruitsfrais: ['food-apple', 'food-pear', 'food-orange', 'food-grapes', 'food-strawberry', 'food-cherries', 'food-banana', 'food-lemon', 'food-watermelon'],
+    exotiques: ['food-pineapple', 'food-coconut', 'food-avocado', 'food-advocado-half', 'food-coconut-half'],
+    herbes: ['food-mushroom', 'food-mushroom-half', 'food-onion-half', 'food-paprika-slice', 'nat-mushroom_red', 'nat-mushroom_tan', 'nat-mushroom_redGroup'],
+    jusfrais: ['food-glass', 'food-cocktail', 'food-lemon-half', 'food-orange'],
   };
-  for (const [id, files] of Object.entries(goods)) files.forEach((f, i) => { A[`produit.${id}${i ? '.' + (i + 1) : ''}`] = def(`${f.replace('nat-pot-large', 'nat-pot_large')}.glb`, 'produit'); });
+  for (const [id, files] of Object.entries(goods)) files.forEach((f, i) => { A[`produit.${id}${i ? '.' + (i + 1) : ''}`] = def(`${f}.glb`, 'produit'); });
 }
+
+/**
+ * Tous les fichiers du dossier models/ : clé générique « f:<nom> » (genre et rotation déduits du préfixe du pack),
+ * pour les familles utilisées en série (décor, animaux, variantes de produits, véhicules garés…).
+ */
+export function kindOf(name: string): { kind: AssetKind; rot: number } {
+  if (/^(character-|mm-character|arc-character|skt-character|blk-character)/.test(name)) return { kind: 'personnage', rot: 2 };
+  if (/^(car-|urb-truck)/.test(name) && !/^car-(cone|box)/.test(name)) return { kind: 'vehicule', rot: 2 };
+  if (/^(building-|house-|ind-building|com-low-detail)/.test(name)) return { kind: 'batiment', rot: 0 };
+  if (/^food-/.test(name)) return { kind: 'produit', rot: 0 };
+  if (/^[a-z]+[A-Z]/.test(name) || /^(mm-|arc-)/.test(name)) return { kind: 'meuble', rot: 2 };
+  return { kind: 'meuble', rot: 0 };
+}
+for (const name of MODEL_FILES) { const k = kindOf(name); ASSETS[`f:${name}`] ??= def(`${name}.glb`, k.kind, k.rot); }
+/** Clés génériques des fichiers dont le nom correspond au motif (chargés ou non). */
+export function filesMatching(re: RegExp): string[] { return MODEL_FILES.filter((n) => re.test(n)).map((n) => `f:${n}`); }
 
 /** Clés d'un produit : « produit.<id> » puis ses variantes « produit.<id>.2 »… (toutes, chargées ou non). */
 export function productKeys(id: string): string[] {
@@ -142,8 +175,7 @@ export class AssetLib {
   async load(onProgress: (p: number, label: string) => void, disabled = false): Promise<void> {
     const keys = Object.keys(ASSETS);
     if (disabled) { this.failed.push(...keys); this.done = true; return; }
-    const pack = await fetchPack(CONFIG.modelsDir + 'pack.json', (p) => onProgress(p * 0.7, 'paquet de modèles'));
-    const files = pack ? await unpack(pack) : null;
+    const files = await loadPack(CONFIG.modelsDir, (p) => onProgress(p * 0.7, 'paquet de modèles'));
     if (files) {
       const loader = new GLTFLoader();
       let n = 0;
@@ -318,15 +350,35 @@ export class AssetLib {
   }
 }
 
-type PackJson = Record<string, string> | { v: 3; index: Record<string, [number, number]>; gz: string };
+type PackJson = Record<string, string> | { v: 3; index: Record<string, [number, number]>; gz: string } | { v: 4; parts: string[] };
+type Files = (file: string) => ArrayBuffer | null;
+
+/**
+ * Paquet des modèles : format 4 = liste de parties (chacune au format 3), téléchargées en parallèle ; formats 3 et
+ * ancien acceptés. Null si absent ou illisible.
+ */
+async function loadPack(dir: string, onProgress: (p: number) => void): Promise<Files | null> {
+  const head = await fetchPack(dir + 'pack.json', () => undefined);
+  if (!head) return null;
+  if ('v' in head && (head as { v: unknown }).v === 4) {
+    const parts = (head as { parts: string[] }).parts;
+    const prog = parts.map(() => 0);
+    const got = await Promise.all(parts.map((name, i) => fetchPack(dir + name, (p) => { prog[i] = p; onProgress(prog.reduce((a, b) => a + b, 0) / parts.length); })
+      .then((pk) => (pk ? unpack(pk) : null))));
+    if (got.some((g) => !g)) return null;
+    return (file) => { for (const g of got) { const b = g!(file); if (b) return b; } return null; };
+  }
+  onProgress(1);
+  return unpack(head);
+}
 
 /**
  * Accès aux fichiers du paquet. Format 3 : GLB bout à bout compressés (gzip, base64) avec index ; ancien format :
  * un base64 par fichier. Null si le paquet est illisible (le jeu charge alors les fichiers .glb).
  */
-async function unpack(pack: PackJson): Promise<((file: string) => ArrayBuffer | null) | null> {
+async function unpack(pack: PackJson): Promise<Files | null> {
   const b64 = (t: string): Uint8Array<ArrayBuffer> => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
-  if ('v' in pack && (pack as { v: unknown }).v === 3) {
+  if ('gz' in pack && typeof (pack as { gz: unknown }).gz === 'string') {
     const p = pack as { index: Record<string, [number, number]>; gz: string };
     if (typeof DecompressionStream === 'undefined') return null;
     try {

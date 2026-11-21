@@ -6,7 +6,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCK, FACE_N, PITCH, SIDEWALK_W, STREET_W, blockCenter, type Building, type District } from '../sim/district';
-import { assets, keysWith } from '../assets';
+import { assets, filesMatching, keysWith } from '../assets';
+import { parkZones } from './life';
+import type { Rect } from '../world/collide';
 import { disposeOwn, textPlane } from './kit';
 
 export const FLOOR_H = 3.2;
@@ -164,6 +166,8 @@ export class DistrictView {
     this.group.add(this.trees());
     this.group.add(this.streetLights());
     this.group.add(this.streetProps());
+    this.group.add(this.parkedCars());
+    this.group.add(this.outskirts());
   }
 
   /**
@@ -174,10 +178,10 @@ export class DistrictView {
    */
   private kitBuildings(): THREE.Group | null {
     const low = keysWith('bat.').filter((k) => !k.startsWith('bat.tour') && assets.has(k));
-    const towers = keysWith('bat.tour-').filter((k) => assets.has(k));
-    const houses = keysWith('maison.').filter((k) => assets.has(k));
+    const towers = filesMatching(/^building-skyscraper-/).filter((k) => assets.has(k));
+    const houses = filesMatching(/^house-/).filter((k) => assets.has(k));
     // Entrepôts (City Kit Industrial) pour le grossiste et le garage.
-    const depots = ['ind.a', 'ind.c', 'ind.e', 'ind.h'].filter((k) => assets.has(k));
+    const depots = filesMatching(/^ind-building-/).filter((k) => assets.has(k));
     if (!low.length) return null;
     const aspect = new Map([...low, ...towers, ...houses, ...depots].map((k) => [k, assets.aspect(k)]));
     const maxRent = Math.max(1, ...this.d.premises.map((p) => p.rent / p.area));
@@ -276,7 +280,9 @@ export class DistrictView {
     const pc = blockCenter(d, d.parkBlock.i, d.parkBlock.j);
     let seed = d.seed * 9301 + 49297;
     const rnd = (): number => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-    for (let k = 0; k < 40; k++) pts.push([pc.x + (rnd() - 0.5) * (BLOCK - 8), pc.z + (rnd() - 0.5) * (BLOCK - 8)]);
+    const zones = parkZones(d);
+    const inZone = (x: number, z: number): boolean => [zones.zoo, zones.skate].some((q) => x > q.x0 - 2 && x < q.x1 + 2 && z > q.z0 - 2 && z < q.z1 + 2);
+    for (let k = 0; k < 70; k++) { const x = pc.x + (rnd() - 0.5) * (BLOCK - 8), z = pc.z + (rnd() - 0.5) * (BLOCK - 8); if (!inZone(x, z)) pts.push([x, z]); }
     for (let i = 0; i <= d.nx; i++) {
       const x = (i - d.nx / 2) * PITCH;
       for (let z = -d.size.d / 2 + 10; z < d.size.d / 2; z += 18) { pts.push([x - STREET_W / 2 + 1.2, z]); pts.push([x + STREET_W / 2 - 1.2, z + 9]); }
@@ -291,7 +297,8 @@ export class DistrictView {
       crowns.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0.16 + 3.2 * s, z), new THREE.Quaternion(), new THREE.Vector3(s, s * 1.1, s)));
     }
     // Modèles d'arbres (City Kit Suburban, Nature Kit) répartis au hasard, un InstancedMesh par modèle.
-    const kinds = ['rue.arbre-grand', 'rue.arbre-petit', 'nat.arbre', 'nat.chene', 'nat.arbre-fin'].filter((k) => assets.has(k));
+    // Tous les arbres du Nature Kit et du City Kit Suburban (feuillus, pins, palmiers, automne).
+    const kinds = ['rue.arbre-grand', 'rue.arbre-petit', ...filesMatching(/^nat-tree_/)].filter((k) => assets.has(k));
     if (kinds.length) {
       const per = new Map<string, THREE.Matrix4[]>();
       trunks.forEach((m, i) => {
@@ -355,14 +362,26 @@ export class DistrictView {
       put('rue.banc', pc.x + k * 9, pc.z - ph + 4, 0); put('rue.banc', pc.x + k * 9, pc.z + ph - 4, Math.PI);
       put('rue.banc', pc.x - ph + 4, pc.z + k * 9, Math.PI / 2); put('rue.banc', pc.x + ph - 4, pc.z + k * 9, -Math.PI / 2);
     }
-    const flowers = keysWith('nat.fleur-').concat('nat.buisson', 'nat.buisson-grand', 'nat.buisson-fin');
-    for (let k = 0; k < 70; k++) {
-      const a = rnd() * Math.PI * 2, rr = 6 + rnd() * (ph - 10);
-      put(flowers[k % flowers.length]!, pc.x + Math.cos(a) * rr, pc.z + Math.sin(a) * rr, rnd() * 6.28, 0);
+    // Massifs : toutes les fleurs, plantes, herbes, champignons, pierres, souches et rondins du Nature Kit.
+    const zones = parkZones(d);
+    const inZone = (x: number, z: number): boolean => [zones.zoo, zones.skate].some((q) => x > q.x0 - 1.5 && x < q.x1 + 1.5 && z > q.z0 - 1.5 && z < q.z1 + 1.5);
+    const flowers = filesMatching(/^nat-(flower_|plant_|grass|mushroom_|crop_|stone_small|rock_small|stump_|log|hanging_moss)/).filter((k) => assets.has(k));
+    for (let k = 0; k < 260 && flowers.length; k++) {
+      const a = rnd() * Math.PI * 2, rr = 6 + rnd() * (ph - 8);
+      const x = pc.x + Math.cos(a) * rr, z = pc.z + Math.sin(a) * rr;
+      if (!inZone(x, z)) put(flowers[k % flowers.length]!, x, z, rnd() * 6.28, 0);
     }
+    // Statues et gros rochers au centre et aux entrées du parc.
+    const statues = filesMatching(/^nat-statue_/).filter((k) => assets.has(k));
+    statues.forEach((k, i) => { const a = (i / Math.max(1, statues.length)) * Math.PI * 2; put(k, pc.x + Math.cos(a) * 5, pc.z - 12 + Math.sin(a) * 3, -a, 0); });
+    filesMatching(/^nat-(rock_large|rock_tall|stone_large|stone_tall)/).filter((k) => assets.has(k)).forEach((k, i) => {
+      const x = pc.x - ph + 3 + (i % 8) * 7, z = pc.z - 18 + Math.floor(i / 8) * 4;
+      if (!inZone(x, z)) put(k, x, z, rnd() * 6, 0);
+    });
     for (let k = 0; k < 3; k++) {
       const x = pc.x - 6 + k * 6, z = pc.z;
       put(k % 2 ? 'rue.parasol-a' : 'rue.parasol-b', x, z, rnd(), 0);
+      put('f:table', x + 1.2, z + 0.4, 0, 0); put('f:chairModernCushion', x + 1.2, z + 1.3, Math.PI, 0);
     }
     // Abords des services : palettes et cartons devant le grossiste, parasols devant les snacks.
     for (const b of d.buildings) {
@@ -373,10 +392,19 @@ export class DistrictView {
       if (b.service === 'grossiste') {
         for (const s of [-5, -3.6, 4, 5.4]) { const [x, z] = at(s, 0.9); put('rue.palette', x, z, ry, 2.2); }
         for (const s of [-4.3, 4.7]) { const [x, z] = at(s, 0.9); put('rue.carton', x, z, ry + 0.3, 2.2); }
+        // Tonneaux, caisses et seaux (Survival Kit), cartons du Furniture Kit.
+        const srv = filesMatching(/^srv-(barrel|box|bucket|chest|bottle)/).filter((k) => assets.has(k));
+        srv.forEach((k, i) => { const [x, z] = at((i % 2 ? 1 : -1) * (6.5 + Math.floor(i / 2) * 0.9), 0.8); put(k, x, z, rnd() * 6, 2.2); });
+        for (const [s2, k] of [[-6.2, 'f:cardboardBoxClosed'], [6.4, 'f:cardboardBoxOpen']] as const) { const [x, z] = at(s2, 2.2); put(k, x, z, rnd(), 2.2); }
       } else if (b.service === 'snack') {
         for (const s of [-4.5, 4.5]) { const [x, z] = at(s, 1.6); put(s < 0 ? 'rue.parasol-a' : 'rue.parasol-b', x, z, ry, 2.5); }
       } else if (b.service === 'garage') {
         for (const s of [-4, -3, 4.2]) { const [x, z] = at(s, 0.8); put('rue.cone', x, z, rnd(), 2.2); }
+        // Vitrine du garage : voitures de course et karts exposés sur le trottoir.
+        const show = filesMatching(/^car-(race|kart)/).filter((k) => assets.has(k));
+        show.forEach((k, i) => { const [x, z] = at((i % 2 ? 1 : -1) * (5.5 + Math.floor(i / 2) * 2.4), 1.6); put(k, x, z, ry + Math.PI / 2, 2.6); });
+      } else if (b.service === 'meubles') {
+        for (const [s2, k] of [[-4.5, 'f:loungeChair'], [4.5, 'f:loungeSofa'], [-5.8, 'f:lampSquareFloor']] as const) { const [x, z] = at(s2, 1.2); put(k, x, z, ry, 2.2); }
       }
     }
     // Petit chantier sur un trottoir (barrières, cônes, lampe de chantier).
@@ -386,6 +414,8 @@ export class DistrictView {
         put('rue.chantier-barriere', x, z0 - 3, Math.PI / 2); put('rue.chantier-barriere', x, z0 + 3, Math.PI / 2);
         put('rue.chantier-cone', x - 0.2, z0 - 1.5); put('rue.chantier-cone', x - 0.2, z0); put('rue.chantier-cone', x - 0.2, z0 + 1.5);
         put('rue.chantier-lampe', x + 0.6, z0 + 4.2, Math.PI / 2);
+        put('f:urb-scaffolding-structure', x + 2.2, z0, 0, 0); put('f:urb-scaffolding-poles', x + 2.2, z0 + 2.4, 0, 0);
+        put('f:urb-planks', x + 0.4, z0 - 4.6, 0.3); put('f:urb-detail-barrier-strong-type-a', x - 0.2, z0 - 6, Math.PI / 2);
       }
     }
     // Tailles (largeur, hauteur, profondeur) maximales de chaque modèle dans la rue (m).
@@ -394,12 +424,125 @@ export class DistrictView {
       'rue.benne': [2.2, 1.6, 1.4], 'rue.parasol-a': [3, 2.7, 3], 'rue.parasol-b': [3, 2.7, 3], 'rue.cloture': [4, 0.8, 0.4],
       'rue.palette': [1.2, 0.3, 1.0], 'rue.carton': [0.8, 0.7, 0.8], 'rue.cone': [0.45, 0.6, 0.45], 'rue.chantier-barriere': [2.4, 1.1, 0.6],
       'rue.chantier-cone': [0.5, 0.75, 0.5], 'rue.chantier-lampe': [1, 2.2, 1], 'nat.buisson': [1.1, 0.9, 1.1], 'nat.buisson-grand': [1.6, 1.3, 1.6],
-      'nat.buisson-fin': [1.2, 1, 1.2],
+      'nat.buisson-fin': [1.2, 1, 1.2], 'f:table': [0.9, 0.75, 0.9], 'f:chairModernCushion': [0.45, 0.9, 0.45],
+      'f:cardboardBoxClosed': [0.7, 0.6, 0.7], 'f:cardboardBoxOpen': [0.7, 0.6, 0.7], 'f:loungeChair': [0.9, 0.9, 0.9],
+      'f:loungeSofa': [2, 0.9, 0.9], 'f:lampSquareFloor': [0.5, 1.7, 0.5], 'f:urb-scaffolding-structure': [2.4, 4, 2.4],
+      'f:urb-scaffolding-poles': [2.4, 4, 2.4], 'f:urb-planks': [2, 0.3, 1], 'f:urb-detail-barrier-strong-type-a': [2.4, 1.1, 0.6],
     };
+    for (const k of per.keys()) {
+      if (size[k]) continue;
+      if (/^f:car-/.test(k)) size[k] = [1.9, 1.6, 4.2];
+      else if (/^f:srv-/.test(k)) size[k] = [0.8, 0.9, 0.8];
+      else if (/^f:nat-statue/.test(k)) size[k] = [1.6, 2.6, 1.6];
+      else if (/^f:nat-(rock|stone)_(large|tall)/.test(k)) size[k] = [1.8, 1.8, 1.8];
+      else if (/^f:nat-(log|stump)/.test(k)) size[k] = [1.2, 0.7, 1.2];
+      else if (/^f:nat-/.test(k)) size[k] = [0.8, 0.8, 0.8];
+    }
     for (const [k, ms] of per) {
       const [w, h, dd] = size[k] ?? [0.7, 0.6, 0.7];
       const im = assets.instances(k, ms, w, h, dd);
       if (im) { im.castShadow = h > 0.7; im.name = `décor ${k}`; g.add(im); }
+    }
+    return g;
+  }
+
+  /** Rectangles des voitures garées (ajoutés aux collisions de la rue). */
+  readonly parkedRects: Rect[] = [];
+
+  /**
+   * Voitures garées le long des trottoirs (tous les véhicules du Car Kit et du Retro Urban Kit sauf course et karts),
+   * jamais devant une porte ni dans un carrefour. Chacune devient un obstacle.
+   */
+  private parkedCars(): THREE.Group {
+    const d = this.d, g = new THREE.Group();
+    g.name = 'voitures-garees';
+    const keys = [...filesMatching(/^car-/).filter((k) => !/race|kart|cone|box|tractor/.test(k)), ...filesMatching(/^urb-truck/)].filter((k) => assets.has(k));
+    if (!keys.length) return g;
+    let seed = d.seed * 977 + 3;
+    const rnd = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const doors = d.buildings.filter((b) => b.premise || b.service || b.home).map((b) => [b.doorX, b.doorZ] as const);
+    const per = new Map<string, THREE.Matrix4[]>();
+    const off = STREET_W / 2 - 1.5;
+    const add = (x: number, z: number, along: 'x' | 'z'): void => {
+      if (rnd() > 0.42) return;
+      if (doors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 6)) return;
+      // Hors des carrefours.
+      const nearCross = (v: number, n: number): boolean => { for (let i = 0; i <= n; i++) if (Math.abs(v - (i - n / 2) * PITCH) < STREET_W / 2 + 5) return true; return false; };
+      if (along === 'z' ? nearCross(z, d.nz) : nearCross(x, d.nx)) return;
+      const k = keys[Math.floor(rnd() * keys.length)]!;
+      const ry = along === 'z' ? (rnd() < 0.5 ? 0 : Math.PI) : (rnd() < 0.5 ? Math.PI / 2 : -Math.PI / 2);
+      if (!per.has(k)) per.set(k, []);
+      per.get(k)!.push(new THREE.Matrix4().makeRotationY(ry).setPosition(x, 0, z));
+      const hw = along === 'z' ? 1.05 : 2.3, hd = along === 'z' ? 2.3 : 1.05;
+      this.parkedRects.push({ minX: x - hw, maxX: x + hw, minZ: z - hd, maxZ: z + hd, h: 1.7 });
+    };
+    for (let i = 0; i <= d.nx; i++) {
+      const x = (i - d.nx / 2) * PITCH;
+      for (let z = -d.size.d / 2 + 6; z < d.size.d / 2 - 4; z += 6.5) { add(x - off, z, 'z'); add(x + off, z + 3, 'z'); }
+    }
+    for (let j = 0; j <= d.nz; j++) {
+      const z = (j - d.nz / 2) * PITCH;
+      for (let x = -d.size.w / 2 + 6; x < d.size.w / 2 - 4; x += 6.5) { add(x, z - off, 'x'); add(x + 3, z + off, 'x'); }
+    }
+    for (const [k, ms] of per) {
+      const sz = assets.size(k);
+      const wide = /truck|garbage|firetruck|ambulance|delivery|van/.test(k) ? 2.3 : 1.9;
+      const im = sz ? assets.instances(k, ms, wide, 4, 6.5) : null;
+      if (im) { im.castShadow = true; im.name = `garée ${k}`; g.add(im); }
+    }
+    return g;
+  }
+
+  /**
+   * Horizon autour du quartier (au-delà des limites où l'on marche) : gratte-ciel et immeubles (City Kit Commercial,
+   * versions « low detail » comprises) au nord et à l'ouest, zone industrielle (entrepôts, cheminées, citernes) à
+   * l'est, quartier pavillonnaire (maisons, allées, clôtures, haies, arbres) au sud.
+   */
+  private outskirts(): THREE.Group {
+    const d = this.d, g = new THREE.Group();
+    g.name = 'horizon';
+    let seed = d.seed * 613 + 1;
+    const rnd = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const per = new Map<string, { m: THREE.Matrix4[]; w: number; h: number }>();
+    const put = (k: string, x: number, z: number, ry: number, w: number, h: number): void => {
+      if (!assets.has(k)) return;
+      if (!per.has(k)) per.set(k, { m: [], w, h });
+      per.get(k)!.m.push(new THREE.Matrix4().makeRotationY(ry).setPosition(x, 0, z));
+    };
+    const hw = d.size.w / 2 + STREET_W / 2, hd = d.size.d / 2 + STREET_W / 2;
+    const city = [...filesMatching(/^building-[a-n]$/), ...filesMatching(/^building-skyscraper-/), ...filesMatching(/^com-low-detail-building/)];
+    const ind = filesMatching(/^ind-(building|chimney|detail-tank)/);
+    const sub = filesMatching(/^house-/);
+    // Nord (z < 0) et ouest (x < 0) : ville dense sur trois rangées.
+    for (let row = 0; row < 3; row++) {
+      const dist = 34 + row * 30;
+      for (let x = -hw - 60; x < hw + 60; x += 22 + rnd() * 8) {
+        const k = city[Math.floor(rnd() * city.length)]!;
+        const tall = /skyscraper/.test(k);
+        put(k, x, -hd - dist, 0, 20, tall ? 70 + rnd() * 30 : 18 + rnd() * 26);
+      }
+      for (let z = -hd - 30; z < hd + 10; z += 22 + rnd() * 8) {
+        const k = city[Math.floor(rnd() * city.length)]!;
+        put(k, -hw - dist, z, Math.PI / 2, 20, /skyscraper/.test(k) ? 60 + rnd() * 30 : 16 + rnd() * 22);
+      }
+    }
+    // Est : zone industrielle.
+    for (let row = 0; row < 3; row++) for (let z = -hd - 20; z < hd + 40; z += 24 + rnd() * 6) {
+      const k = ind[Math.floor(rnd() * ind.length)]!;
+      const small = /chimney|tank/.test(k);
+      put(k, hw + 36 + row * 30 + rnd() * 6, z, -Math.PI / 2, small ? 8 : 22, small ? 22 : 16);
+    }
+    // Sud : pavillons alignés le long d'une petite rue, avec haies, clôtures et arbres.
+    const extras = [...filesMatching(/^sub-(tree|planter|fence|driveway|path)/)];
+    for (let row = 0; row < 3; row++) for (let x = -hw - 20; x < hw + 60; x += 13 + rnd() * 3) {
+      const z = hd + 30 + row * 24;
+      put(sub[Math.floor(rnd() * sub.length)]!, x, z, Math.PI, 10, 12);
+      const e = extras[Math.floor(rnd() * extras.length)];
+      if (e) put(e, x + 5.5, z - 6, Math.PI, 3, 4);
+    }
+    for (const [k, v] of per) {
+      const im = assets.instances(k, v.m, v.w, v.h, v.w);
+      if (im) { im.name = `horizon ${k}`; im.castShadow = false; g.add(im); }
     }
     return g;
   }

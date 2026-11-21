@@ -88,10 +88,13 @@ export interface District {
 export const SERVICE_ORDER: readonly ServiceKind[] = ['grossiste', 'meubles', 'banque', 'emploi', 'garage', 'pub', 'snack', 'snack'];
 
 const COMPETITOR_NAMES: Record<ShopType, string[]> = {
-  epicerie: ['Épicerie du Coin', 'Chez Karim', 'Primeur Atlas', 'Mini-Marché Zitoun'],
+  epicerie: ['Épicerie du Coin', 'Chez Karim', 'Mini-Marché Zitoun', 'Épicerie Nour'],
   cafe: ['Café des Arts', 'Le Petit Noir', 'Café Lamrani', 'Brûlerie Hamria'],
   vetements: ['Mode Zahra', 'Atelier Textile', 'Jeans & Co', 'Boutique Riad'],
   fleuriste: ['Fleurs du Riad', 'Le Jardin de Lina', 'Rose & Jasmin'],
+  boulangerie: ['Boulangerie Benali', 'Au Bon Pain', 'Le Fournil du Quartier'],
+  fastfood: ['Burger Express', 'Tacos & Co', 'Snack Rapide'],
+  primeur: ['Fruits du Souk', 'Le Panier Vert', 'Primeur Atlas'],
 };
 
 /** Centre d'un îlot (i, j). */

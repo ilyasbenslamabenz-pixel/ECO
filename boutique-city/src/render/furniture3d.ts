@@ -14,6 +14,9 @@ export const PRODUCT_COLORS: Record<string, string> = {
   cafe: '#5a3a26', the: '#4f9a4a', croissant: '#e3b05a', sandwich: '#e6d6a8', jus: '#f2a02a',
   tshirt: '#4a7fd0', jean: '#2f4a7a', veste: '#7a4a3a', chaussures: '#3a3a3a',
   roses: '#d8344a', bouquet: '#e88ab0', plantes: '#3f8a45', cartes: '#f2d06b',
+  baguette: '#d9a55a', campagne: '#b9803a', viennoiseries: '#e3b05a', patisseries: '#e88ab0', eau: '#9fd0f0',
+  burger: '#c0773a', frites: '#f2c84a', hotdog: '#d0603a', pizza: '#e0533a', soda: '#d02a2a', glace: '#f4d0e0',
+  legumes: '#4f9a4a', fruitsfrais: '#e0533a', exotiques: '#f2c84a', herbes: '#6aa83a', jusfrais: '#f2a02a',
 };
 
 const WOOD = '#b98a5e', WOOD_D = '#7d5a3c', METAL = '#9aa3ad', DARK = '#3a3f46', WHITE = '#eef0f2';
@@ -27,13 +30,45 @@ export const HOME_FURNITURE: Record<string, { w: number; d: number; nameFr: stri
   tablebasse: { w: 2, d: 1, nameFr: 'Table basse' },
   'bureau-perso': { w: 2, d: 1, nameFr: 'Bureau' },
   tele: { w: 2, d: 1, nameFr: 'Télévision' },
+  'salle-de-bain': { w: 2, d: 1, nameFr: 'Salle de bain' },
+  baignoire: { w: 2, d: 1, nameFr: 'Baignoire' },
+  buanderie: { w: 1, d: 1, nameFr: 'Buanderie' },
+};
+
+/**
+ * Décorations à modèle unique : [clé du modèle, largeur, hauteur, profondeur (m), rotation] puis éléments ajoutés
+ * [clé, l, h, p, x, y, z] ; `y` : hauteur de pose (sur un guéridon). Repli : plante faite en code.
+ */
+const DECO: Record<string, { k: string; w: number; h: number; d: number; y?: number; ry?: number; more?: [string, number, number, number, number, number, number][] }> = {
+  arcade: { k: 'f:arc-arcade-machine', w: 0.8, h: 1.9, d: 0.8 }, flipper: { k: 'f:arc-pinball', w: 0.8, h: 1.5, d: 1.7 },
+  pince: { k: 'f:arc-claw-machine', w: 0.9, h: 2, d: 0.9 }, airhockey: { k: 'f:arc-air-hockey', w: 1.9, h: 1, d: 0.95 },
+  danse: { k: 'f:arc-dance-machine', w: 1.9, h: 2, d: 0.95 }, basket: { k: 'f:arc-basketball-game', w: 0.9, h: 2.1, d: 1.9 },
+  distributeur: { k: 'f:arc-vending-machine', w: 0.9, h: 1.9, d: 0.8 }, roue: { k: 'f:arc-prize-wheel', w: 0.9, h: 1.9, d: 0.6 },
+  tickets: { k: 'f:arc-ticket-machine', w: 0.6, h: 1.5, d: 0.6 }, jackpot: { k: 'f:arc-gambling-machine', w: 0.8, h: 1.8, d: 0.8 },
+  lots: { k: 'f:arc-prizes', w: 0.9, h: 1.6, d: 0.7 },
+  sapin: { k: 'f:hol-tree-decorated', w: 1, h: 2.3, d: 1, more: [['f:hol-present-a-cube', 0.3, 0.3, 0.3, 0.3, 0, 0.35], ['f:hol-present-b-round', 0.3, 0.3, 0.3, -0.3, 0, 0.3]] },
+  bonhomme: { k: 'f:hol-snowman-hat', w: 0.8, h: 1.5, d: 0.8 },
+  cadeaux: { k: 'f:hol-present-a-rectangle', w: 0.5, h: 0.35, d: 0.4, more: [['f:hol-present-b-cube', 0.35, 0.35, 0.35, 0.25, 0, 0.2], ['f:hol-present-a-round', 0.3, 0.3, 0.3, -0.25, 0, 0.25], ['f:hol-present-b-rectangle', 0.4, 0.25, 0.3, 0.05, 0.35, -0.02]] },
+  cassenoisette: { k: 'f:hol-nutcracker', w: 0.5, h: 1.4, d: 0.5 }, lanterne: { k: 'f:hol-lantern', w: 0.4, h: 0.9, d: 0.4 },
+  renne: { k: 'f:hol-reindeer', w: 0.8, h: 1.3, d: 0.8 }, traineau: { k: 'f:hol-sled', w: 1.8, h: 0.8, d: 0.8 },
+  guirlande: { k: 'f:hol-lights-colored', w: 1.9, h: 0.6, d: 0.3, more: [['f:hol-wreath-decorated', 0.5, 0.5, 0.15, 0, 0.7, 0]] },
+  menorah: { k: 'f:hol-hanukkah-menorah-candles', w: 0.6, h: 0.6, d: 0.3, y: 0.55, more: [['f:sideTable', 0.7, 0.55, 0.5, 0, 0, 0]] },
+  nounours: { k: 'f:bear', w: 0.6, h: 0.7, d: 0.5 }, 'tele-vintage': { k: 'f:televisionVintage', w: 0.7, h: 0.6, d: 0.5, y: 0.6, more: [['f:sideTableDrawers', 0.8, 0.6, 0.55, 0, 0, 0]] },
+  'canape-angle': { k: 'f:loungeSofaCorner', w: 1.9, h: 0.9, d: 1.9 }, 'fauteuil-design': { k: 'f:loungeDesignChair', w: 0.85, h: 0.9, d: 0.85 },
+  'lampadaire-carre': { k: 'f:lampSquareFloor', w: 0.5, h: 1.7, d: 0.5 }, 'plante-grande': { k: 'f:nat-plant_bushLarge', w: 0.8, h: 1.1, d: 0.8, more: [['f:nat-pot_large', 0.7, 0.5, 0.7, 0, 0, 0]] },
+  palmier: { k: 'f:nat-tree_palmShort', w: 0.9, h: 2.4, d: 0.9 }, statue: { k: 'f:nat-statue_head', w: 0.8, h: 1.6, d: 0.8 },
+  defibrillateur: { k: 'f:aid-defibrillator-red', w: 0.4, h: 0.45, d: 0.2, y: 1.1, more: [['f:sideTable', 0.5, 1.1, 0.35, 0, 0, -0.25]] },
+  banc: { k: 'f:benchCushion', w: 1.8, h: 0.6, d: 0.6 }, 'tapis-carre': { k: 'f:rugSquare', w: 1.9, h: 0.03, d: 1.9 },
+  'tapis-arrondi': { k: 'f:rugRounded', w: 1.9, h: 0.03, d: 1.9 }, radio: { k: 'f:radio', w: 0.4, h: 0.25, d: 0.25, y: 0.55, more: [['f:sideTable', 0.6, 0.55, 0.45, 0, 0, 0]] },
+  accueil: { k: 'f:deskCorner', w: 1.9, h: 0.8, d: 1.9, more: [['f:computerScreen', 0.5, 0.4, 0.15, -0.3, 0.8, -0.6], ['f:computerKeyboard', 0.4, 0.05, 0.15, -0.3, 0.8, -0.35], ['f:computerMouse', 0.06, 0.04, 0.1, 0, 0.8, -0.35], ['f:chairDesk', 0.55, 1, 0.55, -0.3, 0, 0.2]] },
+  tonneau: { k: 'f:srv-barrel', w: 0.6, h: 0.9, d: 0.6 }, coffre: { k: 'f:srv-chest', w: 0.8, h: 0.6, d: 0.6 },
 };
 
 /** Meubles faits en code utilisés à la place d'un meuble à modèles quand un modèle manque. */
 const CODE_ALIAS: Record<string, string> = {
   gondole: 'rayon', 'presentoir-pain': 'etagere', etal: 'etagere', congelateur: 'frigo', bar: 'table', salon: 'table', bistrot: 'table',
   caddies: 'plante', consigne: 'plante', portemanteau: 'lampe', enceintes: 'lampe', ecran: 'tableau', fleurs: 'plante', bibliotheque: 'armoire',
-  'bureau-perso': 'tablebasse', tele: 'tablebasse',
+  'bureau-perso': 'tablebasse', tele: 'tablebasse', 'salle-de-bain': 'armoire', baignoire: 'tablebasse', buanderie: 'armoire',
 };
 
 export function furnitureSize(id: string): { w: number; d: number } {
@@ -56,7 +91,7 @@ export function buildFurniture(id: string, fill = 0, colors: string[] = ['#ccccc
   const r = hashRand(seed);
   const col = (k: number): THREE.Material => mat(colors[k % colors.length]!, { rough: 0.6 });
   const count = (slots: number): number => Math.round(Math.max(0, Math.min(1, fill)) * slots);
-  switch (CODE_ALIAS[id] ?? id) {
+  switch (CODE_ALIAS[id] ?? (DECO[id] ? 'plante' : id)) {
     case 'caisse': {
       box(g, w, 0.95, 0.75, 0, 0, 0.05, mat('#e4dccd'));
       box(g, w + 0.04, 0.05, 0.8, 0, 0.95, 0.05, mat(WOOD_D));
@@ -248,10 +283,19 @@ function kitFurniture(id: string, fill: number, colors: string[], seed: number):
     bar: ['meuble.bar', 'meuble.tabouret'], salon: ['meuble.canape-design', 'meuble.fauteuil', 'meuble.table-basse'],
     bistrot: ['meuble.table', 'meuble.chaise-moderne'], caddies: ['mm.caddie'], consigne: ['mm.consigne'], portemanteau: ['meuble.portemanteau'],
     enceintes: ['meuble.enceinte'], ecran: ['meuble.meuble-tele', 'meuble.tele'], fleurs: ['nat.fleur-rouge-a'],
-    bibliotheque: ['meuble.bibliotheque-fermee'], 'bureau-perso': ['meuble.bureau', 'meuble.chaise-bureau'], tele: ['meuble.meuble-tele', 'meuble.tele'],
+    bibliotheque: ['meuble.bibliotheque-fermee'], 'salle-de-bain': ['f:toilet', 'f:bathroomSink'], baignoire: ['f:bathtub'], buanderie: ['f:washerDryerStacked'], 'bureau-perso': ['meuble.bureau', 'meuble.chaise-bureau'], tele: ['meuble.meuble-tele', 'meuble.tele'],
     machine: ['meuble.placard', 'meuble.cafetiere'], table: ['meuble.table-ronde', 'meuble.chaise'], plante: ['meuble.plante'], lampe: ['meuble.lampe'],
     tapis: ['meuble.tapis'], lit: ['meuble.lit'], canape: ['meuble.canape'], cuisine: ['meuble.placard', 'meuble.frigo'],
   };
+  const deco = DECO[id];
+  if (deco) {
+    if (!assets.has(deco.k)) return null;
+    const g = new THREE.Group();
+    g.name = id;
+    put(g, deco.k, deco.w, deco.h, deco.d, 0, deco.y ?? 0, deco.y ? -0.1 : 0, false, deco.ry ?? 0);
+    for (const [k, w, h, d, x, y, z] of deco.more ?? []) put(g, k, w, h, d, x, y, z, false);
+    return g;
+  }
   const keys = need[id];
   if (!keys || !keys.every((k) => assets.has(k))) return null;
   const g = new THREE.Group();
@@ -319,6 +363,25 @@ function kitFurniture(id: string, fill: number, colors: string[], seed: number):
       if (!put(g, 'meuble.placard-haut', 0.98, 0.6, 0.35, -1, 1.5, -0.3) || !put(g, 'meuble.placard-haut', 0.98, 0.6, 0.35, 0, 1.5, -0.3)) box(g, 2, 0.6, 0.35, -0.5, 1.55, -0.3, mat('#e8e2d8'));
       put(g, 'meuble.micro-ondes', 0.45, 0.3, 0.35, 0.2, 0.92, -0.25, false);
       put(g, 'meuble.grille-pain', 0.25, 0.2, 0.18, -0.7, 0.92, -0.2, false);
+      put(g, 'f:food-frying-pan', 0.35, 0.08, 0.25, -1.15, 0.92, -0.1, false);
+      put(g, 'f:food-pot-stew', 0.25, 0.22, 0.25, -0.85, 0.92, -0.05, false);
+      put(g, 'f:food-knife-block', 0.15, 0.25, 0.12, -0.3, 0.92, -0.32, false);
+      put(g, 'f:food-cutting-board', 0.35, 0.03, 0.25, -0.15, 0.92, -0.1, false);
+      put(g, 'f:hoodModern', 0.9, 0.5, 0.5, -1, 1.65, -0.25, false);
+      break;
+    case 'salle-de-bain':
+      put(g, 'f:toilet', 0.55, 0.8, 0.75, -0.5, 0, -0.1, false);
+      put(g, 'f:bathroomSink', 0.6, 0.95, 0.5, 0.5, 0, -0.22, false);
+      put(g, 'f:bathroomMirror', 0.5, 0.65, 0.08, 0.5, 1.2, -0.46, false);
+      put(g, 'f:bathroomCabinet', 0.45, 0.5, 0.25, -0.5, 1.4, -0.4, false);
+      put(g, 'f:rugDoormat', 0.7, null, 0.45, 0.5, 0.005, 0.2, true);
+      break;
+    case 'baignoire':
+      put(g, 'f:bathtub', w - 0.15, 0.65, 0.85, 0, 0, 0);
+      put(g, 'f:pillowBlueLong', 0.5, 0.12, 0.2, 0.7, 0.62, -0.25, false);
+      break;
+    case 'buanderie':
+      put(g, 'f:washerDryerStacked', 0.75, 1.8, 0.7, 0, 0, -0.1, false);
       break;
     case 'bureau-perso':
       put(g, 'meuble.bureau', w - 0.2, 0.78, 0.7, 0, 0, -0.1);
