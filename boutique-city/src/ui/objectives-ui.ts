@@ -75,7 +75,7 @@ export class ObjectiveCard {
 /** Bannière centrale « Palier franchi » (6 secondes, un clic la ferme). */
 function showTierBanner(g: Game, t: Tier): void {
   document.querySelector('.tier-banner')?.remove();
-  const k = TIERS.indexOf(t), next = TIERS[k + 1];
+  const k = TIERS.indexOf(t), next = TIERS[k + 1], nc = next && currentTier(g)?.id === next.id ? tierCount(g, next.id) : null;
   const close = (): void => { b.classList.add('out'); setTimeout(() => b.remove(), 350); };
   const b = el('div', { cls: 'tier-banner', attrs: { role: 'status', 'aria-live': 'polite' }, on: { click: close } },
     el('div', { cls: 'tb-ico' }, icon('trophy')),
@@ -83,7 +83,7 @@ function showTierBanner(g: Game, t: Tier): void {
       el('span', { cls: 'kicker', text: `Palier ${k + 1} franchi` }),
       el('b', { text: t.name }),
       el('span', { text: `Récompense : ${t.reward}.` }),
-      next && currentTier(g)?.id === next.id ? el('small', { text: `Vous voilà ${next.rank} : ${tierCount(g, next.id).total - tierCount(g, next.id).done} nouveaux objectifs.` }) : null));
+      next && nc ? el('small', { text: `Vous voilà ${next.rank} : ${nc.total - nc.done} nouveaux objectifs.` }) : null));
   document.body.append(b);
   setTimeout(close, 6500);
 }

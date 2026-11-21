@@ -668,10 +668,10 @@ export class Phone {
   /** Objectifs : les trois objectifs actifs (indication, avancement), puis les quatre paliers et leurs récompenses. */
   private objectifs(): (Node | null)[] {
     const g = this.ctx.game;
-    const cur = currentTier(g), level = cur ? TIERS.indexOf(cur) : TIERS.length;
+    const cur = currentTier(g), level = cur ? TIERS.indexOf(cur) : TIERS.length, cc = cur ? tierCount(g, cur.id) : null;
     const active = activeObjectives(g);
     const out: (Node | null)[] = [
-      tiles(tile('Rang', rankOf(g), 'wrap'), tile('Palier', cur ? `${level + 1} / ${TIERS.length}` : 'tous', '', cur ? `${tierCount(g, cur.id).done} / ${tierCount(g, cur.id).total} objectifs` : 'franchis'), tile('Atteints', `${g.achieved.length} / ${OBJECTIVES.length}`)),
+      tiles(tile('Rang', rankOf(g), 'wrap'), tile('Palier', cur ? `${level + 1} / ${TIERS.length}` : 'tous', '', cc ? `${cc.done} / ${cc.total} objectifs` : 'franchis'), tile('Atteints', `${g.achieved.length} / ${OBJECTIVES.length}`)),
       meter(g.achieved.length / OBJECTIVES.length, 'ok'),
     ];
     if (active.length) {
