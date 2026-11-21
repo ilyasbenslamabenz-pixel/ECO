@@ -59,6 +59,9 @@ step(`12b. former les employés (valeur ${nw()})`);
 go('meubles');
 for (const id of [a, b]) if (g.staffOf(id).length > g.stats(g.shop(id)!).registers) { g.buyFurniture('caisse', 1, id); placeAll(id, ['caisse']); }
 step(`12c. une caisse de plus (${nw()})`);
+// Service de nettoyage de nuit dans chaque commerce (sinon la propreté chute et les ventes avec).
+for (const s of g.shops) g.setCleanService(s.id, true);
+step(`12g. nettoyage de nuit souscrit (${nw()})`);
 let days = 0;
 while (!g.achieved.includes('valeur100k') && days < 120) {
   live(1); days++; raises();
