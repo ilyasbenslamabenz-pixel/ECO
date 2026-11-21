@@ -163,8 +163,13 @@ export function employeeRow(ctx: UiCtx, id: number): HTMLElement {
   const s = el('select', { attrs: { 'aria-label': 'Affectation' } }, el('option', { text: 'Sans affectation', attrs: { value: '' } }), ...g.shops.map((sh) => el('option', { text: sh.name, attrs: { value: String(sh.id) } })));
   s.value = e.shopId === null ? '' : String(e.shopId);
   s.addEventListener('change', () => ctx.act(g.assign(e.id, s.value ? Number(s.value) : null)));
-  return el('div', { cls: 'item' }, el('div', {}, el('b', { text: e.name }), el('div', { cls: 'muted small', text: `compétence ${pct(e.skill)} · ${e.wage} CHF / h` })),
-    el('div', { cls: 'row tight' }, s, button('Licencier', () => ctx.act(g.fire(e.id), (p) => `Indemnité versée : ${chf(p)}.`), 'small danger')));
+  const mood = e.mood ?? 0.75, mw = g.marketWage(e.skill);
+  const face = mood > 0.7 ? '😊' : mood > 0.4 ? '😐' : '😠';
+  return el('div', { cls: 'item' }, el('div', {}, el('b', { text: `${face} ${e.name}` }),
+    el('div', { cls: 'muted small', text: `compétence ${pct(e.skill)} · ${e.wage} CHF / h (marché ${mw}) · satisfaction ${pct(mood)}${e.askedRaise ? ' · demande une augmentation' : ''}` })),
+    el('div', { cls: 'row tight' }, s,
+      button(`+2 CHF/h`, () => ctx.act(g.raiseWage(e.id, e.wage + 2)), e.askedRaise ? 'small primary' : 'small'),
+      button('Licencier', () => ctx.act(g.fire(e.id), (p) => `Indemnité versée : ${chf(p)}.`), 'small danger')));
 }
 
 /* ------------------------------ Garage ------------------------------ */

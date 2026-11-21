@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { assets } from './assets';
 import { gallery } from './gallery';
-import { FURNITURE_BY_ID, HOME_BY_ID, SERVICE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf } from './sim/catalog';
+import { CONFIG, FURNITURE_BY_ID, HOME_BY_ID, SERVICE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf } from './sim/catalog';
 import { clockView, formatClock } from './sim/clock';
 import { FACE_N, type Building } from './sim/district';
 import { Game, dayProfit, type GameSave, type Result, type Shop } from './sim/game';
@@ -71,9 +71,10 @@ function menu(): void {
     save && !params.has('nouveau') ? button(`Continuer : ${save.companyName} (jour ${Math.floor(save.total / 1440) + 1})`, () => begin(new Game(save.seed, save.companyName, save)), 'primary wide') : null,
     el('div', { cls: 'sec', text: 'Nouvelle partie' }),
     el('label', { cls: 'field' }, el('span', { text: 'Nom de l’entreprise' }), name),
-    button('Commencer — 40 000 CHF en poche', () => {
-      const go = (): void => begin(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 1e9) | 0, name.value.trim() || 'Mon entreprise'));
-      if (save && !params.has('nouveau')) void askConfirm(`Remplacer la partie sauvegardée (${save.companyName}) ?`, 'Remplacer', true).then((y) => { if (y) go(); });
+    button(`Nouvelle partie — ${chf(CONFIG.startCash)} en poche`, () => {
+      // Nouvelle partie : la sauvegarde précédente est effacée.
+      const go = (): void => { try { localStorage.removeItem(SAVE_KEY); } catch { /* stockage indisponible */ } begin(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 1e9) | 0, name.value.trim() || 'Mon entreprise')); };
+      if (save && !params.has('nouveau')) void askConfirm(`Effacer la partie sauvegardée (${save.companyName}) et recommencer ?`, 'Nouvelle partie', true).then((y) => { if (y) go(); });
       else go();
     }, save ? 'wide' : 'primary wide'),
     el('div', { cls: 'keys' },

@@ -186,9 +186,15 @@ export const SHOP_TYPE_BY_ID: ReadonlyMap<ShopType, ShopTypeDef> = new Map(SHOP_
 
 export function productsOf(shop: ShopType): ProductDef[] { return PRODUCTS.filter((p) => p.shop === shop); }
 
+/** Réglages de partie (modifiables) : somme de départ. */
+export const CONFIG = {
+  /** Trésorerie au début d'une nouvelle partie (CHF). */
+  startCash: 40_000,
+} as const;
+
 /** Paramètres économiques généraux. */
 export const ECONOMY = {
-  startCash: 40_000,
+  startCash: CONFIG.startCash,
   /** Loyer mensuel de base (CHF / m²), modulé par l'emplacement. */
   rentPerM2: 22,
   /** Dépôt de garantie à la signature (en mois de loyer). */

@@ -7,7 +7,7 @@
  * TypeScript pur (aucun DOM).
  */
 import {
-  PRODUCTS, SHOP_TYPES,
+  CONFIG, PRODUCTS, SHOP_TYPES,
   CAMPAIGN_BY_ID, ECONOMY, FOODS, FURNITURE_BY_ID, HOME_BY_ID, LOAN_OFFERS, NEEDS, PRODUCT_BY_ID, SHOP_TYPE_BY_ID,
   VEHICLE_BY_ID, loanTotal, productsOf,
   type CampaignKind, type ProductDef, type ServiceKind, type ShopType, type VehicleType,
@@ -21,7 +21,15 @@ import { Rng } from './rng';
 
 export const SAVE_VERSION = 2;
 
-export interface Employee { id: number; name: string; skill: number; wage: number; shopId: number | null; hiredDay: number; look: number }
+export interface Employee {
+  id: number; name: string; skill: number; wage: number; shopId: number | null; hiredDay: number; look: number;
+  /** Satisfaction 0..1 (salaire par rapport au marché) : vitesse de service, démission si trop basse. */
+  mood?: number;
+  /** Jours consécutifs très mécontent. */
+  unhappy?: number;
+  /** A demandé une augmentation (en attente). */
+  askedRaise?: boolean;
+}
 export interface Candidate { id: number; name: string; skill: number; wage: number; look: number }
 export interface ProductState { price: number; stock: number; auto: boolean }
 export interface Order { id: number; shopId: number; productId: string; qty: number; cost: number; deliverAt: number }
@@ -116,6 +124,10 @@ export interface Shop {
   close: number;
   reputation: number;
   deposit: number;
+  /** Loyer provisionné depuis la dernière échéance (prélevé tous les 30 jours). */
+  rentDue?: number;
+  /** Jour de signature du bail (échéances mensuelles à partir de ce jour). */
+  leaseDay?: number;
   today: DayStats;
   history: DayStats[];
   /** Taux d'arrivée et capacité de l'heure courante (clients / h). */
@@ -211,7 +223,7 @@ export class Game {
     this.companyName = companyName;
     this.rng = new Rng(seed ^ 0x5bd1e995);
     this.total = START_MINUTE;
-    this.cash = ECONOMY.startCash;
+    this.cash = CONFIG.startCash;
     this.today = emptyDay(0);
     const home = this.district.homes.find((h) => h.id === this.district.startHome);
     this.player = {
@@ -318,6 +330,23 @@ export class Game {
     return ok(sl.deposit);
   }
 
+  /** Salaire du marché (CHF / h) pour une compétence donnée. */
+  marketWage(skill: number): number { return Math.round(20 + skill * 14 + 1.5); }
+
+  /** Augmente (ou fixe) le salaire horaire d'un employé ; la satisfaction monte aussitôt. */
+  raiseWage(employeeId: number, wage: number): Result<number> {
+    const e = this.employees.find((x) => x.id === employeeId);
+    if (!e) return fail('Employé introuvable');
+    const w = Math.round(wage);
+    if (!(w >= 15 && w <= 80)) return fail('Salaire : de 15 à 80 CHF / h');
+    const up = w > e.wage;
+    e.wage = w;
+    if (up) { e.mood = Math.min(1, (e.mood ?? 0.75) + 0.25); e.askedRaise = false; e.unhappy = 0; }
+    this.notify(up ? 'ok' : 'warn', `${e.name} : nouveau salaire ${w} CHF / h.`);
+    this.bump();
+    return ok(w);
+  }
+
   /** Probabilité quotidienne de trouver un locataire selon le loyer demandé (rapport au loyer de marché). */
   tenantChance(sl: Sublet): number {
     const ratio = sl.ask / Math.max(1, this.marketRent(sl.kind, sl.ref));
@@ -408,7 +437,7 @@ export class Game {
     for (const pr of productsOf(type)) products[pr.id] = { price: pr.basePrice, stock: 0, auto: false };
     const shop: Shop = {
       id: this.nextId++, premiseId, type, name: name?.trim() || `${t.nameFr} ${this.companyName}`.slice(0, 40), items: [], nextUid: 1, storage: {}, products,
-      open: t.open, close: t.close, reputation: 0.5, deposit, today: emptyDay(this.day), history: [], rate: 0, capacity: 0, servedThisHour: 0, warned: [],
+      open: t.open, close: t.close, reputation: 0.5, deposit, rentDue: 0, leaseDay: this.day, today: emptyDay(this.day), history: [], rate: 0, capacity: 0, servedThisHour: 0, warned: [],
     };
     this.shops.push(shop);
     this.notify('ok', `Local loué : ${shop.name} (${p.area} m², ${p.rent} CHF / mois). Achetez des meubles au magasin de meubles, puis aménagez.`);
@@ -422,7 +451,7 @@ export class Game {
     let stored = 0;
     for (const [id, n] of Object.entries(s.storage)) stored += (FURNITURE_BY_ID.get(id)?.price ?? 0) * n;
     const resale = Math.round((this.stats(s).value + stored) * ECONOMY.resale);
-    this.cash += s.deposit + resale;
+    this.cash += s.deposit + resale - (s.rentDue ?? 0);
     for (const e of this.staffOf(s.id)) e.shopId = null;
     this.orders = this.orders.filter((o) => o.shopId !== s.id);
     this.campaigns = this.campaigns.filter((c) => c.shopId !== s.id);
@@ -647,7 +676,7 @@ export class Game {
     const c = this.candidates.find((x) => x.id === candidateId);
     if (!c) return fail('Candidat introuvable');
     if (!this.shop(shopId)) return fail('Commerce introuvable');
-    const e: Employee = { id: c.id, name: c.name, skill: c.skill, wage: c.wage, shopId, hiredDay: this.day, look: c.look };
+    const e: Employee = { id: c.id, name: c.name, skill: c.skill, wage: c.wage, shopId, hiredDay: this.day, look: c.look, mood: 0.75, unhappy: 0 };
     this.employees.push(e);
     this.candidates = this.candidates.filter((x) => x !== c);
     this.notify('ok', `${e.name} rejoint ${this.shop(shopId)!.name} (${e.wage} CHF / h).`);
@@ -923,7 +952,7 @@ export class Game {
     const c = clockView(this.total);
     if (!(c.hour >= s.open && c.hour < s.close)) return 0;
     const st = this.stats(s);
-    const staff = this.staffOf(s.id).map((e) => e.skill).sort((a, b) => b - a);
+    const staff = this.staffOf(s.id).map((e) => e.skill * (0.8 + 0.3 * (e.mood ?? 0.75))).sort((a, b) => b - a);
     const tended = Math.min(st.registers, staff.length);
     let skill = staff.slice(0, tended).reduce((a, b) => a + b, 0);
     if (this.player.tending === s.id && st.registers > tended) skill += 1;
@@ -974,6 +1003,8 @@ export class Game {
       }
       if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / this.refPrice(want) - 1)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
       ps.stock--;
+      // Alerte une fois par jour quand le stock passe sous 20 % de la place en rayon (sauf réassort automatique).
+      if (!ps.auto && ps.stock === Math.floor(this.storageFor(s, want) * 0.2) && this.pendingQty(s.id, want.id) === 0) this.warnOnce(s, `bas-${want.id}`, `${s.name} : stock bas de ${want.nameFr.toLowerCase()} (${ps.stock} restants, moins de 20 %).`);
       bought.push(want.id);
       s.today.revenue += ps.price; this.today.revenue += ps.price; this.cash += ps.price;
       s.today.costOfSales += want.cost; this.today.costOfSales += want.cost;
@@ -1016,8 +1047,15 @@ export class Game {
   private newDay(weekday: number): void {
     for (const s of this.shops) {
       const p = this.premise(s.premiseId)!;
+      // Loyer : provision du jour dans les comptes (bénéfice lisible), prélevé une fois par mois.
       const rent = r2(p.rent / 30);
-      s.today.rent += rent; this.today.rent += rent; this.cash -= rent;
+      s.today.rent += rent; this.today.rent += rent;
+      s.rentDue = r2((s.rentDue ?? 0) + rent);
+      if ((this.day + 1 - (s.leaseDay ?? 0)) % 30 === 0) {
+        this.cash -= s.rentDue;
+        this.notify('info', `${s.name} : loyer du mois prélevé (${Math.round(s.rentDue)} CHF).`);
+        s.rentDue = 0;
+      }
       s.history.push(s.today);
       if (s.history.length > 60) s.history.shift();
       s.today = emptyDay(this.day);
@@ -1031,6 +1069,18 @@ export class Game {
       this.cash -= def.rentDay; this.today.living += def.rentDay;
     }
     for (const v of this.vehicles) { const ins = VEHICLE_BY_ID.get(v.type)!.insurance; this.cash -= ins; this.today.living += ins; }
+    // Employés : satisfaction selon le salaire comparé au marché ; demande d'augmentation ; démission.
+    for (const e of [...this.employees]) {
+      const ratio = e.wage / this.marketWage(e.skill);
+      const target = Math.max(0, Math.min(1, 0.7 + (ratio - 1) * 2.2));
+      e.mood = r2((e.mood ?? 0.75) + (target - (e.mood ?? 0.75)) * 0.35);
+      if (ratio < 0.94 && !e.askedRaise) { e.askedRaise = true; this.notify('warn', `${e.name} demande une augmentation : le marché paie ${this.marketWage(e.skill)} CHF / h pour sa compétence (actuellement ${e.wage}).`); }
+      e.unhappy = e.mood < 0.3 ? (e.unhappy ?? 0) + 1 : 0;
+      if (e.unhappy >= 3) {
+        this.employees = this.employees.filter((x) => x !== e);
+        this.notify('error', `${e.name} a démissionné (salaire trop bas).`);
+      }
+    }
     // Sous-locations : loyer payé, loyer encaissé, arrivées et départs de locataires.
     for (const sl of this.sublets) {
       this.cash -= sl.cost; this.today.rent += sl.cost;
