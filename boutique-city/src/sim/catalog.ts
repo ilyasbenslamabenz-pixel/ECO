@@ -75,6 +75,42 @@ export const FURNITURE: readonly FurnitureDef[] = [
 
 export const FURNITURE_BY_ID: ReadonlyMap<string, FurnitureDef> = new Map(FURNITURE.map((f) => [f.id, f]));
 
+/**
+ * Meubles à thème : types de commerce où ils ont leur place. Présentoirs spécialisés : préférés pour ces types (meuble
+ * conseillé), mais un présentoir sert partout où il accueille des produits. Décoration : seule la décoration générale
+ * (absente de cette liste) et celle du thème du commerce sont « utiles ici » ; `[]` : décoration de fête, saisonnière.
+ */
+export const FURNITURE_FITS: Readonly<Record<string, readonly ShopType[]>> = {
+  'presentoir-pain': ['boulangerie', 'epicerie'], etal: ['primeur', 'epicerie'], gondole: ['epicerie'], congelateur: ['fastfood'],
+  caddies: ['epicerie', 'primeur'], consigne: ['epicerie'], portemanteau: ['vetements', 'cafe'], bibliotheque: ['cafe', 'vetements'],
+  ecran: ['fastfood', 'vetements', 'epicerie'], enceintes: ['vetements', 'cafe', 'fastfood'],
+  arcade: ['fastfood'], flipper: ['fastfood', 'cafe'], pince: ['fastfood'], airhockey: ['fastfood'], danse: ['fastfood'], basket: ['fastfood'],
+  distributeur: ['fastfood'], roue: ['fastfood'], tickets: ['fastfood'], jackpot: ['fastfood'], lots: ['fastfood'],
+  'tele-vintage': ['cafe', 'fastfood'], radio: ['cafe', 'boulangerie'], 'canape-angle': ['cafe', 'vetements'], 'fauteuil-design': ['cafe', 'vetements', 'fleuriste'],
+  banc: ['vetements', 'fleuriste', 'primeur'], accueil: ['vetements'], statue: ['vetements', 'fleuriste'], nounours: ['fleuriste'],
+  tonneau: ['primeur', 'epicerie', 'cafe'], coffre: ['fleuriste', 'vetements', 'primeur'],
+  sapin: [], bonhomme: [], cadeaux: [], cassenoisette: [], renne: [], traineau: [], guirlande: [], menorah: [],
+};
+/** Décoration de fête (saisonnière) : rangée à part au magasin de meubles. */
+export const isFestive = (f: FurnitureDef): boolean => f.kind === 'deco' && FURNITURE_FITS[f.id]?.length === 0;
+/** Meuble à sa place dans un commerce de ce type (thème) : général, ou de ce thème. */
+export const fitsType = (f: FurnitureDef, type: ShopType): boolean => { const t = FURNITURE_FITS[f.id]; return !t || t.includes(type); };
+/** Produits d'un type de commerce présentés par un meuble (même genre de présentoir) ; machine à café : produits qui en ont besoin. */
+export function productsHosted(f: FurnitureDef, type: ShopType): ProductDef[] {
+  if (f.kind === 'machine') return productsOf(type).filter((p) => p.needsMachine);
+  return f.capacity ? productsOf(type).filter((p) => p.store === f.kind) : [];
+}
+/**
+ * Présentoir conseillé pour un genre de meuble dans un type de commerce : le plus grand des présentoirs du thème,
+ * sinon le plus grand des présentoirs généraux (ex. boulangerie, rayon : présentoir à pain ; fleuriste : rayonnage).
+ */
+export function bestStoreFurniture(type: ShopType, store: StoreKind): FurnitureDef | null {
+  const all = FURNITURE.filter((f) => f.kind === store && f.capacity);
+  const themed = all.filter((f) => FURNITURE_FITS[f.id]?.includes(type));
+  const pool = themed.length ? themed : all.filter((f) => !FURNITURE_FITS[f.id]);
+  return [...(pool.length ? pool : all)].sort((a, b) => b.capacity! - a.capacity! || a.price - b.price)[0] ?? null;
+}
+
 export interface ProductDef {
   id: string;
   nameFr: string;
@@ -235,6 +271,11 @@ export const ECONOMY = {
   maxDebt: 80_000,
   /** Taxi de retour quand le personnage s'effondre de fatigue (CHF). */
   faintCost: 40,
+  /**
+   * Rotations par jour de la place en rayon avec le réassort automatique : livraisons de 7 h et 14 h (commandes de
+   * 21 h et 11 h), soit au mieux un peu moins de deux rayons pleins vendus par jour.
+   */
+  shelfTurns: 1.8,
 } as const;
 
 /* ------------------------------ Services du quartier ------------------------------ */
@@ -394,9 +435,20 @@ export const NEEDS = {
   hungerPerMin: 100 / (9 * 60),
   /** Récupération en dormant (points / minute, multipliée par le confort du logement) : 0 → 100 en 7 h. */
   sleepPerMin: 100 / (7 * 60),
-  /** Seuil bas : marche ralentie, alertes. */
+  /** Seuil bas : marche ralentie ; alerte de faim sous ce niveau de satiété. */
   low: 15,
+  /** Alertes d'énergie, indépendantes de la faim : fatigue (avertissement), puis épuisement (alerte forte). */
+  tired: 25,
+  exhausted: 10,
+  /**
+   * Jours de grâce en début de partie (le premier jour) : à 0 d'énergie, le personnage ne s'effondre pas (il avance
+   * au ralenti) ; ensuite, taxi jusqu'au logement et longue nuit de sommeil.
+   */
+  graceDays: 1,
 } as const;
+
+/** Repas cuisiné chez soi (logement avec cuisine) : courses comprises, moins cher que le snack, mais il prend du temps. */
+export const HOME_MEAL = { price: 6, hunger: 55, energy: 0, minutes: 20 } as const;
 
 export interface FoodDef { id: string; nameFr: string; price: number; hunger: number; energy: number }
 export const FOODS: readonly FoodDef[] = [
@@ -405,12 +457,12 @@ export const FOODS: readonly FoodDef[] = [
   { id: 'menu', nameFr: 'Menu du jour', price: 17, hunger: 85, energy: 5 },
 ];
 
-/** Logements à louer (prix au jour). */
-export interface HomeDef { id: string; nameFr: string; rentDay: number; comfort: number; gridW: number; gridD: number }
+/** Logements à louer (prix au jour) ; `kitchen` : cuisine équipée (repas chez soi, HOME_MEAL). */
+export interface HomeDef { id: string; nameFr: string; rentDay: number; comfort: number; gridW: number; gridD: number; kitchen: boolean }
 export const HOMES: readonly HomeDef[] = [
-  { id: 'studio', nameFr: 'Studio', rentDay: 28, comfort: 1, gridW: 7, gridD: 6 },
-  { id: 'deux', nameFr: 'Deux-pièces', rentDay: 55, comfort: 1.2, gridW: 9, gridD: 7 },
-  { id: 'loft', nameFr: 'Loft', rentDay: 110, comfort: 1.45, gridW: 11, gridD: 8 },
+  { id: 'studio', nameFr: 'Studio', rentDay: 28, comfort: 1, gridW: 7, gridD: 6, kitchen: true },
+  { id: 'deux', nameFr: 'Deux-pièces', rentDay: 55, comfort: 1.2, gridW: 9, gridD: 7, kitchen: true },
+  { id: 'loft', nameFr: 'Loft', rentDay: 110, comfort: 1.45, gridW: 11, gridD: 8, kitchen: true },
 ];
 export const HOME_BY_ID: ReadonlyMap<string, HomeDef> = new Map(HOMES.map((h) => [h.id, h]));
 
@@ -658,6 +710,17 @@ export const RIVALS = {
   /** Premier jour où les rivaux agissent (ouvertures, prix) ; promotions un peu plus tard. */
   startDay: 10,
   promoStartDay: 12,
+  /**
+   * Premier coup marquant (scénarisé) : un jour tiré de la graine dans `strikeDays` (jours 11 à 13), une enseigne ouvre
+   * un commerce du même type à environ `strikeDist` m du commerce le plus rentable du joueur (ouvert depuis au moins
+   * `strikeMinAge` jours), avec une offre d'ouverture de `strikePromo` jours ; l'enseigne garde au moins
+   * `strikeCashFloor` CHF de trésorerie (ses investisseurs suivent).
+   */
+  strikeDays: [10, 12] as const,
+  strikeDist: 120,
+  strikeMinAge: 3,
+  strikePromo: 3,
+  strikeCashFloor: 2_000,
   /** Ouverture : coût (aménagement et dépôt), chance quotidienne par entreprise, plafond de commerces, locaux libres laissés au joueur. */
   openCost: 12_000,
   openChance: 0.05,

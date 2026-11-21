@@ -13,7 +13,7 @@
  */
 import { ECONOMY, FURNITURE_BY_ID, RIVALS, RIVAL_COMPANIES, RIVAL_LAYOUTS, SHOP_TYPES, SHOP_TYPE_BY_ID, productsOf, type ShopType } from './catalog';
 import type { Premise } from './district';
-import type { Employee, Game, Result, Shop } from './game';
+import type { DayStats, Employee, Game, Result, Shop } from './game';
 import { canPlace, layoutStats } from './layout';
 import { randomName } from './names';
 import { Rng } from './rng';
@@ -53,10 +53,18 @@ export interface RivalShop {
   customers: number;
   revenue: number[];
   profit: number[];
+  /** Ouvert par le premier coup de la concurrence : commerce du joueur visé (id). */
+  target?: number;
 }
 
-/** État sauvegardé ; `buys` : commerces déjà rachetés par le joueur (absent des anciennes sauvegardes : 0). */
-export interface RivalSave { cos: RivalCo[]; shops: RivalShop[]; buys?: number }
+/** Premier coup marquant de la concurrence : jour, local du commerce rival, commerce du joueur visé, enseigne. */
+export interface RivalStrike { day: number; premiseId: number; shopId: number; co: string }
+
+/**
+ * État sauvegardé ; `buys` : commerces déjà rachetés par le joueur (absent des anciennes sauvegardes : 0) ; `strike` :
+ * premier coup déjà joué, ou null s'il n'aura pas lieu (absent : pas encore joué).
+ */
+export interface RivalSave { cos: RivalCo[]; shops: RivalShop[]; buys?: number; strike?: RivalStrike | null }
 
 export interface RivalQuote {
   /** Prix du fonds de commerce, dépôt de garantie du bail, total à payer. */
@@ -84,6 +92,8 @@ export class Rivalry {
   shops: RivalShop[] = [];
   /** Commerces rivaux déjà rachetés par le joueur : chaque rachat renchérit les suivants (RIVALS.buySurcharge). */
   buys = 0;
+  /** Premier coup marquant : joué (détails), null s'il n'aura pas lieu, absent tant qu'il n'est pas joué. */
+  strike?: RivalStrike | null;
   private byPremise = new Map<number, RivalShop>();
 
   constructor(private readonly game: Game, private readonly host: Host) {}
@@ -92,6 +102,8 @@ export class Rivalry {
 
   /** Début de partie (ou sauvegarde sans rivaux) : entreprises tirées de la graine, reprise des commerces existants. */
   init(save?: RivalSave): void {
+    // Sauvegarde d'avant le premier coup scénarisé, déjà au-delà de ses jours : il n'aura pas lieu.
+    this.strike = save?.strike !== undefined ? structuredClone(save.strike) : this.game.day > RIVALS.strikeDays[1] ? null : undefined;
     if (save) {
       this.cos = structuredClone(save.cos);
       this.shops = structuredClone(save.shops);
@@ -128,7 +140,11 @@ export class Rivalry {
     this.apply();
   }
 
-  save(): RivalSave { return { cos: structuredClone(this.cos), shops: structuredClone(this.shops), buys: this.buys }; }
+  save(): RivalSave {
+    const out: RivalSave = { cos: structuredClone(this.cos), shops: structuredClone(this.shops), buys: this.buys };
+    if (this.strike !== undefined) out.strike = structuredClone(this.strike);
+    return out;
+  }
 
   /** Majoration des prix de rachat (× 1 + RIVALS.buySurcharge par commerce déjà racheté). */
   buyFactor(): number { return 1 + RIVALS.buySurcharge * this.buys; }
@@ -198,6 +214,25 @@ export class Rivalry {
   }
   /** Facteur de clientèle (× ≤ 1) dû aux promotions rivales. */
   promoFactor(s: Shop): number { return 1 - this.promoLoss(s); }
+
+  /**
+   * Clients qu'un commerce rival prend chaque jour à un commerce du joueur du même type : sa part de la pression
+   * concurrentielle (sa seule présence) et sa promotion en cours. `share` : part des clients perdus (0..1) ;
+   * `customers` : clients par jour, rapportés aux clients venus ce jour-là (`day`, par défaut la veille ; 0 sans bilan).
+   */
+  impact(s: Shop, rs: RivalShop, day?: DayStats): { share: number; customers: number } {
+    const g = this.game, p = g.premise(s.premiseId), q = g.premise(rs.premiseId);
+    if (!p || !q || rs.type !== s.type) return { share: 0, customers: 0 };
+    const d = dist(p, q);
+    // Même formule que la concurrence (attractiveness) : 1 / (1 + 0,6 × pression), avec ou sans ce rival.
+    const w = d < 300 ? Math.exp(-d / 90) * this.weight(rs.premiseId) : 0;
+    const presence = (0.6 * w) / (1 + 0.6 * this.pressure(p, s.type));
+    const promo = rs.promo > 0 && d < RIVALS.promoRadius ? Math.min(RIVALS.promoMax, RIVALS.promoMax * Math.exp(-d / 120)) : 0;
+    const share = Math.min(0.95, 1 - (1 - presence) * (1 - promo));
+    const y = day ?? s.history.at(-1);
+    const came = y ? y.customers + y.lostStock + y.lostCapacity + y.lostStaff : 0;
+    return { share, customers: Math.round((came * share) / (1 - share)) };
+  }
 
   /* ------------------------------ Estimation d'un commerce rival ------------------------------ */
 

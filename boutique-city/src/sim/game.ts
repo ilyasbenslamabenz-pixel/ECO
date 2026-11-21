@@ -16,6 +16,7 @@ import { SHIFT_BY_ID, STAFF, STAFF_ROLE_BY_ID, type ShiftKind, type StaffRole } 
 import { CLEANING, FLOORING_BY_ID, WALLING_BY_ID, cleanAppeal, surfaceArea } from './catalog';
 import { FINANCE, INVESTMENTS, INVEST_BY_ID, type InvestKind } from './catalog';
 import { EMERGENCY_LOAN, RESCUE, RIVAL_LAYOUTS, hqFee, priceAppeal, taxBracketsText, weeklyTax, type LoanOffer } from './catalog';
+import { HOME_MEAL, bestStoreFurniture } from './catalog';
 import { MINUTES_PER_DAY, START_MINUTE, clockView } from './clock';
 import { emptyLogi, logisticsHour, logisticsNight, restoreLogi, saveLogi, type LogiState } from './logistics';
 import { FACE_N, SIDEWALK_W, generateDistrict, type Building, type District, type Premise } from './district';
@@ -150,6 +151,13 @@ export interface DayStats {
    * pas encore encaissée : hors bénéfice d'exploitation et hors impôt. Absent : 0.
    */
   investGain?: number;
+  /**
+   * Bilan d'un commerce, par produit : articles vendus, et articles demandés mais manqués (rayon vide, aucun meuble,
+   * pas de machine ; un client qui ne trouve rien du tout compte pour son panier moyen réparti selon la demande).
+   * Sert aux conseils chiffrés du récapitulatif. Absents : non suivis (anciennes sauvegardes).
+   */
+  sold?: Record<string, number>;
+  missed?: Record<string, number>;
 }
 
 /**
@@ -223,11 +231,31 @@ export interface Shop {
    * nettoyage de nuit suspendu, jusqu'à ce que le commerce puisse vendre à nouveau. Absent : en activité.
    */
   stopped?: StopReason;
+  /** Alerte de stock en attente (minute de jeu) : ruptures et stocks bas regroupés en un message. Absent : aucune. */
+  stockAlertAt?: number;
 }
 
 /** Action proposée par une notification (bouton dans l'appli Messages) : aligner des prix, ouvrir le plan de redressement. */
 export type NoticeAction = { kind: 'aligner'; target: BatchTarget } | { kind: 'redressement' };
-export interface Notice { at: number; level: 'info' | 'ok' | 'warn' | 'error'; text: string; action?: NoticeAction }
+/**
+ * Notification : `seq` numérote les messages de la partie (croissant, jamais réutilisé : l'historique est plafonné) ;
+ * `sim` : émise pendant l'écoulement du temps (simulation), pas directement par une action du joueur.
+ */
+export interface Notice { seq: number; at: number; level: 'info' | 'ok' | 'warn' | 'error'; text: string; action?: NoticeAction; sim?: boolean }
+/** Alerte (avertissement ou erreur) : seules les alertes comptent dans la pastille du téléphone. */
+export const isAlert = (n: Notice): boolean => n.level === 'warn' || n.level === 'error';
+/** Ce que deviendrait un déchargement dans un commerce, produit par produit (voir Game.unloadPlan). */
+export interface UnloadLine {
+  productId: string;
+  /** Unités transportées (portées à pied et dans les véhicules garés devant). */
+  carried: number;
+  /** Place physique libre en rayon (capacité − stock). */
+  free: number;
+  /** Place libre non réservée par les commandes en cours (free − commandé). */
+  room: number;
+  /** Unités commandées et pas encore livrées. */
+  pending: number;
+}
 /** Événement visuel : un client a acheté dans un commerce du joueur. */
 export interface ClientEvent { shopId: number; premiseId: number; products: string[] }
 /** Avis visible d'un client (bulle dans le magasin) : raison d'un départ sans achat, client ravi, ou magasin sale. */
@@ -241,6 +269,12 @@ const fail = (message: string): Result<never> => ({ ok: false, message });
 const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, refusedPrice: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0, marketing: 0, finance: 0, living: 0, rentalIncome: 0, tax: 0 });
 const r2 = (v: number): number => Math.round(v * 100) / 100;
 const sumValues = (r: Record<string, number>): number => Object.values(r).reduce((a, b) => a + b, 0);
+/** Délai (minutes de jeu) avant une alerte de stock : les ruptures et stocks bas voisins partent en un seul message. */
+const STOCK_ALERT_DELAY = 10;
+/** Demi-journée d'une minute de jeu pour les alertes de stock : 0 avant 14 h, 1 à partir de la livraison de 14 h. */
+const halfDay = (total: number): number => (clockView(total).hour < 14 ? 0 : 1);
+/** Énumération en français : « pain », « pain et lait », « pain, lait et snacks ». */
+export const listFr = (items: readonly string[]): string => items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} et ${items.at(-1)}`;
 
 /** Résultat d'une journée (toutes dépenses comprises). */
 export function dayProfit(d: DayStats): number {
@@ -371,6 +405,10 @@ export class Game {
   /** Concurrence active : entreprises rivales, leurs commerces, promotions, rachats (src/sim/rivals.ts). */
   readonly rivalry: Rivalry = new Rivalry(this, { newId: () => this.nextId++, bump: () => this.bump() });
   private nextId = 1;
+  /** Numéro de la dernière notification (Notice.seq). */
+  private noticeSeq = 0;
+  /** Profondeur d'appel d'advance() : notifications de la simulation (Notice.sim) plutôt que d'une action. */
+  private ticking = 0;
   /** Version de l'état (l'interface ne redessine que si elle change). */
   version = 0;
 
@@ -382,8 +420,9 @@ export class Game {
     this.cash = CONFIG.startCash;
     this.today = emptyDay(0);
     const home = this.district.homes.find((h) => h.id === this.district.startHome);
+    // Réveil reposé et rassasié (petit-déjeuner pris) : la faim ne coupe pas la première journée.
     this.player = {
-      x: home?.doorX ?? 0, z: home?.doorZ ?? 0, heading: 0, energy: 90, hunger: 75, home: home?.id ?? null, carry: {},
+      x: home?.doorX ?? 0, z: home?.doorZ ?? 0, heading: 0, energy: 90, hunger: 100, home: home?.id ?? null, carry: {},
       tending: null, sleeping: false, driving: null, place: home ? { kind: 'logement', homeId: home.id } : { kind: 'rue' }, teleportHome: false,
     };
     if (save) this.restore(save);
@@ -674,7 +713,7 @@ export class Game {
     // jour (livraisons de 7 h et 14 h, réassort automatique à 11 h et 21 h).
     const shelf = new Map<string, number>();
     for (const f of RIVAL_LAYOUTS[type]) { const d = FURNITURE_BY_ID.get(f); if (d?.capacity) shelf.set(d.kind, (shelf.get(d.kind) ?? 0) + d.capacity); }
-    const turns = 1.8, sellMax = (pr: ProductDef): number => turns * (shelf.get(pr.store) ?? 0) / prods.filter((x) => x.store === pr.store).length;
+    const turns = ECONOMY.shelfTurns, sellMax = (pr: ProductDef): number => turns * (shelf.get(pr.store) ?? 0) / prods.filter((x) => x.store === pr.store).length;
     // Caissier type : compétence 0,75, satisfait.
     const skill = 0.75, perCashier = ECONOMY.servePerRegister * skill * (0.8 + 0.3 * 0.75), wage = this.marketWage(skill);
     const rent = p.rent / 30, other = ECONOMY.deliveryBase + Math.max(CLEANING.serviceMin, Math.round(p.area * CLEANING.servicePerM2));
@@ -1036,7 +1075,8 @@ export class Game {
     this.cash -= cost;
     s.today.equipment += cost; this.today.equipment += cost;
     s.storage[defId] = (s.storage[defId] ?? 0) + n;
-    this.notify('ok', `${n} × ${def.nameFr} livré(s) dans la réserve de ${s.name}.`);
+    // Un seul message (l'interface n'en ajoute pas) : quoi, où, combien, et la suite.
+    this.notify('ok', `${n} × ${def.nameFr} livré${n > 1 ? 's' : ''} dans la réserve de ${s.name} (${Math.round(cost).toLocaleString('fr-CH')} CHF, livraison comprise) : à poser avec « Aménager » (B).`);
     this.bump();
     return ok(cost);
   }
@@ -1275,25 +1315,122 @@ export class Game {
     return ok(o);
   }
 
+  /** Place physique libre en rayon pour un produit (capacité − stock), sans déduire les commandes en cours. */
+  shelfFree(shop: Shop, productId: string): number {
+    const pr = PRODUCT_BY_ID.get(productId)!;
+    return Math.max(0, this.storageFor(shop, pr) - shop.products[productId]!.stock);
+  }
+
+  /** Marchandise transportée vers un commerce : portée à pied et cargaisons des véhicules garés devant. */
+  private loadsAt(s: Shop): Record<string, number>[] {
+    const p = this.premise(s.premiseId)!;
+    return [this.player.carry, ...this.vehiclesNear(p.doorX, p.doorZ).map((v) => v.cargo)];
+  }
+
+  /** Commandes en cours d'un produit pour un commerce, la plus tardive d'abord (c'est elle qu'on réduit en premier). */
+  private pendingOrders(s: Shop, productId: string): Order[] {
+    return this.orders.filter((o) => o.shopId === s.id && o.productId === productId).sort((a, b) => b.deliverAt - a.deliverAt || b.id - a.id);
+  }
+
+  /** Remboursement d'une réduction de `n` unités des commandes en cours d'un produit (au prorata de chaque commande). */
+  private cutRefund(s: Shop, productId: string, n: number): number {
+    let left = n, back = 0;
+    for (const o of this.pendingOrders(s, productId)) {
+      if (left <= 0) break;
+      const k = Math.min(o.qty, left);
+      back += k === o.qty ? o.cost : r2((o.cost * k) / o.qty);
+      left -= k;
+    }
+    return r2(back);
+  }
+
+  /**
+   * Réduit de `n` unités les commandes en cours d'un produit (la plus tardive d'abord), remboursées au prorata (frais
+   * de livraison compris) ; une commande ramenée à zéro est annulée. Rend les unités retirées, le remboursement et le
+   * moment de la livraison concernée.
+   */
+  private cutOrders(s: Shop, productId: string, n: number): { qty: number; refund: number; when: string } {
+    let left = n, qty = 0, refund = 0, when = '';
+    for (const o of this.pendingOrders(s, productId)) {
+      if (left <= 0) break;
+      const k = Math.min(o.qty, left), back = k === o.qty ? o.cost : r2((o.cost * k) / o.qty);
+      o.qty -= k; o.cost = r2(o.cost - back);
+      left -= k; qty += k; refund += back;
+      when ||= this.deliveryLabel(o.deliverAt);
+    }
+    this.orders = this.orders.filter((o) => o.qty > 0);
+    refund = r2(refund);
+    this.cash += refund; s.today.purchases -= refund; this.today.purchases -= refund;
+    return { qty, refund, when };
+  }
+
+  /**
+   * Ce que donnerait un déchargement dans un commerce, sans rien modifier, produit par produit. `now` : unités
+   * rangeables sans toucher aux commandes ; `reducing` : unités rangeables en plus en réduisant les commandes en cours
+   * qui réservent la place (remboursement estimé `refund`) ; `other` : unités de produits qui ne se vendent pas ici ;
+   * `reason` : pourquoi rien n'est rangeable tout de suite (null dès que `now` > 0).
+   */
+  unloadPlan(shopId: number): { lines: UnloadLine[]; carried: number; now: number; reducing: number; refund: number; other: number; reason: string | null } {
+    const s = this.shop(shopId);
+    const out = { lines: [] as UnloadLine[], carried: 0, now: 0, reducing: 0, refund: 0, other: 0, reason: null as string | null };
+    if (!s) return { ...out, reason: 'Commerce introuvable' };
+    const by = new Map<string, number>();
+    for (const load of this.loadsAt(s)) for (const [pid, n] of Object.entries(load)) {
+      if (!(n > 0)) continue;
+      if (s.products[pid]) by.set(pid, (by.get(pid) ?? 0) + n); else out.other += n;
+    }
+    for (const [pid, carried] of by) {
+      const free = this.shelfFree(s, pid), pending = this.pendingQty(s.id, pid), room = Math.max(0, free - pending);
+      out.lines.push({ productId: pid, carried, free, room, pending });
+      const now = Math.min(carried, room), more = Math.min(carried, free) - now;
+      out.carried += carried; out.now += now; out.reducing += more;
+      if (more > 0) out.refund += this.cutRefund(s, pid, more);
+    }
+    out.refund = r2(out.refund);
+    if (out.now === 0) out.reason = this.unloadReason(s, out.lines, out.other);
+    return out;
+  }
+
+  /** Pourquoi rien n'est rangeable sans toucher aux commandes : place réservée, rayon plein, aucun meuble, produits d'ailleurs. */
+  private unloadReason(s: Shop, lines: UnloadLine[], other: number): string {
+    if (!lines.length) return other > 0 ? `Rien à décharger dans ${s.name} : ces produits ne se vendent pas ici.` : 'Rien à décharger : aucune marchandise portée ni dans un véhicule garé devant.';
+    const parts = lines.map((l) => {
+      const pr = PRODUCT_BY_ID.get(l.productId)!, cap = this.storageFor(s, pr);
+      if (cap <= 0) { const f = bestStoreFurniture(s.type, pr.store); return `${pr.nameFr} : aucun meuble pour ce produit${f ? ` (ajoutez : ${f.nameFr.toLowerCase()})` : ''}.`; }
+      if (l.free <= 0) return `${pr.nameFr} : rayon plein (${cap} / ${cap}).`;
+      const first = [...this.pendingOrders(s, l.productId)].sort((a, b) => a.deliverAt - b.deliverAt)[0];
+      return `${pr.nameFr} : place réservée par la livraison prévue ${first ? this.deliveryLabel(first.deliverAt) : 'bientôt'} (${l.pending} commandés).`;
+    });
+    const reserved = lines.some((l) => l.free > 0 && l.pending > 0);
+    return `Rien à ranger tout de suite dans ${s.name}. ${parts.join(' ')}${reserved ? ' « Ranger quand même » réduit cette commande d’autant (remboursée au prorata).' : ''}`;
+  }
+
   /**
    * Déchargement dans un commerce (le personnage doit y être) : marchandise portée et cargaison des véhicules garés
-   * devant, dans la limite de la place en rayon. Rend le nombre d'unités rangées.
+   * devant, dans la limite de la place en rayon. Place réservée par une commande en cours : avec `reduceOrders`
+   * (par défaut), la marchandise est rangée quand même et la commande réduite d'autant, remboursée au prorata ;
+   * sinon seule la place non réservée sert. Rend le nombre d'unités rangées ; un refus explique pourquoi.
    */
-  unload(shopId: number): Result<number> {
+  unload(shopId: number, reduceOrders = true): Result<number> {
     const s = this.shop(shopId);
     if (!s) return fail('Commerce introuvable');
     if (!(this.player.place.kind === 'commerce' && this.player.place.shopId === shopId)) return fail('Entrez dans le commerce pour décharger.');
-    const p = this.premise(s.premiseId)!;
-    const loads = [this.player.carry, ...this.vehiclesNear(p.doorX, p.doorZ).map((v) => v.cargo)];
-    let moved = 0, extra = 0;
-    for (const load of loads) {
+    let moved = 0, extra = 0, refund = 0, short = false;
+    const cuts: string[] = [];
+    for (const load of this.loadsAt(s)) {
       for (const [pid, n] of Object.entries(load)) {
-        if (!s.products[pid]) continue;
-        let q = Math.min(n, this.room(s, pid));
+        if (!s.products[pid] || !(n > 0)) continue;
+        const room = this.room(s, pid);
+        let q = Math.min(n, reduceOrders ? this.shelfFree(s, pid) : room);
         // Commerce premium : la marchandise emportée est standard, le grossiste facture le supplément premium au rangement.
         const sup = s.premium ? this.orderCost(pid, 1, s.id) - this.orderCost(pid, 1) : 0;
-        if (sup > 0) q = Math.min(q, Math.floor(Math.max(0, this.cash) / sup));
+        if (sup > 0 && q > 0) { const k = Math.min(q, Math.floor(Math.max(0, this.cash) / sup)); short ||= k < q; q = k; }
         if (q <= 0) continue;
+        if (q > room) {
+          const c = this.cutOrders(s, pid, q - room);
+          refund += c.refund;
+          cuts.push(`${c.qty} ${PRODUCT_BY_ID.get(pid)!.nameFr.toLowerCase()} en moins sur la livraison ${c.when}`);
+        }
         if (sup > 0) { const c = r2(sup * q); this.cash -= c; s.today.purchases += c; this.today.purchases += c; extra += c; }
         s.products[pid]!.stock += q;
         load[pid] = n - q;
@@ -1301,8 +1438,8 @@ export class Game {
         moved += q;
       }
     }
-    if (moved === 0) return fail('Rien à décharger ici (mauvais produits ou rayons pleins).');
-    this.notify('ok', `${moved} unités rangées dans ${s.name}.${extra > 0 ? ` Supplément gamme premium : ${Math.round(extra)} CHF.` : ''}`);
+    if (moved === 0) return fail(short ? 'Trésorerie insuffisante pour le supplément de la gamme premium.' : this.unloadPlan(shopId).reason ?? 'Rien à décharger ici.');
+    this.notify('ok', `${moved} unités rangées dans ${s.name}.${cuts.length ? ` Place réservée : commande réduite d’autant (${cuts.join(', ')}), ${Math.round(refund)} CHF remboursés.` : ''}${extra > 0 ? ` Supplément gamme premium : ${Math.round(extra)} CHF.` : ''}`);
     this.bump();
     return ok(moved);
   }
@@ -1311,9 +1448,8 @@ export class Game {
   unloadable(shopId: number): number {
     const s = this.shop(shopId);
     if (!s) return 0;
-    const p = this.premise(s.premiseId)!;
     let n = 0;
-    for (const load of [this.player.carry, ...this.vehiclesNear(p.doorX, p.doorZ).map((v) => v.cargo)]) for (const [pid, q] of Object.entries(load)) if (s.products[pid]) n += q;
+    for (const load of this.loadsAt(s)) for (const [pid, q] of Object.entries(load)) if (s.products[pid]) n += q;
     return n;
   }
 
@@ -1563,6 +1699,32 @@ export class Game {
     return ok(f.price);
   }
 
+  /** Le logement du joueur a-t-il une cuisine (repas chez soi) ? */
+  hasKitchen(): boolean {
+    const h = this.player.home === null ? undefined : this.district.homes.find((x) => x.id === this.player.home);
+    return !!h && !!HOME_BY_ID.get(h.def)?.kitchen;
+  }
+
+  /**
+   * Repas cuisiné chez soi (logement avec cuisine) : HOME_MEAL.price CHF de courses, HOME_MEAL.minutes de jeu passent
+   * (les commerces continuent de tourner), la faim remonte de HOME_MEAL.hunger points.
+   */
+  cook(): Result<number> {
+    const p = this.player, pl = p.place;
+    if (!(pl.kind === 'logement' && pl.homeId === p.home)) return fail('Rentrez chez vous pour cuisiner (ou mangez au snack).');
+    if (!this.hasKitchen()) return fail('Pas de cuisine dans ce logement : mangez au snack.');
+    if (p.sleeping) return fail('Vous dormez.');
+    if (p.hunger >= 95) return fail('Vous n’avez pas faim.');
+    if (this.cash < HOME_MEAL.price) return fail('Pas assez d’argent pour les courses.');
+    this.cash -= HOME_MEAL.price;
+    this.today.living += HOME_MEAL.price;
+    this.advance(HOME_MEAL.minutes);
+    p.hunger = Math.min(100, p.hunger + HOME_MEAL.hunger);
+    p.energy = Math.min(100, p.energy + HOME_MEAL.energy);
+    this.bump();
+    return ok(HOME_MEAL.price);
+  }
+
   rentHome(homeId: number): Result {
     const h = this.district.homes.find((x) => x.id === homeId);
     if (!h) return fail('Logement introuvable');
@@ -1752,7 +1914,8 @@ export class Game {
 
   /** Avance de `minutes` minutes de jeu (minute par minute). */
   advance(minutes: number): void {
-    for (let k = 0; k < minutes; k++) this.minute();
+    this.ticking++;
+    try { for (let k = 0; k < minutes; k++) this.minute(); } finally { this.ticking--; }
   }
 
   private minute(): void {
@@ -1766,8 +1929,12 @@ export class Game {
       const n = this.rng.poisson(s.rate / 60);
       for (let k = 0; k < n; k++) this.customer(s);
     }
+    for (const s of this.shops) if (s.stockAlertAt !== undefined && s.stockAlertAt <= this.total) this.stockAlert(s);
     if (c.hour === 0 && c.minute === 0) this.newDay(c.weekday);
   }
+
+  /** Dernière alerte de fatigue et de faim (minute de jeu) : les rappels s'espacent (état de l'interface, non sauvegardé). */
+  private needAlertAt = { energy: -1e9, hunger: -1e9 };
 
   private needs(): void {
     const p = this.player;
@@ -1775,12 +1942,31 @@ export class Game {
       const comfort = p.home ? HOME_BY_ID.get(this.district.homes.find((h) => h.id === p.home)!.def)!.comfort : 0.7;
       p.energy = Math.min(100, p.energy + NEEDS.sleepPerMin * comfort);
       p.hunger = Math.max(0, p.hunger - NEEDS.hungerPerMin * 0.4);
-      if (p.energy >= 100) { p.sleeping = false; this.notify('ok', 'Vous êtes reposé.'); this.bump(); }
+      if (p.energy >= 100) {
+        p.sleeping = false;
+        this.notify('ok', p.hunger < NEEDS.low ? 'Vous êtes reposé… et affamé : mangez chez vous (« Manger (cuisine) ») ou au snack.' : 'Vous êtes reposé.');
+        this.bump();
+      }
       return;
     }
+    const e0 = p.energy, h0 = p.hunger;
     p.hunger = Math.max(0, p.hunger - NEEDS.hungerPerMin);
     p.energy = Math.max(0, p.energy - NEEDS.energyPerMin * (p.hunger <= 0 ? 2 : 1));
+    // Alertes au passage des seuils, indépendantes l'une de l'autre : l'énergie d'abord (la plus urgente), puis la faim.
+    const grace = this.day < NEEDS.graceDays;
+    if (e0 >= NEEDS.tired && p.energy < NEEDS.tired) { this.needAlertAt.energy = this.total; this.notify('warn', 'Vous êtes fatigué (énergie 25) : pensez à rentrer dormir (lit, touche E). Un café au snack donne un coup de fouet.'); }
+    if (e0 >= NEEDS.exhausted && p.energy < NEEDS.exhausted) {
+      this.needAlertAt.energy = this.total;
+      this.notify('error', grace ? 'Épuisé (énergie 10) : rentrez dormir. Premier jour : vous tiendrez debout, au ralenti ; ensuite, à zéro, on s’effondre.' : `Épuisé (énergie 10) : rentrez dormir tout de suite, sinon vous allez vous effondrer (taxi ${ECONOMY.faintCost} CHF et longue nuit).`);
+    }
+    if (h0 >= NEEDS.low && p.hunger < NEEDS.low) { this.needAlertAt.hunger = this.total; this.notify('warn', 'Vous avez faim : mangez au snack ou chez vous (« Manger (cuisine) »).'); }
+    if (h0 > 0 && p.hunger <= 0) { this.needAlertAt.hunger = this.total; this.notify('warn', 'Ventre vide : vous vous fatiguez deux fois plus vite. Mangez au snack ou chez vous (cuisine).'); }
     if (p.energy <= 0) {
+      // Premier jour : pas d'évanouissement, le personnage avance au ralenti jusqu'à ce qu'il dorme.
+      if (grace) {
+        if (e0 > 0) { this.needAlertAt.energy = this.total; this.notify('error', `À bout de forces : vous avancez au ralenti. Rentrez dormir (lit, touche E) ; dès demain, à zéro d’énergie, vous vous effondrerez (taxi ${ECONOMY.faintCost} CHF et longue nuit).`); }
+        return;
+      }
       this.cash -= ECONOMY.faintCost;
       this.today.living += ECONOMY.faintCost;
       p.tending = null;
@@ -1820,8 +2006,16 @@ export class Game {
     }
     logisticsHour(this, h);
     if (h === 21 || h === 11) this.autoReorder();
-    if (this.player.hunger < NEEDS.low && !this.player.sleeping) this.notify('warn', 'Vous avez faim : allez manger au snack.');
-    else if (this.player.energy < NEEDS.low && !this.player.sleeping) this.notify('warn', 'Vous êtes épuisé : rentrez dormir.');
+    // Rappels, indépendants (l'énergie d'abord) : épuisement toutes les deux heures, faim toutes les trois heures.
+    const pl = this.player;
+    if (!pl.sleeping && pl.energy < NEEDS.exhausted && this.total - this.needAlertAt.energy >= 120) {
+      this.needAlertAt.energy = this.total;
+      this.notify('error', `Épuisé (énergie ${Math.round(pl.energy)}) : rentrez dormir${this.day < NEEDS.graceDays ? '' : ` avant de vous effondrer (taxi ${ECONOMY.faintCost} CHF et longue nuit)`}.`);
+    }
+    if (!pl.sleeping && pl.hunger < NEEDS.low && this.total - this.needAlertAt.hunger >= 180) {
+      this.needAlertAt.hunger = this.total;
+      this.notify('warn', `Vous avez faim (${Math.round(pl.hunger)}) : mangez au snack ou chez vous (« Manger (cuisine) »).`);
+    }
     for (const s of this.shops) {
       this.updateReputation(s);
       s.servedThisHour = 0;
@@ -1908,7 +2102,14 @@ export class Game {
     if (s.capacity <= 0) { s.today.lostStaff++; this.today.lostStaff++; this.feel(s, 'caisse'); return; }
     if (s.servedThisHour >= s.capacity) { s.today.lostCapacity++; this.today.lostCapacity++; this.feel(s, 'attente'); return; }
     const avail = productsOf(s.type).filter((pr) => this.sellable(s, pr, st));
-    if (!avail.length) { s.today.lostStock++; this.today.lostStock++; this.feel(s, 'rupture'); return; }
+    if (!avail.length) {
+      s.today.lostStock++; this.today.lostStock++; this.feel(s, 'rupture');
+      // Rien à vendre : la demande de ce client (panier moyen, selon la part de chaque produit) est notée comme manquée.
+      const miss = (s.today.missed ??= {});
+      for (const pr of productsOf(s.type)) miss[pr.id] = (miss[pr.id] ?? 0) + t.basket * pr.share;
+      if (productsOf(s.type).some((pr) => st.capacity[pr.store] > 0)) this.flagStock(s, 'rupt');
+      return;
+    }
     let refused = 0, missing = 0;
     const items = Math.max(1, this.rng.poisson(t.basket - 1) + 1);
     const bought: string[] = [];
@@ -1917,14 +2118,18 @@ export class Game {
       for (const pr of productsOf(s.type)) { r -= pr.share; if (r <= 0) { want = pr; break; } }
       const ps = s.products[want.id]!;
       if (!this.sellable(s, want, st)) {
-        if (st.capacity[want.store] > 0 && ps.stock <= 0) this.warnOnce(s, want.id, `${s.name} : rupture de ${want.nameFr.toLowerCase()}.`);
+        if (st.capacity[want.store] > 0 && ps.stock <= 0) this.flagStock(s, 'rupt');
+        const miss = (s.today.missed ??= {});
+        miss[want.id] = (miss[want.id] ?? 0) + 1;
         missing++;
         continue;
       }
       if (this.rng.next() > Math.min(1, priceAppeal(ps.price / this.refPrice(want, s)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
       ps.stock--;
-      // Alerte une fois par jour quand le stock passe sous 20 % de la place en rayon (sauf réassort automatique).
-      if (!ps.auto && ps.stock === Math.floor(this.storageFor(s, want) * 0.2) && this.pendingQty(s.id, want.id) === 0) this.warnOnce(s, `bas-${want.id}`, `${s.name} : stock bas de ${want.nameFr.toLowerCase()} (${ps.stock} restants, moins de 20 %).`);
+      const sold = (s.today.sold ??= {});
+      sold[want.id] = (sold[want.id] ?? 0) + 1;
+      // Stock passé sous 20 % de la place en rayon (sauf réassort automatique ou commande en cours) : alerte regroupée.
+      if (!ps.auto && ps.stock === Math.floor(this.storageFor(s, want) * 0.2) && this.pendingQty(s.id, want.id) === 0) this.flagStock(s, 'bas');
       bought.push(want.id);
       s.today.revenue += ps.price; this.today.revenue += ps.price; this.cash += ps.price;
       const uc = this.unitCost(want, s);
@@ -1992,6 +2197,7 @@ export class Game {
       if (s.history.length > 60) s.history.shift();
       s.today = emptyDay(this.day);
       s.warned = [];
+      delete s.stockAlertAt;
       s.hourServed = new Array(24).fill(0);
       s.hourLost = new Array(24).fill(0);
     }
@@ -2208,10 +2414,48 @@ export class Game {
     this.notify('warn', text);
   }
 
+  /**
+   * Rupture (`rupt`) ou stock bas (`bas`) constaté dans un commerce : l'alerte part STOCK_ALERT_DELAY minutes plus tard
+   * et regroupe tous les produits concernés à ce moment ; au plus une alerte de chaque sorte par commerce et par
+   * demi-journée (avant 14 h, puis après la livraison de 14 h).
+   */
+  private flagStock(s: Shop, kind: 'rupt' | 'bas'): void {
+    if (s.stockAlertAt !== undefined || s.warned.includes(`__${kind}${halfDay(this.total)}`)) return;
+    s.stockAlertAt = this.total + STOCK_ALERT_DELAY;
+  }
+
+  /** Alerte de stock regroupée d'un commerce : produits en rupture, puis stocks bas, livraison prévue ou conseil. */
+  private stockAlert(s: Shop): void {
+    const half = halfDay(s.stockAlertAt! - STOCK_ALERT_DELAY);
+    delete s.stockAlertAt;
+    const st = this.stats(s), prods = productsOf(s.type);
+    const out = prods.filter((pr) => st.capacity[pr.store] > 0 && s.products[pr.id]!.stock <= 0);
+    const low = prods.filter((pr) => { const ps = s.products[pr.id]!; return !ps.auto && ps.stock > 0 && ps.stock <= Math.floor(this.storageFor(s, pr, st) * 0.2) && this.pendingQty(s.id, pr.id) === 0; });
+    const parts: string[] = [];
+    if (out.length && !s.warned.includes(`__rupt${half}`)) { s.warned.push(`__rupt${half}`); parts.push(`rupture de ${listFr(out.map((p) => p.nameFr.toLowerCase()))}`); }
+    if (low.length && !s.warned.includes(`__bas${half}`)) { s.warned.push(`__bas${half}`); parts.push(`stock bas de ${listFr(low.map((p) => `${p.nameFr.toLowerCase()} (${s.products[p.id]!.stock})`))}`); }
+    if (!parts.length) return;
+    const ids = new Set([...out, ...low].map((p) => p.id));
+    const next = this.orders.filter((o) => o.shopId === s.id && ids.has(o.productId)).sort((a, b) => a.deliverAt - b.deliverAt)[0];
+    const manual = [...out, ...low].some((p) => !s.products[p.id]!.auto);
+    const hint = next ? ` Livraison prévue ${this.deliveryLabel(next.deliverAt)}.` : manual ? ' Commandez au grossiste, ou activez le réassort automatique (onglet Prix et stock).' : '';
+    this.notify('warn', `${s.name} : ${parts.join(' ; ')}.${hint}`);
+  }
+
+  /**
+   * Nouvelle notification (historique plafonné à 100, numérotée par `seq`). Celles émises pendant l'écoulement du temps
+   * sont marquées `sim` : l'interface sait ainsi qu'une action a déjà son message (pas de second toast).
+   */
   notify(level: Notice['level'], text: string, action?: NoticeAction): void {
-    this.notices.push(action ? { at: this.total, level, text, action } : { at: this.total, level, text });
+    const n: Notice = { seq: ++this.noticeSeq, at: this.total, level, text };
+    if (action) n.action = action;
+    if (this.ticking > 0) n.sim = true;
+    this.notices.push(n);
     if (this.notices.length > 100) this.notices.shift();
   }
+
+  /** Numéro de la dernière notification (0 : aucune). */
+  get lastNoticeSeq(): number { return this.noticeSeq; }
 
   private bump(): void { this.version++; }
 
