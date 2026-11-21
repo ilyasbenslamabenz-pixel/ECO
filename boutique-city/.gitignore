@@ -9,3 +9,7 @@ scripts/.build-*.mjs
 scripts/.bugs-*
 tests/.probe*.mjs
 tests/.dbg*.mjs
+scripts/.proprete-*
+scripts/.*.ts
+scripts/.*.mjs
+tests/.*
