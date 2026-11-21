@@ -79,22 +79,29 @@ export class FollowCamera {
     const dirAt = (p: number): THREE.Vector3 => new THREE.Vector3(Math.sin(this.yaw) * Math.cos(p), Math.sin(p), Math.cos(this.yaw) * Math.cos(p));
     let want = this.dist, pitch = this.pitch;
     if (clear) {
-      // Masqué par un immeuble : la caméra monte d'abord (vue plongeante), puis se rapproche si cela ne suffit pas.
+      // Masqué par un immeuble (typiquement : joueur devant une porte, caméra côté façade). Ordre de préférence :
+      // 1) remonter un peu (jusqu'à ~45°, pas de vue zénithale qui passerait derrière l'auvent) ;
+      // 2) sinon se rapprocher du joueur, en remontant légèrement pour rester au-dessus de sa tête ;
+      // 3) et, si le joueur ne tourne pas la caméra, pivoter doucement vers l'angle dégagé le plus proche.
+      const top = Math.max(this.pitch, 0.8);
       let best = 0, bestP = this.pitch;
-      for (let p = this.pitch; p <= Math.max(this.pitch, 1.15) + 1e-6; p += 0.15) {
+      for (let p = this.pitch; p <= top + 1e-6; p += 0.1) {
         const f = clear(this.focus, this.focus.clone().addScaledVector(dirAt(p), this.dist));
         if (f > best + 0.05) { best = f; bestP = p; }
         if (f > 0.97) break;
       }
       pitch = bestP;
-      want = Math.max(1.4, this.dist * best - 0.4);
-      // Fortement masqué et le joueur ne tourne pas la caméra : elle pivote d'elle-même vers l'angle dégagé le plus
-      // proche (de 20° en 20°), en douceur.
-      if (best < 0.5 && this.pointers.size === 0 && !snap) {
+      if (best < 0.97) {
+        // Rapprochée : distance libre à l'angle retenu, jamais collée à la tête.
+        pitch = Math.max(pitch, Math.min(0.75, this.pitch + 0.25 * (1 - best)));
+        const f = pitch === bestP ? best : clear(this.focus, this.focus.clone().addScaledVector(dirAt(pitch), this.dist));
+        want = Math.max(1.6, this.dist * f - 0.6);
+      }
+      if (best < 0.8 && this.pointers.size === 0 && !snap) {
         for (const off of [0.35, -0.35, 0.7, -0.7, 1.05, -1.05, 1.4, -1.4, 1.75, -1.75, 2.1, -2.1, 2.45, -2.45, Math.PI]) {
           const y = this.yaw + off;
           const d = new THREE.Vector3(Math.sin(y) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(y) * Math.cos(this.pitch));
-          if (clear(this.focus, this.focus.clone().addScaledVector(d, this.dist)) > 0.9) { this.yaw += off * Math.min(1, dt * 2.5); break; }
+          if (clear(this.focus, this.focus.clone().addScaledVector(d, this.dist)) > 0.9) { this.yaw += off * Math.min(1, dt * 3); break; }
         }
       }
     }

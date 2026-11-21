@@ -69,6 +69,8 @@ export class DistrictView {
   private readonly pins = new Map<number, THREE.Sprite>();
   private readonly awnings: THREE.InstancedMesh;
   private readonly awningIndex = new Map<number, number>();
+  /** Auvents : matrice, centre, normale et demi-largeur (pour les masquer quand la caméra passe derrière). */
+  private readonly awningInfo: { m: THREE.Matrix4; x: number; z: number; n: readonly [number, number]; half: number; hidden: boolean }[] = [];
   private readonly rings: THREE.InstancedMesh;
   private readonly ringIndex = new Map<number, number>();
   private ringPhase = 0;
@@ -130,7 +132,9 @@ export class DistrictView {
       const front = b.face % 2 === 0 ? b.w : b.d, depth = b.face % 2 === 0 ? b.d : b.w;
       const pos = new THREE.Vector3(b.x + n[0] * (depth / 2 + 0.7), 0.16 + 2.9, b.z + n[1] * (depth / 2 + 0.7));
       const size = b.face % 2 === 0 ? new THREE.Vector3(front * 0.9, 0.18, 1.4) : new THREE.Vector3(1.4, 0.18, front * 0.9);
-      this.awnings.setMatrixAt(k, new THREE.Matrix4().compose(pos, new THREE.Quaternion(), size));
+      const m = new THREE.Matrix4().compose(pos, new THREE.Quaternion(), size);
+      this.awnings.setMatrixAt(k, m);
+      this.awningInfo.push({ m, x: pos.x, z: pos.z, n, half: front * 0.45, hidden: false });
       this.awningIndex.set(b.id, k);
       this.awnings.setColorAt(k, new THREE.Color(0x8a8f96));
     });
@@ -290,7 +294,7 @@ export class DistrictView {
     return instanced(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xd8d8d0 }), out, 'marquage', false, false);
   }
 
-  /** Arbres : parc dense, alignements le long des trottoirs. */
+  /** Arbres : parc aéré (quelques arbres plus petits), alignements le long des trottoirs. */
   private trees(): THREE.Group {
     const d = this.d, g = new THREE.Group();
     const pts: [number, number][] = [];
@@ -298,8 +302,18 @@ export class DistrictView {
     let seed = d.seed * 9301 + 49297;
     const rnd = (): number => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
     const zones = parkZones(d);
-    const inZone = (x: number, z: number): boolean => [zones.zoo, zones.skate].some((q) => x > q.x0 - 2 && x < q.x1 + 2 && z > q.z0 - 2 && z < q.z1 + 2);
-    for (let k = 0; k < 70; k++) { const x = pc.x + (rnd() - 0.5) * (BLOCK - 8), z = pc.z + (rnd() - 0.5) * (BLOCK - 8); if (!inZone(x, z)) pts.push([x, z]); }
+    const inZone = (x: number, z: number): boolean => [zones.zoo, zones.skate].some((q) => x > q.x0 - 3.5 && x < q.x1 + 3.5 && z > q.z0 - 3.5 && z < q.z1 + 3.5);
+    // Parc : peu d'arbres, espacés d'au moins 7 m, hors du zoo, du skate-park et de la placette centrale (parasols,
+    // statues) pour que les allées restent lisibles.
+    const parkPts: [number, number][] = [];
+    for (let k = 0; k < 40 && parkPts.length < 14; k++) {
+      const x = pc.x + (rnd() - 0.5) * (BLOCK - 10), z = pc.z + (rnd() - 0.5) * (BLOCK - 10);
+      if (inZone(x, z) || Math.hypot(x - pc.x, z - pc.z) < 9 || Math.hypot(x - pc.x, z - pc.z + 12) < 6) continue;
+      if (parkPts.some(([px, pz]) => Math.hypot(px - x, pz - z) < 7)) continue;
+      parkPts.push([x, z]);
+    }
+    pts.push(...parkPts);
+    const nPark = parkPts.length;
     for (let i = 0; i <= d.nx; i++) {
       const x = (i - d.nx / 2) * PITCH;
       for (let z = -d.size.d / 2 + 10; z < d.size.d / 2; z += 18) { pts.push([x - STREET_W / 2 + 1.2, z]); pts.push([x + STREET_W / 2 - 1.2, z + 9]); }
@@ -307,12 +321,13 @@ export class DistrictView {
     const trunks: THREE.Matrix4[] = [], crowns: THREE.Matrix4[] = [];
     // Aucun arbre devant une porte (bâtiments où l'on peut entrer).
     const doors = d.buildings.filter((b) => b.premise || b.service || b.home).map((b) => [b.doorX, b.doorZ] as const);
-    for (const [x, z] of pts) {
-      if (doors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 5.5)) continue;
-      const s = 0.8 + rnd() * 0.5;
+    // Rayon dégagé autour des portes : la caméra de rue, reculée, ne doit pas avoir de feuillage entre elle et le joueur.
+    pts.forEach(([x, z], idx) => {
+      if (doors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 7.5)) return;
+      const s = idx < nPark ? 0.5 + rnd() * 0.22 : 0.8 + rnd() * 0.4;
       trunks.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0.16, z), new THREE.Quaternion(), new THREE.Vector3(s, s, s)));
       crowns.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0.16 + 3.2 * s, z), new THREE.Quaternion(), new THREE.Vector3(s, s * 1.1, s)));
-    }
+    });
     // Modèles d'arbres (City Kit Suburban, Nature Kit) répartis au hasard, un InstancedMesh par modèle.
     // Tous les arbres du Nature Kit et du City Kit Suburban (feuillus, pins, palmiers, automne).
     const kinds = ['rue.arbre-grand', 'rue.arbre-petit', ...filesMatching(/^nat-tree_/)].filter((k) => assets.has(k));
@@ -375,24 +390,27 @@ export class DistrictView {
     });
     // Parc : bancs autour, massifs de fleurs et buissons, parasols et tables, clôture basse.
     const pc = blockCenter(d, d.parkBlock.i, d.parkBlock.j), ph = BLOCK / 2 - 3;
-    for (let k = -2; k <= 2; k++) {
-      put('rue.banc', pc.x + k * 9, pc.z - ph + 4, 0); put('rue.banc', pc.x + k * 9, pc.z + ph - 4, Math.PI);
-      put('rue.banc', pc.x - ph + 4, pc.z + k * 9, Math.PI / 2); put('rue.banc', pc.x + ph - 4, pc.z + k * 9, -Math.PI / 2);
-    }
-    // Massifs : toutes les fleurs, plantes, herbes, champignons, pierres, souches et rondins du Nature Kit.
     const zones = parkZones(d);
-    const inZone = (x: number, z: number): boolean => [zones.zoo, zones.skate].some((q) => x > q.x0 - 1.5 && x < q.x1 + 1.5 && z > q.z0 - 1.5 && z < q.z1 + 1.5);
-    const flowers = filesMatching(/^nat-(flower_|plant_bush|grass_large|grass_leafsLarge|mushroom_redGroup|mushroom_tanGroup)/).filter((k) => assets.has(k));
-    for (let k = 0; k < 130 && flowers.length; k++) {
-      const a = rnd() * Math.PI * 2, rr = 6 + rnd() * (ph - 8);
-      const x = pc.x + Math.cos(a) * rr, z = pc.z + Math.sin(a) * rr;
-      if (!inZone(x, z)) put(flowers[k % flowers.length]!, x, z, rnd() * 6.28, 0);
+    const inZone = (x: number, z: number, m = 3): boolean => [zones.zoo, zones.skate].some((q) => x > q.x0 - m && x < q.x1 + m && z > q.z0 - m && z < q.z1 + m);
+    const bench = (x: number, z: number, ry: number): void => { if (!inZone(x, z, 1)) put('rue.banc', x, z, ry); };
+    for (let k = -2; k <= 2; k++) {
+      bench(pc.x + k * 9, pc.z - ph + 4, 0); bench(pc.x + k * 9, pc.z + ph - 4, Math.PI);
+      bench(pc.x - ph + 4, pc.z + k * 9, Math.PI / 2); bench(pc.x + ph - 4, pc.z + k * 9, -Math.PI / 2);
     }
-    // Statues et gros rochers au centre et aux entrées du parc.
-    const statues = filesMatching(/^nat-statue_/).filter((k) => assets.has(k));
-    statues.forEach((k, i) => { const a = (i / Math.max(1, statues.length)) * Math.PI * 2; put(k, pc.x + Math.cos(a) * 5, pc.z - 12 + Math.sin(a) * 3, -a, 0); });
-    filesMatching(/^nat-(rock_large|stump_old|log_stack)/).filter((k) => assets.has(k)).forEach((k, i) => {
-      const x = pc.x - ph + 4 + (i % 4) * 12, z = pc.z - 20 + Math.floor(i / 4) * 9;
+    // Massifs regroupés (petites touffes de 3 plantes) plutôt que semés partout : moins d'encombrement.
+    const flowers = filesMatching(/^nat-(flower_|plant_bush|grass_large|grass_leafsLarge)/).filter((k) => assets.has(k));
+    for (let c = 0; c < 12 && flowers.length; c++) {
+      const a = rnd() * Math.PI * 2, rr = 9 + rnd() * (ph - 11);
+      const cx = pc.x + Math.cos(a) * rr, cz = pc.z + Math.sin(a) * rr;
+      if (inZone(cx, cz)) continue;
+      for (let k = 0; k < 3; k++) put(flowers[(c * 3 + k) % flowers.length]!, cx + (rnd() - 0.5) * 1.6, cz + (rnd() - 0.5) * 1.6, rnd() * 6.28, 0);
+    }
+    // Deux statues de part et d'autre de l'allée nord, trois rochers / souches dans les coins.
+    const statues = filesMatching(/^nat-statue_/).filter((k) => assets.has(k)).slice(0, 2);
+    statues.forEach((k, i) => put(k, pc.x + (i ? 5 : -5), pc.z - 12, i ? -Math.PI / 2 : Math.PI / 2, 0));
+    const corners: [number, number][] = [[pc.x - ph + 5, pc.z - ph + 8], [pc.x + ph - 5, pc.z - ph + 8], [pc.x + ph - 6, pc.z - 4]];
+    filesMatching(/^nat-(rock_large|stump_old|log_stack)/).filter((k) => assets.has(k)).slice(0, corners.length).forEach((k, i) => {
+      const [x, z] = corners[i]!;
       if (!inZone(x, z)) put(k, x, z, rnd() * 6, 0);
     });
     for (let k = 0; k < 3; k++) {
@@ -451,7 +469,7 @@ export class DistrictView {
       if (/^f:car-/.test(k)) size[k] = [1.9, 1.6, 4.2];
       else if (/^f:srv-/.test(k)) size[k] = [0.8, 0.9, 0.8];
       else if (/^f:nat-statue/.test(k)) size[k] = [1.6, 2.6, 1.6];
-      else if (/^f:nat-(rock|stone)_(large|tall)/.test(k)) size[k] = [1.8, 1.8, 1.8];
+      else if (/^f:nat-(rock|stone)_(large|tall)/.test(k)) size[k] = [1.1, 1.0, 1.1];
       else if (/^f:nat-(log|stump)/.test(k)) size[k] = [1.2, 0.7, 1.2];
       else if (/^f:nat-/.test(k)) size[k] = [0.8, 0.8, 0.8];
     }
@@ -609,9 +627,23 @@ export class DistrictView {
     this.rings.instanceMatrix.needsUpdate = true;
   }
 
-  /** Repères des locaux libres seulement au loin ; anneaux qui pulsent. */
+  /**
+   * Repères des locaux libres seulement au loin ; anneaux qui pulsent ; auvents masqués quand la caméra est
+   * au-dessus ou derrière eux (caméra rabattue contre une façade) : ils cacheraient le joueur devant la porte.
+   */
   updateLabels(camera: THREE.Camera, dt: number): void {
-    for (const pin of this.pins.values()) pin.visible = camera.position.distanceTo(pin.position) > PIN_MIN_DIST;
+    const cp = camera.position;
+    for (const pin of this.pins.values()) pin.visible = cp.distanceTo(pin.position) > PIN_MIN_DIST;
+    let dirty = false;
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.awningInfo.forEach((a, k) => {
+      const rx = cp.x - a.x, rz = cp.z - a.z;
+      const out = rx * a.n[0] + rz * a.n[1], side = Math.abs(rx * a.n[1] - rz * a.n[0]);
+      // Caméra pas nettement devant l'auvent (au-dessus de lui ou côté immeuble), au droit de la façade et proche.
+      const hide = out < 2.5 && side < a.half + 4 && cp.y > 2.2 && Math.abs(out) < 30;
+      if (hide !== a.hidden) { a.hidden = hide; this.awnings.setMatrixAt(k, hide ? zero : a.m); dirty = true; }
+    });
+    if (dirty) this.awnings.instanceMatrix.needsUpdate = true;
     this.ringPhase += dt;
     (this.rings.material as THREE.MeshBasicMaterial).opacity = 0.55 + 0.35 * Math.sin(this.ringPhase * 3);
   }

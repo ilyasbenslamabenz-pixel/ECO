@@ -69,7 +69,7 @@ export class StreetLife {
     pond.position.set(zoo.x1 - 4, 0.2, zoo.z0 + 4); this.group.add(pond);
     for (const [dx, dz, k] of [[-1, 0.6, 'f:nat-lily_large'], [1.1, -0.8, 'f:nat-lily_small'], [0.2, 1.4, 'f:nat-lily_small']] as const) this.prop(k, 0.9, 0.2, 0.9, zoo.x1 - 4 + dx, zoo.z0 + 4 + dz, rnd() * 6, 0.21);
     this.add('f:pet-animal-fish', ANIMAL_SIZE['fish']!, { zone: { x0: zoo.x1 - 5.5, z0: zoo.z0 + 2.5, x1: zoo.x1 - 2.5, z1: zoo.z0 + 5.5 }, speed: 0.5, y: 0.05 });
-    for (const [x, zz] of [[zoo.x0 + 2, zoo.z1 - 2], [zoo.x0 + 5, zoo.z1 - 3]]) this.prop('f:nat-tree_oak', 3, 4.5, 3, x!, zz!, rnd() * 6);
+    this.prop('f:nat-tree_oak', 2.4, 3.6, 2.4, zoo.x0 + 2.5, zoo.z1 - 2.5, rnd() * 6);
     this.prop('f:nat-log_stack', 1.6, 0.8, 1.2, zoo.x0 + 3, zoo.z0 + 2, 0.3);
     this.prop('f:nat-rock_largeA', 1.6, 1.2, 1.6, zoo.x1 - 2, zoo.z1 - 2, 0);
     const inner = { x0: zoo.x0 + 1.5, z0: zoo.z0 + 1.5, x1: zoo.x1 - 1.5, z1: zoo.z1 - 1.5 };
@@ -79,26 +79,30 @@ export class StreetLife {
     // Panneau du zoo.
     this.prop('f:nat-sign', 1, 1.4, 0.4, zoo.x0 - 1, zoo.z0 - 0.8, 0);
 
-    // Skate-park : rampes, rails, modules ; deux skateurs en aller-retour.
+    // Skate-park lisible : dalle claire bordée, deux half-pipes face à face aux extrémités, une piste centrale
+    // dégagée pour les skateurs, et seulement quatre modules bien espacés (deux de chaque côté de la piste).
     const sk = z.skate;
     const sx = (sk.x0 + sk.x1) / 2, sz = (sk.z0 + sk.z1) / 2;
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(sk.x1 - sk.x0, sk.z1 - sk.z0).rotateX(-Math.PI / 2), mat('#a7a9ab', { rough: 0.95 }));
+    const border = new THREE.Mesh(new THREE.PlaneGeometry(sk.x1 - sk.x0 + 1.2, sk.z1 - sk.z0 + 1.2).rotateX(-Math.PI / 2), mat('#6f7378', { rough: 0.95 }));
+    border.position.set(sx, 0.185, sz); border.receiveShadow = true; this.group.add(border);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(sk.x1 - sk.x0, sk.z1 - sk.z0).rotateX(-Math.PI / 2), mat('#c9cbcd', { rough: 0.9 }));
     ground.position.set(sx, 0.19, sz); ground.receiveShadow = true; this.group.add(ground);
+    // Piste centrale marquée (bande légèrement plus foncée) : là où roulent les skateurs.
+    const lane = new THREE.Mesh(new THREE.PlaneGeometry(sk.x1 - sk.x0 - 7, 4.2).rotateX(-Math.PI / 2), mat('#b3b6b9', { rough: 0.9 }));
+    lane.position.set(sx, 0.195, sz); this.group.add(lane);
     const sp: [string, number, number, number, number, number, number][] = [
-      ['f:skt-half-pipe', 4, 2.2, 3, sk.x0 + 2.5, sz, Math.PI / 2], ['f:skt-half-pipe', 4, 2.2, 3, sk.x1 - 2.5, sz, -Math.PI / 2],
-      ['f:skt-rail-low', 3, 0.5, 0.3, sx, sz - 3, Math.PI / 2], ['f:skt-rail-high', 3, 0.8, 0.3, sx, sz + 3, Math.PI / 2],
-      ['f:skt-obstacle-box', 2, 0.6, 2, sx - 2.5, sz + 5.5, 0], ['f:skt-obstacle-middle', 2, 0.7, 2, sx + 2.5, sz - 5.5, 0],
-      ['f:skt-obstacle-end', 2, 0.7, 2, sx + 4.5, sz - 5.5, 0], ['f:skt-steps', 2.4, 1, 2, sx - 4, sz - 6, 0],
-      ['f:skt-rail-curve', 2.5, 0.6, 2.5, sx + 3.5, sz + 5.5, 0], ['f:skt-rail-slope', 2.5, 0.9, 0.4, sx - 1, sz - 6, 0],
-      ['f:skt-structure-platform', 2, 1, 1.4, sk.x0 + 1, sk.z0 + 1.2, 0], ['f:skt-structure-wood', 1.4, 1.6, 1.4, sk.x1 - 1, sk.z0 + 1.2, 0],
-      ['f:skt-pallet', 1.2, 0.3, 1, sk.x1 - 1.2, sk.z1 - 1.2, 0.4], ['f:skt-bowl-side', 2, 1.2, 2, sk.x0 + 1.2, sk.z1 - 1.2, 0],
-      ['f:skt-bowl-corner-inner', 2, 1.2, 2, sk.x0 + 3.2, sk.z1 - 1.2, 0], ['f:skt-bowl-corner-outer', 2, 1.2, 2, sk.x0 + 5.2, sk.z1 - 1.2, 0],
-      ['f:skt-skateboard', 0.8, 0.15, 0.3, sx - 6, sz + 6.5, 0.6],
+      ['f:skt-half-pipe', 4, 2.2, 3, sk.x0 + 2, sz, Math.PI / 2], ['f:skt-half-pipe', 4, 2.2, 3, sk.x1 - 2, sz, -Math.PI / 2],
+      // Rails : modèles longs selon z (boîte allongée en profondeur), tournés parallèlement à la piste.
+      ['f:skt-rail-low', 0.5, 0.9, 3.4, sx - 3.2, sz - 5, Math.PI / 2], ['f:skt-obstacle-box', 2.2, 0.6, 2.2, sx + 3.4, sz - 5, 0],
+      ['f:skt-rail-high', 0.5, 1.4, 3.2, sx - 3.2, sz + 5, Math.PI / 2],
+      // Plan incliné – table – plan incliné (funbox) dans l'axe de la piste.
+      ['f:skt-obstacle-middle', 2, 1.1, 2, sx + 3.4, sz + 5, 0],
+      ['f:skt-obstacle-end', 2, 0.7, 1, sx + 1.9, sz + 5, -Math.PI / 2], ['f:skt-obstacle-end', 2, 0.7, 1, sx + 4.9, sz + 5, Math.PI / 2],
     ];
     for (const [k, w, h, dd, x, zz, ry] of sp) this.prop(k, w, h, dd, x, zz, ry, 0.2);
-    for (const [k, off] of [['f:skt-character-skate-boy', -1.2], ['f:skt-character-skate-girl', 1.2]] as const) {
-      const m = this.add(k, 1.15, { a: new THREE.Vector2(sk.x0 + 5, sz + off), b: new THREE.Vector2(sk.x1 - 5, sz + off), speed: 3, walk: 'skate', idle: 'skate-stand', person: true, y: 0.32 });
-      if (m) { const board = assets.fitted('f:skt-skateboard', 0.75, 0.12, 0.28); if (board) { board.rotation.y = Math.PI / 2; board.position.y = -0.12; m.obj.add(board); } }
+    for (const [k, off, sp2] of [['f:skt-character-skate-boy', -1, 2.6], ['f:skt-character-skate-girl', 1, 2.2]] as const) {
+      const m = this.add(k, 1.3, { a: new THREE.Vector2(sk.x0 + 4.2, sz + off), b: new THREE.Vector2(sk.x1 - 4.2, sz + off), speed: sp2, t: off < 0 ? 0.1 : 0.6, walk: 'skate', idle: 'skate-stand', person: true, y: 0.33 });
+      if (m) { const board = assets.fitted('f:skt-skateboard', 0.85, 0.13, 0.3); if (board) { board.rotation.y = Math.PI / 2; board.position.y = -0.13; m.obj.add(board); } }
     }
 
     // Promeneurs du parc (Blocky Characters) et une personne en fauteuil roulant ; joueur d'arcade près des parasols.
