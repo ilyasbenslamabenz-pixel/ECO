@@ -420,8 +420,8 @@ export class Rivalry {
     this.apply();
     const e = this.estimate(rs);
     rs.customers = e.customers;
-    const near = this.nearPlayer(rs);
-    if (near) g.notify('warn', `${rs.name} (${co.name}) ouvre à ${Math.round(near.d)} m de votre ${near.s.name} : attendez-vous à moins de clients. Soignez prix, stock et décoration.`);
+    const near = this.nearPlayer(rs), im = near ? this.impact(near.s, rs) : null;
+    if (near) g.notify('warn', `${rs.name} (${co.name}) ouvre à ${Math.round(near.d)} m de votre ${near.s.name} : ${im && im.customers >= 1 ? `environ ${im.customers} client${im.customers > 1 ? 's' : ''} de moins par jour (−${Math.round(im.share * 100)} %)` : 'attendez-vous à moins de clients'}. Soignez prix, stock et décoration.`);
     else g.notify('info', `Nouvelle ouverture : ${rs.name} (${co.name}) dans un local de ${best.area} m².`);
     return true;
   }

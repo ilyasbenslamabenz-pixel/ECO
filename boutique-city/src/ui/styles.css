@@ -928,7 +928,7 @@ kbd { font-family: var(--font); }
 .rc-cheer { display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-radius: 14px; background: linear-gradient(90deg, #3a2a05, #221a07); border: 2px solid #ffcc4d; box-shadow: 0 4px 0 rgba(0,0,0,.35), 0 0 22px rgba(255, 204, 77, .25); opacity: 0; animation: cheerIn .55s cubic-bezier(.2, 1.4, .4, 1) var(--d, 1s) forwards; }
 .rc-cheer-ico { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: #ffcc4d; color: #2b1d00; font-size: 21px; box-shadow: 0 3px 0 #b8861b; }
 .rc-cheer b { display: block; font-size: 17px; font-weight: 800; color: #ffe08a; line-height: 1.2; }
-.rc-cheer span { font-size: 12.5px; color: #f5e6c4; }
+.rc-cheer div span { font-size: 12.5px; color: #f5e6c4; }
 @keyframes cheerIn { from { opacity: 0; transform: translateY(8px) scale(.92); } to { opacity: 1; transform: none; } }
 .tbl.pnl tr.grp td { padding-top: 10px; font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: #8fa3ba; background: none !important; }
 .tbl.pnl tr.total.sub td { font-size: 14px; }
@@ -936,3 +936,4 @@ kbd { font-family: var(--font); }
   #hud .wallet.gain, #hud .wallet.palier, #hud .wallet.spend, #hud .wallet .cash, .dest-pointer.edge, .hint-bar { animation: none; }
   .rc-cheer { animation: none; opacity: 1; }
 }
+.rc-cheer-ico .ico { stroke-width: 2.4; }

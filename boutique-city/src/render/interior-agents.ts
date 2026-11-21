@@ -1,8 +1,8 @@
 /**
- * Vie dans un commerce : chaque vente de la simulation fait entrer un client qui va aux meubles des produits
- * achetés, fait la queue à une caisse, paie et ressort. Les employés se tiennent derrière les caisses (les autres
- * passent entre les rayons). Chemins sur la grille (recherche en largeur), vitesse proportionnelle au temps de jeu.
- * Dépend de three.
+ * Vie dans un commerce : chaque vente de la simulation affiche aussitôt son montant doré au-dessus d'une caisse et
+ * fait entrer un client qui va aux meubles des produits achetés, fait la queue (file ordonnée, en ligne puis le long
+ * des murs) à une caisse, paie et ressort. Les employés se tiennent derrière les caisses (les autres passent entre les
+ * rayons). Chemins sur la grille (recherche en largeur), vitesse proportionnelle au temps de jeu. Dépend de three.
  */
 import * as THREE from 'three';
 import { FURNITURE_BY_ID, PRODUCT_BY_ID } from '../sim/catalog';
@@ -171,8 +171,8 @@ export class InteriorAgents {
     }
     // Au-dessus de la caisse enregistreuse, côté caissier, plus haut qu'une tête.
     const x = r.center[0] - r.dir[0] * 0.25, z = r.center[1] - r.dir[1] * 0.25;
-    const l = this.label(moneyMaterial(amount), 1.5, 0.47, 3, 22);
-    l.at.set(x, 2.05, z);
+    const l = this.label(moneyMaterial(amount), 1.75, 0.55, 3, 22);
+    l.at.set(x, 2.2, z);
     // Ventes rapprochées à la même caisse : le montant prend le plus bas créneau libre de la pile. Tous montent à la
     // même vitesse : deux créneaux espacés d'une hauteur ne se recouvrent jamais, et la pile ne grimpe pas sans fin.
     const step = l.h + LABEL_GAP;
@@ -705,11 +705,11 @@ function drawMoney(m: THREE.SpriteMaterial, amount: number): void {
   gold.addColorStop(0, '#fff3b0'); gold.addColorStop(0.5, '#ffcc4d'); gold.addColorStop(1, '#e09a1a');
   g.fillStyle = 'rgba(30, 20, 4, 0.93)'; g.strokeStyle = gold; g.lineWidth = 6;
   g.beginPath(); g.roundRect(6, 6, 372, 108, 54); g.fill(); g.stroke();
-  // Pièce.
+  // Pièce : disque doré, listel et reflet.
   g.fillStyle = gold; g.beginPath(); g.arc(62, 60, 33, 0, Math.PI * 2); g.fill();
   g.strokeStyle = '#a86d0c'; g.lineWidth = 4; g.beginPath(); g.arc(62, 60, 24, 0, Math.PI * 2); g.stroke();
-  g.fillStyle = '#8a5806'; g.font = '800 26px Rubik, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('F', 62, 62);
+  g.strokeStyle = 'rgba(255, 255, 255, 0.75)'; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.arc(62, 60, 15, Math.PI * 1.1, Math.PI * 1.45); g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
   // Montant : texte doré cerné de brun (lisible sur tous les sols).
   g.font = '800 54px Rubik, system-ui, sans-serif';
   g.lineJoin = 'round'; g.lineWidth = 8; g.strokeStyle = '#3a2600';

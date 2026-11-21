@@ -336,7 +336,7 @@ try {
   });
   check(cands.length === await ev(() => window.__bc.game.candidates.length) && cands.every((c) => c.nameOk && c.wishOk), 'agence : chaque candidat affiche son souhait (équipe, salaire minimum)', JSON.stringify(cands.map((c) => c.wish)));
   check(cands.every((c) => c.starred.length === 1 && c.starred[0] === c.want), 'agence : l’équipe souhaitée est marquée ★ dans le menu des équipes', JSON.stringify(cands.map((c) => [c.want, c.starred])));
-  check(cands.every((c) => c.roles.join() === 'caisse,rayon,entretien' && c.shifts.slice().sort().join() === 'journee,matin,soir'), 'agence : choix du rôle (caisse, rayon, entretien) et de l’équipe (matin, soir, journée)');
+  check(cands.every((c) => c.roles.join() === 'caisse,rayon,entretien' && c.shifts.slice().sort().join() === 'journee,matin,pointe,soir'), 'agence : choix du rôle (caisse, rayon, entretien) et de l’équipe (matin, soir, journée, pointe)');
   // Candidats retenus selon leurs souhaits (indépendant des tirages) : A caissier du matin, B caissière du soir,
   // C agent d'entretien en journée, D embauché sur une équipe qu'il ne souhaite pas (puis licencié).
   const pickC = (want, taken) => cands.find((c) => c.want === want && !taken.includes(c.id)) ?? cands.find((c) => !taken.includes(c.id));

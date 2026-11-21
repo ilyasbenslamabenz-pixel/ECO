@@ -212,8 +212,6 @@ export class Scene3D {
       for (const m of this.beacon.children) ((m as THREE.Mesh).material as THREE.MeshBasicMaterial).color.set(p.color ?? '#5fc3ff');
     }
   }
-  /** Position de la balise de destination (null : aucune). */
-  get beaconAt(): THREE.Vector3 | null { return this.beacon.visible ? this.beacon.position : null; }
 
   enterInterior(view: InteriorView, agents: InteriorAgents | null): void {
     this.exitInterior();

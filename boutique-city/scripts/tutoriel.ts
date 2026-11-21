@@ -10,6 +10,7 @@ import { FURNITURE_BY_ID, PREMIUM_BY_TYPE, SHOP_TYPES, productsOf, type ShopType
 import { serviceBuilding } from '../src/sim/district';
 import { canPlace, layoutStats } from '../src/sim/layout';
 import { Game } from '../src/sim/game';
+import { autoMins, buyRacks, placeImport, rentWarehouse, setTransport, warehouseName, warehousePremises } from '../src/sim/logistics';
 import { LEGEND_ID, OBJECTIVES, TIERS, activeObjectives, netWorth, tierComplete, type TierId } from '../src/sim/objectives';
 
 const g = new Game(7, 'Tutoriel SA');
@@ -151,6 +152,24 @@ function initiative(): void {
           if (r.ok) { for (const s of g.shops) if (s.acquired) stockUp(s.id); act(`rachat de l’enseigne ${best.co.name} (${r.data} commerces)`); return; }
         }
         break;
+      }
+      case 'placement': if (g.cash > 30_000 && g.deposit('epargne', 10_000).ok) { act('10 000 CHF placés sur le compte épargne'); return; } break;
+      case 'entrepot': {
+        // Un entrepôt quand le réseau compte au moins cinq commerces : étagères, importation des produits vendus,
+        // stocks minimums proposés, transporteur pour les tournées de nuit.
+        if (g.logi.warehouses.length || g.shops.length < 5 || g.cash < 25_000) break;
+        const wp = warehousePremises(g)[0];
+        if (!wp) break;
+        const w = rentWarehouse(g, wp.id);
+        if (!w.ok) break;
+        buyRacks(g, w.data.id, 8);
+        const pallets: Record<string, number> = {};
+        for (const pr of new Set(g.shops.flatMap((sh) => productsOf(sh.type).map((x) => x.id)))) pallets[pr] = 2;
+        while (!placeImport(g, w.data.id, pallets).ok && Object.keys(pallets).length > 3) delete pallets[Object.keys(pallets).pop()!];
+        for (const sh of g.shops) autoMins(g, sh.id);
+        setTransport(g, w.data.id, 'service');
+        act(`entrepôt loué (${warehouseName(g, wp.id)}), importation et tournées de nuit`);
+        return;
       }
       default: break;
     }

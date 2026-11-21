@@ -204,7 +204,7 @@ function showHelp(): void {
       [['E'], 'entrer, parler, conduire, tenir la caisse, dormir'], [['B'], 'aménager le commerce'], [['R'], 'tourner le meuble en main'],
       [['Clic droit'], 'annuler la pose d’un meuble']]],
     ['Interface', [
-      [['T'], 'téléphone (gestion à distance)'], [['M'], 'carte (clic = destination)'],
+      [['T'], 'téléphone (gestion à distance)'], [['M'], `carte (clic = destination, taxi ${TAXI_FARE} CHF)`],
       [['P'], 'pause / reprise'], [['1–4'], 'vitesse du temps'], [['H'], 'cette aide'], [['Échap'], 'fermer, revenir, se réveiller']]],
   ];
   const steps = ['Louez un local (anneau jaune)', 'Achetez des meubles et aménagez (B)', 'Approvisionnez au grossiste', 'Tenez la caisse ou embauchez'];
@@ -683,7 +683,7 @@ function start(game: Game): void {
   let lastPalier = palier(seenRevenue).k;
   const pulse = (kind: 'gain' | 'spend' | 'palier'): void => {
     const now = performance.now();
-    if (kind !== 'palier' && now - pulseAt < 140) return;
+    if (kind !== 'palier' && now - pulseAt < 300) return;
     pulseAt = now;
     wallet.classList.remove('gain', 'spend', 'palier');
     void wallet.offsetWidth;
@@ -783,8 +783,9 @@ function start(game: Game): void {
     // quelque chose peut aller en rayon ; sinon, son infobulle dit pourquoi (place réservée, rayon plein, aucun meuble).
     const up = game.unloadPlan(s.id), n = up.carried, storable = up.now + up.reducing;
     const id = s.id;
-    const clean = Math.round(game.cleanliness(s));
-    const sig = `${id}|${open}|${s.today.customers}|${Math.round(s.today.revenue)}|${n}|${storable}|${build.on}|${clean}`;
+    // Alerte sur la propreté réelle (49,7 % s'affiche « 50 % » mais reste sous le seuil).
+    const clean = Math.round(game.cleanliness(s)), dirty = game.cleanliness(s) < CLEANING.warn;
+    const sig = `${id}|${open}|${s.today.customers}|${Math.round(s.today.revenue)}|${n}|${storable}|${build.on}|${clean}|${dirty}`;
     if (sig === ibarSig) return;
     ibarSig = sig;
     const t = SHOP_TYPE_BY_ID.get(s.type)!;
@@ -799,7 +800,7 @@ function start(game: Game): void {
       el('div', { cls: 'ib-actions' },
         n > 0 ? Object.assign(ibtn(`Décharger (${n})`, () => unloadInto(ctx, id, () => { refreshInterior(true); renderInteriorBar(); }), storable > 0 ? 'primary' : ''), { title: storable > 0 ? '' : up.reason ?? '' }) : null,
         ibtn(build.on ? 'Terminer' : 'Aménager', () => setBuild(!build.on), build.on ? 'primary' : '', 'B'),
-        ibtn(`Nettoyer (${clean} %)`, () => { act(game.cleanShop(id), (v) => `Magasin nettoyé : propreté ${v} %.`); refreshInterior(true); renderInteriorBar(); }, clean < 50 ? 'warn' : ''),
+        ibtn(`Nettoyer (${clean} %)`, () => { act(game.cleanShop(id), (v) => `Magasin nettoyé : propreté ${v} %.`); refreshInterior(true); renderInteriorBar(); }, dirty ? 'warn' : ''),
         ibtn('Gestion', () => ctx.openShop(id)),
         ibtn('Sortir', exitInterior)));
   };
@@ -865,7 +866,8 @@ function start(game: Game): void {
   hintX.setAttribute('aria-label', 'Masquer l’indice');
   hintBox.append(hintX);
   document.body.append(hintBox);
-  let hintNow: { key: string; text: string; go: string | null } | null = null, hintMuted = '', hintCheck = 0, idleT = 0;
+  /** Indice affiché ou à afficher, indice masqué par le joueur ; dernier contrôle et dernier mouvement (ms, temps réel). */
+  let hintNow: { key: string; text: string; go: string | null } | null = null, hintMuted = '', hintCheck = 0, movedAt = performance.now();
   const waitingHint = (): typeof hintNow => {
     if (!game.shops.length) return null;
     const next = Math.min(...game.orders.filter((o) => o.deliverAt > game.total).map((o) => o.deliverAt));
@@ -880,12 +882,12 @@ function start(game: Game): void {
     if (!what) return null;
     return { key: `livraison-${next}`, text: `En attendant la livraison de ${when} : ${what}.`, go: speed < 2 ? 'Accélérer (3)' : speed < 3 ? 'Plus vite (4)' : null };
   };
-  const hintStep = (dt: number): void => {
-    const ax = controls.axis();
-    idleT = Math.hypot(ax.x, ax.y) > 0.05 ? 0 : idleT + dt;
-    if ((hintCheck -= dt) <= 0) { hintCheck = 0.5; hintNow = waitingHint(); }
+  const hintStep = (): void => {
+    const ax = controls.axis(), now = performance.now();
+    if (Math.hypot(ax.x, ax.y) > 0.05) movedAt = now;
+    if (now - hintCheck > 500) { hintCheck = now; hintNow = waitingHint(); }
     const busy = !!recapOpen || !!bankruptOpen || !!victoryOpen || bigmap.isOpen || phone.isOpen || panel.isOpen || build.on || game.player.sleeping;
-    const show = !!hintNow && !busy && idleT > 4 && hintNow.key !== hintMuted;
+    const show = !!hintNow && !busy && now - movedAt > 4000 && hintNow.key !== hintMuted;
     hintBox.classList.toggle('hidden', !show);
     if (!show || !hintNow) return;
     if (hintText.textContent !== hintNow.text) hintText.textContent = hintNow.text;
@@ -1115,7 +1117,7 @@ function start(game: Game): void {
     scene.frame(dt, focus, snapCam);
     snapCam = false;
     destPointer();
-    hintStep(dt);
+    hintStep();
   };
   requestAnimationFrame(loop);
   window.addEventListener('beforeunload', () => writeSave(game));

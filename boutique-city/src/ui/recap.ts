@@ -2,6 +2,8 @@
  * Récapitulatif de fin de journée (à minuit de jeu) : chiffres clés, tableau par commerce, compte de résultat de
  * l'entreprise, clients perdus avec leur cause et conseils. Le jeu est en pause tant qu'il est ouvert. Lit
  * uniquement les bilans enregistrés par la simulation.
+ * Présentation : résultat d'exploitation en grand et investissements (mobilier, revêtements, véhicules, dépôts) à
+ * part, compteurs qui défilent, bandeaux de célébration (premier jour rentable, record, progression) et fanfare.
  */
 import { WEEKDAYS_FR } from '../sim/clock';
 import { FINANCE, RESCUE, taxBracketsText } from '../sim/catalog';
@@ -92,7 +94,8 @@ export function showRecap(g: Game, onClose: () => void, onRescue?: () => void): 
   const rows = g.shops.map((s) => ({ name: s.name, d: s.history.find((h) => h.day === y.day), stop: s.stopped })).filter((r): r is { name: string; d: DayStats; stop: typeof r.stop } => !!r.d);
   const shopLine = (name: string, d: DayStats, stop?: keyof typeof STOP_FR): HTMLElement => {
     const margin = d.revenue - d.costOfSales;
-    const solde = d.revenue - d.purchases - d.wages - d.rent - d.equipment - d.marketing;
+    // Résultat d'exploitation du commerce (marge − salaires − loyer − publicité), hors investissements du jour.
+    const solde = margin - d.wages - d.rent - d.marketing;
     const lostS = d.lostStaff + d.lostStock + d.lostCapacity;
     return el('tr', {}, el('td', {}, el('b', { text: name }), stop ? el('div', { cls: 'sub bad', text: `à l’arrêt : ${STOP_FR[stop]}` }) : lostS ? el('div', { cls: 'sub', text: `${num(lostS)} client(s) perdu(s)` }) : null),
       el('td', { cls: 'n', text: num(d.customers) }), el('td', { cls: 'n', text: chf(d.revenue) }), el('td', { cls: 'n', text: chf(margin) }),
@@ -163,7 +166,7 @@ export function showRecap(g: Game, onClose: () => void, onRescue?: () => void): 
       rescueBlock(g, onRescue ? () => { close(); if (!planDue) onRescue(); } : undefined),
       rows.length ? el('div', { cls: 'sec', text: 'Par commerce' }) : null,
       rows.length ? el('table', { cls: 'tbl rc-shops' },
-        el('tr', {}, ...['Commerce', 'Clients', 'Ventes', 'Marge', 'Salaires', 'Loyer (prov.)', 'Solde'].map((t, k) => el('th', { cls: k ? 'n' : '', text: t }))),
+        el('tr', {}, ...['Commerce', 'Clients', 'Ventes', 'Marge', 'Salaires', 'Loyer (prov.)', 'Exploitation'].map((t, k) => el('th', { cls: k ? 'n' : '', text: t }))),
         ...rows.map((r) => shopLine(r.name, r.d, r.stop))) : null,
       el('div', { cls: 'rc-cols' },
         el('div', { cls: 'rc-col' },

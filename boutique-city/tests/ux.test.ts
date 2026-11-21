@@ -6,10 +6,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FURNITURE_BY_ID, HOMES, HOME_MEAL, NEEDS, PRODUCT_BY_ID, RIVALS, bestStoreFurniture, productsOf, type ServiceKind, type ShopType } from '../src/sim/catalog';
+import { ECONOMY, FURNITURE_BY_ID, HOMES, HOME_MEAL, NEEDS, PRODUCT_BY_ID, RIVALS, bestStoreFurniture, productsOf, type ServiceKind, type ShopType } from '../src/sim/catalog';
 import { serviceBuilding } from '../src/sim/district';
 import { canPlace, layoutStats } from '../src/sim/layout';
-import { ECONOMY } from '../src/sim/catalog';
 import { Game, isAlert, type Notice } from '../src/sim/game';
 import { rivalTips, stockTips } from '../src/ui/recap-tips';
 import { defaultShopId } from '../src/ui/dialogs';

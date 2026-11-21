@@ -206,6 +206,8 @@ export const OBJECTIVES: readonly Objective[] = [
     return { p: Math.min(1, b.share / MARKET_GOAL), text: `${Math.floor(b.share * 100)} / ${Math.round(MARKET_GOAL * 100)} %${b.type ? ` · ${typeName(b.type)}` : ''}` };
   } },
   { id: 'cinq', tier: 'entrepreneur', title: 'Bâtir un réseau de cinq commerces', hint: 'Ouvrez dans des rues passantes, ou rachetez un concurrent déjà installé avec sa clientèle.', progress: (g) => step(g.shops.length, 5, 'commerces') },
+  { id: 'entrepot', tier: 'entrepreneur', title: 'Livrer ses commerces depuis un entrepôt', hint: 'Louez un entrepôt (repéré sur la carte), commandez à l’importateur, fixez des stocks minimums et choisissez un transport : une tournée de nuit réapprovisionne vos rayons.', progress: (g) => flag(g.logi.tours.length > 0) },
+  { id: 'placement', tier: 'entrepreneur', title: 'Placer 10 000 CHF', hint: 'Téléphone › Finances : un compte épargne sûr ou un fonds plus risqué pour la trésorerie qui dort.', progress: (g) => step(g.investValue(), 10_000, 'CHF') },
   { id: 'valeur100k', tier: 'entrepreneur', title: 'Atteindre 60 000 CHF de valeur nette', hint: 'Leviers : gamme premium, employés formés, une caisse de plus là où des clients attendent, contrat fournisseur quand vous achetez beaucoup.', progress: worth(60_000) },
   { id: 'vn100k', tier: 'entrepreneur', title: 'Atteindre 100 000 CHF de valeur nette', hint: 'Développez les commerces les plus rentables, placez la trésorerie qui dort, remboursez les prêts coûteux.', progress: worth(100_000) },
 
@@ -217,9 +219,10 @@ export const OBJECTIVES: readonly Objective[] = [
     if (g.rivalry.cos.length && !g.rivalry.active.length) return { p: 1, text: 'plus aucune enseigne rivale dans le quartier' };
     return buyProgress(g, cheapestCompany(g));
   } },
-  { id: 'vn250k', tier: 'magnat', title: 'Atteindre 250 000 CHF de valeur nette', hint: 'Un réseau rentable, des employés formés, la gamme premium là où la réputation le permet.', progress: worth(250_000) },
-  { id: 'vn500k', tier: 'magnat', title: 'Atteindre 500 000 CHF de valeur nette', hint: 'Les gros leviers : rachats rentables, importateur et entrepôt pour acheter moins cher, gamme premium partout où elle paie.', progress: worth(500_000) },
-  { id: 'vn1m', tier: 'magnat', title: 'Atteindre 1 000 000 CHF de valeur nette', hint: 'Le million : un empire rentable, sans dette inutile.', progress: worth(1_000_000) },
+  { id: 'clients50k', tier: 'magnat', title: 'Servir 50 000 clients au total', hint: 'Un grand réseau bien approvisionné : tous commerces confondus.', progress: (g) => step(totalCustomers(g), 50_000, 'clients') },
+  { id: 'vn250k', tier: 'magnat', title: 'Atteindre 150 000 CHF de valeur nette', hint: 'Un réseau rentable, des employés formés, la gamme premium là où la réputation le permet.', progress: worth(150_000) },
+  { id: 'vn500k', tier: 'magnat', title: 'Atteindre 200 000 CHF de valeur nette', hint: 'Les gros leviers : rachats rentables, importateur et entrepôt pour acheter moins cher, gamme premium partout où elle paie.', progress: worth(200_000) },
+  { id: 'vn1m', tier: 'magnat', title: 'Atteindre 300 000 CHF de valeur nette', hint: 'Un empire rentable, sans dette inutile.', progress: worth(300_000) },
   { id: LEGEND_ID, tier: 'magnat', title: LEGEND_RANK, hint: 'Le dernier défi : atteindre tous les autres objectifs. Le quartier ne parlera plus que de vous.', progress: (g) => {
     const others = OBJECTIVES.filter((o) => o.id !== LEGEND_ID);
     const n = others.filter((o) => g.achieved.includes(o.id)).length;

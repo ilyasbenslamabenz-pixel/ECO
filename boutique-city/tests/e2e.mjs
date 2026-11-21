@@ -60,7 +60,10 @@ try {
   await page.keyboard.up('KeyS');
   check(await ev(() => window.__bc.state().inside === null), 'sorti dans la rue en marchant');
   const p0 = await ev(() => [window.__bc.game.player.x, window.__bc.game.player.z]);
-  await page.keyboard.down('KeyD'); await page.waitForTimeout(3000); await page.keyboard.up('KeyD');
+  // Touche maintenue jusqu'au déplacement (au plus 30 s) : en rendu logiciel très lent, 3 s peuvent ne compter qu'une image.
+  await page.keyboard.down('KeyD');
+  await page.waitForFunction(([x, z]) => Math.hypot(window.__bc.game.player.x - x, window.__bc.game.player.z - z) > 0.5, p0, { timeout: 30000, polling: 250 }).catch(() => {});
+  await page.keyboard.up('KeyD');
   const p1 = await ev(() => [window.__bc.game.player.x, window.__bc.game.player.z]);
   check(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) > 0.5, 'le personnage marche dans la rue', JSON.stringify([p0, p1]));
   await shot('03-rue');

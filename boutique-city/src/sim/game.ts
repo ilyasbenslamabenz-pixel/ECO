@@ -1924,7 +1924,8 @@ export class Game {
     const regain = CLEANING.perPower * this.cleaningPower(s);
     s.clean = Math.max(0, Math.min(100, this.cleanliness(s) - CLEANING.perOpenHour + regain));
     s.clean = Math.max(s.clean, Math.min(CLEANING.cashierCap, s.clean + this.cashierSweep(s)));
-    if (s.clean < CLEANING.warn) this.warnOnce(s, '__sale', `${s.name} est sale (propreté ${Math.round(s.clean)} %) : moins de clients et réputation en baisse. Nettoyez (bouton « Nettoyer » sur place), embauchez un employé d’entretien ou souscrivez le service de nettoyage.`);
+    // Arrondi vers le bas : sous le seuil, le message n'affiche jamais « 50 % ».
+    if (s.clean < CLEANING.warn) this.warnOnce(s, '__sale', `${s.name} est sale (propreté ${Math.floor(s.clean)} %) : moins de clients et réputation en baisse. Nettoyez (bouton « Nettoyer » sur place), embauchez un employé d’entretien ou souscrivez le service de nettoyage.`);
   }
 
   /* ------------------------------ Simulation ------------------------------ */
