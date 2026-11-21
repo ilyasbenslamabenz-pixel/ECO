@@ -39,7 +39,7 @@ try {
     // Résolution et mesure en une seule étape dans la page : le panneau peut être redessiné entre deux allers-retours
     // (rendu logiciel ≈ 1 image/s) ; le bouton redessiné reste au même endroit, le clic souris tombe donc dessus.
     for (let k = 0; k < 40; k++) {
-      const b = await l.evaluate((e) => { const r = e.getBoundingClientRect(); return r.width ? { x: r.x, y: r.y, width: r.width, height: r.height } : null; }, null, { timeout: 1500 }).catch(() => null);
+      const b = await l.evaluate((e) => { const r = e.getBoundingClientRect(); return r.width ? { x: r.x, y: r.y, width: r.width, height: r.height } : null; }, null, { timeout: 20000 }).catch(() => null);
       if (b) { await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await page.waitForTimeout(150); return; }
       await page.waitForTimeout(200);
     }

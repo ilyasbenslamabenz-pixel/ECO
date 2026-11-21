@@ -53,6 +53,10 @@ export class Panel {
     const scroll = body?.scrollTop ?? 0;
     this.root.classList.toggle('wide', !!v.wide);
     const nb = el('div', { cls: 'p-body' }, ...v.render());
+    // Contenu identique (rafraîchissement sans changement visible) : on garde les éléments en place — pas de
+    // scintillement, survol et clic en cours conservés.
+    const head = this.root.querySelector('.p-head h3')?.textContent;
+    if (!force && body && head === v.title && body.innerHTML === nb.innerHTML) return;
     this.root.replaceChildren(
       el('div', { cls: 'p-head' }, el('div', {}, el('div', { cls: 'kicker', text: v.kicker }), el('h3', { text: v.title })), button('×', () => this.close(), 'icon-x')),
       nb);
