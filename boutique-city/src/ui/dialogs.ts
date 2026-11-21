@@ -4,7 +4,7 @@
  * que le personnage est bien sur place.
  */
 import {
-  CAMPAIGNS, ECONOMY, FOODS, FURNITURE, HOME_BY_ID, LOAN_OFFERS, PRODUCTS, SERVICE_BY_ID, SHOP_TYPES, SHOP_TYPE_BY_ID,
+  CAMPAIGNS, CONTRACTS, ECONOMY, FOODS, TRAINING, FURNITURE, HOME_BY_ID, LOAN_OFFERS, PRODUCTS, SERVICE_BY_ID, SHOP_TYPES, SHOP_TYPE_BY_ID,
   VEHICLES, VEHICLE_BY_ID, loanTotal, type ServiceKind, type ShopType,
 } from '../sim/catalog';
 import type { Building, Home, Premise } from '../sim/district';
@@ -65,6 +65,7 @@ function grossiste(ctx: UiCtx, b: Building): (Node | null)[] {
       dest ? el('label', { cls: 'field grow' }, el('span', { text: 'Ou livrer demain à 7 h à' }), dest) : null),
     near.length ? null : note(`Pour charger beaucoup : garez un véhicule à moins de ${ECONOMY.loadDistance} m de la porte.`),
     note(`Remise de ${pct(ECONOMY.bulkDiscount)} dès ${ECONOMY.bulkQty} unités. Livraison : ${ECONOMY.deliveryBase} CHF + ${pct(ECONOMY.deliveryRate)} du montant.`),
+    ...contractBlock(ctx),
   ];
   for (const t of order) {
     out.push(sec(t.nameFr));
@@ -76,7 +77,7 @@ function grossiste(ctx: UiCtx, b: Building): (Node | null)[] {
         ctx.act(g.buyStock(p.id, Number(q.value), c), (n) => `${n} ${p.nameFr.toLowerCase()} chargés.`);
       }, 'small primary');
       const deliver = dest ? button('Livrer', () => ctx.act(g.order(Number(dest.value), p.id, Number(q.value)), (o) => `${o.qty} ${p.nameFr.toLowerCase()} livrés demain à 7 h (${chf2(o.cost)}).`), 'small') : null;
-      tbl.append(el('tr', {}, el('td', { text: p.nameFr }), el('td', {}, el('b', { text: chf2(p.cost * g.marketIndex(p.id)) }), el('span', { cls: g.marketIndex(p.id) > 1.02 ? 'small trend up' : g.marketIndex(p.id) < 0.98 ? 'small trend down' : 'small trend', text: g.marketIndex(p.id) > 1.02 ? ` ▲ ${Math.round((g.marketIndex(p.id) - 1) * 100)} %` : g.marketIndex(p.id) < 0.98 ? ` ▼ ${Math.round((1 - g.marketIndex(p.id)) * 100)} %` : ' =' })), el('td', {}, q), el('td', { cls: 'nowrap' }, take, deliver)));
+      tbl.append(el('tr', {}, el('td', { text: p.nameFr }), el('td', {}, el('b', { text: chf2(g.orderCost(p.id, 1)) }), el('span', { cls: g.marketIndex(p.id) > 1.02 ? 'small trend up' : g.marketIndex(p.id) < 0.98 ? 'small trend down' : 'small trend', text: g.marketIndex(p.id) > 1.02 ? ` ▲ ${Math.round((g.marketIndex(p.id) - 1) * 100)} %` : g.marketIndex(p.id) < 0.98 ? ` ▼ ${Math.round((1 - g.marketIndex(p.id)) * 100)} %` : ' =' })), el('td', {}, q), el('td', { cls: 'nowrap' }, take, deliver)));
     }
     out.push(tbl);
   }
@@ -86,6 +87,25 @@ function grossiste(ctx: UiCtx, b: Building): (Node | null)[] {
     for (const l of loads) out.push(el('p', { cls: 'small', text: `${l.label} : ${Object.entries(l.load).map(([k, n]) => `${n} ${PRODUCTS.find((p) => p.id === k)!.nameFr.toLowerCase()}`).join(', ')}` }));
     out.push(note('Entrez dans votre commerce (véhicule garé devant) pour décharger.'));
   }
+  return out;
+}
+
+/** Contrats fournisseurs : forfait quotidien contre une remise sur tous les achats (comparée aux achats récents). */
+function contractBlock(ctx: UiCtx): (Node | null)[] {
+  const g = ctx.game, cur = g.contractDef();
+  const recent = g.ledger.slice(-7);
+  const avgBuy = recent.length ? recent.reduce((a, d) => a + d.purchases - (cur && d.purchases >= cur.perDay ? cur.perDay : 0), 0) / recent.length : 0;
+  const out: (Node | null)[] = [sec('Contrat fournisseur')];
+  for (const c of CONTRACTS) {
+    const on = cur?.id === c.id;
+    // Gain estimé : remise sur les achats moyens des 7 derniers jours, moins le forfait.
+    const gain = avgBuy * c.discount - c.perDay;
+    out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: `${c.nameFr}${on ? ' (en cours)' : ''}` }),
+      el('div', { cls: 'muted small', text: `${c.desc} ${c.perDay} CHF / jour.${recent.length ? ` Avec vos achats récents (${chf(avgBuy)} / jour) : ${signed(gain)} / jour.` : ''}` })),
+      on ? button('Résilier', () => ctx.act(g.signContract(null), 'Contrat résilié.'), 'small danger')
+        : button('Signer', () => ctx.act(g.signContract(c.id), (d) => `${c.nameFr} signé (${chf(d)} pour aujourd’hui).`), 'small primary')));
+  }
+  out.push(note('Le forfait est payé chaque jour à minuit (le premier jour à la signature). Rentable quand vous achetez beaucoup : plusieurs commerces.'));
   return out;
 }
 
@@ -174,12 +194,16 @@ export function employeeRow(ctx: UiCtx, id: number): HTMLElement {
   const s = el('select', { attrs: { 'aria-label': 'Affectation' } }, el('option', { text: 'Sans affectation', attrs: { value: '' } }), ...g.shops.map((sh) => el('option', { text: sh.name, attrs: { value: String(sh.id) } })));
   s.value = e.shopId === null ? '' : String(e.shopId);
   s.addEventListener('change', () => ctx.act(g.assign(e.id, s.value ? Number(s.value) : null)));
-  const mood = e.mood ?? 0.75, mw = g.marketWage(e.skill);
+  const mood = e.mood ?? 0.75, lv = e.training ?? 0, mw = g.marketWage(e.skill, lv);
   const face = mood > 0.7 ? '😊' : mood > 0.4 ? '😐' : '😠';
+  const next = g.nextTrainingCost(e);
+  const train = next === null ? null : button(`Former (${chf(next)})`, () => ctx.act(g.train(e.id), () => `${e.name} : formation niveau ${lv + 1} terminée.`), 'small');
+  if (train) train.title = `Niveau ${lv + 1} / ${TRAINING.maxLevel} : +${pct(TRAINING.capacity)} de clients servis en caisse, salaire du marché +${TRAINING.wage} CHF / h.`;
   return el('div', { cls: 'item' }, el('div', {}, el('b', { text: `${face} ${e.name}` }),
-    el('div', { cls: 'muted small', text: `compétence ${pct(e.skill)} · ${e.wage} CHF / h (marché ${mw}) · satisfaction ${pct(mood)}${e.askedRaise ? ' · demande une augmentation' : ''}` })),
+    el('div', { cls: 'muted small', text: `compétence ${pct(e.skill)} · formation ${lv} / ${TRAINING.maxLevel} · ${num(g.serviceSkill(e) * ECONOMY.servePerRegister)} clients / h · ${e.wage} CHF / h (marché ${mw}) · satisfaction ${pct(mood)}${e.askedRaise ? ' · demande une augmentation' : ''}` })),
     el('div', { cls: 'row tight' }, s,
       button(`+2 CHF/h`, () => ctx.act(g.raiseWage(e.id, e.wage + 2)), e.askedRaise ? 'small primary' : 'small'),
+      train,
       button('Licencier', () => ctx.act(g.fire(e.id), (p) => `Indemnité versée : ${chf(p)}.`), 'small danger')));
 }
 

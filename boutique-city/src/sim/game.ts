@@ -8,9 +8,9 @@
  */
 import {
   CONFIG, PRODUCTS, SHOP_TYPES,
-  CAMPAIGN_BY_ID, ECONOMY, FOODS, FURNITURE_BY_ID, HOME_BY_ID, LOAN_OFFERS, NEEDS, PRODUCT_BY_ID, SHOP_TYPE_BY_ID,
-  VEHICLE_BY_ID, loanTotal, productsOf,
-  type CampaignKind, type ProductDef, type ServiceKind, type ShopType, type VehicleType,
+  CAMPAIGN_BY_ID, CONTRACT_BY_ID, ECONOMY, FOODS, FURNITURE_BY_ID, HOME_BY_ID, LOAN_OFFERS, NEEDS, PREMIUM, PREMIUM_BY_TYPE,
+  PRODUCT_BY_ID, SHOP_TYPE_BY_ID, TRAINING, VEHICLE_BY_ID, loanTotal, premiumDemand, productsOf, trainingCost,
+  type CampaignKind, type ContractDef, type ContractKind, type ProductDef, type ServiceKind, type ShopType, type VehicleType,
 } from './catalog';
 import { MINUTES_PER_DAY, START_MINUTE, clockView } from './clock';
 import { FACE_N, SIDEWALK_W, competitorsNear, generateDistrict, type Building, type District, type Premise } from './district';
@@ -29,6 +29,8 @@ export interface Employee {
   unhappy?: number;
   /** A demandé une augmentation (en attente). */
   askedRaise?: boolean;
+  /** Niveau de formation 0..TRAINING.maxLevel (absent : 0). */
+  training?: number;
 }
 export interface Candidate { id: number; name: string; skill: number; wage: number; look: number }
 export interface ProductState { price: number; stock: number; auto: boolean }
@@ -138,6 +140,10 @@ export interface Shop {
   hourServed?: number[];
   hourLost?: number[];
   warned: string[];
+  /** Gamme premium active (absent : gamme standard). */
+  premium?: boolean;
+  /** Mise en place de la gamme premium déjà payée (bascule libre ensuite). */
+  premiumOwned?: boolean;
 }
 
 export interface Notice { at: number; level: 'info' | 'ok' | 'warn' | 'error'; text: string }
@@ -181,6 +187,8 @@ export interface GameSave {
   rivals?: Record<string, number>;
   weather?: Weather;
   marketDay?: boolean;
+  /** Contrat fournisseur en cours (absent : aucun). */
+  contract?: ContractKind | null;
   nextId: number;
   rng: number[];
 }
@@ -216,6 +224,8 @@ export class Game {
   weather: Weather = 'soleil';
   /** Jour de marché dans le quartier (plus de passants toute la journée). */
   marketDay = false;
+  /** Contrat fournisseur avec le grossiste (remise sur les achats contre un forfait quotidien). */
+  contract: ContractKind | null = null;
   private rng: Rng;
   private nextId = 1;
   /** Version de l'état (l'interface ne redessine que si elle change). */
@@ -267,7 +277,11 @@ export class Game {
   subletOf(kind: Sublet['kind'], ref: number): Sublet | undefined { return this.sublets.find((x) => x.kind === kind && x.ref === ref); }
 
   /** Prix de vente de référence d'un produit dans le quartier (prix habituel × prix des concurrents). */
-  refPrice(pr: ProductDef): number { return r2(pr.basePrice * (this.rivals[pr.shop] ?? 1)); }
+  refPrice(pr: ProductDef, shop?: Shop): number { return r2(pr.basePrice * (this.rivals[pr.shop] ?? 1) * (shop?.premium ? PREMIUM.priceMult : 1)); }
+  /** Coût d'achat catalogue d'un produit pour un commerce (gamme premium plus chère). */
+  unitCost(pr: ProductDef, shop?: Shop): number { return pr.cost * (shop?.premium ? PREMIUM.costMult : 1); }
+  /** Contrat fournisseur en cours (définition), ou null. */
+  contractDef(): ContractDef | null { return this.contract ? CONTRACT_BY_ID.get(this.contract) ?? null : null; }
   /** Effet de la météo sur la fréquentation selon le type de commerce. */
   weatherFactor(type: ShopType): number {
     if (this.weather === 'pluie') return type === 'cafe' || type === 'fastfood' ? 1.05 : type === 'fleuriste' || type === 'primeur' ? 0.7 : 0.82;
@@ -370,7 +384,7 @@ export class Game {
   }
 
   /** Salaire du marché (CHF / h) pour une compétence donnée. */
-  marketWage(skill: number): number { return Math.round(20 + skill * 14 + 1.5); }
+  marketWage(skill: number, training = 0): number { return Math.round(20 + skill * 14 + 1.5 + TRAINING.wage * training); }
 
   /** Augmente (ou fixe) le salaire horaire d'un employé ; la satisfaction monte aussitôt. */
   raiseWage(employeeId: number, wage: number): Result<number> {
@@ -384,6 +398,92 @@ export class Game {
     this.notify(up ? 'ok' : 'warn', `${e.name} : nouveau salaire ${w} CHF / h.`);
     this.bump();
     return ok(w);
+  }
+
+  /* ------------------------------ Milieu de partie : formation, gamme premium, contrats ------------------------------ */
+
+  /** Coût du prochain niveau de formation d'un employé, ou null s'il est au maximum. */
+  nextTrainingCost(e: Employee): number | null {
+    const lv = e.training ?? 0;
+    return lv >= TRAINING.maxLevel ? null : trainingCost(lv + 1);
+  }
+
+  /**
+   * Forme un employé (niveau suivant, payé aussitôt) : +12 % de clients servis en caisse et +5 points de compétence
+   * par niveau, satisfaction en hausse ; mais son salaire de marché monte (TRAINING.wage CHF / h par niveau).
+   */
+  train(employeeId: number): Result<number> {
+    const e = this.employees.find((x) => x.id === employeeId);
+    if (!e) return fail('Employé introuvable');
+    const cost = this.nextTrainingCost(e);
+    if (cost === null) return fail(`${e.name} a déjà suivi toutes les formations.`);
+    if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
+    this.cash -= cost;
+    this.today.wages += cost;
+    const s = e.shopId === null ? undefined : this.shop(e.shopId);
+    if (s) s.today.wages += cost;
+    e.training = (e.training ?? 0) + 1;
+    e.skill = Math.min(1, r2(e.skill + TRAINING.skill));
+    e.mood = Math.min(1, (e.mood ?? 0.75) + 0.1);
+    this.notify('ok', `${e.name} a suivi la formation niveau ${e.training} : sert ${Math.round(TRAINING.capacity * e.training * 100)} % de clients en plus. Salaire du marché : ${this.marketWage(e.skill, e.training)} CHF / h.`);
+    this.refreshCapacities();
+    this.bump();
+    return ok(cost);
+  }
+
+  /** Meilleur niveau de formation parmi les employés d'un commerce. */
+  bestTraining(shopId: number): number { return this.staffOf(shopId).reduce((m, e) => Math.max(m, e.training ?? 0), 0); }
+
+  /**
+   * Passe un commerce en gamme premium (ou revient en standard). Première mise en place payante, et il faut au moins
+   * un employé formé dans le commerce. Les prix de vente suivent (× ou ÷ PREMIUM.priceMult).
+   */
+  setPremium(shopId: number, on: boolean): Result<number> {
+    const s = this.shop(shopId);
+    if (!s) return fail('Commerce introuvable');
+    if (!!s.premium === on) return ok(0);
+    const def = PREMIUM_BY_TYPE.get(s.type)!;
+    let cost = 0;
+    if (on) {
+      if (this.bestTraining(s.id) < PREMIUM.minTraining) return fail('Il faut au moins un employé formé dans ce commerce (onglet Employés › Former).');
+      if (!s.premiumOwned) {
+        cost = def.cost;
+        if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
+        this.cash -= cost;
+        s.today.equipment += cost; this.today.equipment += cost;
+        s.premiumOwned = true;
+      }
+    }
+    const k = on ? PREMIUM.priceMult : 1 / PREMIUM.priceMult;
+    for (const pr of productsOf(s.type)) s.products[pr.id]!.price = r2(s.products[pr.id]!.price * k);
+    s.premium = on;
+    this.notify(on ? 'ok' : 'info', on
+      ? `${s.name} passe en gamme premium (${def.nameFr}) : prix et coûts d’achat plus élevés, clientèle selon la réputation.`
+      : `${s.name} revient à la gamme standard.`);
+    this.bump();
+    return ok(cost);
+  }
+
+  /** Signe (ou résilie avec null) un contrat fournisseur, chez le grossiste. Le premier jour est payé à la signature. */
+  signContract(kind: ContractKind | null): Result<number> {
+    const here = this.needService('grossiste', 'chez le grossiste');
+    if (!here.ok) return here;
+    if (kind === this.contract) return ok(0);
+    if (kind === null) {
+      this.contract = null;
+      this.notify('info', 'Contrat fournisseur résilié.');
+      this.bump();
+      return ok(0);
+    }
+    const def = CONTRACT_BY_ID.get(kind);
+    if (!def) return fail('Contrat inconnu');
+    if (this.cash < def.perDay) return fail(`Trésorerie insuffisante (${def.perDay} CHF)`);
+    this.cash -= def.perDay;
+    this.today.purchases += def.perDay;
+    this.contract = kind;
+    this.notify('ok', `${def.nameFr} signé : ${Math.round(def.discount * 100)} % de remise sur vos achats, ${def.perDay} CHF par jour.`);
+    this.bump();
+    return ok(def.perDay);
   }
 
   /** Probabilité quotidienne de trouver un locataire selon le loyer demandé (rapport au loyer de marché). */
@@ -586,7 +686,8 @@ export class Game {
     const s = this.shop(shopId), pr = PRODUCT_BY_ID.get(productId);
     if (!s || !pr || !s.products[productId]) return fail('Produit inconnu');
     if (!Number.isFinite(price)) return fail('Prix invalide');
-    const v = r2(Math.min(pr.basePrice * 3, Math.max(pr.basePrice * 0.3, price)));
+    const base = pr.basePrice * (s.premium ? PREMIUM.priceMult : 1);
+    const v = r2(Math.min(base * 3, Math.max(base * 0.3, price)));
     s.products[productId]!.price = v;
     this.bump();
     return ok(v);
@@ -611,15 +712,20 @@ export class Game {
 
   /* ------------------------------ Marchandise ------------------------------ */
 
-  /** Prix d'achat (remise de gros au-delà de ECONOMY.bulkQty unités). */
-  orderCost(productId: string, qty: number): number {
+  /**
+   * Prix d'achat : remise de gros au-delà de ECONOMY.bulkQty unités, remise du contrat fournisseur ; gamme premium
+   * plus chère si la commande est destinée à un commerce premium.
+   */
+  orderCost(productId: string, qty: number, shopId?: number): number {
     const pr = PRODUCT_BY_ID.get(productId)!;
-    return r2(qty * pr.cost * this.marketIndex(productId) * (qty >= ECONOMY.bulkQty ? 1 - ECONOMY.bulkDiscount : 1));
+    const shop = shopId === undefined ? undefined : this.shop(shopId);
+    const contract = 1 - (this.contractDef()?.discount ?? 0);
+    return r2(qty * this.unitCost(pr, shop) * this.marketIndex(productId) * (qty >= ECONOMY.bulkQty ? 1 - ECONOMY.bulkDiscount : 1) * contract);
   }
   /** Frais de livraison : forfait une fois par livraison et par commerce (offert si une commande part déjà ce jour-là), plus une part du montant. */
   deliveryFee(goods: number, shopId?: number): number {
     const at = this.nextDelivery();
-    const grouped = shopId !== undefined && this.orders.some((o) => o.shopId === shopId && o.deliverAt === at);
+    const grouped = (shopId !== undefined && this.orders.some((o) => o.shopId === shopId && o.deliverAt === at)) || !!this.contractDef()?.freeDelivery;
     return r2((grouped ? 0 : ECONOMY.deliveryBase) + goods * ECONOMY.deliveryRate);
   }
 
@@ -663,7 +769,7 @@ export class Game {
     const room = this.room(s, productId);
     if (room <= 0) return fail(`Plus de place pour ${pr.nameFr.toLowerCase()} : ajoutez un meuble adapté.`);
     const q = Math.min(n, room);
-    const goods = this.orderCost(productId, q);
+    const goods = this.orderCost(productId, q, shopId);
     const cost = r2(goods + this.deliveryFee(goods, shopId));
     if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
     this.cash -= cost;
@@ -684,12 +790,16 @@ export class Game {
     if (!(this.player.place.kind === 'commerce' && this.player.place.shopId === shopId)) return fail('Entrez dans le commerce pour décharger.');
     const p = this.premise(s.premiseId)!;
     const loads = [this.player.carry, ...this.vehiclesNear(p.doorX, p.doorZ).map((v) => v.cargo)];
-    let moved = 0;
+    let moved = 0, extra = 0;
     for (const load of loads) {
       for (const [pid, n] of Object.entries(load)) {
         if (!s.products[pid]) continue;
-        const q = Math.min(n, this.room(s, pid));
+        let q = Math.min(n, this.room(s, pid));
+        // Commerce premium : la marchandise emportée est standard, le grossiste facture le supplément premium au rangement.
+        const sup = s.premium ? this.orderCost(pid, 1, s.id) - this.orderCost(pid, 1) : 0;
+        if (sup > 0) q = Math.min(q, Math.floor(Math.max(0, this.cash) / sup));
         if (q <= 0) continue;
+        if (sup > 0) { const c = r2(sup * q); this.cash -= c; s.today.purchases += c; this.today.purchases += c; extra += c; }
         s.products[pid]!.stock += q;
         load[pid] = n - q;
         if (load[pid] === 0) delete load[pid];
@@ -697,7 +807,7 @@ export class Game {
       }
     }
     if (moved === 0) return fail('Rien à décharger ici (mauvais produits ou rayons pleins).');
-    this.notify('ok', `${moved} unités rangées dans ${s.name}.`);
+    this.notify('ok', `${moved} unités rangées dans ${s.name}.${extra > 0 ? ` Supplément gamme premium : ${Math.round(extra)} CHF.` : ''}`);
     this.bump();
     return ok(moved);
   }
@@ -997,12 +1107,14 @@ export class Game {
     const c = clockView(this.total);
     if (!(c.hour >= s.open && c.hour < s.close)) return 0;
     const st = this.stats(s);
-    const staff = this.staffOf(s.id).map((e) => e.skill * (0.8 + 0.3 * (e.mood ?? 0.75))).sort((a, b) => b - a);
+    const staff = this.staffOf(s.id).map((e) => this.serviceSkill(e)).sort((a, b) => b - a);
     const tended = Math.min(st.registers, staff.length);
     let skill = staff.slice(0, tended).reduce((a, b) => a + b, 0);
     if (this.player.tending === s.id && st.registers > tended) skill += 1;
     return ECONOMY.servePerRegister * skill;
   }
+  /** Efficacité en caisse d'un employé : compétence × formation × satisfaction (1 ≈ 28 clients / h). */
+  serviceSkill(e: Employee): number { return e.skill * (1 + TRAINING.capacity * (e.training ?? 0)) * (0.8 + 0.3 * (e.mood ?? 0.75)); }
   private refreshCapacities(): void { for (const s of this.shops) if (s.rate > 0 || s.capacity > 0) s.capacity = this.capacityNow(s); }
 
   /** Attrait du commerce (1 ≈ commerce moyen du quartier). */
@@ -1012,7 +1124,7 @@ export class Game {
       if (!this.sellable(s, pr, st)) continue;
       const ps = s.products[pr.id]!;
       shareAvail += pr.share;
-      priceAcc += pr.share * Math.min(1.8, Math.max(0.05, Math.exp(-2.2 * (ps.price / this.refPrice(pr) - 1))));
+      priceAcc += pr.share * Math.min(1.8, Math.max(0.05, Math.exp(-2.2 * (ps.price / this.refPrice(pr, s) - 1))));
     }
     if (shareAvail <= 0) return 0;
     const price = priceAcc / shareAvail;
@@ -1020,7 +1132,9 @@ export class Game {
     const decor = 0.85 + 0.25 * Math.min(1, st.decor) + (s.type === 'cafe' ? 0.3 * Math.min(1, st.seats / 16) - 0.1 : 0);
     const rep = 0.5 + s.reputation;
     const comp = 1 / (1 + 0.6 * this.competition(this.premise(s.premiseId)!, s.type));
-    return price * variety * decor * rep * comp;
+    // Gamme premium : la clientèle suit la réputation (peu de clients tant que le commerce n'est pas reconnu).
+    const range = s.premium ? premiumDemand(s.reputation) : 1;
+    return price * variety * decor * rep * comp * range;
   }
 
   private sellable(s: Shop, pr: ProductDef, st: LayoutStats): boolean {
@@ -1046,13 +1160,14 @@ export class Game {
         missing++;
         continue;
       }
-      if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / this.refPrice(want) - 1)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
+      if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / this.refPrice(want, s) - 1)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
       ps.stock--;
       // Alerte une fois par jour quand le stock passe sous 20 % de la place en rayon (sauf réassort automatique).
       if (!ps.auto && ps.stock === Math.floor(this.storageFor(s, want) * 0.2) && this.pendingQty(s.id, want.id) === 0) this.warnOnce(s, `bas-${want.id}`, `${s.name} : stock bas de ${want.nameFr.toLowerCase()} (${ps.stock} restants, moins de 20 %).`);
       bought.push(want.id);
       s.today.revenue += ps.price; this.today.revenue += ps.price; this.cash += ps.price;
-      s.today.costOfSales += want.cost; this.today.costOfSales += want.cost;
+      const uc = this.unitCost(want, s);
+      s.today.costOfSales += uc; this.today.costOfSales += uc;
     }
     if (bought.length === 0) { s.today.lostStock++; this.today.lostStock++; this.feel(s, refused >= missing ? 'prix' : 'rupture'); return; }
     if (refused > 0 && this.rng.next() < 0.5) this.feel(s, 'prix');
@@ -1116,10 +1231,10 @@ export class Game {
     for (const v of this.vehicles) { const ins = VEHICLE_BY_ID.get(v.type)!.insurance; this.cash -= ins; this.today.living += ins; }
     // Employés : satisfaction selon le salaire comparé au marché ; demande d'augmentation ; démission.
     for (const e of [...this.employees]) {
-      const ratio = e.wage / this.marketWage(e.skill);
+      const ratio = e.wage / this.marketWage(e.skill, e.training ?? 0);
       const target = Math.max(0, Math.min(1, 0.7 + (ratio - 1) * 2.2));
       e.mood = r2((e.mood ?? 0.75) + (target - (e.mood ?? 0.75)) * 0.35);
-      if (ratio < 0.94 && !e.askedRaise) { e.askedRaise = true; this.notify('warn', `${e.name} demande une augmentation : le marché paie ${this.marketWage(e.skill)} CHF / h pour sa compétence (actuellement ${e.wage}).`); }
+      if (ratio < 0.94 && !e.askedRaise) { e.askedRaise = true; this.notify('warn', `${e.name} demande une augmentation : le marché paie ${this.marketWage(e.skill, e.training ?? 0)} CHF / h pour sa compétence (actuellement ${e.wage}).`); }
       e.unhappy = e.mood < 0.3 ? (e.unhappy ?? 0) + 1 : 0;
       if (e.unhappy >= 3) {
         this.employees = this.employees.filter((x) => x !== e);
@@ -1140,6 +1255,9 @@ export class Game {
         this.notify('ok', `Nouveau locataire : ${sl.tenant} (${Math.round(sl.ask)} CHF / jour).`);
       }
     }
+    // Contrat fournisseur : forfait quotidien (compté dans les achats).
+    const ct = this.contractDef();
+    if (ct) { this.cash -= ct.perDay; this.today.purchases += ct.perDay; }
     this.updateMarket();
     // Météo du lendemain : pluie un jour sur cinq environ, nuages un sur trois.
     const w = this.rng.next();
@@ -1225,7 +1343,7 @@ export class Game {
       v: SAVE_VERSION, seed: this.seed, companyName: this.companyName, total: this.total, cash: this.cash,
       player: structuredClone(this.player), shops: structuredClone(this.shops), employees: structuredClone(this.employees),
       candidates: structuredClone(this.candidates), orders: structuredClone(this.orders), vehicles: structuredClone(this.vehicles),
-      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals }, weather: this.weather, marketDay: this.marketDay,
+      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals }, weather: this.weather, marketDay: this.marketDay, contract: this.contract,
       nextId: this.nextId, rng: this.rng.state(),
     };
   }
@@ -1242,12 +1360,14 @@ export class Game {
     this.ledger = led;
     this.nextId = s.nextId;
     this.rng = new Rng(s.rng);
-    this.achieved = [...(s.achieved ?? [])];
+    // Objectifs : on ne garde que ceux qui existent encore (la liste a pu changer entre deux versions).
+    this.achieved = (s.achieved ?? []).filter((id) => OBJECTIVES.some((o) => o.id === id));
     this.sublets = structuredClone(s.sublets ?? []);
     this.market = { ...(s.market ?? {}) };
     this.rivals = { ...(s.rivals ?? {}) };
     this.weather = s.weather ?? 'soleil';
     this.marketDay = s.marketDay ?? false;
+    this.contract = s.contract && CONTRACT_BY_ID.has(s.contract) ? s.contract : null;
     // Sauvegardes antérieures : champs ajoutés depuis.
     for (const d of [...this.ledger, this.today, ...this.shops.flatMap((x) => [x.today, ...x.history])]) { d.refusedPrice ??= 0; d.rentalIncome ??= 0; }
   }

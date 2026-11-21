@@ -4,28 +4,31 @@
  * Banque (trésorerie, prêts, résultats), Équipe (employés), Marché (prix du grossiste, prix des concurrents),
  * Messages (historique des notifications), Objectifs, Véhicules, Carte, Entreprise, Réglages.
  * Redessiné quand la partie change (au plus deux fois par seconde), jamais sous le pointeur ni pendant une saisie.
+ *
+ * Chaque appli suit la même grammaire : tuiles de chiffres clés en tête, sections titrées, cartes (titre à gauche,
+ * chiffre principal à droite, petites mesures dessous, boutons d'action en bas), état vide avec une action.
  */
 import { HOME_BY_ID, PRODUCTS, SHOP_TYPES, SHOP_TYPE_BY_ID, VEHICLE_BY_ID } from '../sim/catalog';
-import { clockView, formatClock } from '../sim/clock';
-import { dayProfit } from '../sim/game';
+import { WEEKDAYS_FR, clockView } from '../sim/clock';
+import { dayProfit, type DayStats, type Notice } from '../sim/game';
 import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
-import { button, chf, chf2, el, num, pct, signed } from './dom';
+import { button, chf, chf2, el, icon, iconButton, num, pct, signed, type IconName } from './dom';
 import { subletView, type UiCtx } from './dialogs';
 
 type AppId = 'commerces' | 'immo' | 'banque' | 'equipe' | 'marche' | 'messages' | 'objectifs' | 'vehicules' | 'carte' | 'entreprise' | 'reglages';
-interface App { id: AppId; name: string; icon: string; color: string }
+interface App { id: AppId; name: string; icon: IconName; color: string }
 const APPS: App[] = [
-  { id: 'commerces', name: 'Commerces', icon: '🏪', color: '#ff8a3d' },
-  { id: 'immo', name: 'Immobilier', icon: '🏢', color: '#4c8dff' },
-  { id: 'banque', name: 'Banque', icon: '🏦', color: '#22b07d' },
-  { id: 'equipe', name: 'Équipe', icon: '🧑‍🍳', color: '#a76bff' },
-  { id: 'marche', name: 'Marché', icon: '📈', color: '#f2b705' },
-  { id: 'messages', name: 'Messages', icon: '💬', color: '#2fbfde' },
-  { id: 'objectifs', name: 'Objectifs', icon: '🏆', color: '#ff5a7a' },
-  { id: 'vehicules', name: 'Véhicules', icon: '🚐', color: '#7a8798' },
-  { id: 'carte', name: 'Carte', icon: '🗺️', color: '#3fae4f' },
-  { id: 'entreprise', name: 'Entreprise', icon: '💼', color: '#d9534f' },
-  { id: 'reglages', name: 'Réglages', icon: '⚙️', color: '#5b6573' },
+  { id: 'commerces', name: 'Commerces', icon: 'shop', color: '#ff8a3d' },
+  { id: 'immo', name: 'Immobilier', icon: 'building', color: '#4c8dff' },
+  { id: 'banque', name: 'Banque', icon: 'bank', color: '#20a36b' },
+  { id: 'equipe', name: 'Équipe', icon: 'team', color: '#ef6b8a' },
+  { id: 'marche', name: 'Marché', icon: 'chart', color: '#e9a908' },
+  { id: 'messages', name: 'Messages', icon: 'chat', color: '#2fb4de' },
+  { id: 'objectifs', name: 'Objectifs', icon: 'trophy', color: '#e8574f' },
+  { id: 'vehicules', name: 'Véhicules', icon: 'truck', color: '#6f7d90' },
+  { id: 'carte', name: 'Carte', icon: 'map', color: '#46a84f' },
+  { id: 'entreprise', name: 'Entreprise', icon: 'briefcase', color: '#2a9d9b' },
+  { id: 'reglages', name: 'Réglages', icon: 'gear', color: '#5b6573' },
 ];
 
 export interface PhoneHooks {
@@ -42,6 +45,40 @@ export interface PhoneHooks {
   showOnMap: (x: number, z: number, label: string) => void;
 }
 
+type Tone = 'ok' | 'bad' | 'warn' | '';
+const hhmm = (h: number, m: number): string => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+const WEATHER: Record<string, [IconName, string]> = { soleil: ['sun', 'Ensoleillé'], nuages: ['cloud', 'Nuageux'], pluie: ['rain', 'Pluie'] };
+
+/* ------------------------------ Briques d'affichage ------------------------------ */
+
+/** Tuile de chiffre clé (en tête d'appli). */
+function tile(label: string, value: string, tone: Tone = '', sub?: string): HTMLElement {
+  return el('div', { cls: 'ph-tile' }, el('span', { text: label }), el('b', { cls: tone, text: value }), sub ? el('small', { text: sub }) : null);
+}
+function tiles(...t: HTMLElement[]): HTMLElement { return el('div', { cls: `ph-tiles n${t.length}` }, ...t); }
+/** Titre de section, avec un complément à droite (compteur, total). */
+function sec(text: string, aside?: string): HTMLElement { return el('div', { cls: 'ph-sec' }, el('span', { text }), aside ? el('em', { text: aside }) : null); }
+/** Petite mesure « libellé / valeur » dans une carte. */
+function kv(label: string, value: string, tone: Tone = ''): HTMLElement { return el('div', { cls: 'ph-kv' }, el('span', { text: label }), el('b', { cls: tone, text: value })); }
+function pill(text: string, tone: Tone | 'info' = ''): HTMLElement { return el('span', { cls: `pill ${tone}`.trim(), text }); }
+function meter(p: number, tone: Tone = ''): HTMLElement {
+  return el('div', { cls: `ph-meter ${tone}`.trim() }, el('i', { attrs: { style: `width:${Math.round(Math.max(0, Math.min(1, p)) * 100)}%` } }));
+}
+
+interface CardOpts { accent?: string; title: string; sub?: string; right?: Node | null; body?: (Node | null)[]; actions?: (Node | null)[]; cls?: string }
+/** Carte d'élément : titre et sous-titre à gauche, chiffre ou étiquette à droite, contenu, boutons. */
+function card(o: CardOpts): HTMLElement {
+  const acts = (o.actions ?? []).filter((a): a is Node => !!a);
+  return el('div', { cls: `ph-card ${o.cls ?? ''}`.trim(), attrs: o.accent ? { style: `--app:${o.accent}` } : {} },
+    el('div', { cls: 'ph-card-top' }, el('div', { cls: 'ph-card-id' }, el('b', { text: o.title }), o.sub ? el('small', { text: o.sub }) : null), o.right ?? null),
+    ...(o.body ?? []),
+    acts.length ? el('div', { cls: 'ph-actions' }, ...acts) : null);
+}
+/** État vide : pictogramme, phrase, action éventuelle. */
+function empty(ic: IconName, title: string, text: string, action?: HTMLElement | null): HTMLElement {
+  return el('div', { cls: 'ph-empty' }, el('div', { cls: 'ph-empty-ico' }, icon(ic)), el('b', { text: title }), el('p', { text }), action ?? null);
+}
+
 export class Phone {
   readonly root = el('div', { cls: 'phone hidden', attrs: { role: 'dialog', 'aria-label': 'Téléphone' } });
   private readonly screen = el('div', { cls: 'ph-screen' });
@@ -49,12 +86,15 @@ export class Phone {
   private app: AppId | null = null;
   private immoTab: 'locaux' | 'apparts' | 'baux' = 'locaux';
   private immoSort: 'passants' | 'loyer' | 'surface' = 'passants';
+  private msgFilter: 'tout' | 'alertes' = 'tout';
   /** Voile assombri et flouté derrière le téléphone (un clic dessus le ferme). */
   private readonly veil = el('div', { cls: 'ph-veil hidden' });
   private lastVersion = -1;
   private lastPaint = 0;
   /** Nombre de messages déjà lus. */
   private seen = 0;
+  /** Messages non lus au moment d'ouvrir l'appli Messages (marqués « nouveau »). */
+  private fresh = 0;
 
   constructor(private readonly ctx: UiCtx, private readonly hooks: PhoneHooks) {
     const home = el('button', { cls: 'ph-home', attrs: { type: 'button', 'aria-label': 'Accueil du téléphone' }, on: { click: () => { this.app ? this.go(null) : this.close(); } } });
@@ -87,7 +127,7 @@ export class Phone {
     if (app === 'carte') { this.close(); this.hooks.openMap(); return; }
     if (app === 'entreprise') { this.close(); this.hooks.openCompany(); return; }
     this.app = app;
-    if (app === 'messages') this.seen = this.ctx.game.notices.length;
+    if (app === 'messages') { this.fresh = this.unread; this.seen = this.ctx.game.notices.length; }
     this.paint(true);
   }
 
@@ -102,29 +142,51 @@ export class Phone {
       if (this.root.querySelector('button:hover, input:hover')) return;
     }
     this.lastVersion = g.version; this.lastPaint = now;
-    if (this.app === 'messages') this.seen = g.notices.length;
+    if (this.app === 'messages') { this.fresh += this.unread; this.seen = g.notices.length; }
     const c = clockView(g.total);
-    this.status.replaceChildren(el('b', { text: `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}` }), el('span', { text: chf(g.cash) }));
+    this.status.replaceChildren(el('b', { text: hhmm(c.hour, c.minute) }), el('span', { cls: g.cash < 0 ? 'bad' : '', text: chf(g.cash) }));
     const scroll = this.screen.querySelector('.ph-body')?.scrollTop ?? 0;
     if (!this.app) { this.screen.replaceChildren(this.homeScreen()); return; }
     const a = APPS.find((x) => x.id === this.app)!;
     const body = el('div', { cls: 'ph-body' }, ...this.render(this.app));
+    const back = button('', () => this.go(null), 'ph-back');
+    back.setAttribute('aria-label', 'Retour à l’accueil');
+    back.append(icon('back'));
     this.screen.replaceChildren(
-      el('div', { cls: 'ph-bar', attrs: { style: `--app:${a.color}` } }, button('‹', () => this.go(null), 'ph-back'), el('b', { text: a.name }), el('span', { text: a.icon })),
+      el('div', { cls: 'ph-bar', attrs: { style: `--app:${a.color}` } }, back, el('span', { cls: 'ph-bar-ico' }, icon(a.icon)), el('b', { text: a.name }), this.barAside(this.app)),
       body);
     body.scrollTop = scroll;
+  }
+
+  /** Complément discret dans la barre de titre de l'appli. */
+  private barAside(app: AppId): HTMLElement | null {
+    const g = this.ctx.game;
+    const t = app === 'commerces' ? `${g.shops.length}` : app === 'equipe' ? `${g.employees.length}` : app === 'vehicules' ? `${g.vehicles.length}`
+      : app === 'objectifs' ? `${g.achieved.length}/${OBJECTIVES.length}` : app === 'banque' ? chf(g.cash) : null;
+    return t ? el('span', { cls: 'ph-bar-aside', text: t }) : null;
   }
 
   private homeScreen(): HTMLElement {
     const g = this.ctx.game;
     const warn = g.shops.reduce((n, s) => n + s.warned.length, 0);
-    const badge: Partial<Record<AppId, number>> = { messages: this.unread, commerces: warn };
+    const pendingRaise = g.employees.filter((e) => e.askedRaise).length;
+    const badge: Partial<Record<AppId, number>> = { messages: this.unread, commerces: warn, equipe: pendingRaise };
     const c = clockView(g.total);
+    const today = dayProfit(g.today);
+    const [wi, wl] = WEATHER[g.weather] ?? WEATHER['soleil']!;
     return el('div', { cls: 'ph-homescreen' },
-      el('div', { cls: 'ph-clock' }, el('b', { text: `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}` }), el('span', { text: formatClock(g.total).split('·')[0]!.trim() })),
-      el('div', { cls: 'ph-widget' }, el('span', { text: 'Valeur nette' }), el('b', { text: chf(netWorth(g)) }), el('span', { cls: 'small', text: `${rankOf(g.achieved.length)} · ${g.shops.length} commerce(s) · ${g.sublets.length} bail(aux) en sous-location` })),
-      el('div', { cls: 'ph-grid' }, ...APPS.map((a) => el('button', { cls: 'ph-app', attrs: { type: 'button', 'data-app': a.id }, on: { click: () => this.go(a.id) } },
-        el('span', { cls: 'ph-ico', attrs: { style: `--app:${a.color}` }, text: a.icon }),
+      el('div', { cls: 'ph-clock' },
+        el('b', { text: hhmm(c.hour, c.minute) }),
+        el('span', { cls: 'ph-date' }, el('span', { text: `${WEEKDAYS_FR[c.weekday]} · jour ${c.day + 1}` }), el('span', { cls: 'ph-weather' }, icon(wi), wl))),
+      el('div', { cls: 'ph-widgets' },
+        el('button', { cls: 'ph-widget', attrs: { type: 'button' }, on: { click: () => this.go('banque') } },
+          el('span', { text: 'Compte' }), el('b', { cls: g.cash < 0 ? 'bad' : '', text: chf(g.cash) }),
+          el('small', { cls: today >= 0 ? 'ok' : 'bad', text: `${signed(today)} aujourd’hui` })),
+        el('button', { cls: 'ph-widget', attrs: { type: 'button' }, on: { click: () => this.go('objectifs') } },
+          el('span', { text: 'Valeur nette' }), el('b', { text: chf(netWorth(g)) }), el('small', { text: rankOf(g.achieved.length) }))),
+      warn ? el('button', { cls: 'ph-banner', attrs: { type: 'button' }, on: { click: () => this.go('commerces') } }, icon('alert'), el('span', { text: `${warn} alerte${warn > 1 ? 's' : ''} dans vos commerces` }), icon('next')) : null,
+      el('div', { cls: 'ph-grid' }, ...APPS.map((a) => el('button', { cls: 'ph-app', attrs: { type: 'button', 'data-app': a.id, 'aria-label': a.name }, on: { click: () => this.go(a.id) } },
+        el('span', { cls: 'ph-ico', attrs: { style: `--app:${a.color}` } }, icon(a.icon)),
         badge[a.id] ? el('i', { cls: 'ph-badge', text: String(Math.min(99, badge[a.id]!)) }) : null,
         el('span', { cls: 'ph-name', text: a.name })))));
   }
@@ -144,164 +206,304 @@ export class Phone {
     }
   }
 
-  private gps(x: number, z: number, label: string): HTMLButtonElement {
-    return button('📍 Itinéraire', () => { this.ctx.waypoint(x, z, label); this.close(); }, 'small');
+  private gps(x: number, z: number, label: string, cls = ''): HTMLButtonElement {
+    return iconButton('route', 'Itinéraire', () => { this.ctx.waypoint(x, z, label); this.close(); }, `small ${cls}`.trim());
   }
-  private onMap(x: number, z: number, label: string): HTMLButtonElement {
-    return button('👁 Voir sur la carte', () => { this.close(); this.hooks.showOnMap(x, z, label); }, 'small');
+  private onMap(x: number, z: number, label: string, cls = ''): HTMLButtonElement {
+    return iconButton('eye', 'Voir sur la carte', () => { this.close(); this.hooks.showOnMap(x, z, label); }, `small ${cls}`.trim());
   }
+  private serviceGps(service: string, label: string): HTMLButtonElement | null {
+    const b = this.ctx.game.district.buildings.find((x) => x.service === service);
+    return b ? this.gps(b.doorX, b.doorZ, label, 'primary') : null;
+  }
+
+  /* ------------------------------ Commerces ------------------------------ */
 
   private commerces(): (Node | null)[] {
     const g = this.ctx.game;
-    if (!g.shops.length) return [el('p', { cls: 'ph-empty', text: 'Aucun commerce. Ouvrez l’appli Immobilier pour trouver un local à louer.' }), button('Ouvrir Immobilier', () => this.go('immo'), 'primary wide')];
+    if (!g.shops.length) return [empty('shop', 'Aucun commerce', 'Trouvez un local libre dans l’appli Immobilier, puis signez le bail sur place.', button('Ouvrir Immobilier', () => this.go('immo'), 'primary'))];
     const c = clockView(g.total);
     const totRev = g.shops.reduce((a, s) => a + s.today.revenue, 0), totCli = g.shops.reduce((a, s) => a + s.today.customers, 0);
+    const lost = g.shops.reduce((a, s) => a + s.today.lostStaff + s.today.lostStock + s.today.lostCapacity, 0);
     return [
-      el('div', { cls: 'ph-sum' }, el('div', {}, el('span', { text: 'Ventes du jour' }), el('b', { text: chf(totRev) })), el('div', {}, el('span', { text: 'Clients' }), el('b', { text: num(totCli) }))),
+      tiles(tile('Ventes du jour', chf(totRev)), tile('Clients', num(totCli), '', lost ? `${num(lost)} perdu(s)` : 'aucun perdu')),
+      sec('Mes commerces', `${g.shops.length}`),
       ...g.shops.map((s) => {
         const t = SHOP_TYPE_BY_ID.get(s.type)!, p = g.premise(s.premiseId)!;
         const open = c.hour >= s.open && c.hour < s.close;
         const staff = g.staffOf(s.id).length;
-        return el('div', { cls: 'ph-card', attrs: { style: `--app:${t.color}` } },
-          el('div', { cls: 'ph-card-top' }, el('b', { text: s.name }), el('span', { cls: open ? 'pill ok' : 'pill', text: open ? 'Ouvert' : 'Fermé' })),
-          el('div', { cls: 'ph-stats' }, el('span', { text: `${t.nameFr}` }), el('span', { text: `${s.today.customers} clients` }), el('span', { text: chf(s.today.revenue) }), el('span', { text: `${staff} employé(s)` })),
-          s.warned.length ? el('div', { cls: 'ph-alert', text: `⚠ ${s.warned.length} alerte(s) : stock, caisse ou place` }) : null,
-          el('div', { cls: 'row' }, button('Gérer', () => { this.close(); this.ctx.openShop(s.id); }, 'small primary'), this.gps(p.doorX, p.doorZ, s.name)));
+        const sLost = s.today.lostStaff + s.today.lostStock + s.today.lostCapacity;
+        return card({
+          accent: t.color, title: s.name, sub: `${t.nameFr} · ${s.open} h – ${s.close} h`,
+          right: pill(open ? 'Ouvert' : 'Fermé', open ? 'ok' : ''),
+          body: [
+            el('div', { cls: 'ph-kvs' }, kv('Clients', num(s.today.customers)), kv('Ventes', chf(s.today.revenue)), kv('Employés', String(staff), staff ? '' : 'warn')),
+            sLost ? el('div', { cls: 'ph-note warn' }, icon('alert'), el('span', { text: `${num(sLost)} client(s) perdu(s) aujourd’hui` })) : null,
+            s.warned.length ? el('div', { cls: 'ph-note bad' }, icon('alert'), el('span', { text: `${s.warned.length} alerte(s) : stock, caisse ou place` })) : null,
+          ],
+          actions: [button('Gérer', () => { this.close(); this.ctx.openShop(s.id); }, 'small primary'), this.gps(p.doorX, p.doorZ, s.name)],
+        });
       }),
     ];
   }
+
+  /* ------------------------------ Immobilier ------------------------------ */
 
   private immo(): (Node | null)[] {
     const g = this.ctx.game;
-    const tabs = el('div', { cls: 'ph-tabs' }, ...([['locaux', 'Locaux'], ['apparts', 'Appartements'], ['baux', 'Mes baux']] as const).map(([id, l]) => button(l, () => { this.immoTab = id; this.paint(true); }, this.immoTab === id ? 'on' : '')));
+    const free = g.district.premises.filter((p) => g.isFree(p));
+    const homes = g.district.homes.filter((h) => g.homeFree(h.id));
+    const leases = g.shops.length + g.sublets.length + (g.player.home ? 1 : 0);
+    const tabs = el('div', { cls: 'ph-seg' }, ...([['locaux', 'Locaux', free.length], ['apparts', 'Apparts', homes.length], ['baux', 'Mes baux', leases]] as const)
+      .map(([id, l, n]) => { const b = button('', () => { this.immoTab = id; this.paint(true); }, this.immoTab === id ? 'on' : ''); b.append(el('span', { text: l }), el('i', { text: String(n) })); return b; }));
     const out: (Node | null)[] = [tabs];
+    const sortBar = (opts: readonly (readonly ['passants' | 'loyer' | 'surface', string])[]): HTMLElement => el('div', { cls: 'ph-sort' }, el('span', { text: 'Trier par' }),
+      ...opts.map(([id, l]) => button(l, () => { this.immoSort = id; this.paint(true); }, this.immoSort === id ? 'on' : '')));
     if (this.immoTab === 'locaux') {
       const key = { passants: (p: { footfall: number }) => -p.footfall, loyer: (p: { rent: number }) => p.rent, surface: (p: { area: number }) => -p.area }[this.immoSort] as (p: typeof g.district.premises[number]) => number;
-      const free = g.district.premises.filter((p) => g.isFree(p)).sort((a, b) => key(a) - key(b));
-      out.push(el('div', { cls: 'ph-sort' }, el('span', { text: 'Trier :' }), ...([['passants', 'Passants/h'], ['loyer', 'Loyer'], ['surface', 'Surface']] as const).map(([id, l]) => button(l, () => { this.immoSort = id; this.paint(true); }, this.immoSort === id ? 'on' : ''))));
-      out.push(el('p', { cls: 'ph-hint', text: `${free.length} locaux libres. Signez le bail sur place (pour votre commerce ou pour sous-louer).` }));
+      free.sort((a, b) => key(a) - key(b));
+      out.push(sortBar([['passants', 'Passants'], ['loyer', 'Loyer'], ['surface', 'Surface']]));
+      if (!free.length) out.push(empty('building', 'Aucun local libre', 'Tous les locaux du quartier sont occupés pour le moment.'));
+      else out.push(el('p', { cls: 'ph-hint', text: 'Le bail se signe sur place, devant l’anneau jaune : pour votre commerce ou pour sous-louer.' }));
       for (const p of free.slice(0, 30)) {
         const best = [...SHOP_TYPES].sort((a, b) => g.estimatePeak(p, b.id) - g.estimatePeak(p, a.id))[0]!;
-        out.push(el('div', { cls: 'ph-card' },
-          el('div', { cls: 'ph-card-top' }, el('b', { text: `${p.area} m² · ${chf(p.rent)}/mois` }), el('span', { cls: 'pill', text: `${num(p.footfall)} passants/h` })),
-          el('div', { cls: 'ph-stats' }, el('span', { text: `Idéal : ${best.nameFr}` }), el('span', { text: `≈ ${num(g.estimatePeak(p, best.id))} clients/h` }), el('span', { text: `grille ${p.gridW}×${p.gridD}` })),
-          el('div', { cls: 'row' }, this.onMap(p.doorX, p.doorZ, `Local ${p.area} m²`), this.gps(p.doorX, p.doorZ, `Local ${p.area} m²`))));
+        out.push(card({
+          accent: '#ffd166', title: `Local de ${p.area} m²`, sub: `Grille ${p.gridW} × ${p.gridD} cases`,
+          right: el('div', { cls: 'ph-price' }, el('b', { text: chf(p.rent) }), el('small', { text: 'par mois' })),
+          body: [el('div', { cls: 'ph-kvs' }, kv('Passants/h', num(p.footfall)), kv('Idéal', best.nameFr), kv('Clients/h', `≈ ${num(g.estimatePeak(p, best.id))}`))],
+          actions: [this.onMap(p.doorX, p.doorZ, `Local ${p.area} m²`, 'primary'), this.gps(p.doorX, p.doorZ, `Local ${p.area} m²`)],
+        }));
       }
     } else if (this.immoTab === 'apparts') {
-      const homes = g.district.homes.filter((h) => g.homeFree(h.id)).sort((a, b) => this.immoSort === 'loyer' ? HOME_BY_ID.get(a.def)!.rentDay - HOME_BY_ID.get(b.def)!.rentDay : HOME_BY_ID.get(b.def)!.gridW * HOME_BY_ID.get(b.def)!.gridD - HOME_BY_ID.get(a.def)!.gridW * HOME_BY_ID.get(a.def)!.gridD);
-      out.push(el('p', { cls: 'ph-hint', text: 'Louez pour y habiter (confort du sommeil) ou pour sous-louer à un locataire.' }));
+      const size = (h: typeof homes[number]): number => { const d = HOME_BY_ID.get(h.def)!; return d.gridW * d.gridD; };
+      homes.sort((a, b) => this.immoSort === 'loyer' ? HOME_BY_ID.get(a.def)!.rentDay - HOME_BY_ID.get(b.def)!.rentDay : size(b) - size(a));
+      out.push(sortBar([['surface', 'Surface'], ['loyer', 'Loyer']]));
+      if (!homes.length) out.push(empty('home', 'Aucun appartement libre', 'Revenez plus tard : des logements se libèrent.'));
+      else out.push(el('p', { cls: 'ph-hint', text: 'Louez pour y habiter (meilleur sommeil) ou pour sous-louer à un locataire.' }));
       for (const h of homes.slice(0, 30)) {
         const d = HOME_BY_ID.get(h.def)!;
-        out.push(el('div', { cls: 'ph-card' },
-          el('div', { cls: 'ph-card-top' }, el('b', { text: `${d.nameFr} · ${d.gridW * d.gridD} m²` }), el('span', { cls: 'pill', text: `${d.rentDay} CHF/jour` })),
-          el('div', { cls: 'ph-stats' }, el('span', { text: `Confort ×${d.comfort}` }), el('span', { text: `Sous-location ≈ ${chf(d.rentDay * 1.25)}/j` })),
-          el('div', { cls: 'row' }, this.onMap(h.doorX, h.doorZ, d.nameFr), this.gps(h.doorX, h.doorZ, d.nameFr))));
+        out.push(card({
+          accent: '#9ec9ff', title: d.nameFr, sub: `${d.gridW * d.gridD} m²`,
+          right: el('div', { cls: 'ph-price' }, el('b', { text: `${d.rentDay} CHF` }), el('small', { text: 'par jour' })),
+          body: [el('div', { cls: 'ph-kvs' }, kv('Confort', `× ${d.comfort}`), kv('Sous-location', `≈ ${chf(d.rentDay * 1.25)}/j`))],
+          actions: [this.onMap(h.doorX, h.doorZ, d.nameFr, 'primary'), this.gps(h.doorX, h.doorZ, d.nameFr)],
+        }));
       }
     } else {
       const home = g.district.homes.find((h) => h.id === g.player.home);
-      if (home) { const d = HOME_BY_ID.get(home.def)!; out.push(el('div', { cls: 'ph-card' }, el('div', { cls: 'ph-card-top' }, el('b', { text: `Chez moi : ${d.nameFr}` }), el('span', { cls: 'pill', text: `−${d.rentDay} CHF/j` })), el('div', { cls: 'row' }, this.gps(home.doorX, home.doorZ, 'Chez moi')))); }
-      for (const s of g.shops) { const p = g.premise(s.premiseId)!; out.push(el('div', { cls: 'ph-card' }, el('div', { cls: 'ph-card-top' }, el('b', { text: s.name }), el('span', { cls: 'pill', text: `−${chf(p.rent / 30)}/j` })), el('div', { cls: 'ph-stats' }, el('span', { text: `Bail commercial · ${p.area} m²` })))); }
-      if (!g.sublets.length) out.push(el('p', { cls: 'ph-hint', text: 'Aucune sous-location. Devant un local ou un appartement libre : « Prendre à bail pour sous-louer ».' }));
+      out.push(sec('Logement'));
+      if (home) {
+        const d = HOME_BY_ID.get(home.def)!;
+        out.push(card({ accent: '#ffffff', title: 'Chez moi', sub: d.nameFr, right: el('div', { cls: 'ph-price' }, el('b', { cls: 'bad', text: `−${d.rentDay} CHF` }), el('small', { text: 'par jour' })), actions: [this.gps(home.doorX, home.doorZ, 'Chez moi')] }));
+      } else out.push(el('p', { cls: 'ph-hint', text: 'Pas de logement : vous dormez moins bien.' }));
+      out.push(sec('Baux commerciaux', `${g.shops.length}`));
+      if (!g.shops.length) out.push(el('p', { cls: 'ph-hint', text: 'Aucun bail commercial pour l’instant.' }));
+      for (const s of g.shops) {
+        const p = g.premise(s.premiseId)!;
+        out.push(card({ accent: SHOP_TYPE_BY_ID.get(s.type)!.color, title: s.name, sub: `${p.area} m² · ${chf(p.rent)}/mois`, right: el('div', { cls: 'ph-price' }, el('b', { cls: 'bad', text: `−${chf(p.rent / 30)}` }), el('small', { text: 'par jour' })) }));
+      }
+      out.push(sec('Sous-locations', `${g.sublets.length}`));
+      if (!g.sublets.length) out.push(el('p', { cls: 'ph-hint', text: 'Devant un local ou un appartement libre : « Prendre à bail pour sous-louer ».' }));
       for (const sl of g.sublets) {
         const where = sl.kind === 'logement' ? g.district.homes.find((h) => h.id === sl.ref) : g.premise(sl.ref);
-        out.push(el('div', { cls: 'ph-card', attrs: { style: '--app:#c39bff' } },
-          el('div', { cls: 'ph-card-top' }, el('b', { text: sl.kind === 'logement' ? 'Appartement sous-loué' : 'Local sous-loué' }), el('span', { cls: sl.tenant ? 'pill ok' : 'pill warn', text: sl.tenant ? 'Loué' : 'Vacant' })),
-          el('div', { cls: 'ph-stats' }, el('span', { text: sl.tenant ?? 'Recherche de locataire…' }), el('span', { text: `paie ${chf2(sl.cost)}/j` }), el('span', { text: `demande ${chf2(sl.ask)}/j` })),
-          el('div', { cls: 'row' }, button('Gérer', () => { this.close(); this.ctx.panel.open(subletView(this.ctx, sl.id)); }, 'small primary'), where ? this.gps(where.doorX, where.doorZ, 'Sous-location') : null)));
+        const margin = sl.tenant ? sl.ask - sl.cost : -sl.cost;
+        out.push(card({
+          accent: '#c39bff', title: sl.kind === 'logement' ? 'Appartement sous-loué' : 'Local sous-loué', sub: sl.tenant ?? 'Recherche de locataire…',
+          right: pill(sl.tenant ? 'Loué' : 'Vacant', sl.tenant ? 'ok' : 'warn'),
+          body: [el('div', { cls: 'ph-kvs' }, kv('Je paie', `${chf2(sl.cost)}/j`), kv('Je demande', `${chf2(sl.ask)}/j`), kv('Solde', `${signed(margin)}/j`, margin >= 0 ? 'ok' : 'bad'))],
+          actions: [button('Gérer', () => { this.close(); this.ctx.panel.open(subletView(this.ctx, sl.id)); }, 'small primary'), where ? this.gps(where.doorX, where.doorZ, 'Sous-location') : null],
+        }));
       }
     }
     return out;
   }
+
+  /* ------------------------------ Banque ------------------------------ */
 
   private banque(): (Node | null)[] {
     const g = this.ctx.game;
-    const days = [...g.ledger.slice(-6), g.today];
+    const days: DayStats[] = [...g.ledger.slice(-6), g.today];
     const max = Math.max(1, ...days.map((d) => Math.abs(dayProfit(d))));
-    const bank = g.district.buildings.find((b) => b.service === 'banque');
+    const today = dayProfit(g.today);
+    const t = g.today;
+    const lines = ([
+      ['Ventes', t.revenue, 1], ['Loyers encaissés', t.rentalIncome ?? 0, 1], ['Achats de marchandise', t.purchases, -1], ['Salaires', t.wages, -1],
+      ['Loyers (provision)', t.rent, -1], ['Équipement', t.equipment, -1], ['Publicité', t.marketing, -1], ['Prêts', t.finance, -1], ['Vie courante', t.living, -1],
+    ] as [string, number, number][]).filter(([l, v]) => v > 0 || l === 'Ventes');
     return [
-      el('div', { cls: 'ph-sum' }, el('div', {}, el('span', { text: 'Compte' }), el('b', { cls: g.cash < 0 ? 'bad' : '', text: chf(g.cash) })), el('div', {}, el('span', { text: 'Dettes' }), el('b', { text: chf(g.debt) }))),
-      el('div', { cls: 'ph-sec', text: 'Résultat des 7 derniers jours' }),
-      el('div', { cls: 'ph-bars' }, ...days.map((d) => { const v = dayProfit(d); return el('div', { cls: 'ph-barcol', attrs: { title: signed(v) } }, el('i', { cls: v >= 0 ? 'pos' : 'neg', attrs: { style: `height:${Math.round((Math.abs(v) / max) * 100)}%` } }), el('span', { text: `J${d.day + 1}` })); })),
-      el('div', { cls: 'ph-sec', text: 'Prêts' }),
-      ...(g.loans.length ? g.loans.map((l) => el('div', { cls: 'ph-card' }, el('div', { cls: 'ph-card-top' }, el('b', { text: chf(l.amount) }), el('span', { cls: 'pill', text: `${l.daysLeft} j` })), el('div', { cls: 'ph-stats' }, el('span', { text: `reste ${chf(l.remaining)}` }), el('span', { text: `${chf(l.daily)} / jour` })))) : [el('p', { cls: 'ph-hint', text: 'Aucun prêt en cours. Les prêts se signent à la banque.' })]),
-      bank ? el('div', { cls: 'row' }, this.gps(bank.doorX, bank.doorZ, 'Banque du Quartier')) : null,
-      el('div', { cls: 'ph-sec', text: 'Aujourd’hui' }),
-      el('div', { cls: 'ph-stats col' }, el('span', { text: `Ventes ${chf(g.today.revenue)}` }), el('span', { text: `Loyers encaissés ${chf(g.today.rentalIncome)}` }), el('span', { text: `Achats ${chf(g.today.purchases)}` }), el('span', { text: `Salaires ${chf(g.today.wages)}` }), el('span', { text: `Loyers payés ${chf(g.today.rent)}` })),
+      tiles(tile('Compte', chf(g.cash), g.cash < 0 ? 'bad' : ''), tile('Dettes', chf(g.debt), g.debt > 0 ? 'warn' : ''), tile('Aujourd’hui', signed(today), today >= 0 ? 'ok' : 'bad')),
+      sec('Résultat des 7 derniers jours'),
+      el('div', { cls: 'ph-bars' }, ...days.map((d) => {
+        const v = dayProfit(d), cur = d === g.today;
+        return el('div', { cls: `ph-barcol${cur ? ' cur' : ''}`, attrs: { title: `Jour ${d.day + 1} : ${signed(v)}` } },
+          el('i', { cls: v >= 0 ? 'pos' : 'neg', attrs: { style: `height:${Math.max(2, Math.round((Math.abs(v) / max) * 100))}%` } }),
+          el('span', { text: cur ? 'Auj.' : `J${d.day + 1}` }));
+      })),
+      sec('Aujourd’hui', signed(today)),
+      el('div', { cls: 'ph-ledger' }, ...lines.map(([l, v, k]) => el('div', {}, el('span', { text: l }), el('b', { cls: k > 0 ? 'ok' : 'bad', text: `${k > 0 ? '+' : '−'} ${chf(v)}` })))),
+      sec('Prêts', g.loans.length ? `${g.loans.length} en cours` : undefined),
+      ...(g.loans.length ? g.loans.map((l) => card({
+        accent: '#20a36b', title: `Prêt de ${chf(l.amount)}`, sub: `${chf(l.daily)} prélevés chaque jour`,
+        right: pill(`${l.daysLeft} j restants`, 'info'),
+        body: [meter(1 - l.remaining / Math.max(1, l.total), 'ok'), el('div', { cls: 'ph-meter-l' }, el('span', { text: 'Remboursé' }), el('b', { text: `reste ${chf(l.remaining)}` }))],
+      })) : [el('p', { cls: 'ph-hint', text: 'Aucun prêt en cours. Les prêts se signent au guichet de la banque.' })]),
+      el('div', { cls: 'ph-actions' }, this.serviceGps('banque', 'Banque du Quartier')),
     ];
   }
+
+  /* ------------------------------ Équipe ------------------------------ */
 
   private equipe(): (Node | null)[] {
     const g = this.ctx.game;
-    const agency = g.district.buildings.find((b) => b.service === 'emploi');
-    if (!g.employees.length) return [el('p', { cls: 'ph-empty', text: 'Personne dans l’équipe. Embauchez à l’agence pour l’emploi (nouveaux candidats chaque lundi).' }), agency ? this.gps(agency.doorX, agency.doorZ, "Agence pour l'emploi") : null];
-    return [
-      el('div', { cls: 'ph-sum' }, el('div', {}, el('span', { text: 'Employés' }), el('b', { text: String(g.employees.length) })), el('div', {}, el('span', { text: 'Salaires / h' }), el('b', { text: chf(g.employees.reduce((a, e) => a + e.wage, 0)) }))),
-      ...g.employees.map((e) => el('div', { cls: 'ph-card' },
-        el('div', { cls: 'ph-card-top' }, el('b', { text: e.name }), el('span', { cls: 'pill', text: `${e.wage} CHF/h` })),
-        el('div', { cls: 'ph-stats' }, el('span', { text: e.shopId ? g.shop(e.shopId)?.name ?? '—' : 'Sans affectation' })),
-        el('div', { cls: 'ph-meter' }, el('i', { attrs: { style: `width:${Math.round(e.skill * 100)}%` } })),
-        el('span', { cls: 'small muted', text: `Compétence ${pct(e.skill)}` }))),
-    ];
+    if (!g.employees.length) return [empty('team', 'Personne dans l’équipe', 'Embauchez à l’agence pour l’emploi : nouveaux candidats chaque lundi.', this.serviceGps('emploi', "Agence pour l'emploi"))];
+    const wages = g.employees.reduce((a, e) => a + e.wage, 0);
+    const moods = g.employees.map((e) => e.mood ?? 1);
+    const avgMood = moods.reduce((a, b) => a + b, 0) / moods.length;
+    const groups = [...g.shops.map((s) => ({ name: s.name, id: s.id as number | null })), { name: 'Sans affectation', id: null }];
+    const out: (Node | null)[] = [tiles(tile('Employés', String(g.employees.length)), tile('Salaires', `${chf(wages)}/h`), tile('Moral', pct(avgMood), avgMood < 0.45 ? 'bad' : avgMood < 0.7 ? 'warn' : 'ok'))];
+    for (const grp of groups) {
+      const list = g.employees.filter((e) => e.shopId === grp.id);
+      if (!list.length) continue;
+      out.push(sec(grp.name, `${list.length}`));
+      for (const e of list) {
+        const mood = e.mood ?? 1;
+        out.push(card({
+          title: e.name, sub: `Embauché le jour ${e.hiredDay + 1}`, right: el('div', { cls: 'ph-price' }, el('b', { text: `${e.wage} CHF` }), el('small', { text: 'par heure' })),
+          body: [
+            el('div', { cls: 'ph-gauges' },
+              el('div', {}, el('div', { cls: 'ph-meter-l' }, el('span', { text: 'Compétence' }), el('b', { text: pct(e.skill) })), meter(e.skill)),
+              el('div', {}, el('div', { cls: 'ph-meter-l' }, el('span', { text: 'Moral' }), el('b', { text: pct(mood) })), meter(mood, mood < 0.45 ? 'bad' : mood < 0.7 ? 'warn' : 'ok'))),
+            e.askedRaise ? el('div', { cls: 'ph-note warn' }, icon('coin'), el('span', { text: 'Demande une augmentation (panneau du commerce).' })) : null,
+          ],
+        }));
+      }
+    }
+    out.push(el('div', { cls: 'ph-actions' }, this.serviceGps('emploi', "Agence pour l'emploi")));
+    return out;
   }
+
+  /* ------------------------------ Marché ------------------------------ */
 
   private marche(): (Node | null)[] {
     const g = this.ctx.game;
-    const out: (Node | null)[] = [el('p', { cls: 'ph-hint', text: 'Prix du grossiste aujourd’hui (achetez quand ça baisse) et prix pratiqués par vos concurrents.' })];
-    for (const t of SHOP_TYPES) {
+    const mine = new Set(g.shops.map((s) => s.type));
+    const types = [...SHOP_TYPES].sort((a, b) => Number(mine.has(b.id)) - Number(mine.has(a.id)));
+    const out: (Node | null)[] = [
+      el('p', { cls: 'ph-hint', text: 'Prix du grossiste aujourd’hui : achetez quand ils baissent. Vos types de commerce sont en tête.' }),
+      el('div', { cls: 'ph-legend' }, el('span', { cls: 'trend down', text: '▼ moins cher' }), el('span', { cls: 'trend up', text: '▲ plus cher' })),
+    ];
+    for (const t of types) {
       const rv = g.rivals[t.id] ?? 1;
-      out.push(el('div', { cls: 'ph-sec', text: `${t.nameFr} · concurrents ${rv < 0.995 ? `−${Math.round((1 - rv) * 100)} %` : 'prix habituels'}` }));
+      out.push(el('div', { cls: 'ph-sec', attrs: { style: `--app:${t.color}` } },
+        el('span', { cls: 'ph-sec-dot' }), el('span', { text: t.nameFr }), mine.has(t.id) ? pill('à moi', 'ok') : null,
+        el('em', { cls: rv < 0.995 ? 'bad' : '', text: rv < 0.995 ? `concurrents −${Math.round((1 - rv) * 100)} %` : 'concurrents : prix habituels' })));
       for (const p of PRODUCTS.filter((x) => x.shop === t.id)) {
         const m = g.marketIndex(p.id);
         out.push(el('div', { cls: 'ph-line' }, el('span', { text: p.nameFr }), el('b', { text: chf2(p.cost * m) }),
-          el('span', { cls: m > 1.02 ? 'trend up' : m < 0.98 ? 'trend down' : 'trend', text: m > 1.02 ? `▲${Math.round((m - 1) * 100)}%` : m < 0.98 ? `▼${Math.round((1 - m) * 100)}%` : '=' })));
+          el('span', { cls: m > 1.02 ? 'trend up' : m < 0.98 ? 'trend down' : 'trend', text: m > 1.02 ? `▲ ${Math.round((m - 1) * 100)} %` : m < 0.98 ? `▼ ${Math.round((1 - m) * 100)} %` : '=' })));
       }
+    }
+    out.push(el('div', { cls: 'ph-actions' }, this.serviceGps('grossiste', 'Grossiste')));
+    return out;
+  }
+
+  /* ------------------------------ Messages ------------------------------ */
+
+  private messages(): (Node | null)[] {
+    const g = this.ctx.game;
+    const all = [...g.notices].reverse();
+    const alerts = all.filter((n) => n.level === 'warn' || n.level === 'error');
+    const seg = el('div', { cls: 'ph-seg' }, ...([['tout', 'Tous', all.length], ['alertes', 'Alertes', alerts.length]] as const)
+      .map(([id, l, n]) => { const b = button('', () => { this.msgFilter = id; this.paint(true); }, this.msgFilter === id ? 'on' : ''); b.append(el('span', { text: l }), el('i', { text: String(n) })); return b; }));
+    const list = (this.msgFilter === 'alertes' ? alerts : all).slice(0, 60);
+    if (!list.length) return [seg, empty('chat', 'Aucun message', this.msgFilter === 'alertes' ? 'Aucune alerte : tout va bien.' : 'Les nouvelles du quartier et de vos commerces arriveront ici.')];
+    const out: (Node | null)[] = [seg];
+    const ic: Record<Notice['level'], IconName> = { info: 'info', ok: 'check', warn: 'alert', error: 'alert' };
+    const today = Math.floor(g.total / 1440);
+    let lastDay = -1;
+    list.forEach((n) => {
+      const d = Math.floor(n.at / 1440);
+      if (d !== lastDay) { lastDay = d; out.push(sec(d === today ? 'Aujourd’hui' : d === today - 1 ? 'Hier' : `${WEEKDAYS_FR[d % 7]} · jour ${d + 1}`)); }
+      const isNew = all.indexOf(n) < this.fresh;
+      const c = clockView(n.at);
+      out.push(el('div', { cls: `ph-msg ${n.level}${isNew ? ' new' : ''}` },
+        el('span', { cls: 'ph-msg-ico' }, icon(ic[n.level])),
+        el('div', { cls: 'ph-msg-txt' }, el('div', { text: n.text }), el('small', { text: hhmm(c.hour, c.minute) })),
+        isNew ? el('i', { cls: 'ph-dot', attrs: { title: 'Nouveau' } }) : null));
+    });
+    return out;
+  }
+
+  /* ------------------------------ Objectifs ------------------------------ */
+
+  private objectifs(): (Node | null)[] {
+    const g = this.ctx.game;
+    const todo = OBJECTIVES.filter((o) => !g.achieved.includes(o.id));
+    const done = OBJECTIVES.filter((o) => g.achieved.includes(o.id));
+    const cur = todo[0];
+    const out: (Node | null)[] = [
+      tiles(tile('Rang', rankOf(g.achieved.length)), tile('Atteints', `${done.length} / ${OBJECTIVES.length}`)),
+      meter(done.length / OBJECTIVES.length, 'ok'),
+    ];
+    if (cur) {
+      const pr = cur.progress(g);
+      out.push(sec('En cours'), card({
+        cls: 'current', accent: '#ffcc4d', title: cur.title, right: el('span', { cls: 'ph-step', text: String(done.length + 1) }),
+        body: [el('p', { cls: 'ph-card-txt', text: cur.hint }), meter(pr.p, 'ok'), el('div', { cls: 'ph-meter-l' }, el('span', { text: 'Avancement' }), el('b', { text: pr.text }))],
+      }));
+    } else out.push(el('div', { cls: 'ph-note ok' }, icon('trophy'), el('span', { text: 'Tous les objectifs sont atteints. Bravo !' })));
+    if (todo.length > 1) {
+      out.push(sec('À venir', `${todo.length - 1}`));
+      out.push(el('ol', { cls: 'ph-olist' }, ...todo.slice(1).map((o, k) => el('li', {}, el('i', { text: String(done.length + 2 + k) }), el('span', { text: o.title })))));
+    }
+    if (done.length) {
+      out.push(sec('Atteints', `${done.length}`));
+      out.push(el('ol', { cls: 'ph-olist done' }, ...done.map((o) => el('li', {}, el('i', {}, icon('check')), el('span', { text: o.title })))));
     }
     return out;
   }
 
-  private messages(): (Node | null)[] {
-    const g = this.ctx.game;
-    const list = [...g.notices].reverse().slice(0, 60);
-    if (!list.length) return [el('p', { cls: 'ph-empty', text: 'Aucun message.' })];
-    return list.map((n) => el('div', { cls: `ph-msg ${n.level}` }, el('span', { cls: 'small muted', text: formatClock(n.at) }), el('div', { text: n.text })));
-  }
+  /* ------------------------------ Véhicules ------------------------------ */
 
-  private objectifs(): (Node | null)[] {
+  private vehicules(): (Node | null)[] {
     const g = this.ctx.game;
+    if (!g.vehicles.length) return [empty('truck', 'Aucun véhicule', 'Le garage vend scooters, citadines, voitures de luxe, camionnettes et camions pour transporter la marchandise.', this.serviceGps('garage', 'Garage'))];
+    const names = new Map(PRODUCTS.map((p) => [p.id, p.nameFr]));
     return [
-      el('div', { cls: 'ph-sum' }, el('div', {}, el('span', { text: 'Rang' }), el('b', { text: rankOf(g.achieved.length) })), el('div', {}, el('span', { text: 'Atteints' }), el('b', { text: `${g.achieved.length} / ${OBJECTIVES.length}` }))),
-      ...OBJECTIVES.map((o) => {
-        const done = g.achieved.includes(o.id), pr = o.progress(g);
-        return el('div', { cls: `ph-card ${done ? 'done' : ''}` }, el('div', { cls: 'ph-card-top' }, el('b', { text: `${done ? '✓ ' : ''}${o.title}` })),
-          done ? null : el('span', { cls: 'small muted', text: o.hint }),
-          el('div', { cls: 'ph-meter' }, el('i', { attrs: { style: `width:${Math.round((done ? 1 : pr.p) * 100)}%` } })), el('span', { cls: 'small', text: done ? 'fait' : pr.text }));
+      tiles(tile('Véhicules', String(g.vehicles.length)), tile('Capacité', num(g.vehicles.reduce((a, v) => a + VEHICLE_BY_ID.get(v.type)!.cargo, 0)), '', 'unités au total')),
+      ...g.vehicles.map((v) => {
+        const d = VEHICLE_BY_ID.get(v.type)!;
+        const goods = Object.entries(v.cargo).filter(([, n]) => n > 0);
+        const load = goods.reduce((a, [, n]) => a + n, 0);
+        return card({
+          accent: d.color, title: d.nameFr, sub: `Assurance ${d.insurance} CHF/jour`,
+          right: el('div', { cls: 'ph-price' }, el('b', { text: `${num(load)} / ${num(d.cargo)}` }), el('small', { text: 'chargement' })),
+          body: [meter(load / d.cargo, load >= d.cargo ? 'warn' : ''),
+            el('p', { cls: 'ph-card-txt', text: goods.length ? goods.map(([id, n]) => `${names.get(id) ?? id} × ${n}`).join(' · ') : 'Vide' })],
+          actions: [this.gps(v.x, v.z, d.nameFr, 'primary')],
+        });
       }),
     ];
   }
 
-  private vehicules(): (Node | null)[] {
-    const g = this.ctx.game;
-    const garage = g.district.buildings.find((b) => b.service === 'garage');
-    if (!g.vehicles.length) return [el('p', { cls: 'ph-empty', text: 'Aucun véhicule. Le garage vend scooters, citadines, voitures de luxe, camionnettes et camions.' }), garage ? this.gps(garage.doorX, garage.doorZ, 'Garage') : null];
-    return g.vehicles.map((v) => {
-      const d = VEHICLE_BY_ID.get(v.type)!, load = Object.values(v.cargo).reduce((a, b) => a + b, 0);
-      return el('div', { cls: 'ph-card' }, el('div', { cls: 'ph-card-top' }, el('b', { text: d.nameFr }), el('span', { cls: 'pill', text: `${load} / ${d.cargo}` })),
-        el('div', { cls: 'ph-meter' }, el('i', { attrs: { style: `width:${Math.round((load / d.cargo) * 100)}%` } })),
-        el('div', { cls: 'row' }, this.gps(v.x, v.z, d.nameFr)));
-    });
-  }
+  /* ------------------------------ Réglages ------------------------------ */
 
   private reglages(): (Node | null)[] {
     const q = this.hooks.quality();
+    const muted = this.hooks.muted();
+    const keys: [string, string][] = [['T', 'Téléphone'], ['M', 'Carte'], ['E', 'Interagir'], ['B', 'Aménager'], ['P', 'Pause'], ['1 – 4', 'Vitesse'], ['H', 'Aide'], ['Échap', 'Fermer']];
     return [
-      el('div', { cls: 'ph-sec', text: 'Graphismes' }),
-      el('div', { cls: 'ph-tabs' }, ...([['auto', 'Auto'], ['basse', 'Basse'], ['haute', 'Haute']] as const).map(([id, l]) => button(l, () => { this.hooks.setQuality(id); this.paint(true); }, q === id ? 'on' : ''))),
+      sec('Graphismes'),
+      el('div', { cls: 'ph-seg' }, ...([['auto', 'Auto'], ['basse', 'Basse'], ['haute', 'Haute']] as const).map(([id, l]) => button(l, () => { this.hooks.setQuality(id); this.paint(true); }, q === id ? 'on' : ''))),
       el('p', { cls: 'ph-hint', text: 'Auto : la qualité baisse toute seule si les images par seconde chutent (ombres, résolution).' }),
-      el('div', { cls: 'ph-sec', text: 'Son' }),
-      button(this.hooks.muted() ? '🔇 Son coupé' : '🔊 Son activé', () => { this.hooks.toggleSound(); this.paint(true); }, 'wide'),
-      el('div', { cls: 'ph-sec', text: 'Partie' }),
-      button('💾 Sauvegarder', () => this.hooks.save(), 'primary wide'),
-      el('p', { cls: 'ph-hint', text: 'Raccourcis : T téléphone · M carte · E interagir · B aménager · P pause · Échap fermer.' }),
+      sec('Son'),
+      el('button', { cls: `ph-toggle${muted ? '' : ' on'}`, attrs: { type: 'button', 'aria-pressed': String(!muted) }, on: { click: () => { this.hooks.toggleSound(); this.paint(true); } } },
+        icon(muted ? 'mute' : 'sound'), el('span', { text: muted ? 'Son coupé' : 'Son activé' }), el('i', {})),
+      sec('Partie'),
+      iconButton('save', 'Sauvegarder la partie', () => this.hooks.save(), 'primary wide'),
+      el('p', { cls: 'ph-hint', text: 'La partie est aussi sauvegardée automatiquement chaque nuit.' }),
+      sec('Raccourcis'),
+      el('div', { cls: 'ph-keys' }, ...keys.map(([k, t]) => el('div', {}, el('kbd', { text: k }), el('span', { text: t })))),
     ];
   }
 }

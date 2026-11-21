@@ -15,13 +15,20 @@ import type { FeedbackKind } from '../sim/game';
 
 const MAX_CUSTOMERS = 14;
 
-type Step = { kind: 'browse'; cell: [number, number]; look: [number, number] } | { kind: 'pay' } | { kind: 'exit' };
+type Step = { kind: 'browse'; cell: [number, number]; look: [number, number] } | { kind: 'pay' } | { kind: 'react'; t: number } | { kind: 'exit' };
 
-interface Register { uid: number; front: [number, number][]; back: [number, number][]; dir: [number, number]; queue: Customer[]; tended: boolean }
+/**
+ * Caisse : cases devant (clients) et derrière (caissier), triées de la plus proche à la plus éloignée de la caisse
+ * enregistreuse posée sur le comptoir ; `line` : cases de la file d'attente (calculées à la demande).
+ */
+interface Register { uid: number; front: [number, number][]; back: [number, number][]; dir: [number, number]; queue: Customer[]; tended: boolean; center: [number, number]; line: [number, number][] | null }
 
-interface Mover { h: Person; x: number; z: number; heading: number; route: [number, number][]; speed: number }
-interface Customer extends Mover { amount?: number; bubble?: THREE.Sprite; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
+interface Mover { h: Person; x: number; z: number; heading: number; route: [number, number][]; speed: number; face: number | null }
+interface Customer extends Mover { amount?: number; bubble?: THREE.Sprite; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'done' | 'react' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
 interface Staff extends Mover { id: number; idle: number }
+
+/** Longueur maximale d'une file d'attente dessinée (au-delà, les clients se rangent au plus près). */
+const MAX_LINE = 10;
 
 const headingTo = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
 
@@ -44,7 +51,12 @@ export class InteriorAgents {
     this.registers = this.view.items.filter((i) => i.def === 'caisse').map((it) => {
       const s = registerSides(it, FURNITURE_BY_ID.get('caisse')!);
       const ok = (c: [number, number]): boolean => !this.view.walkBlocked(c[0], c[1]);
-      return { uid: it.uid, front: s.front.filter(ok), back: s.back.filter(ok), dir: frontDir(it.rot), queue: old.get(it.uid)?.queue ?? [], tended: false };
+      // Caisse enregistreuse du modèle : à x = −0,45 m (repère du meuble, face avant +z), tournée avec le meuble.
+      const center = this.itemCenter(it), a = (it.rot * Math.PI) / 2;
+      const till: [number, number] = [center[0] - 0.45 * Math.cos(a), center[1] + 0.45 * Math.sin(a)];
+      const near = (c: [number, number]): number => { const [x, z] = this.view.cellCenter(c[0], c[1]); return Math.hypot(x - till[0], z - till[1]); };
+      const byNear = (l: [number, number][]): [number, number][] => l.filter(ok).sort((p, q) => near(p) - near(q));
+      return { uid: it.uid, front: byNear(s.front), back: byNear(s.back), dir: frontDir(it.rot), queue: old.get(it.uid)?.queue ?? [], tended: false, center, line: null };
     });
     // Les clients dont la caisse a disparu repartent.
     for (const c of this.customers) if (c.reg && !this.registers.includes(c.reg) && !this.registers.some((r) => r.uid === c.reg!.uid)) { c.reg = null; c.plan = [{ kind: 'exit' }]; this.next(c); }
@@ -81,7 +93,8 @@ export class InteriorAgents {
       const h = makePerson(e.look, this.accent, 1, true);
       const [x, z] = this.view.cellCenter(...this.door());
       this.group.add(h.group);
-      this.staff.push({ id: e.id, h, x, z, heading: Math.PI, route: [], speed: 0, idle: 0 });
+      // Employés : allure de marche normale (vitesse 0 = jamais arrivés à leur poste).
+      this.staff.push({ id: e.id, h, x, z, heading: Math.PI, face: null, route: [], speed: 1.4, idle: 0 });
     }
   }
 
@@ -107,7 +120,7 @@ export class InteriorAgents {
     const h = makePerson(Math.floor(this.rand() * 1e6), undefined, 0.94 + this.rand() * 0.1);
     this.group.add(h.group);
     const [dx, dz] = this.view.cellCenter(...this.door());
-    this.customers.push({ h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, route: [[dx, dz]], speed: 1.25 + this.rand() * 0.35, arrive: null, plan, amount, state: 'walk', timer: 0, reg: null, slot: 0, jx: (this.rand() - 0.5) * 0.3, jz: (this.rand() - 0.5) * 0.3 });
+    this.customers.push({ h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, face: null, route: [[dx, dz]], speed: 1.25 + this.rand() * 0.35, arrive: null, plan, amount, state: 'walk', timer: 0, reg: null, slot: 0, jx: (this.rand() - 0.5) * 0.3, jz: (this.rand() - 0.5) * 0.3 });
   }
 
   /**
@@ -125,40 +138,58 @@ export class InteriorAgents {
     const [dx, dz] = this.view.cellCenter(...this.door());
     const h = makePerson(Math.floor(this.rand() * 1e6), undefined, 0.94 + this.rand() * 0.1);
     this.group.add(h.group);
-    const c: Customer = { h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, route: [[dx, dz - 1.2]], speed: 1.3, arrive: null, plan: [{ kind: 'exit' }], state: 'walk', timer: 0, reg: null, slot: 0, jx: 0, jz: 0 };
+    const c: Customer = { h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, face: null, route: [[dx + (this.rand() - 0.5) * 0.8, dz - 1.2]], speed: 1.3, arrive: null, plan: [{ kind: 'react', t: 1.8 }, { kind: 'exit' }], state: 'walk', timer: 0, reg: null, slot: 0, jx: 0, jz: 0 };
     this.customers.push(c);
     this.say(c, kind);
+    this.next(c);
   }
 
-  /** Textes flottants (montants des ventes) : montent et s'effacent en 1,4 s. */
-  private floats: { sp: THREE.Sprite; t: number }[] = [];
+  /** Textes flottants (montants des ventes) : montent et s'effacent en 1,6 s. */
+  private floats: { sp: THREE.Sprite; t: number; x: number; z: number }[] = [];
   private floatText(text: string, x: number, z: number): void {
     const sp = new THREE.Sprite(moneyMaterial(text));
-    sp.scale.set(1.3, 0.42, 1);
-    sp.position.set(x, 1.8, z);
-    sp.renderOrder = 21;
+    sp.scale.set(1.05, 0.34, 1);
+    // Plusieurs ventes rapprochées à la même caisse : chaque montant part un cran plus haut (jamais superposés).
+    const near = this.floats.filter((f) => f.t < 0.9 && Math.hypot(f.x - x, f.z - z) < 1.2).length;
+    sp.position.set(x, 1.55 + near * 0.4, z);
+    sp.renderOrder = 22;
     this.group.add(sp);
-    this.floats.push({ sp, t: 0 });
+    this.floats.push({ sp, t: 0, x, z });
   }
-  private sayIcon(c: Customer, icon: string): void {
+
+  /**
+   * Hauteur (repère du personnage) d'une bulle de hauteur `h` : juste au-dessus de la tête, relevée d'un cran par
+   * bulle déjà affichée chez un voisin proche, pour que deux bulles ne se recouvrent jamais.
+   */
+  private bubbleY(c: Customer, h: number): number {
+    const used = new Set<number>();
+    for (const o of this.customers) if (o !== c && o.bubble && Math.hypot(o.x - c.x, o.z - c.z) < 1.4) used.add(o.bubble.userData['lvl'] as number);
+    let n = 0;
+    while (used.has(n)) n++;
+    c.bubble!.userData['lvl'] = n;
+    return c.h.top + 0.15 + h / 2 + n * (h + 0.1);
+  }
+
+  /** Humeur (visage dessiné, lisible sans police d'émojis) au-dessus d'un client. */
+  private sayIcon(c: Customer, mood: Mood): void {
     if (c.bubble) c.h.group.remove(c.bubble);
-    const sp = new THREE.Sprite(iconMaterial(icon));
-    sp.scale.set(0.55, 0.55, 1);
-    sp.position.y = 2.0;
+    const sp = new THREE.Sprite(iconMaterial(mood));
+    sp.scale.set(0.5, 0.5, 1);
     sp.renderOrder = 20;
+    c.bubble = sp; c.bubbleT = 1.6;
+    sp.position.y = this.bubbleY(c, 0.5);
     c.h.group.add(sp);
-    c.bubble = sp; c.bubbleT = 1.8;
   }
 
   private say(c: Customer, kind: FeedbackKind): void {
     if (c.bubble) c.h.group.remove(c.bubble);
     const sp = new THREE.Sprite(bubbleMaterial(kind));
-    sp.scale.set(1.35, 0.5, 1);
-    sp.position.y = 2.1;
+    sp.scale.set(1.5, 0.5, 1);
     sp.renderOrder = 20;
-    c.h.group.add(sp);
     c.bubble = sp;
     c.bubbleT = 3.2;
+    sp.position.y = this.bubbleY(c, 0.5);
+    c.h.group.add(sp);
   }
 
   private rand(): number { this.seed = (this.seed * 16807) % 2147483647; return this.seed / 2147483647; }
@@ -196,13 +227,15 @@ export class InteriorAgents {
     } else if (st.kind === 'pay') {
       const regs = this.registers.filter((r) => r.front.length);
       if (!regs.length) { this.next(c); return; }
-      const staffed = regs.filter((r, k) => k < this.staff.length || r.uid === this.playerRegister);
+      const staffed = regs.filter((r) => r.tended || r.uid === this.playerRegister);
       const pool = staffed.length ? staffed : regs;
       const reg = pool.reduce((a, b) => (b.queue.length < a.queue.length ? b : a));
       reg.queue.push(c);
       c.reg = reg;
       c.slot = -1;
       c.state = 'queue';
+    } else if (st.kind === 'react') {
+      c.state = 'react'; c.timer = st.t; c.route = c.route.slice(0, 1);
     } else {
       const [dx, dz] = this.view.cellCenter(...this.door());
       this.routeTo(c, this.door());
@@ -214,38 +247,54 @@ export class InteriorAgents {
   }
 
   /**
-   * Case de la k-ième place de la file d'une caisse : cases libres les plus proches du devant de la caisse (en
-   * distance de marche), en privilégiant l'alignement dans l'axe de la caisse. Chaque client a sa case.
+   * Case de la k-ième place de la file d'une caisse : en ligne droite devant la caisse enregistreuse, dans l'axe de
+   * la caisse (une case par client, donc 1 m d'écart) ; si un meuble ou un mur coupe la ligne, la file tourne vers
+   * les cases libres les plus proches (recherche en largeur). Jamais sur les cases de la porte.
    */
   private slotCell(r: Register, k: number): [number, number] {
-    const f = r.front[0]!;
-    const W = this.view.W, D = this.view.D;
-    const dist = new Int32Array(W * D).fill(-1);
-    const order: [number, number][] = [];
-    const q: [number, number][] = [f];
-    dist[f[1] * W + f[0]] = 0;
-    for (let h = 0; h < q.length && order.length <= k + 1; h++) {
-      const [x, z] = q[h]!;
-      order.push([x, z]);
-      for (const [dx, dz] of [[r.dir[0], r.dir[1]], [r.dir[1], r.dir[0]], [-r.dir[1], -r.dir[0]], [-r.dir[0], -r.dir[1]]] as const) {
-        const nx = x + dx, nz = z + dz;
-        if (!this.view.inside(nx, nz) || dist[nz * W + nx]! >= 0 || this.view.walkBlocked(nx, nz)) continue;
-        dist[nz * W + nx] = dist[z * W + x]! + 1;
+    if (!r.line) r.line = this.queueLine(r);
+    return r.line[Math.min(k, r.line.length - 1)] ?? r.front[0]!;
+  }
+
+  private queueLine(r: Register): [number, number][] {
+    const W = this.view.W;
+    const door = new Set(doorCells(this.view.W, this.view.D).map(([x, z]) => z * W + x));
+    const used = new Set<number>();
+    const free = (x: number, z: number): boolean => this.view.inside(x, z) && !this.view.walkBlocked(x, z) && !door.has(z * W + x) && !used.has(z * W + x);
+    const out: [number, number][] = [];
+    let [x, z] = r.front[0]!;
+    out.push([x, z]); used.add(z * W + x);
+    while (out.length < MAX_LINE && free(x + r.dir[0], z + r.dir[1])) { x += r.dir[0]; z += r.dir[1]; out.push([x, z]); used.add(z * W + x); }
+    // Suite : cases libres les plus proches de la dernière, en privilégiant les côtés de la ligne.
+    const q: [number, number][] = [[x, z]];
+    const seen = new Set<number>([z * W + x]);
+    for (let h = 0; h < q.length && out.length < MAX_LINE; h++) {
+      const [cx, cz] = q[h]!;
+      for (const [dx, dz] of [[r.dir[1], r.dir[0]], [-r.dir[1], -r.dir[0]], [r.dir[0], r.dir[1]], [-r.dir[0], -r.dir[1]]] as const) {
+        const nx = cx + dx, nz = cz + dz, key = nz * W + nx;
+        if (seen.has(key) || !this.view.inside(nx, nz) || this.view.walkBlocked(nx, nz)) continue;
+        seen.add(key);
         q.push([nx, nz]);
+        if (free(nx, nz)) { out.push([nx, nz]); used.add(key); }
       }
     }
-    return order[Math.min(k, order.length - 1)] ?? f;
+    return out;
   }
 
   /** Avance d'un pas le long de la route ; vrai à l'arrivée. */
   private step(m: Mover, dt: number, ts: number): boolean {
     const t = m.route[0];
-    if (!t) { m.h.update(dt, 0); return true; }
+    if (!t) {
+      // À l'arrêt : se tourne en douceur vers ce qu'il regarde (caisse, rayon, clients).
+      if (m.face !== null) m.heading = turn(m.heading, m.face, dt * 7);
+      m.h.update(dt, 0);
+      return true;
+    }
     const dx = t[0] - m.x, dz = t[1] - m.z, d = Math.hypot(dx, dz);
     const v = m.speed * ts;
     // Arrivée tolérante (0,3 m ; 0,45 m pour un point de passage) : deux clients qui visent la même case ne se
     // bloquent plus mutuellement à cause de l'écart minimal.
-    if (d <= v * dt) { m.x = t[0]; m.z = t[1]; m.route.shift(); }
+    if (d <= v * dt || v <= 0) { m.x = t[0]; m.z = t[1]; m.route.shift(); }
     else if (d < (m.route.length > 1 ? 0.45 : 0.3)) m.route.shift();
     else { m.x += (dx / d) * v * dt; m.z += (dz / d) * v * dt; m.heading = turn(m.heading, headingTo(dx, dz), dt * 10); }
     m.h.update(dt, Math.min(2.5, v));
@@ -254,7 +303,8 @@ export class InteriorAgents {
 
   update(dt: number, timeScale: number, open: boolean): void {
     const ts = Math.max(0.5, Math.min(4, timeScale));
-    // Employés.
+    // Employés : un par caisse, derrière la caisse enregistreuse, face aux clients ; geste d'encaissement pendant un
+    // paiement. Les autres passent entre les rayons.
     this.registers.forEach((r) => { r.tended = false; });
     this.staff.forEach((s, k) => {
       s.h.group.visible = open;
@@ -263,7 +313,9 @@ export class InteriorAgents {
         r.tended = true;
         const [tx, tz] = this.view.cellCenter(r.back[0]![0], r.back[0]![1]);
         if (Math.hypot(tx - s.x, tz - s.z) > 0.05 && !s.route.length) this.routeTo(s, r.back[0]!);
-        if (this.step(s, dt, ts)) s.heading = turn(s.heading, headingTo(r.dir[0], r.dir[1]), dt * 8);
+        s.face = headingTo(r.dir[0], r.dir[1]);
+        s.h.gesture(r.queue[0]?.state === 'pay' ? 'interact-left' : null);
+        this.step(s, dt, ts);
       } else {
         s.idle -= dt * ts;
         if (s.idle <= 0 && !s.route.length) {
@@ -271,8 +323,10 @@ export class InteriorAgents {
           const shelf = this.view.items.filter((i) => FURNITURE_BY_ID.get(i.def)?.capacity);
           const it = shelf[Math.floor(this.rand() * shelf.length)];
           const cell = it ? this.accessCell(it) : null;
-          if (cell) this.routeTo(s, cell);
+          if (it && cell && this.routeTo(s, cell)) { const [lx, lz] = this.itemCenter(it), [cx, cz] = this.view.cellCenter(cell[0], cell[1]); s.face = headingTo(lx - cx, lz - cz); }
         }
+        // Mise en rayon : bras tendus vers le meuble une fois arrivé.
+        s.h.gesture(s.route.length ? null : 'interact-right');
         this.step(s, dt, ts);
       }
       s.h.group.position.set(s.x, 0, s.z);
@@ -285,23 +339,39 @@ export class InteriorAgents {
       if (c.bubble && (c.bubbleT! -= dt) <= 0) { c.h.group.remove(c.bubble); c.bubble = undefined; }
       const arrive = c.arrive;
       if (c.state === 'walk' && arrived) {
-        if (arrive?.kind === 'browse') { c.state = 'browse'; c.timer = 1.6 + this.rand() * 2; c.heading = headingTo(arrive.look[0] - c.x, arrive.look[1] - c.z); }
-        else this.next(c);
+        if (arrive?.kind === 'browse') {
+          c.state = 'browse'; c.timer = 1.6 + this.rand() * 2;
+          c.face = headingTo(arrive.look[0] - c.x, arrive.look[1] - c.z);
+          c.h.gesture(this.rand() < 0.5 ? 'pick-up' : 'interact-right');
+        } else this.next(c);
       } else if (c.state === 'browse') {
         c.timer -= dt * ts;
-        if (c.timer <= 0) this.next(c);
+        if (c.timer <= 0) { c.h.gesture(null); c.face = null; this.next(c); }
+      } else if (c.state === 'react') {
+        // Client mécontent : s'arrête, fait « non » de la tête, puis ressort.
+        if (arrived) { c.h.gesture('emote-no'); c.timer -= dt * ts; }
+        if (c.timer <= 0) { c.h.gesture(null); this.next(c); }
       } else if (c.state === 'queue' && c.reg) {
         const k = c.reg.queue.indexOf(c);
-        if (k !== c.slot) { c.slot = k; this.routeTo(c, this.slotCell(c.reg, k), c.jx * 0.5, c.jz * 0.5); }
-        if (arrived && k === 0) { c.state = 'pay'; c.timer = 2.2; c.heading = headingTo(-c.reg.dir[0], -c.reg.dir[1]); }
+        if (k !== c.slot) { c.slot = k; this.routeTo(c, this.slotCell(c.reg, k)); }
+        // Dans la file : regarde la caisse (le client devant lui).
+        if (arrived) c.face = headingTo(c.reg.center[0] - c.x, c.reg.center[1] - c.z);
+        if (arrived && k === 0) { c.state = 'pay'; c.timer = 2.2; c.face = headingTo(-c.reg.dir[0], -c.reg.dir[1]); c.h.gesture('interact-right'); }
       } else if (c.state === 'pay') {
-        c.timer -= dt * ts;
+        // Paiement seulement si quelqu'un tient la caisse (employé ou joueur) ; sinon le client patiente.
+        const served = !c.reg || c.reg.tended || c.reg.uid === this.playerRegister || !this.registers.some((r) => r.tended);
+        if (served) c.timer -= dt * ts;
         if (c.timer <= 0) {
-          // Vente : « +X CHF » au-dessus de la caisse, client satisfait (😊).
-          if (c.reg && c.amount) { const it = this.view.items.find((i) => i.uid === c.reg!.uid); if (it) { const [wx, wz] = this.itemCenter(it); this.floatText(`+${c.amount.toFixed(c.amount < 10 ? 2 : 0)} CHF`, wx, wz); } }
-          this.sayIcon(c, '😊');
-          c.reg?.queue.shift(); c.reg = null; this.next(c);
+          // Vente : « +X CHF » au-dessus de la caisse (côté caissier), puis client satisfait (visage souriant).
+          if (c.reg && c.amount) this.floatText(`+${c.amount.toFixed(c.amount < 10 ? 2 : 0)} CHF`, c.reg.center[0] - c.reg.dir[0] * 0.25, c.reg.center[1] - c.reg.dir[1] * 0.25);
+          c.reg?.queue.shift(); c.reg = null;
+          c.state = 'done'; c.timer = 0.8;
+          c.h.gesture('emote-yes');
+          this.sayIcon(c, 'content');
         }
+      } else if (c.state === 'done') {
+        c.timer -= dt * ts;
+        if (c.timer <= 0) { c.h.gesture(null); c.face = null; this.next(c); }
       } else if (c.state === 'leave' && arrived) {
         this.group.remove(c.h.group);
         disposeOwn(c.h.group);
@@ -310,9 +380,9 @@ export class InteriorAgents {
       keep.push(c);
     }
     this.customers = keep;
-    for (const f of this.floats) { f.t += dt; f.sp.position.y += dt * 0.7; (f.sp.material as THREE.SpriteMaterial).opacity = Math.max(0, 1 - f.t / 1.4); }
-    for (const f of this.floats.filter((x) => x.t >= 1.4)) { this.group.remove(f.sp); (f.sp.material as THREE.SpriteMaterial).map?.dispose(); (f.sp.material as THREE.SpriteMaterial).dispose(); }
-    this.floats = this.floats.filter((x) => x.t < 1.4);
+    for (const f of this.floats) { f.t += dt; f.sp.position.y += dt * 0.55; (f.sp.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, (1.6 - f.t) / 0.5)); }
+    for (const f of this.floats.filter((x) => x.t >= 1.6)) { this.group.remove(f.sp); (f.sp.material as THREE.SpriteMaterial).map?.dispose(); (f.sp.material as THREE.SpriteMaterial).dispose(); }
+    this.floats = this.floats.filter((x) => x.t < 1.6);
     this.separate();
     this.separate();
     for (const c of this.customers) { c.h.group.position.set(c.x, 0, c.z); c.h.group.rotation.y = c.heading; }
@@ -370,57 +440,82 @@ function turn(a: number, b: number, k: number): number {
   return a + d * Math.min(1, k);
 }
 
-const BUBBLES: Record<FeedbackKind, [string, string]> = {
-  prix: ['😠 Trop cher !', '#ef6b6b'], rupture: ['😠 Rupture…', '#f0b84a'], attente: ['😠 Trop d’attente', '#f0b84a'],
-  caisse: ['😠 Personne en caisse ?', '#ef6b6b'], content: ['😊 Super boutique !', '#5cc77a'],
+type Mood = 'content' | 'fache' | 'bof';
+const BUBBLES: Record<FeedbackKind, [string, string, Mood]> = {
+  prix: ['Trop cher !', '#ef6b6b', 'fache'], rupture: ['Rupture…', '#f0b84a', 'bof'], attente: ['Trop d’attente', '#f0b84a', 'bof'],
+  caisse: ['Personne en caisse ?', '#ef6b6b', 'fache'], content: ['Super boutique !', '#5cc77a', 'content'],
 };
+
+/**
+ * Visage dessiné (cercle jaune, yeux, bouche souriante, neutre ou fâchée, sourcils froncés) : lisible sur tous les
+ * systèmes, même sans police d'émojis. Centre (cx, cy), rayon r.
+ */
+function drawFace(g: CanvasRenderingContext2D, cx: number, cy: number, r: number, mood: Mood): void {
+  g.fillStyle = mood === 'fache' ? '#ff8a5c' : '#ffd23f';
+  g.strokeStyle = '#1d2733'; g.lineWidth = r * 0.1;
+  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill(); g.stroke();
+  g.fillStyle = '#1d2733';
+  for (const s of [-1, 1]) { g.beginPath(); g.ellipse(cx + s * r * 0.36, cy - r * 0.18, r * 0.11, r * 0.16, 0, 0, Math.PI * 2); g.fill(); }
+  g.lineCap = 'round'; g.lineWidth = r * 0.12;
+  g.beginPath();
+  if (mood === 'content') g.arc(cx, cy + r * 0.05, r * 0.5, 0.15 * Math.PI, 0.85 * Math.PI);
+  else if (mood === 'fache') g.arc(cx, cy + r * 0.62, r * 0.4, 1.2 * Math.PI, 1.8 * Math.PI);
+  else { g.moveTo(cx - r * 0.35, cy + r * 0.42); g.lineTo(cx + r * 0.35, cy + r * 0.36); }
+  g.stroke();
+  if (mood === 'fache') for (const s of [-1, 1]) { g.beginPath(); g.moveTo(cx + s * r * 0.58, cy - r * 0.5); g.lineTo(cx + s * r * 0.18, cy - r * 0.34); g.stroke(); }
+}
+
 const bubbleCache = new Map<FeedbackKind, THREE.SpriteMaterial>();
-/** Bulle d'avis (canevas → sprite), mise en cache par type. */
+/** Bulle d'avis (visage + texte, canevas → sprite), mise en cache par type. */
 function bubbleMaterial(kind: FeedbackKind): THREE.SpriteMaterial {
   const c = bubbleCache.get(kind);
   if (c) return c;
-  const [text, color] = BUBBLES[kind];
+  const [text, color, mood] = BUBBLES[kind];
   const cv = document.createElement('canvas');
-  cv.width = 300; cv.height = 110;
+  cv.width = 384; cv.height = 128;
   const g = cv.getContext('2d')!;
   g.fillStyle = '#ffffff'; g.strokeStyle = color; g.lineWidth = 8;
-  g.beginPath(); g.roundRect(6, 6, 288, 74, 30); g.fill(); g.stroke();
-  g.beginPath(); g.moveTo(130, 78); g.lineTo(150, 104); g.lineTo(168, 78); g.fill();
-  g.fillStyle = '#1d2733'; g.font = '700 34px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, 150, 44, 270);
+  g.beginPath(); g.roundRect(6, 6, 372, 90, 40); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(170, 94); g.lineTo(192, 124); g.lineTo(214, 94); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(170, 98); g.lineTo(192, 124); g.lineTo(214, 98); g.stroke();
+  g.fillStyle = '#ffffff'; g.fillRect(166, 88, 52, 8);
+  drawFace(g, 56, 51, 30, mood);
+  g.fillStyle = '#1d2733'; g.font = '800 38px Rubik, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 230, 53, 280);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
   const m = new THREE.SpriteMaterial({ map: tex, depthTest: false });
   bubbleCache.set(kind, m);
   return m;
 }
 
-/** Montant d'une vente (texte vert sur fond sombre), un matériau par texte (libéré après l'animation). */
+/** Montant d'une vente (texte vert vif bordé, sur fond sombre), un matériau par texte (libéré après l'animation). */
 function moneyMaterial(text: string): THREE.SpriteMaterial {
   const cv = document.createElement('canvas');
-  cv.width = 260; cv.height = 84;
+  cv.width = 320; cv.height = 104;
   const g = cv.getContext('2d')!;
-  g.fillStyle = 'rgba(20, 27, 38, 0.88)'; g.beginPath(); g.roundRect(4, 4, 252, 76, 30); g.fill();
-  g.fillStyle = '#7dffa8'; g.font = '800 44px Rubik, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, 130, 44, 240);
+  g.fillStyle = 'rgba(16, 22, 32, 0.9)'; g.strokeStyle = '#7dffa8'; g.lineWidth = 5;
+  g.beginPath(); g.roundRect(5, 5, 310, 94, 46); g.fill(); g.stroke();
+  g.fillStyle = '#7dffa8'; g.font = '800 54px Rubik, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 160, 55, 286);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   return new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
 }
-const iconCache = new Map<string, THREE.SpriteMaterial>();
-/** Icône d'humeur (émoji) au-dessus d'un client. */
-function iconMaterial(icon: string): THREE.SpriteMaterial {
-  const c = iconCache.get(icon);
+const iconCache = new Map<Mood, THREE.SpriteMaterial>();
+/** Icône d'humeur (visage dessiné sur pastille blanche) au-dessus d'un client. */
+function iconMaterial(mood: Mood): THREE.SpriteMaterial {
+  const c = iconCache.get(mood);
   if (c) return c;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = 96;
+  cv.width = cv.height = 128;
   const g = cv.getContext('2d')!;
-  g.fillStyle = '#ffffff'; g.beginPath(); g.arc(48, 48, 44, 0, Math.PI * 2); g.fill();
-  g.font = '60px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(icon, 48, 52);
+  g.fillStyle = '#ffffff'; g.beginPath(); g.arc(64, 64, 60, 0, Math.PI * 2); g.fill();
+  drawFace(g, 64, 64, 46, mood);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   const m = new THREE.SpriteMaterial({ map: tex, depthTest: false });
-  iconCache.set(icon, m);
+  iconCache.set(mood, m);
   return m;
 }

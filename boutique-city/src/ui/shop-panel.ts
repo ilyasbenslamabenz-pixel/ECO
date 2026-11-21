@@ -3,7 +3,7 @@
  * puis onglets — aperçu et liste de contrôle, prix et stock (commande livrée, réassort automatique), employés,
  * horaires, résultats. Et le panneau Entreprise : trésorerie, journal, commerces, véhicules, prêts, objectifs.
  */
-import { FURNITURE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf, PRODUCT_BY_ID } from '../sim/catalog';
+import { ECONOMY, FURNITURE_BY_ID, PREMIUM, PREMIUM_BY_TYPE, SHOP_TYPE_BY_ID, TRAINING, VEHICLE_BY_ID, premiumDemand, productsOf, PRODUCT_BY_ID } from '../sim/catalog';
 import { clockView } from '../sim/clock';
 import { dayProfit, type DayStats, type Game, type Shop } from '../sim/game';
 import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
@@ -96,7 +96,7 @@ function header(g: Game, s: Shop): HTMLElement {
     el('div', { cls: 'sp-id' },
       el('div', { cls: 'sp-sign', text: t.nameFr.slice(0, 1).toUpperCase() }),
       el('div', { cls: 'sp-idtxt' },
-        el('div', { cls: 'sp-line' }, status, el('span', { cls: 'sp-hours', text: `${s.open} h – ${s.close} h` })),
+        el('div', { cls: 'sp-line' }, status, s.premium ? badge('Premium', 'ok') : null, el('span', { cls: 'sp-hours', text: `${s.open} h – ${s.close} h` })),
         el('div', { cls: 'sp-rep' }, el('span', { text: 'Réputation' }), meter(s.reputation, repTone), el('b', { text: pct(s.reputation) })))),
     el('div', { cls: 'sp-stats' },
       stat('Clients', num(d.customers), lost ? `${num(lost)} perdu(s)` : 'aucun perdu', ''),
@@ -137,7 +137,7 @@ function stock(ctx: UiCtx, id: number): (Node | null)[] {
   let empty = 0, pendingAll = 0, value = 0;
   for (const p of prods) {
     const ps = s.products[p.id]!, cap = g.storageFor(s, p), pend = g.pendingQty(id, p.id);
-    const unitCost = p.cost * g.marketIndex(p.id), ref = g.refPrice(p);
+    const unitCost = g.orderCost(p.id, 1, id), ref = g.refPrice(p, s);
     value += ps.stock * unitCost; pendingAll += pend;
     if (ps.stock === 0 && cap > 0) empty++;
     const price = el('input', { cls: 'price', attrs: { type: 'number', step: '0.1', min: '0', value: String(ps.price), 'aria-label': `Prix ${p.nameFr}` } });
@@ -154,7 +154,7 @@ function stock(ctx: UiCtx, id: number): (Node | null)[] {
     const frac = cap > 0 ? ps.stock / cap : 0;
     const stTone: Tone = cap === 0 ? 'muted' : ps.stock === 0 ? 'bad' : frac < 0.25 ? 'warn' : 'ok';
     const marginU = ps.price - unitCost, marginP = ps.price > 0 ? marginU / ps.price : 0;
-    const est = room > 0 ? g.orderCost(p.id, room) : 0;
+    const est = room > 0 ? g.orderCost(p.id, room, id) : 0;
     const orderBtn = button(room > 0 ? `+${room}` : 'Plein', () => ctx.act(g.order(id, p.id, room), (o) => `Livraison demain 7 h : ${o.qty} ${p.nameFr.toLowerCase()} (${chf2(o.cost)}).`), room > 0 ? 'small order' : 'small');
     if (room > 0) orderBtn.title = `Commander ${room} unités (environ ${chf(est + g.deliveryFee(est, id))} livraison comprise)`;
     tbl.append(el('tr', { cls: stTone === 'bad' ? 'row-bad' : '' },
@@ -168,12 +168,29 @@ function stock(ctx: UiCtx, id: number): (Node | null)[] {
       el('td', { cls: 'c' }, orderBtn)));
   }
   return [
+    ...rangeBlock(ctx, id),
     el('div', { cls: 'sp-strip' },
       stat('Ruptures', String(empty), null, empty ? 'bad' : 'ok'),
       stat('En commande', `${num(pendingAll)} u.`, 'livrées à 7 h'),
       stat('Valeur du stock', chf(value), 'au prix d’achat')),
     tbl,
     el('p', { cls: 'sp-note', text: 'Commander = livraison le lendemain à 7 h (frais de livraison). Moins cher : acheter chez le grossiste et transporter vous-même. Auto : commande livrée chaque soir à 21 h quand le rayon est à moitié vide. Écart : votre prix comparé à celui du quartier ; au-delà de +10 %, des clients reposent l’article.' }),
+  ];
+}
+
+/** Gamme du commerce : standard ou premium (mise en place payée une fois, clientèle selon la réputation). */
+function rangeBlock(ctx: UiCtx, id: number): (Node | null)[] {
+  const g = ctx.game, s = g.shop(id)!, def = PREMIUM_BY_TYPE.get(s.type)!;
+  const demand = premiumDemand(s.reputation), trained = g.bestTraining(id) >= PREMIUM.minTraining;
+  const effect = `Prix du quartier ×${String(PREMIUM.priceMult).replace('.', ',')}, achats ×${String(PREMIUM.costMult).replace('.', ',')}. Clientèle premium avec votre réputation (${pct(s.reputation)}) : ${pct(demand)} de la clientèle standard.`;
+  let action: HTMLElement;
+  if (s.premium) action = button('Revenir à la gamme standard', () => ctx.act(g.setPremium(id, false)), 'small');
+  else if (s.premiumOwned) action = button('Repasser en gamme premium', () => ctx.act(g.setPremium(id, true)), 'small primary');
+  else action = button(`Passer en gamme premium (${chf(def.cost)})`, () => void askConfirm(`Passer ${s.name} en gamme « ${def.nameFr} » pour ${chf(def.cost)} ? Les prix de vente sont multipliés par ${String(PREMIUM.priceMult).replace('.', ',')}.`, 'Monter en gamme').then((y) => { if (y) ctx.act(g.setPremium(id, true), 'Gamme premium en place.'); }), trained ? 'small primary' : 'small');
+  return [
+    section('Gamme', badge(s.premium ? def.nameFr : 'Standard', s.premium ? 'ok' : 'muted')),
+    el('div', { cls: 'item' }, el('div', {}, el('b', { text: def.nameFr }), el('div', { cls: 'sub', text: `${def.desc} ${effect}` }),
+      !s.premium && !trained ? el('div', { cls: 'sub bad', text: 'Il faut d’abord un employé formé dans ce commerce (onglet Employés › Former).' }) : null), action),
   ];
 }
 
@@ -184,11 +201,12 @@ function equipe(ctx: UiCtx, id: number): (Node | null)[] {
   return [
     el('div', { cls: 'sp-strip' },
       stat('Employés', String(staff.length), staff.length ? `compétence moy. ${pct(avgSkill)}` : 'personne', staff.length ? '' : 'warn'),
-      stat('Caisses', String(st.registers), st.registers ? `jusqu’à ${st.registers * 28} clients / h` : 'aucune', st.registers ? '' : 'bad'),
+      stat('Caisses', String(st.registers), st.registers ? `jusqu’à ${st.registers * ECONOMY.servePerRegister} clients / h` : 'aucune', st.registers ? '' : 'bad'),
+      stat('Formation', staff.length ? `${staff.reduce((a, e) => a + (e.training ?? 0), 0)} niveau(x)` : '—', `max ${TRAINING.maxLevel} par employé`),
       stat('Salaires', `${chf(wages)} / h`, 'payés aux heures d’ouverture')),
     section('Équipe'),
     ...(staff.length ? staff.map((e) => employeeRow(ctx, e.id)) : [el('div', { cls: 'sp-empty', text: 'Aucun employé affecté à ce commerce.' })]),
-    el('p', { cls: 'sp-note', text: 'Chaque caissier sert jusqu’à 28 clients par heure selon sa compétence ; les autres réassortent. Pour embaucher : agence pour l’emploi. Vous pouvez aussi tenir la caisse vous-même (E derrière la caisse).' }),
+    el('p', { cls: 'sp-note', text: `Chaque caissier sert jusqu’à ${ECONOMY.servePerRegister} clients par heure selon sa compétence ; les autres réassortent. Former : +${pct(TRAINING.capacity)} de clients servis par niveau, mais le salaire du marché monte de ${TRAINING.wage} CHF / h (augmentez-le pour garder l’employé satisfait). Un employé formé permet la gamme premium. Pour embaucher : agence pour l’emploi. Vous pouvez aussi tenir la caisse vous-même (E derrière la caisse).` }),
   ];
 }
 
@@ -302,6 +320,8 @@ export function companyView(ctx: UiCtx): View {
           out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: VEHICLE_BY_ID.get(v.type)!.nameFr }), el('div', { cls: 'sub', text: load || 'vide' })), button('Y aller', () => ctx.waypoint(v.x, v.z, 'Véhicule'), 'small')));
         }
       }
+      const ct = g.contractDef();
+      if (ct) out.push(el('p', { cls: 'sp-note', text: `${ct.nameFr} avec le grossiste : −${pct(ct.discount)} sur les achats, ${chf(ct.perDay)} / jour.` }));
       if (g.loans.length) out.push(el('p', { cls: 'sp-note', text: `Prêts : ${g.loans.map((l) => `${chf(l.remaining)} restants (${chf2(l.daily)} / jour)`).join(' · ')}` }));
       out.push(section('Objectifs', `${g.achieved.length} / ${OBJECTIVES.length}`),
         el('ul', { cls: 'sp-checks objlist' }, ...OBJECTIVES.map((o) => {

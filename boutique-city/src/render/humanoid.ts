@@ -32,6 +32,11 @@ export class Humanoid {
   private readonly body = new THREE.Group();
   private phase = Math.random() * 6;
   private sitting = false;
+  /** Geste en cours à l'arrêt (voir Person.gesture) et durée restante (s ; ≤ 0 : sans fin). */
+  private gest: string | null = null;
+  private gestT = 0;
+  /** Hauteur du haut de la tête (repère local, avant l'échelle du groupe). */
+  readonly top = 1.86;
 
   constructor(look: Look, readonly scale = 1) {
     const g = this.body;
@@ -75,7 +80,15 @@ export class Humanoid {
     this.armL.rotation.x = -s * a * 0.8; this.armR.rotation.x = s * a * 0.8;
     this.armL.rotation.z = 0; this.armR.rotation.z = 0;
     this.body.position.y = moving ? Math.abs(Math.cos(this.phase)) * 0.04 : Math.sin(this.phase) * 0.008;
+    if (this.gest && this.gestT > 0 && (this.gestT -= dt) <= 0) this.gest = null;
+    if (moving || !this.gest) return;
+    // Gestes à l'arrêt, version faite en code : bras tendus (caisse, rayon), bras levés (content), tête basse (mécontent).
+    if (this.gest.startsWith('interact') || this.gest === 'pick-up' || this.gest.startsWith('holding')) this.armL.rotation.x = this.armR.rotation.x = -0.9 + Math.sin(this.phase * 3) * 0.12;
+    else if (this.gest === 'emote-yes') { this.armL.rotation.z = -2.5; this.armR.rotation.z = 2.5; this.body.position.y = Math.abs(Math.sin(this.phase * 4)) * 0.06; }
+    else if (this.gest === 'emote-no') { this.armL.rotation.z = -0.3; this.armR.rotation.z = 0.3; }
   }
+
+  gesture(name: string | null, duration = 0): void { this.gest = name; this.gestT = duration; }
 
   /** Assis (jambes à l'horizontale, bassin abaissé). */
   sit(on: boolean): void {
@@ -90,7 +103,18 @@ export class Humanoid {
 }
 
 /** Personnage du jeu : fait en code (Humanoid) ou modèle animé (KitPerson), même interface. */
-export interface Person { readonly group: THREE.Group; update(dt: number, speed: number): void; sit(on: boolean): void; reach(): void }
+export interface Person {
+  readonly group: THREE.Group;
+  /** Haut de la tête dans le repère du groupe (pour placer les bulles juste au-dessus). */
+  readonly top: number;
+  update(dt: number, speed: number): void; sit(on: boolean): void; reach(): void;
+  /**
+   * Geste joué tant que le personnage est à l'arrêt (la marche reprend le dessus) : « interact-right » (caisse,
+   * rayon), « pick-up », « emote-yes » / « emote-no »… ; `duration` (s) : retour automatique au repos, 0 = jusqu'au
+   * prochain appel ; null : repos.
+   */
+  gesture(name: string | null, duration?: number): void;
+}
 
 /**
  * Personnage animé des Mini Characters (Kenney) : squelette cloné, AnimationMixer (idle, walk, sprint, sit), teinte
@@ -101,6 +125,9 @@ export class KitPerson implements Person {
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<string, THREE.AnimationAction>();
   private current = '';
+  private gest: string | null = null;
+  private gestT = 0;
+  readonly top: number = CONFIG.npcHeight;
 
   /** Fauteuil roulant : animations « wheelchair-* » à la place de la marche. */
   private readonly wheel: boolean;
@@ -167,13 +194,16 @@ export class KitPerson implements Person {
 
   update(dt: number, speed: number): void {
     if (this.wheel) { this.play(speed > 0.1 ? 'wheelchair-move-forward' : 'wheelchair-sit', Math.max(0.6, speed / 1.2)); this.mixer.update(dt); return; }
+    if (this.gest && this.gestT > 0 && (this.gestT -= dt) <= 0) this.gest = null;
     if (this.current !== 'sit') {
       if (speed > 3) this.play('sprint', speed / 5);
       else if (speed > 0.1) this.play('walk', Math.max(0.6, speed / 1.4));
-      else this.play('idle');
+      else this.play(this.gest ?? 'idle');
     }
     this.mixer.update(dt);
   }
+
+  gesture(name: string | null, duration = 0): void { this.gest = name && this.actions.has(name) ? name : null; this.gestT = duration; }
 
   sit(on: boolean): void { if (!this.wheel) this.play(on ? 'sit' : 'idle'); }
   reach(): void { /* pose « au comptoir » : posture de repos du modèle */ }

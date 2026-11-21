@@ -43,9 +43,12 @@ export const OBJECTIVES: readonly Objective[] = [
   { id: 'vehicule', title: 'Acheter un véhicule', hint: 'Garage : une camionnette transporte 600 unités, bien moins cher que la livraison.', progress: (g) => flag(g.vehicles.length > 0) },
   { id: 'pub', title: 'Lancer une campagne de publicité', hint: 'Agence de publicité : plus de clients pendant la campagne.', progress: (g) => flag(g.campaigns.length > 0 || g.ledger.some((d) => d.marketing > 0) || g.today.marketing > 0) },
   { id: 'deux', title: 'Ouvrir un deuxième commerce', hint: 'Téléphone › Immobilier : un autre type dans une autre rue évite de vous concurrencer vous-même.', progress: (g) => step(g.shops.length, 2, 'commerces') },
-  { id: 'jour2000', title: 'Vendre pour 2 000 CHF en une journée', hint: 'Plusieurs commerces, une caisse de plus aux heures de pointe.', progress: (g) => step(bestDay(g), 2000, 'CHF') },
   { id: 'trois', title: 'Bâtir un réseau de trois commerces', hint: 'Prêts bancaires pour financer, employés pour tenir les caisses.', progress: (g) => step(g.shops.length, 3, 'commerces') },
-  { id: 'valeur100k', title: 'Atteindre 60 000 CHF de valeur nette', hint: 'Trésorerie, mobilier, véhicules et dépôts, moins les dettes. Les sous-locations rapportent chaque jour.', progress: (g) => step(Math.max(0, netWorth(g)), 60_000, 'CHF') },
+  { id: 'gamme', title: 'Monter en gamme : un commerce premium', hint: 'Formez un employé (Gestion › Employés › Former), puis Gestion › Prix et stock › Gamme premium. Mieux vaut une bonne réputation : la clientèle premium la suit.', progress: (g) => {
+    const best = Math.max(0, ...g.shops.map((s) => (s.premium ? 2 : 0) + Math.min(1, g.bestTraining(s.id))));
+    return { p: best >= 2 ? 1 : best / 2, text: best >= 2 ? 'fait' : best >= 1 ? 'employé formé, gamme à activer' : 'former un employé' };
+  } },
+  { id: 'valeur100k', title: 'Atteindre 60 000 CHF de valeur nette', hint: 'Trésorerie, mobilier, véhicules et dépôts, moins les dettes. Leviers : gamme premium, formation, une caisse de plus là où des clients attendent, contrat fournisseur quand vous achetez beaucoup.', progress: (g) => step(Math.max(0, netWorth(g)), 60_000, 'CHF') },
 ];
 
 /** Titre de l'entrepreneur selon le nombre d'objectifs atteints. */

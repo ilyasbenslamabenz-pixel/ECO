@@ -306,3 +306,67 @@ export const HOMES: readonly HomeDef[] = [
   { id: 'loft', nameFr: 'Loft', rentDay: 110, comfort: 1.45, gridW: 11, gridD: 8 },
 ];
 export const HOME_BY_ID: ReadonlyMap<string, HomeDef> = new Map(HOMES.map((h) => [h.id, h]));
+
+/* ------------------------------ Milieu de partie : gamme premium, formation, contrats ------------------------------ */
+
+/**
+ * Gamme premium d'un type de commerce : produits plus fins, vendus plus cher (prix de référence × priceMult) et
+ * achetés plus cher (coût × costMult). La clientèle premium dépend de la réputation : peu de clients tant que le
+ * commerce n'est pas reconnu, autant ou plus qu'en gamme standard quand il l'est. Coût unique de mise en place
+ * (agencement, référencement chez les fournisseurs), puis bascule libre entre les deux gammes.
+ */
+export interface PremiumDef { type: ShopType; nameFr: string; cost: number; desc: string }
+export const PREMIUM = {
+  /** Prix de vente de référence du quartier pour la gamme premium (× prix habituel). */
+  priceMult: 1.6,
+  /** Prix d'achat au grossiste de la gamme premium (× coût habituel). */
+  costMult: 1.45,
+  /** Demande premium = base + slope × réputation (plafonnée à max). */
+  demandBase: 0.25,
+  demandSlope: 0.9,
+  demandMax: 1.1,
+  /** Formation minimale d'au moins un employé du commerce pour passer en premium. */
+  minTraining: 1,
+} as const;
+export const PREMIUM_RANGES: readonly PremiumDef[] = [
+  { type: 'epicerie', nameFr: 'Épicerie fine', cost: 5500, desc: 'Produits bio, fromages affinés, conserves de producteurs.' },
+  { type: 'cafe', nameFr: 'Café de spécialité', cost: 4500, desc: 'Torréfaction artisanale, pâtisseries maison.' },
+  { type: 'vetements', nameFr: 'Mode de créateurs', cost: 6000, desc: 'Pièces de créateurs locaux, matières nobles.' },
+  { type: 'fleuriste', nameFr: 'Atelier floral', cost: 4500, desc: 'Compositions sur mesure, fleurs de saison rares.' },
+  { type: 'boulangerie', nameFr: 'Boulangerie artisanale', cost: 4500, desc: 'Levain naturel, farines anciennes, pâtisserie fine.' },
+  { type: 'fastfood', nameFr: 'Burgers gourmets', cost: 4500, desc: 'Viande locale, pains briochés, sauces maison.' },
+  { type: 'primeur', nameFr: 'Primeur bio', cost: 4500, desc: 'Fruits et légumes bio de petits producteurs.' },
+];
+export const PREMIUM_BY_TYPE: ReadonlyMap<ShopType, PremiumDef> = new Map(PREMIUM_RANGES.map((p) => [p.type, p]));
+/** Part de la demande premium selon la réputation (0..1). */
+export const premiumDemand = (reputation: number): number => Math.min(PREMIUM.demandMax, PREMIUM.demandBase + PREMIUM.demandSlope * reputation);
+
+/**
+ * Formation des employés (cours du soir, payée une fois par niveau) : chaque niveau sert plus de clients par heure,
+ * mais l'employé formé vaut plus cher sur le marché (il demandera une augmentation si son salaire ne suit pas).
+ */
+export const TRAINING = {
+  maxLevel: 3,
+  /** Coût du niveau n (1..3) : base + step × (n − 1). */
+  base: 600,
+  step: 500,
+  /** Clients servis en plus par niveau (part de la capacité de caisse). */
+  capacity: 0.12,
+  /** Salaire du marché en plus par niveau (CHF / h). */
+  wage: 2,
+  /** Compétence gagnée par niveau (plafonnée à 100 %). */
+  skill: 0.05,
+} as const;
+export const trainingCost = (level: number): number => TRAINING.base + TRAINING.step * (level - 1);
+
+/**
+ * Contrats fournisseurs avec le grossiste : forfait quotidien contre une remise sur tous les achats (emportés ou
+ * livrés). Intéressant seulement quand on achète beaucoup (plusieurs commerces).
+ */
+export type ContractKind = 'essentiel' | 'partenaire';
+export interface ContractDef { id: ContractKind; nameFr: string; perDay: number; discount: number; /** Forfait de livraison offert. */ freeDelivery: boolean; desc: string }
+export const CONTRACTS: readonly ContractDef[] = [
+  { id: 'essentiel', nameFr: 'Contrat Essentiel', perDay: 45, discount: 0.08, freeDelivery: false, desc: '−8 % sur tous les achats.' },
+  { id: 'partenaire', nameFr: 'Contrat Partenaire', perDay: 150, discount: 0.15, freeDelivery: true, desc: '−15 % sur tous les achats, forfait de livraison offert.' },
+];
+export const CONTRACT_BY_ID: ReadonlyMap<ContractKind, ContractDef> = new Map(CONTRACTS.map((c) => [c.id, c]));

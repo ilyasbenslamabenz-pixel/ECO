@@ -15,6 +15,10 @@ interface Mover {
   a: THREE.Vector2; b: THREE.Vector2; t: number; dir: 1 | -1; speed: number; pause: number;
   zone: { x0: number; z0: number; x1: number; z1: number } | null; target: THREE.Vector2 | null;
   walk: string; idle: string; y: number;
+  /** Circuit fermé (points de passage parcourus en boucle) au lieu d'un aller-retour ; index du prochain point. */
+  loop: THREE.Vector2[] | null; idx: number;
+  /** Probabilité d'une pause (animation `idle`) à chaque point atteint, et figure jouée en roulant de temps en temps. */
+  rest: number; trick: string | null; trickT: number;
   /** Décalage de cap : les personnages (rotation d'ASSETS) regardent vers −z, les animaux vers +z. */
   face: number;
 }
@@ -100,8 +104,18 @@ export class StreetLife {
       ['f:skt-obstacle-end', 2, 0.7, 1, sx + 1.9, sz + 5, -Math.PI / 2], ['f:skt-obstacle-end', 2, 0.7, 1, sx + 4.9, sz + 5, Math.PI / 2],
     ];
     for (const [k, w, h, dd, x, zz, ry] of sp) this.prop(k, w, h, dd, x, zz, ry, 0.2);
-    for (const [k, off, sp2] of [['f:skt-character-skate-boy', -1, 2.6], ['f:skt-character-skate-girl', 1, 2.2]] as const) {
-      const m = this.add(k, 1.3, { a: new THREE.Vector2(sk.x0 + 4.2, sz + off), b: new THREE.Vector2(sk.x1 - 4.2, sz + off), speed: sp2, t: off < 0 ? 0.1 : 0.6, walk: 'skate', idle: 'skate-stand', person: true, y: 0.33 });
+    // Deux skateurs désynchronisés : le garçon fait des allers-retours rapides sur un côté de la piste (pauses
+    // rares) ; la fille tourne en boucle sur un circuit ovale dans l'autre sens, plus lentement, avec des pauses
+    // et des figures. Départs à des endroits différents du trajet.
+    const laneHalf = (sk.x1 - sk.x0) / 2 - 4.6;
+    const oval: THREE.Vector2[] = [];
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; oval.push(new THREE.Vector2(sx + Math.cos(a) * laneHalf * 0.85, sz + 0.7 + Math.sin(a) * 1.3)); }
+    const riders: [string, Parameters<StreetLife['add']>[2]][] = [
+      ['f:skt-character-skate-boy', { a: new THREE.Vector2(sk.x0 + 4.4, sz - 1.5), b: new THREE.Vector2(sk.x1 - 4.4, sz - 1.5), speed: 2.9, t: 0.2 + rnd() * 0.2, walk: 'skate', idle: 'skate-stand', person: true, y: 0.33, rest: 0.25, trick: 'skate-air' }],
+      ['f:skt-character-skate-girl', { loop: oval, idx: 6 + Math.floor(rnd() * 3), speed: 1.9, walk: 'skate', idle: 'skate-stand', person: true, y: 0.33, rest: 0.12, trick: 'skate-grab' }],
+    ];
+    for (const [k, o] of riders) {
+      const m = this.add(k, 1.3, o);
       if (m) { const board = assets.fitted('f:skt-skateboard', 0.85, 0.13, 0.3); if (board) { board.rotation.y = Math.PI / 2; board.position.y = -0.13; m.obj.add(board); } }
     }
 
@@ -127,7 +141,7 @@ export class StreetLife {
   }
 
   /** Personnage ou animal animé. */
-  private add(key: string, size: number, o: { a?: THREE.Vector2; b?: THREE.Vector2; zone?: Mover['zone']; speed: number; t?: number; walk?: string; idle?: string; person?: boolean; y?: number }): Mover | null {
+  private add(key: string, size: number, o: { a?: THREE.Vector2; b?: THREE.Vector2; zone?: Mover['zone']; loop?: THREE.Vector2[]; idx?: number; speed: number; t?: number; walk?: string; idle?: string; person?: boolean; y?: number; rest?: number; trick?: string }): Mover | null {
     const c = assets.clone(key);
     if (!c) return null;
     const fitted = fitInto(c.obj, o.person ? 3 : size, o.person ? size : size, o.person ? 3 : size, false);
@@ -138,10 +152,25 @@ export class StreetLife {
     const mixer = c.animations.length ? new THREE.AnimationMixer(c.obj) : null;
     const actions = new Map<string, THREE.AnimationAction>();
     if (mixer) for (const clip of c.animations) actions.set(clip.name, mixer.clipAction(clip));
-    const a = o.a ?? new THREE.Vector2(o.zone!.x0, o.zone!.z0), b = o.b ?? a.clone();
-    const m: Mover = { obj: holder, mixer, actions, cur: '', a, b, t: o.t ?? 0, dir: 1, speed: o.speed, pause: 0, zone: o.zone ?? null, target: null, walk: o.walk ?? 'walk', idle: o.idle ?? 'idle', y: o.y ?? 0.17, face: o.person ? Math.PI : 0 };
+    const a = o.a ?? o.loop?.[0] ?? new THREE.Vector2(o.zone!.x0, o.zone!.z0), b = o.b ?? a.clone();
+    const m: Mover = {
+      obj: holder, mixer, actions, cur: '', a, b, t: o.t ?? 0, dir: 1, speed: o.speed, pause: 0, zone: o.zone ?? null, target: null,
+      walk: o.walk ?? 'walk', idle: o.idle ?? 'idle', y: o.y ?? 0.17, loop: o.loop ?? null, idx: 0, rest: o.rest ?? 0.5, trick: o.trick ?? null, trickT: 3 + Math.random() * 6,
+      face: o.person ? Math.PI : 0,
+    };
     if (m.zone) { m.target = new THREE.Vector2(); this.pick(m); holder.position.set(m.target.x, m.y, m.target.y); }
-    else holder.position.set(a.x, m.y, a.y);
+    else if (m.loop) {
+      // Circuit : départ sur le point idx − 1, en route vers le point idx.
+      const n = m.loop.length;
+      m.idx = (o.idx ?? 0) % n;
+      const p0 = m.loop[(m.idx + n - 1) % n]!;
+      holder.position.set(p0.x, m.y, p0.y);
+    } else {
+      // Aller-retour : départ à la fraction t du trajet, dans un sens tiré au hasard (les trajets ne restent pas en phase).
+      const t0 = Math.max(0, Math.min(1, m.t));
+      holder.position.set(a.x + (b.x - a.x) * t0, m.y, a.y + (b.y - a.y) * t0);
+      if (Math.random() < 0.5) m.dir = -1;
+    }
     mixer?.update(Math.random() * 2);
     this.play(m, m.speed > 0 ? m.walk : m.idle);
     this.group.add(holder);
@@ -171,14 +200,23 @@ export class StreetLife {
       m.mixer?.update(dt);
       if (m.speed <= 0) continue;
       if (m.pause > 0) { m.pause -= dt; if (m.pause <= 0) this.play(m, m.walk); continue; }
+      // Figure de temps en temps (skateurs) : jouée environ une seconde sans s'arrêter.
+      if (m.trick) {
+        m.trickT -= dt;
+        if (m.cur === m.trick) { if (m.trickT <= 0) { this.play(m, m.walk); m.trickT = 5 + Math.random() * 8; } }
+        else if (m.trickT <= 0 && m.cur === m.walk) { this.play(m, m.trick); m.trickT = 1.1; }
+      }
       let tx: number, tz: number;
       if (m.zone) { tx = m.target!.x; tz = m.target!.y; }
+      else if (m.loop) { const to = m.loop[m.idx]!; tx = to.x; tz = to.y; }
       else { const to = m.dir > 0 ? m.b : m.a; tx = to.x; tz = to.y; }
       const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz), step = m.speed * dt;
       if (d <= step) {
         p.x = tx; p.z = tz;
-        if (m.zone) this.pick(m); else m.dir = m.dir > 0 ? -1 : 1;
-        if (Math.random() < 0.5 && m.walk !== 'skate') { m.pause = 1 + Math.random() * 3; this.play(m, m.idle); }
+        if (m.zone) this.pick(m); else if (m.loop) m.idx = (m.idx + 1) % m.loop.length; else m.dir = m.dir > 0 ? -1 : 1;
+        // Pause éventuelle (sur un circuit, seulement aux deux bouts de l'ovale : pas au milieu d'un virage).
+        const atEnd = !m.loop || m.idx % (m.loop.length / 2) === 1;
+        if (atEnd && Math.random() < m.rest) { m.pause = (m.walk === 'skate' ? 0.8 : 1) + Math.random() * (m.walk === 'skate' ? 1.6 : 3); this.play(m, m.idle); }
       } else {
         p.x += (dx / d) * step; p.z += (dz / d) * step;
         const want = Math.atan2(dx, dz) + m.face;
