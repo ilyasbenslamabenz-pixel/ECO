@@ -3,3 +3,9 @@ dist
 tests/out
 *.log
 tests/out-boucle
+
+# Fichiers temporaires des agents (builds et sondes locales)
+scripts/.build-*.mjs
+scripts/.bugs-*
+tests/.probe*.mjs
+tests/.dbg*.mjs
