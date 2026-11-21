@@ -8,6 +8,7 @@ import { ECONOMY, FURNITURE_BY_ID, PREMIUM, PREMIUM_BY_TYPE, SHOP_TYPE_BY_ID, TR
 import { CLEANING, FLOORINGS, WALLINGS, cleanAppeal, type SurfaceDef } from '../sim/catalog';
 import { clockView } from '../sim/clock';
 import { dayProfit, type DayStats, type Game, type Shop } from '../sim/game';
+import type { BatchSettings, BatchTarget } from '../sim/game';
 import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
 import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
 import { employeeRow, type UiCtx } from './dialogs';
@@ -185,6 +186,119 @@ function surfaceBlock(ctx: UiCtx, id: number): (Node | null)[] {
     row('murs', WALLINGS, s.wallId ?? 'origine'),
     here ? null : el('p', { cls: 'sp-note', text: 'La pose se commande sur place, dans le commerce.' }),
   ];
+}
+
+/* ------------------------------ Réglages en lot ------------------------------ */
+
+type Tri = '' | 'on' | 'off';
+/** Formulaire des réglages en lot (gardé entre deux affichages). */
+const lot = { target: 'tous' as BatchTarget, price: '' as '' | 'coef' | 'produits', factor: 1, prices: {} as Record<string, number>, auto: '' as Tri, hours: false, open: 8, close: 20, clean: '' as Tri };
+
+/** Réglages du formulaire convertis pour la simulation (prix par produit : seulement si un type est choisi). */
+function lotSettings(): BatchSettings {
+  const set: BatchSettings = {};
+  if (lot.price === 'coef') set.priceFactor = lot.factor;
+  if (lot.price === 'produits' && lot.target !== 'tous') {
+    const ids = new Set(productsOf(lot.target).map((p) => p.id));
+    set.prices = Object.fromEntries(Object.entries(lot.prices).filter(([k, v]) => ids.has(k) && v > 0));
+  }
+  if (lot.auto) set.auto = lot.auto === 'on';
+  if (lot.hours) set.hours = { open: lot.open, close: lot.close };
+  if (lot.clean) set.cleanService = lot.clean === 'on';
+  return set;
+}
+
+/**
+ * Gestion centralisée : appliquer d'un coup à tous les commerces d'un type (ou à tous) les prix (coefficient sur le
+ * prix du quartier, ou prix par produit), le réassort automatique, les horaires et le nettoyage de nuit, avec un
+ * aperçu de chaque modification avant de valider.
+ */
+export function batchView(ctx: UiCtx): View {
+  const g = ctx.game;
+  const repaint = (): void => ctx.panel.paint(true);
+  const select = <T extends string>(label: string, value: T, options: [T, string][], onPick: (v: T) => void): HTMLElement => {
+    const e = el('select', { attrs: { 'aria-label': label } }, ...options.map(([v, t]) => el('option', { text: t, attrs: { value: v } })));
+    e.value = value;
+    e.addEventListener('change', () => { onPick(e.value as T); repaint(); });
+    return el('label', { cls: 'field' }, el('span', { text: label }), e);
+  };
+  const number = (label: string, value: number, step: string, onSet: (v: number) => void, cls = 'price'): HTMLElement => {
+    const e = el('input', { cls, attrs: { type: 'number', step, min: '0', value: String(value), 'aria-label': label } });
+    e.addEventListener('change', () => { onSet(Number(e.value)); repaint(); });
+    return el('label', { cls: 'field' }, el('span', { text: label }), e);
+  };
+  return {
+    kicker: 'Entreprise · gestion centralisée', title: 'Réglages en lot', wide: true,
+    render: () => {
+      if (!g.shops.length) return [el('div', { cls: 'sp-empty', text: 'Aucun commerce pour l’instant.' })];
+      const types = [...new Set(g.shops.map((s) => s.type))];
+      if (lot.target !== 'tous' && !types.includes(lot.target)) lot.target = 'tous';
+      const count = (t: BatchTarget): number => g.batchShops(t).length;
+      const out: (Node | null)[] = [
+        el('p', { cls: 'sp-note', text: 'Choisissez les commerces visés et les réglages à changer. Rien n’est modifié avant « Appliquer » : l’aperçu en bas liste chaque changement.' }),
+        section('Commerces visés', `${count(lot.target)} commerce${count(lot.target) > 1 ? 's' : ''}`),
+        el('div', { cls: 'lot-row' },
+          select<BatchTarget>('Appliquer à', lot.target, [['tous', `Tous mes commerces (${g.shops.length})`], ...types.map((t): [BatchTarget, string] => [t, `${SHOP_TYPE_BY_ID.get(t)!.nameFr} (${count(t)})`])], (v) => { lot.target = v; if (v === 'tous' && lot.price === 'produits') lot.price = ''; })),
+        section('Prix de vente'),
+        el('div', { cls: 'lot-row' },
+          select<typeof lot.price>('Prix', lot.price, [['', 'Ne pas changer'], ['coef', 'Coefficient sur le prix du quartier'], ...(lot.target !== 'tous' ? [['produits', 'Prix par produit'] as ['produits', string]] : [])], (v) => { lot.price = v; }),
+          lot.price === 'coef' ? number('Coefficient (×)', lot.factor, '0.05', (v) => { lot.factor = v; }) : null),
+      ];
+      if (lot.price === 'coef') out.push(el('p', { cls: 'sp-note', text: `×1 = prix du quartier ; ×${(1.1).toLocaleString('fr-CH')} = 10 % plus cher (des clients reposent alors l’article). Gamme premium et concurrence prises en compte commerce par commerce.` }));
+      if (lot.price === 'produits' && lot.target !== 'tous') {
+        const ex = g.batchShops(lot.target)[0]!;
+        out.push(el('div', { cls: 'lot-prices' }, ...productsOf(lot.target).map((p) => {
+          const ref = g.refPrice(p, ex);
+          return number(`${p.nameFr} (quartier ${chf2(ref)})`, lot.prices[p.id] ?? ex.products[p.id]!.price, '0.1', (v) => { lot.prices[p.id] = v; });
+        })));
+      }
+      out.push(
+        section('Réassort, horaires, nettoyage'),
+        el('div', { cls: 'lot-row' },
+          select<Tri>('Réassort automatique (tous les produits)', lot.auto, [['', 'Ne pas changer'], ['on', 'Activer'], ['off', 'Désactiver']], (v) => { lot.auto = v; }),
+          select<Tri>('Service de nettoyage de nuit', lot.clean, [['', 'Ne pas changer'], ['on', 'Souscrire'], ['off', 'Résilier']], (v) => { lot.clean = v; }),
+          select<'0' | '1'>('Horaires', lot.hours ? '1' : '0', [['0', 'Ne pas changer'], ['1', 'Fixer les horaires']], (v) => { lot.hours = v === '1'; })),
+      );
+      if (lot.hours) {
+        const hours = (from: number, to: number): [string, string][] => Array.from({ length: to - from + 1 }, (_, k) => [String(from + k), `${from + k} h`]);
+        out.push(el('div', { cls: 'lot-row' },
+          select('Ouverture', String(lot.open), hours(5, 19), (v) => { lot.open = Number(v); }),
+          select('Fermeture', String(lot.close), hours(9, 23), (v) => { lot.close = Number(v); }),
+          el('div', { cls: 'sp-hours-sum' }, el('b', { text: `${lot.close - lot.open} h` }), el('span', { text: 'par jour' }))));
+      }
+      // Aperçu.
+      const plan = g.previewBatch(lot.target, lotSettings());
+      out.push(section('Aperçu', plan.ok ? `${plan.data.length} modification${plan.data.length > 1 ? 's' : ''}` : null));
+      if (!plan.ok) { out.push(el('p', { cls: 'sp-note warn', text: plan.message })); return out; }
+      if (!plan.data.length) { out.push(el('p', { cls: 'sp-note', text: 'Rien ne change avec ces réglages (déjà en place, ou aucun réglage choisi).' })); return out; }
+      const perDay = plan.data.reduce((a, c) => a + (c.perDay ?? 0), 0);
+      for (const s of g.batchShops(lot.target)) {
+        const list = plan.data.filter((c) => c.shopId === s.id);
+        if (!list.length) { out.push(el('div', { cls: 'lot-shop muted' }, el('b', { text: s.name }), el('span', { cls: 'sub', text: ' · déjà à jour' }))); continue; }
+        const shown = list.slice(0, 8);
+        out.push(el('div', { cls: 'lot-shop', attrs: { style: `--shop:${SHOP_TYPE_BY_ID.get(s.type)!.color}` } },
+          el('div', { cls: 'lot-shop-h' }, el('b', { text: s.name }), el('span', { cls: 'sub', text: `${list.length} changement${list.length > 1 ? 's' : ''}` })),
+          el('ul', { cls: 'lot-changes' }, ...shown.map((c) => el('li', {}, el('span', { text: c.label }), el('s', { text: c.from }), el('b', { text: `→ ${c.to}` }))),
+            list.length > shown.length ? el('li', { cls: 'sub', text: `… et ${list.length - shown.length} autre(s)` }) : null)));
+      }
+      if (perDay) out.push(el('p', { cls: `sp-note ${perDay > 0 ? 'warn' : 'ok'}`, text: `Nettoyage de nuit : ${perDay > 0 ? '+' : '−'}${chf(Math.abs(perDay))} par jour au total.` }));
+      out.push(el('div', { cls: 'row' }, button(`Appliquer (${plan.data.length})`, () => {
+        if (ctx.act(g.applyBatch(lot.target, lotSettings()), (r) => `${r.changes} modification(s) dans ${r.shops} commerce(s).`)) { lot.prices = {}; repaint(); }
+      }, 'primary')));
+      return out;
+    },
+  };
+}
+
+/** Accès direct aux revêtements depuis le mode aménagement (même contenu que dans l'onglet Aperçu). */
+export function surfaceView(ctx: UiCtx, shopId: number): View {
+  const s0 = ctx.game.shop(shopId);
+  return {
+    kicker: 'Aménagement · sol et murs', title: s0?.name ?? '',
+    render: () => ctx.game.shop(shopId)
+      ? [el('p', { cls: 'sp-note', text: 'Un beau sol et de beaux murs attirent plus de clients. La pose est immédiate et payée aussitôt.' }), ...surfaceBlock(ctx, shopId)]
+      : [el('p', { text: 'Ce commerce n’existe plus.' })],
+  };
 }
 
 function stock(ctx: UiCtx, id: number): (Node | null)[] {
@@ -384,6 +498,8 @@ export function companyView(ctx: UiCtx): View {
           stat('Solde du jour', signed(today), 'toutes dépenses', today >= 0 ? 'ok' : 'bad'),
           stat('Valeur nette', chf(netWorth(g)), rankOf(g.achieved.length))),
         section('Mes commerces', g.shops.length ? `${g.shops.length}` : null),
+        g.shops.length >= 2 ? el('div', { cls: 'row lot-entry' }, button('Réglages en lot…', () => ctx.panel.open(batchView(ctx)), 'small primary'),
+          el('span', { cls: 'sub', text: 'prix, réassort, horaires et nettoyage de plusieurs commerces d’un coup' })) : null,
       ];
       if (!g.shops.length) out.push(el('div', { cls: 'sp-empty', text: 'Aucun commerce. Repérez les anneaux jaunes devant les locaux à louer (carte : touche M).' }));
       for (const s of g.shops) {

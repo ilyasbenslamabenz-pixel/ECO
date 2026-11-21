@@ -16,11 +16,13 @@ import { SHIFT_BY_ID, STAFF, STAFF_ROLE_BY_ID, type ShiftKind, type StaffRole } 
 import { CLEANING, FLOORING_BY_ID, WALLING_BY_ID, cleanAppeal, surfaceArea } from './catalog';
 import { FINANCE, INVESTMENTS, INVEST_BY_ID, type InvestKind } from './catalog';
 import { MINUTES_PER_DAY, START_MINUTE, clockView } from './clock';
-import { FACE_N, SIDEWALK_W, competitorsNear, generateDistrict, type Building, type District, type Premise } from './district';
+import { emptyLogi, logisticsHour, logisticsNight, restoreLogi, saveLogi, type LogiState } from './logistics';
+import { FACE_N, SIDEWALK_W, generateDistrict, type Building, type District, type Premise } from './district';
 import { canPlace, layoutStats, type LayoutStats, type PlacedItem, type Rot } from './layout';
 import { randomName } from './names';
 import { OBJECTIVES, netWorth } from './objectives';
 import { Rng } from './rng';
+import { Rivalry, type RivalSave } from './rivals';
 
 export const SAVE_VERSION = 2;
 
@@ -119,6 +121,11 @@ export interface DayStats {
   rentalIncome: number;
   /** Impôt sur le bénéfice prélevé ce jour-là (fin de semaine) ; absent : 0. */
   tax?: number;
+  /**
+   * Gains (+) ou pertes (−) des placements cette nuit-là : intérêts de l'épargne, variation du fonds. Valeur placée,
+   * pas encore encaissée : hors bénéfice d'exploitation et hors impôt. Absent : 0.
+   */
+  investGain?: number;
 }
 
 /**
@@ -205,6 +212,36 @@ export function dayProfit(d: DayStats): number {
   return d.revenue + (d.rentalIncome ?? 0) - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living - (d.tax ?? 0);
 }
 
+/** Réglages en lot : commerces visés (un type, ou tous les commerces). */
+export type BatchTarget = ShopType | 'tous';
+/** Réglages à appliquer d'un coup ; un champ absent n'est pas modifié. */
+export interface BatchSettings {
+  /** Prix de chaque produit = coefficient × prix du quartier (0,3 à 3). */
+  priceFactor?: number;
+  /** Prix fixés par produit (CHF), prioritaires sur le coefficient ; ignorés là où le produit n'est pas vendu. */
+  prices?: Record<string, number>;
+  /** Réassort automatique de tous les produits. */
+  auto?: boolean;
+  /** Horaires d'ouverture (5 h à 23 h, au moins 4 h). */
+  hours?: { open: number; close: number };
+  /** Service de nettoyage de nuit. */
+  cleanService?: boolean;
+}
+/** Une modification prévue par un réglage en lot (aperçu avant validation). */
+export interface BatchChange {
+  shopId: number;
+  kind: 'prix' | 'auto' | 'horaires' | 'nettoyage';
+  /** Produit concerné (prix, réassort). */
+  productId?: string;
+  label: string;
+  from: string;
+  to: string;
+  /** Valeur appliquée (prix en CHF ; 1/0 pour un interrupteur ; horaires : ouverture × 100 + fermeture). */
+  value: number;
+  /** Variation de coût par jour (service de nettoyage). */
+  perDay?: number;
+}
+
 export interface GameSave {
   v: number;
   seed: number;
@@ -224,12 +261,16 @@ export interface GameSave {
   sublets?: Sublet[];
   market?: Record<string, number>;
   rivals?: Record<string, number>;
+  /** Entreprises et commerces rivaux (absent : tirés de la graine, comme en début de partie). */
+  rivalry?: RivalSave;
   weather?: Weather;
   marketDay?: boolean;
   /** Contrat fournisseur en cours (absent : aucun). */
   contract?: ContractKind | null;
   /** Placements, notoriété, impôts (absent : rien de placé, aucune notoriété). */
   finance?: FinanceSave;
+  /** Logistique : entrepôts, importations, stocks minimums, tournées (absent : aucun entrepôt). */
+  logi?: LogiState;
   nextId: number;
   rng: number[];
 }
@@ -276,7 +317,11 @@ export class Game {
   awareness: Record<string, number> = {};
   /** Impôts des dernières semaines (12 au plus). */
   taxes: TaxRecord[] = [];
+  /** Logistique : entrepôts, importations en cours, stocks minimums des commerces, tournées (voir logistics.ts). */
+  logi: LogiState = emptyLogi();
   private rng: Rng;
+  /** Concurrence active : entreprises rivales, leurs commerces, promotions, rachats (src/sim/rivals.ts). */
+  readonly rivalry: Rivalry = new Rivalry(this, { newId: () => this.nextId++, bump: () => this.bump() });
   private nextId = 1;
   /** Version de l'état (l'interface ne redessine que si elle change). */
   version = 0;
@@ -295,6 +340,7 @@ export class Game {
     };
     if (save) this.restore(save);
     else this.refreshCandidates();
+    this.rivalry.init(save?.rivalry);
   }
 
   /* ------------------------------ Lecture ------------------------------ */
@@ -321,7 +367,7 @@ export class Game {
   /** Incrémenté à chaque changement de mobilier (tous commerces). */
   layoutRev = 0;
 
-  isFree(p: Premise): boolean { return !p.competitor && !this.shopAt(p.id) && !this.sublets.some((x) => x.kind === 'local' && x.ref === p.id); }
+  isFree(p: Premise): boolean { return !p.warehouse && !p.competitor && !this.shopAt(p.id) && !this.sublets.some((x) => x.kind === 'local' && x.ref === p.id); }
   /** Logement libre : ni le vôtre, ni déjà pris à bail. */
   homeFree(homeId: number): boolean { return this.player.home !== homeId && !this.sublets.some((x) => x.kind === 'logement' && x.ref === homeId); }
   subletOf(kind: Sublet['kind'], ref: number): Sublet | undefined { return this.sublets.find((x) => x.kind === kind && x.ref === ref); }
@@ -557,7 +603,7 @@ export class Game {
   }
 
   competition(p: Premise, type: ShopType): number {
-    return competitorsNear(this.district, p, type, 300, (q) => this.shopAt(q.id)?.type ?? null);
+    return this.rivalry.pressure(p, type);
   }
 
   /** Clients attendus par heure à l'heure de pointe pour un type de commerce dans ce local (aménagement moyen). */
@@ -858,6 +904,72 @@ export class Game {
     s.open = open; s.close = close;
     this.bump();
     return ok(undefined);
+  }
+
+  /* ------------------------------ Réglages en lot ------------------------------ */
+
+  /** Commerces visés par un réglage en lot. */
+  batchShops(target: BatchTarget): Shop[] {
+    return target === 'tous' ? [...this.shops] : this.shops.filter((s) => s.type === target);
+  }
+
+  /** Prix de vente borné comme setPrice (30 % à 300 % du prix de base de la gamme). */
+  private clampPrice(s: Shop, pr: ProductDef, price: number): number {
+    const base = pr.basePrice * (s.premium ? PREMIUM.priceMult : 1);
+    return r2(Math.min(base * 3, Math.max(base * 0.3, price)));
+  }
+
+  /** Aperçu d'un réglage en lot : la liste de ce qui changerait (rien n'est modifié). */
+  previewBatch(target: BatchTarget, set: BatchSettings): Result<BatchChange[]> {
+    const shops = this.batchShops(target);
+    if (!shops.length) return fail(target === 'tous' ? 'Aucun commerce.' : `Aucun commerce de type ${SHOP_TYPE_BY_ID.get(target)?.nameFr.toLowerCase() ?? target}.`);
+    const f = set.priceFactor;
+    if (f !== undefined && !(Number.isFinite(f) && f >= 0.3 && f <= 3)) return fail('Coefficient de prix : entre ×0,3 et ×3.');
+    for (const [pid, v] of Object.entries(set.prices ?? {})) {
+      if (!PRODUCT_BY_ID.has(pid)) return fail('Produit inconnu');
+      if (!Number.isFinite(v) || v <= 0) return fail(`Prix invalide pour ${PRODUCT_BY_ID.get(pid)!.nameFr.toLowerCase()}.`);
+    }
+    const hrs = set.hours;
+    if (hrs && !(Number.isInteger(hrs.open) && Number.isInteger(hrs.close) && hrs.open >= 5 && hrs.close <= 23 && hrs.close - hrs.open >= 4)) return fail('Horaires : de 5 h à 23 h, au moins 4 h d’ouverture');
+    const out: BatchChange[] = [];
+    const money = (v: number): string => `${v.toFixed(2).replace('.', ',')} CHF`;
+    for (const s of shops) {
+      for (const pr of productsOf(s.type)) {
+        const ps = s.products[pr.id]!;
+        const want = set.prices?.[pr.id] ?? (f !== undefined ? this.refPrice(pr, s) * f : undefined);
+        if (want !== undefined) {
+          const v = this.clampPrice(s, pr, want);
+          if (Math.abs(v - ps.price) >= 0.005) out.push({ shopId: s.id, kind: 'prix', productId: pr.id, label: `Prix · ${pr.nameFr}`, from: money(ps.price), to: money(v), value: v });
+        }
+        if (set.auto !== undefined && ps.auto !== set.auto) out.push({ shopId: s.id, kind: 'auto', productId: pr.id, label: `Réassort auto · ${pr.nameFr}`, from: ps.auto ? 'oui' : 'non', to: set.auto ? 'oui' : 'non', value: set.auto ? 1 : 0 });
+      }
+      if (hrs && (hrs.open !== s.open || hrs.close !== s.close)) out.push({ shopId: s.id, kind: 'horaires', label: 'Horaires', from: `${s.open} h – ${s.close} h`, to: `${hrs.open} h – ${hrs.close} h`, value: hrs.open * 100 + hrs.close });
+      if (set.cleanService !== undefined && !!s.cleanService !== set.cleanService) {
+        const fee = this.cleanServiceCost(s.id);
+        out.push({ shopId: s.id, kind: 'nettoyage', label: 'Nettoyage de nuit', from: s.cleanService ? 'oui' : 'non', to: set.cleanService ? `oui (${fee} CHF / jour)` : 'non', value: set.cleanService ? 1 : 0, perDay: set.cleanService ? fee : -fee });
+      }
+    }
+    return ok(out);
+  }
+
+  /** Applique un réglage en lot à tous les commerces visés ; renvoie le nombre de commerces et de modifications. */
+  applyBatch(target: BatchTarget, set: BatchSettings): Result<{ shops: number; changes: number }> {
+    const plan = this.previewBatch(target, set);
+    if (!plan.ok) return plan;
+    const touched = new Set<number>();
+    for (const c of plan.data) {
+      const s = this.shop(c.shopId)!;
+      touched.add(s.id);
+      if (c.kind === 'prix') s.products[c.productId!]!.price = c.value;
+      else if (c.kind === 'auto') s.products[c.productId!]!.auto = c.value === 1;
+      else if (c.kind === 'horaires') { s.open = Math.floor(c.value / 100); s.close = c.value % 100; }
+      else s.cleanService = c.value === 1;
+    }
+    if (plan.data.some((c) => c.kind === 'horaires')) this.refreshCapacities();
+    const n = plan.data.length;
+    if (n) this.notify('ok', `Réglages en lot appliqués : ${n} modification${n > 1 ? 's' : ''} dans ${touched.size} commerce${touched.size > 1 ? 's' : ''}.`);
+    this.bump();
+    return ok({ shops: touched.size, changes: n });
   }
 
   /* ------------------------------ Marchandise ------------------------------ */
@@ -1348,10 +1460,22 @@ export class Game {
     if (c < CLEANING.warn && this.rng.next() < 0.3 * (CLEANING.warn - c) / CLEANING.warn) this.feel(s, 'sale');
   }
 
-  /** Heure d'ouverture : salissure, entretien par l'équipe, alerte une fois par jour sous le seuil. */
+  /**
+   * Nettoyage de base par les caissiers présents pendant les heures creuses (points pour cette heure) : proportionnel
+   * à leur compétence et à la part de capacité de caisse restée inutilisée l'heure précédente.
+   */
+  cashierSweep(s: Shop): number {
+    const h = clockView(this.total).hour;
+    const served = s.hourServed?.[h - 1] ?? 0;
+    const slack = s.capacity > 0 ? Math.max(0, 1 - served / s.capacity) : 1;
+    return CLEANING.cashierPerHour * slack * this.onDuty(s.id, 'caisse', h).reduce((a, e) => a + e.skill, 0);
+  }
+
+  /** Heure d'ouverture : salissure, entretien par l'équipe, coup de balai des caissiers, alerte une fois par jour sous le seuil. */
   private cleanHour(s: Shop): void {
     const regain = CLEANING.perPower * this.cleaningPower(s);
     s.clean = Math.max(0, Math.min(100, this.cleanliness(s) - CLEANING.perOpenHour + regain));
+    s.clean = Math.max(s.clean, Math.min(CLEANING.cashierCap, s.clean + this.cashierSweep(s)));
     if (s.clean < CLEANING.warn) this.warnOnce(s, '__sale', `${s.name} est sale (propreté ${Math.round(s.clean)} %) : moins de clients et réputation en baisse. Nettoyez (bouton « Nettoyer » sur place), embauchez un employé d’entretien ou souscrivez le service de nettoyage.`);
   }
 
@@ -1428,6 +1552,7 @@ export class Game {
       }
       this.notify('info', `Livraison reçue : ${due.length} commande(s).`);
     }
+    logisticsHour(this, h);
     if (h === 21 || h === 11) this.autoReorder();
     if (this.player.hunger < NEEDS.low && !this.player.sleeping) this.notify('warn', 'Vous avez faim : allez manger au snack.');
     else if (this.player.energy < NEEDS.low && !this.player.sleeping) this.notify('warn', 'Vous êtes épuisé : rentrez dormir.');
@@ -1495,7 +1620,8 @@ export class Game {
     const range = s.premium ? premiumDemand(s.reputation) : 1;
     // Revêtements (sol et murs) : bonus d'attrait ; saleté : moins de clients sous CLEANING.fine.
     const surfaces = (1 + this.surfaceAppeal(s)) * cleanAppeal(this.cleanliness(s));
-    return price * variety * decor * rep * comp * range * surfaces;
+    // Promotions des rivaux voisins du même type : jusqu'à RIVALS.promoMax de clients en moins.
+    return price * variety * decor * rep * comp * range * surfaces * this.rivalry.promoFactor(s);
   }
 
   private sellable(s: Shop, pr: ProductDef, st: LayoutStats): boolean {
@@ -1600,6 +1726,7 @@ export class Game {
       if ((this.player.homePrepaid ?? 0) > 0) this.player.homePrepaid! -= 1;
       else { this.cash -= def.rentDay; this.today.living += def.rentDay; }
     }
+    logisticsNight(this);
     for (const v of this.vehicles) { const ins = VEHICLE_BY_ID.get(v.type)!.insurance; this.cash -= ins; this.today.living += ins; }
     // Employés : satisfaction selon le salaire comparé au marché ; demande d'augmentation ; démission.
     for (const e of [...this.employees]) {
@@ -1633,6 +1760,7 @@ export class Game {
     // Contrat fournisseur : forfait quotidien (compté dans les achats).
     const ct = this.contractDef();
     if (ct) { this.cash -= ct.perDay; this.today.purchases += ct.perDay; }
+    this.rivalry.night();
     this.updateMarket();
     // Météo du lendemain : pluie un jour sur cinq environ, nuages un sur trois.
     const w = this.rng.next();
@@ -1689,7 +1817,11 @@ export class Game {
         this.fundReturns.push(Math.round(r * 100000) / 100000);
         if (this.fundReturns.length > 14) this.fundReturns.shift();
       }
-      if ((this.invest[def.id] ?? 0) > 0) this.invest[def.id] = r2(this.invest[def.id] * (1 + r));
+      const bal = this.invest[def.id] ?? 0;
+      if (bal > 0) {
+        this.invest[def.id] = r2(bal * (1 + r));
+        y.investGain = r2((y.investGain ?? 0) + this.invest[def.id] - bal);
+      }
     }
     const P = FINANCE.taxPeriod;
     if (y.day % P === P - 1) {
@@ -1775,8 +1907,9 @@ export class Game {
       v: SAVE_VERSION, seed: this.seed, companyName: this.companyName, total: this.total, cash: this.cash,
       player: structuredClone(this.player), shops: structuredClone(this.shops), employees: structuredClone(this.employees),
       candidates: structuredClone(this.candidates), orders: structuredClone(this.orders), vehicles: structuredClone(this.vehicles),
-      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals }, weather: this.weather, marketDay: this.marketDay, contract: this.contract,
+      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals }, rivalry: this.rivalry.save(), weather: this.weather, marketDay: this.marketDay, contract: this.contract,
       finance: { invest: { ...this.invest }, principal: { ...this.investPrincipal }, fundReturns: [...this.fundReturns], awareness: { ...this.awareness }, taxes: structuredClone(this.taxes) },
+      logi: saveLogi(this.logi),
       nextId: this.nextId, rng: this.rng.state(),
     };
   }
@@ -1809,6 +1942,7 @@ export class Game {
     // Anciennes sauvegardes : les campagnes en cours gardent leur effet (notoriété de départ).
     if (!f) for (const c of this.campaigns) { const k = String(c.shopId ?? 'all'); this.awareness[k] = Math.min(FINANCE.awarenessMax, (this.awareness[k] ?? 0) + (CAMPAIGN_BY_ID.get(c.kind)?.boost ?? 0)); }
     this.taxes = structuredClone(f?.taxes ?? []);
+    this.logi = restoreLogi(s.logi);
     // Sauvegardes antérieures : employés sans rôle ni équipe → caisse, journée complète ; candidats sans souhait.
     for (const e of this.employees) { e.role ??= 'caisse'; e.shift ??= 'journee'; }
     for (const c of this.candidates) { c.wantShift ??= 'journee'; c.minWage ??= c.wage; }

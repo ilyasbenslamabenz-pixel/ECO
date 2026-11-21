@@ -8,10 +8,13 @@ import {
   VEHICLES, VEHICLE_BY_ID, loanTotal, type ServiceKind, type ShopType,
 } from '../sim/catalog';
 import { SHIFTS, SHIFT_BY_ID, STAFF, STAFF_ROLES, STAFF_ROLE_BY_ID, type ShiftKind, type StaffRole } from '../sim/catalog';
+import { RIVALS } from '../sim/catalog';
 import type { Building, Home, Premise } from '../sim/district';
 import type { Game } from '../sim/game';
 import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
 import type { Act, Panel, View } from './panel';
+import { LOGISTICS } from '../sim/catalog';
+import { freeOf, importQuote, importUnit, palletOf, placeImport, warehouseName } from '../sim/logistics';
 
 export interface UiCtx {
   game: Game;
@@ -316,8 +319,57 @@ export function competitorView(ctx: UiCtx, p: Premise): View {
   const t = SHOP_TYPE_BY_ID.get(p.competitor!)!;
   return {
     kicker: `Concurrent · ${t.nameFr}`, title: p.competitorName ?? t.nameFr, onClose: () => ctx.leave(),
-    render: () => [el('div', { cls: 'kpis' }, kpi('Passage', `${num(p.footfall)} / h`), kpi('Surface', `${p.area} m²`), kpi('Type', t.nameFr)),
-      note('Un commerce du même type à proximité réduit vos clients. Installez-vous plutôt sur une autre rue, ou soignez prix et décoration.')],
+    render: () => {
+      const g = ctx.game, rv = g.rivalry, rs = rv.shopAt(p.id);
+      if (!rs) return [note('Ce commerce a fermé : le local est à louer.')];
+      const co = rv.co(rs.co), q = rv.quote(p.id);
+      return [el('div', { cls: 'kpis' }, kpi('Passage', `${num(p.footfall)} / h`), kpi('Surface', `${p.area} m²`), kpi('Enseigne', co ? co.name : 'Indépendant')),
+        el('div', { cls: 'kpis' }, kpi('Clients / jour', `≈ ${num(q?.customers ?? 0)}`), kpi('Prix', rivalPriceText(rs.price)), kpi('Réputation', pct(rs.reputation))),
+        rs.promo > 0 ? el('p', { cls: 'riv-promo', text: `Promotion en cours : −${Math.round(RIVALS.promoDiscount * 100)} % encore ${rs.promo} jour(s).` }) : null,
+        note('Un commerce du même type à proximité réduit vos clients. Installez-vous plutôt sur une autre rue, soignez prix et décoration… ou rachetez-le.'),
+        q ? button(`Racheter ce commerce (${chf(q.total)})`, () => ctx.panel.open(rivalBuyView(ctx, p.id)), 'primary wide') : null];
+    },
+  };
+}
+
+/** Niveau de prix d'un rival en clair : « habituels », « −8 % », « +6 % ». */
+export function rivalPriceText(price: number): string {
+  const d = Math.round((price - 1) * 100);
+  return d === 0 ? 'habituels' : d < 0 ? `−${-d} %` : `+${d} %`;
+}
+
+/** Reprise des employés cochée par défaut, mémorisée entre deux rafraîchissements. */
+let buyWithStaff = true;
+
+/** Fenêtre de rachat d'un commerce rival : prix détaillé, reprise des employés en option. */
+export function rivalBuyView(ctx: UiCtx, premiseId: number): View {
+  const g = ctx.game;
+  const name = g.rivalry.shopAt(premiseId)?.name ?? 'Commerce';
+  return {
+    kicker: 'Rachat d’un commerce concurrent', title: name, onClose: () => ctx.leave(),
+    render: () => {
+      const rs = g.rivalry.shopAt(premiseId), q = g.rivalry.quote(premiseId);
+      if (!rs || !q) return [note('Ce commerce n’est plus à vendre.')];
+      const t = SHOP_TYPE_BY_ID.get(rs.type)!, co = g.rivalry.co(rs.co);
+      const staff = el('input', { attrs: { type: 'checkbox', 'aria-label': 'Reprendre les employés' } });
+      staff.checked = buyWithStaff;
+      staff.addEventListener('change', () => { buyWithStaff = staff.checked; });
+      const wage = g.marketWage(0.72);
+      return [
+        el('div', { cls: 'kpis' }, kpi('Chiffre d’affaires', `≈ ${chf(q.revenue)} / j`), kpi('Clients', `≈ ${num(q.customers)} / j`), kpi('Réputation', pct(q.reputation))),
+        sec('Prix'),
+        el('table', { cls: 'tbl' },
+          el('tr', {}, el('td', { text: `Fonds de commerce (${RIVALS.buyRevenueDays} jours de ventes × réputation, mobilier compris)` }), el('td', { text: chf(q.price) })),
+          el('tr', {}, el('td', { text: 'Dépôt de garantie du bail (rendu à la résiliation)' }), el('td', { text: chf(q.deposit) })),
+          el('tr', {}, el('th', { text: 'Total à payer' }), el('th', { text: chf(q.total) }))),
+        note(`${t.nameFr}${co ? ` de ${co.name}` : ' indépendant'} : vous reprenez le bail, le mobilier (${chf(q.furniture)} au catalogue, posé) et des rayons remplis à ${Math.round(RIVALS.buyStock * 100)} %. Le nom et la réputation restent.`),
+        el('label', { cls: 'riv-check' }, staff, el('span', { text: `Reprendre ${q.staff} employé${q.staff > 1 ? 's' : ''} en caisse (environ ${wage} CHF / h chacun)` })),
+        button(`Racheter (${chf(q.total)})`, () => {
+          if (ctx.act(g.rivalry.buy(premiseId, buyWithStaff), (sh) => `${sh.name} est à vous !`)) ctx.panel.close();
+        }, 'primary wide'),
+        g.cash < q.total ? note(`Il vous manque ${chf(q.total - g.cash)}.`) : null,
+      ];
+    },
   };
 }
 
@@ -361,4 +413,65 @@ export function subletBlock(ctx: UiCtx, id: number): (Node | null)[] {
 
 export function kpi(label: string, value: string): HTMLElement {
   return el('div', { cls: 'kpi' }, el('span', { text: label }), el('b', { text: value }));
+}
+
+/* ------------------------------ Logistique : importateur ------------------------------ */
+
+/**
+ * Importateur (commande à distance) : palettes de chaque produit, prix fixe plus bas que le grossiste, commande
+ * minimale, livraison à l'entrepôt seulement, après 1 ou 2 jours. `back` : vue à rouvrir (entrepôt).
+ */
+export function importerView(ctx: UiCtx, back?: () => View): View {
+  const g = ctx.game;
+  return {
+    kicker: 'Logistique · Importateur', title: 'Import Grand Large', wide: true,
+    render: () => {
+      if (!g.logi.warehouses.length) return [note('L’importateur ne livre qu’aux entrepôts : louez d’abord un entrepôt (appli Logistique du téléphone).'), back ? button('Retour', () => ctx.panel.open(back()), 'wide') : null];
+      const dest = remember('imp-dest', el('select', { attrs: { 'aria-label': 'Entrepôt de livraison' } },
+        ...g.logi.warehouses.map((w) => el('option', { text: `${warehouseName(g, w.premiseId)} (${num(freeOf(g, w))} places libres)`, attrs: { value: String(w.id) } }))));
+      const inputs = new Map<string, HTMLInputElement>();
+      const summary = el('div', { cls: 'logi-sum' });
+      const refresh = (): void => {
+        const q = importQuote(g, Object.fromEntries([...inputs].map(([id, i]) => [id, Number(i.value) || 0])));
+        const w = g.logi.warehouses.find((x) => String(x.id) === dest.value);
+        const free = w ? freeOf(g, w) : 0;
+        const okMin = q.pallets >= LOGISTICS.minPallets, okRoom = q.units <= free;
+        summary.replaceChildren(...[
+          el('b', { text: `${q.pallets} palette(s) · ${num(q.units)} unités · ${chf(q.total)}` }),
+          el('span', { cls: 'muted small', text: ` dont transport ${chf(q.fee)} · livraison ${q.pallets ? g.deliveryLabel(q.arriveAt) : '—'}` }),
+          !okMin ? el('div', { cls: 'small warn', text: `Commande minimale : ${LOGISTICS.minPallets} palettes.` }) : null,
+          !okRoom ? el('div', { cls: 'small warn', text: `Place libre à l’entrepôt : ${num(free)} unités. Ajoutez des étagères.` }) : null].filter((x): x is HTMLElement => !!x));
+      };
+      dest.addEventListener('change', refresh);
+      const types = new Set(g.shops.map((s) => s.type));
+      const order = [...SHOP_TYPES].sort((a, c) => Number(types.has(c.id)) - Number(types.has(a.id)));
+      const out: (Node | null)[] = [
+        note(`Prix fixes, ${pct(LOGISTICS.importDiscount)} sous le prix catalogue du grossiste. Vente par palettes (${LOGISTICS.palletUnits} unités, ${LOGISTICS.palletUnitsBig} pour les articles chers), ${LOGISTICS.minPallets} palettes minimum par commande, transport ${LOGISTICS.importFee} CHF. Livré à l’entrepôt à ${LOGISTICS.importHour} h : le lendemain jusqu’à ${LOGISTICS.fastPallets} palettes, sinon en 2 jours.`),
+        el('label', { cls: 'field' }, el('span', { text: 'Livrer à' }), dest),
+      ];
+      for (const t of order) {
+        out.push(sec(t.nameFr));
+        const tbl = el('table', { cls: 'tbl' }, el('tr', {}, el('th', { text: 'Produit' }), el('th', { text: 'Palette' }), el('th', { text: 'Prix / u.' }), el('th', { text: 'Grossiste' }), el('th', { text: 'Palettes' })));
+        for (const p of PRODUCTS.filter((x) => x.shop === t.id)) {
+          const inp = remember(`imp-${p.id}`, el('input', { cls: 'qty', attrs: { type: 'number', min: '0', max: '99', step: '1', value: '0', 'aria-label': `Palettes de ${p.nameFr}` } }));
+          inp.addEventListener('input', refresh);
+          inputs.set(p.id, inp);
+          tbl.append(el('tr', {}, el('td', { text: p.nameFr }), el('td', { text: `${palletOf(p)} u.` }), el('td', {}, el('b', { text: chf2(importUnit(p)) })),
+            el('td', { cls: 'muted', text: chf2(g.orderCost(p.id, 100) / 100) }), el('td', {}, inp)));
+        }
+        out.push(tbl);
+      }
+      refresh();
+      out.push(summary,
+        button('Passer la commande', () => {
+          const lines = Object.fromEntries([...inputs].map(([id, i]) => [id, Number(i.value) || 0]));
+          if (ctx.act(placeImport(g, Number(dest.value), lines), (o) => `Commande passée : livraison ${g.deliveryLabel(o.arriveAt)}.`)) {
+            for (const id of inputs.keys()) memo.delete(`imp-${id}`);
+            ctx.panel.paint(true);
+          }
+        }, 'primary wide'),
+        back ? button('Retour à l’entrepôt', () => ctx.panel.open(back()), 'wide') : null);
+      return out;
+    },
+  };
 }

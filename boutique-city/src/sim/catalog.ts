@@ -457,7 +457,7 @@ export const CLEANING = {
   /** Au-dessus de ce niveau, aucun effet sur l'attrait. */
   fine: 75,
   /** Attrait à 0 % de propreté (× ; linéaire jusqu'à `fine`). */
-  minAppeal: 0.8,
+  minAppeal: 0.62,
   /** Réputation visée en moins à 0 % de propreté (points ; linéaire jusqu'à `fine`). */
   repPenalty: 0.2,
   /** Alerte (une fois par jour) sous ce niveau. */
@@ -468,6 +468,12 @@ export const CLEANING = {
   playerEnergy: 6,
   /** Points rendus par heure d'ouverture pour 1 point d'entretien de l'équipe (cleaningPower). */
   perPower: 6,
+  /**
+   * Coup de balai des caissiers en heures creuses : points rendus par heure pour un caissier pleinement compétent et
+   * inoccupé (× part de la caisse restée libre l'heure précédente), sans dépasser `cashierCap` (propre « passable »).
+   */
+  cashierPerHour: 6,
+  cashierCap: 35,
   /** Service de nettoyage de nuit : CHF par m² et par jour (minimum `serviceMin`) ; remet à 100 % chaque nuit. */
   servicePerM2: 0.35,
   serviceMin: 25,
@@ -495,3 +501,114 @@ export const WALLING_BY_ID: ReadonlyMap<string, SurfaceDef> = new Map(WALLINGS.m
 export const surfaceArea = (part: 'sol' | 'murs', W: number, D: number): number => part === 'sol' ? W * D : (W + 2 * D) * 3;
 /** Attrait selon la propreté (× sur la clientèle) pour un niveau 0..100. */
 export const cleanAppeal = (clean: number): number => CLEANING.minAppeal + (1 - CLEANING.minAppeal) * Math.min(1, Math.max(0, clean) / CLEANING.fine);
+
+/* ------------------------------ Logistique ------------------------------ */
+
+/**
+ * Logistique : entrepôts (locaux en périphérie, loyer réduit, étagères à palettes), importateur (achat en très gros,
+ * par palettes, moins cher que le grossiste, livré seulement à l'entrepôt avec un délai) et tournées de nuit qui
+ * réapprovisionnent les commerces sous leur stock minimum (transporteur payant, ou un de vos véhicules avec un
+ * chauffeur à la tournée).
+ */
+export type TransportMode = 'aucun' | 'service' | 'vehicule';
+export const LOGISTICS = {
+  /** Locaux du quartier réservés aux entrepôts. */
+  warehouses: 2,
+  /** Loyer d'un entrepôt : part du loyer qu'aurait le local en boutique. */
+  rentMult: 0.8,
+  /** Étagère à palettes : prix (montée, livrée), capacité (unités), surface au sol par étagère (m²). */
+  rackPrice: 450,
+  rackCapacity: 250,
+  m2PerRack: 6,
+  /** Prix de l'importateur : remise sur le prix catalogue (fixe, ne suit pas le marché du grossiste). */
+  importDiscount: 0.28,
+  /** Unités par palette : produits bon marché, et produits chers (coût unitaire ≥ bigUnitCost). */
+  palletUnits: 100,
+  palletUnitsBig: 25,
+  bigUnitCost: 5,
+  /** Commande minimale (palettes, tous produits confondus) et frais de transport par commande. */
+  minPallets: 5,
+  importFee: 150,
+  /** Délai : 1 jour jusqu'à fastPallets palettes, 2 jours au-delà ; arrivée à importHour. */
+  fastPallets: 10,
+  importHour: 14,
+  /** Heure de la tournée de nuit (avant l'ouverture des commerces). */
+  tourHour: 4,
+  /** Transporteur : forfait par tournée, par commerce livré, par unité ; capacité de sa camionnette. */
+  service: { base: 35, perStop: 8, perUnit: 0.03, cargo: 800 },
+  /** Votre véhicule avec un chauffeur à la tournée : forfait, par commerce livré (capacité : soute du véhicule). */
+  own: { base: 20, perStop: 5 },
+} as const;
+export const TRANSPORT_FR: Record<TransportMode, string> = { aucun: 'Aucun transport', service: 'Transporteur (service payant)', vehicule: 'Mon véhicule + chauffeur' };
+
+/* ------------------------------ Rivaux ------------------------------ */
+
+/** Entreprise rivale possible (noms inventés) : enseigne courte, couleur sur la carte, types de commerce de prédilection. */
+export interface RivalDef { id: string; nameFr: string; brand: string; color: string; types: readonly ShopType[] }
+export const RIVAL_COMPANIES: readonly RivalDef[] = [
+  { id: 'altiva', nameFr: 'Groupe Altiva', brand: 'Altiva', color: '#b5482e', types: ['epicerie', 'primeur'] },
+  { id: 'lumen', nameFr: 'Enseignes Lumen', brand: 'Lumen', color: '#5468d4', types: ['cafe', 'boulangerie'] },
+  { id: 'marelle', nameFr: 'Maison Marelle', brand: 'Marelle', color: '#9e3f7a', types: ['vetements', 'fleuriste'] },
+  { id: 'rapido', nameFr: 'Rapido & Cie', brand: 'Rapido', color: '#8a7b2a', types: ['fastfood', 'cafe'] },
+  { id: 'verger', nameFr: 'Coopérative du Verger', brand: 'Le Verger', color: '#6b8e9e', types: ['primeur', 'boulangerie', 'epicerie'] },
+];
+/**
+ * Concurrence active : 2 à 4 entreprises rivales tirées de la graine. Avant `startDay`, elles se contentent de
+ * tenir leurs commerces ; ensuite elles ouvrent des commerces (locaux libres), ajustent leurs prix, lancent des
+ * promotions qui prennent des clients aux commerces voisins du même type (au plus `promoMax`), et ferment les
+ * commerces qui perdent de l'argent, voire font faillite. Le joueur peut racheter un commerce ou une entreprise.
+ */
+export const RIVALS = {
+  countMin: 2,
+  countMax: 4,
+  /** Commerces existants repris par chaque entreprise au début (au plus). */
+  startShops: 3,
+  /** Trésorerie de départ (CHF, entre les deux bornes). */
+  startCash: [18_000, 30_000] as const,
+  /** Premier jour où les rivaux agissent (ouvertures, prix) ; promotions un peu plus tard. */
+  startDay: 10,
+  promoStartDay: 12,
+  /** Ouverture : coût (aménagement et dépôt), chance quotidienne par entreprise, plafond de commerces, locaux libres laissés au joueur. */
+  openCost: 12_000,
+  openChance: 0.05,
+  maxShops: 5,
+  minFreeLeft: 8,
+  /** Promotion : chance quotidienne, durée (jours), coût par commerce et par jour, remise affichée. */
+  promoChance: 0.05,
+  promoDays: [3, 5] as const,
+  promoCost: 120,
+  promoDiscount: 0.15,
+  /** Effet d'une promotion sur un commerce du joueur du même type : jusqu'à `promoMax` de clients en moins, dans `promoRadius` m. */
+  promoRadius: 260,
+  promoMax: 0.12,
+  /** Prix pratiqués (× prix habituel). */
+  priceMin: 0.85,
+  priceMax: 1.12,
+  /** Rayon des menaces signalées (m). */
+  nearRadius: 300,
+  /** Attrait d'un commerce rival par rapport à un commerce du joueur bien tenu ; salaire horaire moyen de son personnel. */
+  attract: 0.8,
+  staffWage: 26,
+  /** Frais de structure d'une entreprise rivale (CHF / jour, plus par commerce). */
+  overhead: 150,
+  overheadPerShop: 60,
+  /** Fermeture après autant de jours de pertes d'affilée ; faillite sous cette trésorerie. */
+  closeAfterLoss: 14,
+  bankruptCash: -4_000,
+  /** Rachat : jours de chiffre d'affaires × (0,5 + réputation), plancher, part des rayons remplis à la reprise. */
+  buyRevenueDays: 20,
+  buyMin: 8_000,
+  buyStock: 0.6,
+  /** Rachat d'une entreprise entière : remise sur la somme des commerces. */
+  buyCompanyDiscount: 0.9,
+} as const;
+/** Mobilier livré avec un commerce racheté, par type. */
+export const RIVAL_LAYOUTS: Record<ShopType, readonly string[]> = {
+  epicerie: ['caisse', 'rayon', 'rayon', 'rayon', 'frigo', 'frigo', 'plante'],
+  cafe: ['caisse', 'machine', 'comptoir', 'vitrine', 'frigo', 'table', 'table', 'plante'],
+  vetements: ['caisse', 'portant', 'portant', 'portant', 'portant', 'rayon', 'plante'],
+  fleuriste: ['caisse', 'frigo', 'frigo', 'rayon', 'plante', 'lampe'],
+  boulangerie: ['caisse', 'rayon', 'rayon', 'vitrine', 'vitrine', 'frigo', 'plante'],
+  fastfood: ['caisse', 'comptoir', 'comptoir', 'vitrine', 'frigo', 'table', 'plante'],
+  primeur: ['caisse', 'rayon', 'rayon', 'rayon', 'rayon', 'frigo', 'plante'],
+};

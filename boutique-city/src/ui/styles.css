@@ -754,3 +754,42 @@ kbd { font-family: var(--font); }
 .fin-spark i { flex: 1; align-self: flex-end; border-radius: 3px 3px 0 0; }
 .fin-spark i.pos { background: #2f9a63; }
 .fin-spark i.neg { background: #c4505f; }
+
+/* Lot */
+.lot-row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.lot-row .field { margin: 4px 0; min-width: 170px; }
+.lot-row .sp-hours-sum { margin-left: 4px; }
+.lot-prices { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 14px; }
+.lot-prices .field { margin: 4px 0; }
+.lot-shop { margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--shop, #2a3647); background: rgba(255,255,255,.03); border-radius: 0 8px 8px 0; }
+.lot-shop.muted { opacity: .65; }
+.lot-shop-h { display: flex; justify-content: space-between; gap: 10px; }
+.lot-changes { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; }
+.lot-changes li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; border-top: 1px dashed #2a3647; }
+.lot-changes li > span { flex: 1; color: var(--muted); }
+.lot-changes s { color: var(--muted); }
+.lot-changes b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.lot-entry { align-items: center; gap: 10px; margin: 4px 0 8px; }
+.sp-note.warn { color: #ffd98a; border-left-color: #c99a2a; }
+
+/* Logistique */
+.logi-bar { height: 8px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); overflow: hidden; margin: 6px 0 2px; }
+.logi-bar i { display: block; height: 100%; background: #d9a54a; }
+.logi-sum { margin: 10px 0 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(217, 165, 74, 0.08); }
+.logi-shop { margin: 8px 0 12px; }
+.logi-shop .row { align-items: center; gap: 6px; }
+
+/* Rivaux */
+.riv-share { padding: 7px 6px; border-bottom: 1px solid #1a2330; }
+.riv-share-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; margin-bottom: 5px; }
+.riv-share-top b { font-variant-numeric: tabular-nums; }
+.riv-share-top b.ok { color: #5cc77a; }
+.riv-bar { display: flex; height: 9px; border-radius: 5px; overflow: hidden; background: #1a2330; }
+.riv-bar i { display: block; height: 100%; min-width: 2px; }
+.riv-legend { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 5px; font-size: 11px; color: #9aa7b8; }
+.riv-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.riv-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
+.ph-line.riv-line { grid-template-columns: 1fr auto auto auto; }
+.riv-promo { color: #ff8a7a; font-size: 13px; margin: 6px 0; }
+.riv-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; cursor: pointer; }
+.riv-check input { width: 16px; height: 16px; }

@@ -3,11 +3,13 @@
  * légende. Cliquer un lieu sur la grande carte, ou dans la légende, place une destination (balise dans la rue).
  *
  * Code couleur commun aux deux cartes : vert = mes commerces, jaune = locaux libres, couleur propre à chaque
- * service, bleu clair = logements à louer, blanc = chez moi, mauve éteint = concurrents ; flèche jaune = joueur.
+ * service, bleu clair = logements à louer, blanc = chez moi, mauve éteint = concurrents indépendants, couleur de
+ * l'enseigne = commerces d'une entreprise rivale ; flèche jaune = joueur.
  */
 import { SERVICES, SERVICE_BY_ID, SHOP_TYPE_BY_ID } from '../sim/catalog';
 import { BLOCK, SIDEWALK_W, blockCenter, type Building } from '../sim/district';
 import type { Game } from '../sim/game';
+import { warehouseAt, warehouseName } from '../sim/logistics';
 import { $, button, el, icon, num } from './dom';
 
 export interface Poi { b: Building; color: string; label: string; kind: 'service' | 'shop' | 'free' | 'rival' | 'home' | 'myhome' }
@@ -27,8 +29,13 @@ export function pois(g: Game): Poi[] {
     if (b.premise) {
       const sh = g.shopAt(b.premise.id);
       if (sh) out.push({ b, color: COL.shop, label: sh.name, kind: 'shop' });
+      else if (b.premise.warehouse) out.push({ b, color: '#d9a54a', label: `${warehouseName(g, b.premise.id)}${warehouseAt(g, b.premise.id) ? '' : ' (à louer)'}`, kind: 'service' });
       else if (!b.premise.competitor) out.push({ b, color: COL.free, label: `Local à louer · ${b.premise.area} m²`, kind: 'free' });
-      else out.push({ b, color: COL.rival, label: `${b.premise.competitorName ?? 'Concurrent'} (${SHOP_TYPE_BY_ID.get(b.premise.competitor)!.nameFr.toLowerCase()})`, kind: 'rival' });
+      else {
+        // Commerces d'une entreprise rivale : couleur de l'enseigne ; indépendants : mauve éteint.
+        const rs = g.rivalry.shopAt(b.premise.id), co = g.rivalry.co(rs?.co ?? null);
+        out.push({ b, color: co?.color ?? COL.rival, label: `${b.premise.competitorName ?? 'Concurrent'} (${SHOP_TYPE_BY_ID.get(b.premise.competitor)!.nameFr.toLowerCase()}${co ? ` · ${co.name}` : ''}${rs && rs.promo > 0 ? ' · en promotion' : ''})`, kind: 'rival' });
+      }
     }
   }
   return out;
@@ -215,7 +222,8 @@ export class BigMap {
       freeNear ? placeBtn(freeNear, 'Le plus proche') : el('p', { cls: 'muted small', text: 'Aucun local libre.' }),
       el('div', { cls: 'sec', text: 'Légende' }),
       el('div', { cls: 'leg-grid' },
-        ...([[COL.shop, 'Mes commerces', count('shop')], [COL.free, 'Locaux libres', count('free')], [COL.rival, 'Concurrents', count('rival')], [COL.home, 'Logements à louer', count('home')], [COL.myhome, 'Chez moi, véhicules', null], [COL.player, 'Vous', null], [COL.dest, 'Destination', null]] as [string, string, number | null][])
+        ...([[COL.shop, 'Mes commerces', count('shop')], [COL.free, 'Locaux libres', count('free')], [COL.rival, 'Concurrents indépendants', list.filter((p) => p.kind === 'rival' && p.color === COL.rival).length],
+          ...this.game.rivalry.active.map((co): [string, string, number] => [co.color, co.name, this.game.rivalry.shopsOf(co.id).length]), [COL.home, 'Logements à louer', count('home')], [COL.myhome, 'Chez moi, véhicules', null], [COL.player, 'Vous', null], [COL.dest, 'Destination', null]] as [string, string, number | null][])
           .map(([c, t, n]) => el('div', { cls: 'leg' }, el('i', { attrs: { style: `background:${c}` } }), el('span', { text: t }), n !== null ? el('b', { text: String(n) }) : null))));
     const head = el('div', { cls: 'map-head' },
       el('div', {}, el('div', { cls: 'kicker', text: 'Plan du quartier' }), el('h3', { text: dest?.label ? `Destination : ${dest.label}` : 'Où aller ?' })),

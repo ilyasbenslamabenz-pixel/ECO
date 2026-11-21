@@ -242,7 +242,7 @@ try {
   await page.keyboard.press('t');
   await page.waitForTimeout(400);
   const ph = await ev(() => ({ open: !document.querySelector('.phone').classList.contains('hidden'), apps: document.querySelectorAll('.ph-app').length, veil: !document.querySelector('.ph-veil').classList.contains('hidden') }));
-  check(ph.open && ph.apps === 12 && ph.veil, 'téléphone ouvert (12 applis, scène voilée)', JSON.stringify(ph));
+  check(ph.open && ph.apps === 14 && ph.veil, 'téléphone ouvert (14 applis, scène voilée)', JSON.stringify(ph));
   await shot('14a-telephone');
   await ev(() => document.querySelector('.ph-app[data-app="immo"]').click());
   await page.waitForTimeout(400);

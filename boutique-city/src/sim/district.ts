@@ -3,7 +3,7 @@
  * chaussée), un parc. Chaque local commercial a une surface, un loyer et un passage piéton estimé (habitants et
  * employés proches, avenue centrale). Une partie des locaux est déjà occupée par des concurrents. TypeScript pur.
  */
-import { ECONOMY, HOMES, SHOP_TYPES, type ServiceKind, type ShopType } from './catalog';
+import { ECONOMY, HOMES, LOGISTICS, SHOP_TYPES, type ServiceKind, type ShopType } from './catalog';
 import { Rng } from './rng';
 
 /** Largeur d'une rue (chaussée et trottoirs, m) et taille intérieure d'un îlot (m). */
@@ -66,6 +66,8 @@ export interface Premise {
   /** Concurrent installé (type), ou null si libre ou loué par le joueur. */
   competitor: ShopType | null;
   competitorName: string | null;
+  /** Local réservé à un entrepôt (logistique) : ne se loue pas en boutique. */
+  warehouse?: boolean;
 }
 
 export interface District {
@@ -200,6 +202,15 @@ export function generateDistrict(seed: number, nx = 6, nz = 5): District {
   }
   const shopsLeft = premises.filter((p) => !taken.includes(p));
   shopsLeft.forEach((p, k) => { p.id = k + 1; });
+  // Entrepôts : locaux libres les moins passants (périphérie), éloignés les uns des autres. Ils restent dans la liste
+  // des locaux (identifiants inchangés) mais ne se louent qu'en entrepôt.
+  const depots: Premise[] = [];
+  for (const p of shopsLeft.filter((x) => !x.competitor).sort((a, b) => a.footfall - b.footfall || a.id - b.id)) {
+    if (depots.length >= LOGISTICS.warehouses) break;
+    if (depots.some((q) => Math.hypot(q.doorX - p.doorX, q.doorZ - p.doorZ) < 150)) continue;
+    p.warehouse = true;
+    depots.push(p);
+  }
   // Logements à louer : immeubles d'habitation répartis, du studio au loft.
   const homes: Home[] = [];
   const homePlan = [HOMES[0]!, HOMES[0]!, HOMES[1]!, HOMES[1]!, HOMES[2]!];

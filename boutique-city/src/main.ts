@@ -26,8 +26,10 @@ import { Panel } from './ui/panel';
 import { showRecap } from './ui/recap';
 import { sound } from './ui/sound';
 import { OBJECTIVES, rankOf } from './sim/objectives';
-import { companyView, shopView } from './ui/shop-panel';
+import { companyView, shopView, surfaceView } from './ui/shop-panel';
 import { Phone } from './ui/phone';
+import { warehouseView } from './ui/warehouse-panel';
+import { warehouseAt, warehouseName } from './sim/logistics';
 
 const SAVE_KEY = 'boutique-city.save.v2';
 /** Minutes de jeu par seconde réelle (0 = pause). */
@@ -265,6 +267,7 @@ function start(game: Game): void {
       else if (b.premise) {
         const sh = game.shopAt(b.premise.id);
         if (sh) st.push({ buildingId: b.id, sign: sh.name, color: SHOP_TYPE_BY_ID.get(sh.type)!.color, ring: '#5cc77a', pin: false, poster: null });
+        else if (b.premise.warehouse) st.push({ buildingId: b.id, sign: warehouseAt(game, b.premise.id) ? warehouseName(game, b.premise.id) : null, color: '#8a7a5c', ring: '#d9a54a', pin: false, poster: warehouseAt(game, b.premise.id) ? null : 'ENTREPÔT À LOUER' });
         else if (b.premise.competitor) st.push({ buildingId: b.id, sign: b.premise.competitorName, color: mix(SHOP_TYPE_BY_ID.get(b.premise.competitor)!.color), ring: null, pin: false, poster: null });
         else if (game.subletOf('local', b.premise.id)) { const sl = game.subletOf('local', b.premise.id)!; st.push({ buildingId: b.id, sign: sl.tenant, color: '#6f86a8', ring: '#c39bff', pin: false, poster: sl.tenant ? null : 'À SOUS-LOUER' }); }
         else st.push({ buildingId: b.id, sign: null, color: '#9aa0a6', ring: '#ffd166', pin: true, poster: 'À LOUER' });
@@ -373,6 +376,7 @@ function start(game: Game): void {
     const p = b.premise!;
     const sh = game.shopAt(p.id);
     if (sh) return { label: `Entrer : ${sh.name}`, run: () => enterShop(sh.id) };
+    if (p.warehouse) return { label: warehouseAt(game, p.id) ? `Entrer : ${warehouseName(game, p.id)}` : `Visiter l’entrepôt à louer (${p.area} m²)`, run: () => { panel.close(); game.setPlace({ kind: 'local', premiseId: p.id }); panel.open(warehouseView(ctx, p.id)); } };
     if (p.competitor) return { label: `Regarder : ${p.competitorName}`, run: () => panel.open(competitorView(ctx, p)) };
     const sl = game.subletOf('local', p.id);
     if (sl) return { label: `Mon local sous-loué${sl.tenant ? ` : ${sl.tenant}` : ' (à relouer)'}`, run: () => panel.open(subletView(ctx, sl.id)) };
@@ -454,7 +458,7 @@ function start(game: Game): void {
     buildSig = sig;
     buildBar.replaceChildren(
       el('div', { cls: 'bb-head' }, el('b', { text: 'Aménagement' }), el('span', { cls: 'muted small', text: build.tool ? `Pose : ${FURNITURE_BY_ID.get(build.tool)!.nameFr} — clic pour poser, R pour tourner, clic droit pour annuler` : 'Choisissez un meuble de la réserve, ou cliquez un meuble posé pour le déplacer.' }),
-        button('Terminer (B)', () => setBuild(false), 'small primary')),
+        button('Sol et murs', () => panel.open(surfaceView(ctx, s.id)), 'small'), button('Terminer (B)', () => setBuild(false), 'small primary')),
       el('div', { cls: 'bb-items' },
         ...(entries.length ? entries.map(([id, n]) => {
           const f = FURNITURE_BY_ID.get(id)!;

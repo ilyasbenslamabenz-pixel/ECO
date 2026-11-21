@@ -10,13 +10,17 @@
  */
 import { HOME_BY_ID, PRODUCTS, SHOP_TYPES, SHOP_TYPE_BY_ID, VEHICLE_BY_ID } from '../sim/catalog';
 import { FINANCE, INVESTMENTS, type InvestKind } from '../sim/catalog';
+import { SHIFT_BY_ID, STAFF_ROLE_BY_ID } from '../sim/catalog';
 import { WEEKDAYS_FR, clockView } from '../sim/clock';
 import { dayProfit, type DayStats, type Notice } from '../sim/game';
 import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
-import { button, chf, chf2, el, icon, iconButton, num, pct, signed, type IconName } from './dom';
-import { subletView, type UiCtx } from './dialogs';
+import { askConfirm, button, chf, chf2, el, icon, iconButton, num, pct, signed, type IconName } from './dom';
+import { rivalBuyView, rivalPriceText, subletView, type UiCtx } from './dialogs';
+import { RIVALS } from '../sim/catalog';
+import { batchView } from './shop-panel';
+import { logisticsView } from './warehouse-panel';
 
-type AppId = 'commerces' | 'immo' | 'banque' | 'finances' | 'equipe' | 'marche' | 'messages' | 'objectifs' | 'vehicules' | 'carte' | 'entreprise' | 'reglages';
+type AppId = 'commerces' | 'immo' | 'banque' | 'finances' | 'equipe' | 'marche' | 'rivaux' | 'messages' | 'objectifs' | 'vehicules' | 'logistique' | 'carte' | 'entreprise' | 'reglages';
 interface App { id: AppId; name: string; icon: IconName; color: string }
 const APPS: App[] = [
   { id: 'commerces', name: 'Commerces', icon: 'shop', color: '#ff8a3d' },
@@ -25,9 +29,11 @@ const APPS: App[] = [
   { id: 'finances', name: 'Finances', icon: 'coin', color: '#7a5cff' },
   { id: 'equipe', name: 'Équipe', icon: 'team', color: '#ef6b8a' },
   { id: 'marche', name: 'Marché', icon: 'chart', color: '#e9a908' },
+  { id: 'rivaux', name: 'Concurrence', icon: 'flag', color: '#c0485a' },
   { id: 'messages', name: 'Messages', icon: 'chat', color: '#2fb4de' },
   { id: 'objectifs', name: 'Objectifs', icon: 'trophy', color: '#e8574f' },
   { id: 'vehicules', name: 'Véhicules', icon: 'truck', color: '#6f7d90' },
+  { id: 'logistique', name: 'Logistique', icon: 'box', color: '#b8863b' },
   { id: 'carte', name: 'Carte', icon: 'map', color: '#46a84f' },
   { id: 'entreprise', name: 'Entreprise', icon: 'briefcase', color: '#2a9d9b' },
   { id: 'reglages', name: 'Réglages', icon: 'gear', color: '#5b6573' },
@@ -130,6 +136,7 @@ export class Phone {
   go(app: AppId | null): void {
     if (app === 'carte') { this.close(); this.hooks.openMap(); return; }
     if (app === 'entreprise') { this.close(); this.hooks.openCompany(); return; }
+    if (app === 'logistique') { this.close(); this.ctx.panel.open(logisticsView(this.ctx)); return; }
     this.app = app;
     if (app === 'messages') { this.fresh = this.unread; this.seen = this.ctx.game.notices.length; }
     this.paint(true);
@@ -174,7 +181,7 @@ export class Phone {
     const g = this.ctx.game;
     const warn = g.shops.reduce((n, s) => n + s.warned.length, 0);
     const pendingRaise = g.employees.filter((e) => e.askedRaise).length;
-    const badge: Partial<Record<AppId, number>> = { messages: this.unread, commerces: warn, equipe: pendingRaise };
+    const badge: Partial<Record<AppId, number>> = { messages: this.unread, commerces: warn, equipe: pendingRaise, rivaux: g.rivalry.threats().filter((t) => t.rival.promo > 0).length };
     const c = clockView(g.total);
     const today = dayProfit(g.today);
     const [wi, wl] = WEATHER[g.weather] ?? WEATHER['soleil']!;
@@ -203,6 +210,7 @@ export class Phone {
       case 'finances': return this.finances();
       case 'equipe': return this.equipe();
       case 'marche': return this.marche();
+      case 'rivaux': return this.rivaux();
       case 'messages': return this.messages();
       case 'objectifs': return this.objectifs();
       case 'vehicules': return this.vehicules();
@@ -233,6 +241,10 @@ export class Phone {
     return [
       tiles(tile('Ventes du jour', chf(totRev)), tile('Clients', num(totCli), '', lost ? `${num(lost)} perdu(s)` : 'aucun perdu')),
       sec('Mes commerces', `${g.shops.length}`),
+      g.shops.length >= 2 ? card({
+        accent: '#2a9d9b', title: 'Réglages en lot', sub: 'Prix, réassort auto, horaires et nettoyage de nuit : tous les commerces d’un type (ou tous) d’un coup, avec aperçu.',
+        actions: [button('Ouvrir', () => { this.close(); this.ctx.panel.open(batchView(this.ctx)); }, 'small primary')],
+      }) : null,
       ...g.shops.map((s) => {
         const t = SHOP_TYPE_BY_ID.get(s.type)!, p = g.premise(s.premiseId)!;
         const open = c.hour >= s.open && c.hour < s.close;
@@ -347,6 +359,7 @@ export class Phone {
       })),
       sec('Aujourd’hui', signed(today)),
       el('div', { cls: 'ph-ledger' }, ...lines.map(([l, v, k]) => el('div', {}, el('span', { text: l }), el('b', { cls: k > 0 ? 'ok' : 'bad', text: `${k > 0 ? '+' : '−'} ${chf(v)}` })))),
+      this.investLedgerLine(),
       sec('Prêts', g.loans.length ? `${g.loans.length} en cours` : undefined),
       ...(g.loans.length ? g.loans.map((l) => card({
         accent: '#20a36b', title: `Prêt de ${chf(l.amount)}`, sub: `${chf(l.daily)} prélevés chaque jour`,
@@ -355,6 +368,14 @@ export class Phone {
       })) : [el('p', { cls: 'ph-hint', text: 'Aucun prêt en cours. Les prêts se signent au guichet de la banque.' })]),
       el('div', { cls: 'ph-actions' }, this.serviceGps('banque', 'Banque du Quartier')),
     ];
+  }
+
+  /** Ligne du grand livre : gains ou pertes des placements la nuit dernière (valeur placée, hors bénéfice d'exploitation). */
+  private investLedgerLine(): HTMLElement | null {
+    const y = this.ctx.game.ledger.at(-1), v = y?.investGain ?? 0;
+    if (!y || Math.abs(v) < 0.005) return null;
+    return el('div', { cls: 'ph-ledger' }, el('div', { attrs: { title: 'Ajouté à la valeur des placements, pas au compte courant ; hors bénéfice et hors impôt.' } },
+      el('span', { text: `Placements, nuit du jour ${y.day + 1} (intérêts / plus-values)` }), el('b', { cls: v >= 0 ? 'ok' : 'bad', text: `${v >= 0 ? '+' : '−'} ${chf(Math.abs(v))}` })));
   }
 
   /** Rappel dans l'appli Banque : impôt de la semaine et plafond de crédit, avec accès aux détails. */
@@ -406,6 +427,8 @@ export class Phone {
       sec('Placements', placed > 0 ? chf(placed) : undefined),
       el('p', { cls: 'ph-hint', text: `Banque en ligne : placez votre trésorerie disponible (minimum ${chf(FINANCE.investMin)}). Les placements comptent dans la valeur nette, mais pas pour payer loyers et salaires.` }),
     ];
+    const gains7 = g.ledger.slice(-7).reduce((a, d) => a + (d.investGain ?? 0), 0);
+    if (g.ledger.slice(-7).some((d) => d.investGain)) out.push(kv('Intérêts et plus-values des 7 dernières nuits', signed(gains7), gains7 >= 0 ? 'ok' : 'bad'));
     for (const def of INVESTMENTS) out.push(this.investCard(def.id));
     // Notoriété.
     out.push(sec('Notoriété', `−${Math.round(FINANCE.awarenessDecay * 100)} % par jour`));
@@ -452,19 +475,22 @@ export class Phone {
   private equipe(): (Node | null)[] {
     const g = this.ctx.game;
     if (!g.employees.length) return [empty('team', 'Personne dans l’équipe', 'Embauchez à l’agence pour l’emploi : nouveaux candidats chaque lundi.', this.serviceGps('emploi', "Agence pour l'emploi"))];
-    const wages = g.employees.reduce((a, e) => a + e.wage, 0);
+    // Coût réel : salaire horaire × heures de l'équipe (matin, soir ou journée) dans les horaires du commerce.
+    const wages = g.employees.reduce((a, e) => a + e.wage * g.hoursPerDay(e), 0);
     const moods = g.employees.map((e) => e.mood ?? 1);
     const avgMood = moods.reduce((a, b) => a + b, 0) / moods.length;
     const groups = [...g.shops.map((s) => ({ name: s.name, id: s.id as number | null })), { name: 'Sans affectation', id: null }];
-    const out: (Node | null)[] = [tiles(tile('Employés', String(g.employees.length)), tile('Salaires', `${chf(wages)}/h`), tile('Moral', pct(avgMood), avgMood < 0.45 ? 'bad' : avgMood < 0.7 ? 'warn' : 'ok'))];
+    const out: (Node | null)[] = [tiles(tile('Employés', String(g.employees.length)), tile('Salaires', `${chf(wages)}/j`, '', 'selon les équipes'), tile('Moral', pct(avgMood), avgMood < 0.45 ? 'bad' : avgMood < 0.7 ? 'warn' : 'ok'))];
     for (const grp of groups) {
       const list = g.employees.filter((e) => e.shopId === grp.id);
       if (!list.length) continue;
       out.push(sec(grp.name, `${list.length}`));
       for (const e of list) {
-        const mood = e.mood ?? 1;
+        const mood = e.mood ?? 1, hours = g.hoursPerDay(e);
+        const role = STAFF_ROLE_BY_ID.get(g.roleOf(e))?.nameFr ?? 'Caisse', shift = SHIFT_BY_ID.get(g.shiftOf(e))?.nameFr ?? 'Journée complète';
         out.push(card({
-          title: e.name, sub: `Embauché le jour ${e.hiredDay + 1}`, right: el('div', { cls: 'ph-price' }, el('b', { text: `${e.wage} CHF` }), el('small', { text: 'par heure' })),
+          title: e.name, sub: e.shopId === null ? `${role} · sans affectation (non payé)` : `${role} · équipe ${shift.toLowerCase()} · ${hours} h par jour`,
+          right: el('div', { cls: 'ph-price' }, el('b', { text: `${chf(e.wage * hours)}` }), el('small', { text: `par jour · ${e.wage} CHF/h` })),
           body: [
             el('div', { cls: 'ph-gauges' },
               el('div', {}, el('div', { cls: 'ph-meter-l' }, el('span', { text: 'Compétence' }), el('b', { text: pct(e.skill) })), meter(e.skill)),
@@ -501,6 +527,77 @@ export class Phone {
     }
     out.push(el('div', { cls: 'ph-actions' }, this.serviceGps('grossiste', 'Grossiste')));
     return out;
+  }
+
+  /* ------------------------------ Concurrence ------------------------------ */
+
+  private rivaux(): (Node | null)[] {
+    const g = this.ctx.game, rv = g.rivalry;
+    const threats = rv.threats(), promos = rv.shops.filter((s) => s.promo > 0).length;
+    const out: (Node | null)[] = [
+      tiles(tile('Rivaux actifs', String(rv.active.length)), tile('Commerces rivaux', String(rv.shops.filter((s) => s.co).length), '', `${rv.shops.filter((s) => !s.co).length} indépendants`),
+        tile('Menaces', String(threats.length), threats.length ? 'warn' : 'ok', promos ? `${promos} en promotion` : 'aucune promotion')),
+      rv.awake ? null : el('p', { cls: 'ph-hint', text: `Les entreprises rivales observent le quartier. Dès le jour ${RIVALS.startDay + 1}, elles ouvriront des commerces, ajusteront leurs prix et lanceront des promotions.` }),
+    ];
+    // Menaces : rivaux du même type près de vos commerces.
+    out.push(sec('Menaces près de vos commerces', threats.length ? `${threats.length}` : undefined));
+    if (!threats.length) out.push(empty('flag', 'Aucune menace', g.shops.length ? `Aucun concurrent du même type à moins de ${RIVALS.nearRadius} m de vos commerces.` : 'Ouvrez un commerce : les concurrents du même type à proximité apparaîtront ici.'));
+    for (const t of threats.slice(0, 8)) {
+      const q = g.premise(t.rival.premiseId)!, co = rv.co(t.rival.co), loss = rv.promoLoss(t.shop);
+      out.push(card({
+        accent: co?.color ?? '#7d6a8c', title: t.rival.name, sub: `à ${t.dist} m de ${t.shop.name}`,
+        right: t.rival.promo > 0 ? pill(`promo ${t.rival.promo} j`, 'bad') : t.rival.opened > 0 && g.day - t.rival.opened < 7 ? pill('nouveau', 'warn') : pill(co ? co.brand : 'indépendant', 'info'),
+        body: [el('div', { cls: 'ph-kvs' }, kv('Clients / jour', `≈ ${num(t.rival.customers || rv.estimate(t.rival).customers)}`), kv('Prix', rivalPriceText(t.rival.price), t.rival.price < 0.97 ? 'bad' : ''),
+          kv('Effet promo', loss > 0.005 && t.rival.promo > 0 ? `−${Math.round(loss * 100)} % clients` : '—', loss > 0.005 && t.rival.promo > 0 ? 'bad' : ''))],
+        actions: [this.onMap(q.doorX, q.doorZ, t.rival.name), button('Racheter…', () => { this.close(); this.ctx.panel.open(rivalBuyView(this.ctx, q.id)); }, 'small')],
+      }));
+    }
+    // Parts de marché par type (clients par jour).
+    const rows = rv.marketShare().filter((r) => r.total > 0).sort((a, b) => b.mine - a.mine || b.total - a.total);
+    out.push(sec('Parts de marché', 'clients / jour'));
+    for (const r of rows) {
+      const t = SHOP_TYPE_BY_ID.get(r.type)!;
+      const segs = [{ label: 'Vous', color: '#5cc77a', customers: r.mine }, ...r.parts].filter((p) => p.customers > 0);
+      out.push(el('div', { cls: 'riv-share' },
+        el('div', { cls: 'riv-share-top' }, el('span', { text: t.nameFr }), el('b', { cls: r.mine > 0 ? 'ok' : '', text: r.mine > 0 ? `vous ${pct(r.mine / r.total)}` : `${num(r.total)} / j` })),
+        el('div', { cls: 'riv-bar' }, ...segs.map((p) => el('i', { attrs: { style: `width:${(p.customers / r.total) * 100}%;background:${p.color}`, title: `${p.label} : ${num(p.customers)} clients / jour (${pct(p.customers / r.total)})` } }))),
+        el('div', { cls: 'riv-legend' }, ...segs.map((p) => el('span', {}, el('i', { attrs: { style: `background:${p.color}` } }), `${p.label} ${pct(p.customers / r.total)}`)))));
+    }
+    // Entreprises rivales.
+    out.push(sec('Entreprises rivales', `${rv.active.length}`));
+    for (const co of rv.active) {
+      const list = rv.shopsOf(co.id), cq = rv.companyQuote(co.id);
+      const cust = list.reduce((a, s) => a + (s.customers || rv.estimate(s).customers), 0);
+      out.push(card({
+        accent: co.color, title: co.name, sub: [...new Set(list.map((s) => SHOP_TYPE_BY_ID.get(s.type)!.nameFr.toLowerCase()))].join(', ') || 'aucun commerce',
+        right: el('b', { text: `${list.length} commerce${list.length > 1 ? 's' : ''}` }),
+        body: [
+          el('div', { cls: 'ph-kvs' }, kv('Trésorerie', `≈ ${chf(Math.round(co.cash / 1000) * 1000)}`, co.cash < 0 ? 'bad' : ''), kv('Réputation', pct(co.reputation)), kv('Clients / jour', `≈ ${num(cust)}`)),
+          ...list.map((s) => {
+            const q = rv.quote(s.premiseId), p = rv.avgProfit(s);
+            return el('div', { cls: 'ph-line riv-line' }, el('span', { text: `${s.name}${s.promo > 0 ? ' · promo' : ''}` }), el('b', { text: `${chf(rv.avgRevenue(s))} / j` }),
+              el('span', { cls: p < 0 ? 'trend up' : 'trend', text: `prix ${rivalPriceText(s.price)}` }),
+              q ? button(chf(q.total), () => { this.close(); this.ctx.panel.open(rivalBuyView(this.ctx, s.premiseId)); }, 'small') : null);
+          }),
+        ],
+        actions: [cq ? button(`Racheter l’entreprise (${chf(cq.total)})`, () => { void this.buyCompany(co.id); }, 'small') : null],
+      }));
+    }
+    const gone = rv.cos.filter((c) => c.gone);
+    if (gone.length) {
+      out.push(sec('Disparues', `${gone.length}`));
+      for (const c of gone) out.push(el('div', { cls: 'ph-line' }, el('span', { text: c.name }), el('b', { text: c.bought ? 'rachetée' : 'faillite' }), el('span', { cls: 'trend', text: `jour ${(c.endDay ?? 0) + 1}` })));
+    }
+    out.push(el('p', { cls: 'ph-hint', text: `Une promotion rivale prend jusqu’à ${Math.round(RIVALS.promoMax * 100)} % des clients d’un commerce du même type à moins de ${RIVALS.promoRadius} m. Un rival qui perd de l’argent finit par fermer : le local redevient libre.` }));
+    return out;
+  }
+
+  private async buyCompany(coId: string): Promise<void> {
+    const g = this.ctx.game, co = g.rivalry.co(coId), q = g.rivalry.companyQuote(coId);
+    if (!co || !q) return;
+    if (!(await askConfirm(`Racheter ${co.name} : ${q.shops} commerce(s) meublés et approvisionnés, employés repris, pour ${chf(q.total)} (dépôts des baux compris) ?`, 'Racheter'))) return;
+    this.ctx.act(g.rivalry.buyCompany(coId, true), (n) => `${co.name} vous appartient (${n} commerce${n > 1 ? 's' : ''}) !`);
+    this.paint(true);
   }
 
   /* ------------------------------ Messages ------------------------------ */

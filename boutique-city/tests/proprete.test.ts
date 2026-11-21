@@ -78,9 +78,10 @@ test('propreté : alerte une fois par jour sous le seuil, avis « c’est sale �
   // Réputation : deux commerces identiques, l'un propre, l'autre sale.
   const clean = new Game(7, 'Test'), dirty = new Game(7, 'Test');
   const ic = openShop(clean), idd = openShop(dirty);
-  for (let d = 0; d < 3; d++) {
+  // Propreté maintenue heure par heure (sinon le coup de balai des caissiers remonte le magasin sale vers CLEANING.cashierCap).
+  for (let hr = 0; hr < 3 * 24; hr++) {
     clean.shop(ic)!.clean = 100; dirty.shop(idd)!.clean = 5;
-    keepAlive(clean); keepAlive(dirty); clean.advance(1440); dirty.advance(1440);
+    keepAlive(clean); keepAlive(dirty); clean.advance(60); dirty.advance(60);
   }
   assert.ok(dirty.shop(idd)!.reputation < clean.shop(ic)!.reputation - 0.02, `réputation : sale ${dirty.shop(idd)!.reputation.toFixed(2)} < propre ${clean.shop(ic)!.reputation.toFixed(2)}`);
 });
@@ -166,4 +167,40 @@ test('trois jours sans nettoyer : les ventes restent correctes', () => {
   const [d1, d2, d3] = s.history.slice(-3) as [typeof s.today, typeof s.today, typeof s.today];
   assert.ok(d3.revenue > d2.revenue * 0.75, `jour 3 : ${Math.round(d3.revenue)} CHF contre ${Math.round(d2.revenue)} au jour 2`);
   assert.ok(dayProfit(g.ledger.at(-1)!) > -500 && d1.customers > 0);
+});
+
+test('coup de balai des caissiers : remonte un magasin sale vers un niveau « passable », pas au-delà, pas sans caissier', () => {
+  const g = new Game(7, 'Test');
+  const id = openShop(g), s = g.shop(id)!;
+  keepAlive(g); g.advance(1440);
+  // Heure creuse (caisse peu sollicitée) : le caissier nettoie un peu.
+  keepAlive(g); g.advance(60);
+  s.clean = 5;
+  const sweep = g.cashierSweep(s);
+  assert.ok(sweep > 0 && sweep <= CLEANING.cashierPerHour, `balai ${sweep.toFixed(2)} point(s) / h`);
+  keepAlive(g); g.advance(4 * 60);
+  assert.ok(g.cleanliness(s) > 5, `propreté remontée (${g.cleanliness(s).toFixed(1)} %)`);
+  assert.ok(g.cleanliness(s) <= CLEANING.cashierCap, 'jamais au-delà du plafond');
+  // Au-dessus du plafond : aucun effet (la salissure l'emporte).
+  s.clean = CLEANING.cashierCap + 20;
+  keepAlive(g); g.advance(60);
+  assert.ok(g.cleanliness(s) < CLEANING.cashierCap + 20);
+  // Sans caissier : rien.
+  for (const e of g.staffOf(id)) g.assign(e.id, null);
+  s.clean = 5;
+  assert.equal(g.cashierSweep(s), 0);
+});
+
+test('jamais nettoyé pendant 20 jours : propreté stabilisée, ventes en baisse mais pas d’effondrement', () => {
+  const clean = new Game(7, 'Test'), dirty = new Game(7, 'Test');
+  const ic = openShop(clean), idd = openShop(dirty);
+  assert.ok(clean.setCleanService(ic, true).ok);
+  let rc = 0, rd = 0;
+  for (let d = 0; d < 20; d++) {
+    keepAlive(clean); keepAlive(dirty); clean.advance(1440); dirty.advance(1440);
+    if (d >= 10) { rc += clean.shop(ic)!.history.at(-1)!.revenue; rd += dirty.shop(idd)!.history.at(-1)!.revenue; }
+  }
+  assert.ok(rd < rc, `ventes : sale ${Math.round(rd)} < propre ${Math.round(rc)}`);
+  assert.ok(rd > rc * 0.6, `pas d’effondrement (${Math.round((rd / rc - 1) * 100)} %)`);
+  assert.ok(dirty.shop(idd)!.reputation > 0.4, `réputation ${dirty.shop(idd)!.reputation.toFixed(2)}`);
 });
