@@ -184,7 +184,10 @@ function emploi(ctx: UiCtx): (Node | null)[] {
     const s = g.shops.length ? remember(`hire-${c.id}`, shopSelect(g)) : null;
     const want = c.wantShift ?? 'journee';
     const role = remember(`hire-role-${c.id}`, roleSelect('caisse'));
-    const shift = remember(`hire-shift-${c.id}`, shiftSelect('journee', want));
+    // Équipe proposée : celle que souhaite le candidat, sauf pour un premier caissier (la journée complète évite un
+    // commerce sans personne en caisse).
+    const hasCashier = g.employees.some((e) => e.shopId !== null && g.roleOf(e) === 'caisse');
+    const shift = remember(`hire-shift-${c.id}`, shiftSelect(hasCashier ? want : 'journee', want));
     const wish = `Souhaite : ${SHIFT_LABEL[want].toLowerCase()}, au moins ${c.minWage ?? c.wage} CHF / h`;
     out.push(el('div', { cls: 'item col' }, el('div', {}, el('b', { text: c.name }),
       el('div', { cls: 'muted small', text: `compétence ${pct(c.skill)} (${num(c.skill * ECONOMY.servePerRegister)} clients / h en caisse) · demande ${c.wage} CHF / h` }),

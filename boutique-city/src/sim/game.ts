@@ -121,6 +121,8 @@ export interface DayStats {
   rentalIncome: number;
   /** Impôt sur le bénéfice prélevé ce jour-là (fin de semaine) ; absent : 0. */
   tax?: number;
+  /** Part de capital dans les remboursements de prêts (incluse dans finance, mais pas une charge imposable) ; absent : 0. */
+  principal?: number;
   /**
    * Gains (+) ou pertes (−) des placements cette nuit-là : intérêts de l'épargne, variation du fonds. Valeur placée,
    * pas encore encaissée : hors bénéfice d'exploitation et hors impôt. Absent : 0.
@@ -460,6 +462,7 @@ export class Game {
         if (st.registers === 0) faults.push('pas de caisse');
         if (empty > 0) faults.push(`${empty} rayon(s) vide(s)`);
         if (st.blocked.length) faults.push('meubles inaccessibles');
+        if (this.cleanliness(s) < CLEANING.warn) faults.push(`magasin sale (${Math.round(this.cleanliness(s))} %)`);
         if (faults.length) {
           const fine = 150 + 100 * faults.length;
           this.cash -= fine; s.today.equipment += fine; this.today.equipment += fine;
@@ -670,7 +673,8 @@ export class Game {
   taxEstimate(): { week: number; base: number; due: number; daysLeft: number; exempt: boolean } {
     const P = FINANCE.taxPeriod, week = Math.floor(this.today.day / P);
     const days = [...this.ledger.filter((d) => Math.floor(d.day / P) === week), this.today];
-    const base = r2(days.reduce((a, d) => a + dayProfit(d) + (d.tax ?? 0), 0));
+    // Le remboursement du capital d'un prêt n'est pas une charge : seuls les intérêts réduisent le bénéfice imposable.
+    const base = r2(days.reduce((a, d) => a + dayProfit(d) + (d.tax ?? 0) + (d.principal ?? 0), 0));
     const exempt = week < FINANCE.taxGraceWeeks;
     return { week, base, due: exempt ? 0 : r2(Math.max(0, base) * FINANCE.taxRate), daysLeft: week * P + P - 1 - this.today.day, exempt };
   }
@@ -1108,6 +1112,7 @@ export class Game {
     this.candidates = this.candidates.filter((x) => x !== c);
     this.notify('ok', `${e.name} rejoint ${this.shop(shopId)!.name} : ${STAFF_ROLE_BY_ID.get(role)!.nameFr.toLowerCase()}, ${SHIFT_BY_ID.get(shift)!.nameFr.toLowerCase()} (${e.wage} CHF / h).`);
     if (e.wantShift !== shift) this.notify('warn', `${e.name} préférait l’équipe « ${SHIFT_BY_ID.get(e.wantShift!)!.nameFr} » : sa satisfaction va baisser.`);
+    this.warnGaps(e);
     this.refreshCapacities();
     this.bump();
     return ok(e);
@@ -1354,6 +1359,7 @@ export class Game {
     if (this.cash < due) return fail(`Il faut ${Math.ceil(due)} CHF.`);
     this.cash -= due;
     this.today.finance += due;
+    this.today.principal = r2((this.today.principal ?? 0) + Math.min(due, l.remaining * (l.amount / l.total)));
     this.loans = this.loans.filter((x) => x !== l);
     this.bump();
     return ok(due);
@@ -1599,7 +1605,11 @@ export class Game {
   }
   /** Efficacité en caisse d'un employé : compétence × formation × satisfaction (1 ≈ 28 clients / h). */
   serviceSkill(e: Employee): number { return e.skill * (1 + TRAINING.capacity * (e.training ?? 0)) * (0.8 + 0.3 * (e.mood ?? 0.75)); }
-  private refreshCapacities(): void { for (const s of this.shops) if (s.rate > 0 || s.capacity > 0) s.capacity = this.capacityNow(s); }
+  private refreshCapacities(): void {
+    // Tous les commerces ouverts (y compris ceux encore sans clients ni capacité : premier caissier embauché).
+    const h = clockView(this.total).hour;
+    for (const s of this.shops) if (s.rate > 0 || s.capacity > 0 || (h >= s.open && h < s.close)) s.capacity = this.capacityNow(s);
+  }
 
   /** Attrait du commerce (1 ≈ commerce moyen du quartier). */
   attractiveness(s: Shop, st = this.stats(s)): number {
@@ -1772,6 +1782,7 @@ export class Game {
       // Dernière échéance : le solde exact (pas de reliquat d'arrondi).
       const pay = l.daysLeft <= 1 ? l.remaining : Math.min(l.daily, l.remaining);
       this.cash -= pay; this.today.finance += pay;
+      this.today.principal = r2((this.today.principal ?? 0) + pay * (l.amount / l.total));
       l.remaining = r2(l.remaining - pay);
       l.daysLeft--;
     }

@@ -74,7 +74,7 @@ export function shopView(ctx: UiCtx, shopId: number): View {
       const s = g.shop(shopId);
       if (!s) return [el('p', { text: 'Ce commerce n’existe plus.' })];
       const empties = productsOf(s.type).filter((p) => s.products[p.id]!.stock === 0 && g.storageFor(s, p) > 0).length;
-      const alerts: Partial<Record<Tab, boolean>> = { apercu: readiness(g, shopId).some(([ok]) => !ok) || g.cleanliness(s) < CLEANING.warn, stock: empties > 0 };
+      const alerts: Partial<Record<Tab, boolean>> = { apercu: readiness(g, shopId).some(([ok]) => !ok) || g.cleanliness(s) < CLEANING.warn, stock: empties > 0, equipe: g.cashierGaps(shopId).length > 0 };
       const tabs = el('div', { cls: 'tabs sp-tabs', attrs: { role: 'tablist' } }, ...TABS.map(([id, label]) => {
         const b = button(label, () => { tab = id; ctx.panel.paint(true); }, `${tab === id ? 'on' : ''}${alerts[id] ? ' alert' : ''}`.trim());
         b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(tab === id));

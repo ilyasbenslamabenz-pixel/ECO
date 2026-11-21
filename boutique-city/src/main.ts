@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { assets } from './assets';
 import { gallery } from './gallery';
-import { CONFIG, FURNITURE_BY_ID, HOME_BY_ID, SERVICE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf } from './sim/catalog';
+import { CLEANING, CONFIG, FURNITURE_BY_ID, HOME_BY_ID, SERVICE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf } from './sim/catalog';
 import { clockView, formatClock } from './sim/clock';
 import { FACE_N, type Building } from './sim/district';
 import { Game, dayProfit, type GameSave, type Result, type Shop } from './sim/game';
@@ -737,6 +737,7 @@ function start(game: Game): void {
     scene.interior.view.setItems(itemsOf(s));
     scene.interior.view.setSurfaces(s.floorId, s.wallId);
     scene.interior.view.setDirt(game.cleanliness(s));
+    if (agents) agents.dirty = game.cleanliness(s) < CLEANING.warn;
     if (game.layoutRev !== layoutRev) { layoutRev = game.layoutRev; agents?.refreshLayout(); }
     const c = clockView(game.total);
     const open = c.hour >= s.open && c.hour < s.close;

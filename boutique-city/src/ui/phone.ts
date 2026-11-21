@@ -54,7 +54,7 @@ export interface PhoneHooks {
   showOnMap: (x: number, z: number, label: string) => void;
 }
 
-type Tone = 'ok' | 'bad' | 'warn' | 'wrap' | '';
+type Tone = 'ok' | 'bad' | 'warn' | 'wrap' | 'warn wrap' | '';
 /** Première lettre en capitale (« lundi » → « Lundi »). */
 const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 const hhmm = (h: number, m: number): string => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -397,7 +397,7 @@ export class Phone {
     const when = tx.daysLeft <= 0 ? 'ce soir à minuit' : tx.daysLeft === 1 ? 'demain à minuit' : `dans ${tx.daysLeft + 1} jours, à minuit`;
     const placed = g.investValue();
     const out: (Node | null)[] = [
-      tiles(tile('Valeur nette', chf(netWorth(g))), tile('Placements', chf(placed), '', 'valeur de rachat'), tile('Impôt estimé', tx.exempt ? 'exonéré' : chf(tx.due), tx.due > 0 ? 'warn' : '')),
+      tiles(tile('Valeur nette', chf(netWorth(g)), 'wrap'), tile('Placements', chf(placed), 'wrap', 'valeur de rachat'), tile('Impôt estimé', tx.exempt ? 'exonéré' : chf(tx.due), tx.due > 0 ? 'warn wrap' : 'wrap')),
       // Impôt sur le bénéfice.
       sec('Impôt sur le bénéfice', `${rate} % par semaine`),
       card({

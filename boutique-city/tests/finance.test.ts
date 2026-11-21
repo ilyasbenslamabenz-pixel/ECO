@@ -130,3 +130,21 @@ test('notoriété : monte au lancement et pendant la campagne, s’estompe ensui
   assert.ok(g.release(id).ok);
   assert.equal(g.awareness[id], undefined);
 });
+
+test('impôt : rembourser le capital d’un prêt ne réduit pas le bénéfice imposable (seuls les intérêts comptent)', () => {
+  const g = new Game(3);
+  keepAlive(g); g.advance(DAY - (g.total % DAY));
+  goTo(g, 'banque');
+  const before = g.taxEstimate().base;
+  const loan = g.takeLoan(0);
+  assert.ok(loan.ok);
+  const l = g.loans[0]!;
+  const interestShare = (l.total - l.amount) / l.total;
+  const r = g.repayLoan(l.id);
+  assert.ok(r.ok);
+  const paid = r.ok ? r.data : 0;
+  const after = g.taxEstimate().base;
+  // La base ne baisse que de la part d'intérêts du remboursement, pas du capital.
+  assert.ok(before - after <= paid * interestShare + 0.05, `base ${before} → ${after} pour ${paid} remboursés`);
+  assert.ok(before - after < paid / 2, 'le capital n’est pas déduit');
+});

@@ -59,6 +59,8 @@ export class InteriorAgents {
   private seed = 1;
   /** Caisse tenue par le joueur (uid), à exclure des employés. */
   playerRegister: number | null = null;
+  /** Magasin sale : les clients ne repartent plus avec un sourire. */
+  dirty = false;
 
   constructor(private readonly view: InteriorView, private readonly accent: string) { view.scene.add(this.group); }
 
@@ -452,7 +454,7 @@ export class InteriorAgents {
           c.reg?.queue.shift(); c.reg = null;
           c.state = 'done'; c.timer = 0.8;
           c.h.gesture('emote-yes');
-          this.sayIcon(c, 'content');
+          if (!this.dirty) this.sayIcon(c, 'content');
         }
       } else if (c.state === 'done') {
         c.timer -= dt * ts;
