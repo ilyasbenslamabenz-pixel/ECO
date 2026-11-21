@@ -44,6 +44,7 @@ try {
       }
       await page.waitForTimeout(200);
     }
+    await shot('echec-tap').catch(() => {}); console.log('PANEL', (await page.locator('#panel').innerText().catch(() => '')).slice(0, 600));
     throw new Error(`élément introuvable : ${typeof loc === 'string' ? loc : 'localisateur'}`);
   };
   const goIn = async (id) => { await ev((b) => window.__bc.toDoor(b), id); await page.waitForTimeout(250); await page.keyboard.press('e'); await page.waitForTimeout(400); };
@@ -59,7 +60,9 @@ try {
   // 1. Louer.
   const free = await ev(() => { const g = window.__bc.game; return g.district.premises.filter((p) => g.isFree(p)).sort((a, b) => b.footfall - a.footfall)[0].buildingId; });
   await goIn(free);
-  await page.selectOption('#panel select', 'cafe');
+  await page.waitForSelector('#panel select');
+  await ev(() => { const s = [...document.querySelectorAll('#panel select')].find((e) => e.isConnected && [...e.options].some((o) => o.value === 'cafe')); s.value = 'cafe'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(300);
   await tap('#panel button:has-text("Signer le bail")');
   await page.waitForTimeout(500);
   check(await ev(() => window.__bc.state().inside?.kind === 'shop'), '1. local loué (café)');

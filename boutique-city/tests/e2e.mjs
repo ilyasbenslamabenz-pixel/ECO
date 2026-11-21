@@ -70,7 +70,9 @@ try {
   await goIn(free);
   await page.waitForSelector('#panel:not(.hidden)');
   await shot('04-local-libre');
-  await page.selectOption('#panel select', 'epicerie');
+  await page.waitForSelector('#panel select');
+  await ev(() => { const s = [...document.querySelectorAll('#panel select')].find((e) => e.isConnected && [...e.options].some((o) => o.value === 'epicerie')); s.value = 'epicerie'; s.dispatchEvent(new Event('change', { bubbles: true })); });
+  await page.waitForTimeout(300);
   await page.fill('#panel input[type=text]', 'Épicerie Atlas');
   await page.click('#panel button:has-text("Signer le bail")');
   await page.waitForTimeout(600);
@@ -219,7 +221,8 @@ try {
   await ev(([x, z]) => window.__bc.teleport(x + 2.6, z), [van.x, van.z]);
   await page.waitForTimeout(300);
   await page.keyboard.press('e');
-  await page.keyboard.down('KeyW'); await page.waitForTimeout(2500); await page.keyboard.up('KeyW');
+  // Durée longue : en rendu logiciel, le jeu tourne à 1–2 images par seconde (pas de temps plafonné à 0,1 s).
+  await page.keyboard.down('KeyW'); await page.waitForTimeout(6000); await page.keyboard.up('KeyW');
   await shot('12-conduite');
   const moved = await ev(([x, z]) => { const v = window.__bc.game.vehicles[0]; return Math.hypot(v.x - x, v.z - z); }, [van.x, van.z]);
   check(moved > 1, 'la camionnette roule', `${moved.toFixed(1)} m`);

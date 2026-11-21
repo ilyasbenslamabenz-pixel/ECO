@@ -478,11 +478,14 @@ export class DistrictView {
     let seed = d.seed * 977 + 3;
     const rnd = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const doors = d.buildings.filter((b) => b.premise || b.service || b.home).map((b) => [b.doorX, b.doorZ] as const);
+    const garages = d.buildings.filter((b) => b.service === 'garage').map((b) => [b.doorX, b.doorZ] as const);
     const per = new Map<string, THREE.Matrix4[]>();
     const off = STREET_W / 2 - 1.5;
     const add = (x: number, z: number, along: 'x' | 'z'): void => {
       if (rnd() > 0.42) return;
       if (doors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 6)) return;
+      // Abords du garage dégagés (les véhicules achetés y sont livrés).
+      if (garages.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 26)) return;
       // Hors des carrefours.
       const nearCross = (v: number, n: number): boolean => { for (let i = 0; i <= n; i++) if (Math.abs(v - (i - n / 2) * PITCH) < STREET_W / 2 + 5) return true; return false; };
       if (along === 'z' ? nearCross(z, d.nz) : nearCross(x, d.nx)) return;

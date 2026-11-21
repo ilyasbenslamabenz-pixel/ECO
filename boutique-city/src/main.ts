@@ -673,11 +673,13 @@ function start(game: Game): void {
     else { scene.player.group.position.set(game.player.x, 0.16, game.player.z); scene.player.group.rotation.y = game.player.heading; }
     scene.vehicles.sync(game.vehicles, car ?? undefined);
     // Avis des clients (bulles) dans le commerce où l'on se trouve, au plus un toutes les 1,2 s.
-    const fb = game.feedback.splice(0);
+    // Les avis en attente sont gardés (au plus 12) jusqu'à la prochaine bulle possible.
+    if (game.feedback.length > 12) game.feedback.splice(0, game.feedback.length - 12);
     if ((feedbackT -= dt) <= 0 && inside?.kind === 'shop' && agents) {
-      const f = fb.find((x) => x.shopId === (inside as { shopId: number }).shopId);
-      if (f) { agents.feedback(f.kind); feedbackT = 1.2; }
-    }
+      const k = game.feedback.findIndex((x) => x.shopId === (inside as { shopId: number }).shopId);
+      if (k >= 0) { agents.feedback(game.feedback[k]!.kind); game.feedback.splice(0, k + 1); feedbackT = 1.2; }
+      else game.feedback.length = 0;
+    } else if (!inside) game.feedback.length = 0;
     const ev = game.events.splice(0);
     let street = 0;
     for (const e of ev) {
