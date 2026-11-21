@@ -298,7 +298,8 @@ function start(game: Game): void {
   const enterShop = (shopId: number): void => {
     const s = game.shop(shopId)!, p = game.premise(s.premiseId)!, t = SHOP_TYPE_BY_ID.get(s.type)!;
     const b = game.building(p.buildingId)!;
-    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: INTERIOR_STYLE[s.type].floor, wall: INTERIOR_STYLE[s.type].wall, accent: t.color, title: s.name, kind: s.type, facade: facadeColor(b) });
+    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: INTERIOR_STYLE[s.type].floor, wall: INTERIOR_STYLE[s.type].wall, accent: t.color, title: s.name, kind: s.type, facade: facadeColor(b), floorId: s.floorId, wallId: s.wallId });
+    view.setDirt(game.cleanliness(s));
     agents = new InteriorAgents(view, t.color);
     view.setItems(itemsOf(s));
     agents.refreshLayout();
@@ -658,7 +659,8 @@ function start(game: Game): void {
     const open = c.hour >= s.open && c.hour < s.close;
     const n = game.unloadable(s.id);
     const id = s.id;
-    const sig = `${id}|${open}|${s.today.customers}|${Math.round(s.today.revenue)}|${n}|${build.on}`;
+    const clean = Math.round(game.cleanliness(s));
+    const sig = `${id}|${open}|${s.today.customers}|${Math.round(s.today.revenue)}|${n}|${build.on}|${clean}`;
     if (sig === ibarSig) return;
     ibarSig = sig;
     const t = SHOP_TYPE_BY_ID.get(s.type)!;
@@ -673,6 +675,7 @@ function start(game: Game): void {
       el('div', { cls: 'ib-actions' },
         n > 0 ? ibtn(`Décharger (${n})`, () => { act(game.unload(id)); refreshInterior(true); renderInteriorBar(); }, 'primary') : null,
         ibtn(build.on ? 'Terminer' : 'Aménager', () => setBuild(!build.on), build.on ? 'primary' : '', 'B'),
+        ibtn(`Nettoyer (${clean} %)`, () => { act(game.cleanShop(id), (v) => `Magasin nettoyé : propreté ${v} %.`); refreshInterior(true); renderInteriorBar(); }, clean < 50 ? 'warn' : ''),
         ibtn('Gestion', () => ctx.openShop(id)),
         ibtn('Sortir', exitInterior)));
   };
@@ -728,6 +731,8 @@ function start(game: Game): void {
     if (!force && interiorT < 0.5) return;
     interiorT = 0;
     scene.interior.view.setItems(itemsOf(s));
+    scene.interior.view.setSurfaces(s.floorId, s.wallId);
+    scene.interior.view.setDirt(game.cleanliness(s));
     if (game.layoutRev !== layoutRev) { layoutRev = game.layoutRev; agents?.refreshLayout(); }
     const c = clockView(game.total);
     const open = c.hour >= s.open && c.hour < s.close;

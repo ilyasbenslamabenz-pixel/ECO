@@ -9,18 +9,20 @@
  * chiffre principal à droite, petites mesures dessous, boutons d'action en bas), état vide avec une action.
  */
 import { HOME_BY_ID, PRODUCTS, SHOP_TYPES, SHOP_TYPE_BY_ID, VEHICLE_BY_ID } from '../sim/catalog';
+import { FINANCE, INVESTMENTS, type InvestKind } from '../sim/catalog';
 import { WEEKDAYS_FR, clockView } from '../sim/clock';
 import { dayProfit, type DayStats, type Notice } from '../sim/game';
 import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
 import { button, chf, chf2, el, icon, iconButton, num, pct, signed, type IconName } from './dom';
 import { subletView, type UiCtx } from './dialogs';
 
-type AppId = 'commerces' | 'immo' | 'banque' | 'equipe' | 'marche' | 'messages' | 'objectifs' | 'vehicules' | 'carte' | 'entreprise' | 'reglages';
+type AppId = 'commerces' | 'immo' | 'banque' | 'finances' | 'equipe' | 'marche' | 'messages' | 'objectifs' | 'vehicules' | 'carte' | 'entreprise' | 'reglages';
 interface App { id: AppId; name: string; icon: IconName; color: string }
 const APPS: App[] = [
   { id: 'commerces', name: 'Commerces', icon: 'shop', color: '#ff8a3d' },
   { id: 'immo', name: 'Immobilier', icon: 'building', color: '#4c8dff' },
   { id: 'banque', name: 'Banque', icon: 'bank', color: '#20a36b' },
+  { id: 'finances', name: 'Finances', icon: 'coin', color: '#7a5cff' },
   { id: 'equipe', name: 'Équipe', icon: 'team', color: '#ef6b8a' },
   { id: 'marche', name: 'Marché', icon: 'chart', color: '#e9a908' },
   { id: 'messages', name: 'Messages', icon: 'chat', color: '#2fb4de' },
@@ -164,7 +166,7 @@ export class Phone {
   private barAside(app: AppId): HTMLElement | null {
     const g = this.ctx.game;
     const t = app === 'commerces' ? `${g.shops.length}` : app === 'equipe' ? `${g.employees.length}` : app === 'vehicules' ? `${g.vehicles.length}`
-      : app === 'objectifs' ? `${g.achieved.length}/${OBJECTIVES.length}` : app === 'banque' ? chf(g.cash) : null;
+      : app === 'objectifs' ? `${g.achieved.length}/${OBJECTIVES.length}` : app === 'banque' ? chf(g.cash) : app === 'finances' ? chf(netWorth(g)) : null;
     return t ? el('span', { cls: 'ph-bar-aside', text: t }) : null;
   }
 
@@ -198,6 +200,7 @@ export class Phone {
       case 'commerces': return this.commerces();
       case 'immo': return this.immo();
       case 'banque': return this.banque();
+      case 'finances': return this.finances();
       case 'equipe': return this.equipe();
       case 'marche': return this.marche();
       case 'messages': return this.messages();
@@ -330,10 +333,11 @@ export class Phone {
     const t = g.today;
     const lines = ([
       ['Ventes', t.revenue, 1], ['Loyers encaissés', t.rentalIncome ?? 0, 1], ['Achats de marchandise', t.purchases, -1], ['Salaires', t.wages, -1],
-      ['Loyers (provisions et payés)', t.rent, -1], ['Équipement', t.equipment, -1], ['Publicité', t.marketing, -1], ['Prêts', t.finance, -1], ['Vie courante', t.living, -1],
+      ['Loyers (provisions et payés)', t.rent, -1], ['Équipement', t.equipment, -1], ['Publicité', t.marketing, -1], ['Prêts', t.finance, -1], ['Vie courante', t.living, -1], ['Impôt sur le bénéfice', t.tax ?? 0, -1],
     ] as [string, number, number][]).filter(([l, v]) => v > 0 || l === 'Ventes');
     return [
       tiles(tile('Compte', chf(g.cash), g.cash < 0 ? 'bad' : ''), tile('Dettes', chf(g.debt), g.debt > 0 ? 'warn' : ''), tile('Aujourd’hui', signed(today), today >= 0 ? 'ok' : 'bad')),
+      this.financeStrip(),
       sec('Résultat des 7 derniers jours'),
       el('div', { cls: 'ph-bars' }, ...days.map((d) => {
         const v = dayProfit(d), cur = d === g.today;
@@ -351,6 +355,96 @@ export class Phone {
       })) : [el('p', { cls: 'ph-hint', text: 'Aucun prêt en cours. Les prêts se signent au guichet de la banque.' })]),
       el('div', { cls: 'ph-actions' }, this.serviceGps('banque', 'Banque du Quartier')),
     ];
+  }
+
+  /** Rappel dans l'appli Banque : impôt de la semaine et plafond de crédit, avec accès aux détails. */
+  private financeStrip(): HTMLElement {
+    const g = this.ctx.game, tx = g.taxEstimate(), cl = g.creditLimit();
+    return el('div', { cls: 'ph-card fin-strip', attrs: { style: '--app:#7a5cff' } },
+      kv('Impôt de la semaine (estimé)', tx.exempt ? 'exonéré' : chf(tx.due), tx.due > 0 ? 'warn' : ''),
+      kv('Crédit encore disponible', `${chf(cl.available)} sur ${chf(cl.limit)}`),
+      el('div', { cls: 'ph-actions' }, button('Détails dans Finances', () => this.go('finances'), 'small')));
+  }
+
+  /* ------------------------------ Finances ------------------------------ */
+
+  private finances(): (Node | null)[] {
+    const g = this.ctx.game;
+    const tx = g.taxEstimate(), cl = g.creditLimit();
+    const rate = Math.round(FINANCE.taxRate * 100);
+    const when = tx.daysLeft <= 0 ? 'ce soir à minuit' : tx.daysLeft === 1 ? 'demain à minuit' : `dans ${tx.daysLeft + 1} jours, à minuit`;
+    const placed = g.investValue();
+    const out: (Node | null)[] = [
+      tiles(tile('Valeur nette', chf(netWorth(g))), tile('Placements', chf(placed), '', 'valeur de rachat'), tile('Impôt estimé', tx.exempt ? 'exonéré' : chf(tx.due), tx.due > 0 ? 'warn' : '')),
+      // Impôt sur le bénéfice.
+      sec('Impôt sur le bénéfice', `${rate} % par semaine`),
+      card({
+        accent: '#7a5cff', title: `Semaine ${tx.week + 1}`, sub: tx.exempt ? 'Première semaine exonérée : aide à la création d’entreprise.' : `Prélèvement automatique ${when}.`,
+        right: pill(tx.exempt ? 'exonéré' : chf(tx.due), tx.exempt ? 'ok' : tx.due > 0 ? 'warn' : 'ok'),
+        body: [
+          kv('Bénéfice de la semaine (avant impôt)', signed(tx.base), tx.base >= 0 ? 'ok' : 'bad'),
+          kv('Provision estimée', tx.exempt ? '0 CHF' : `${chf(tx.due)} (${rate} % du bénéfice)`),
+          el('p', { cls: 'ph-hint', text: `Le bénéfice est la somme des résultats du jour (ventes et loyers encaissés, moins toutes les dépenses). Une semaine en déficit n’est pas imposée. L’impôt apparaît dans le bilan du 7e jour.` }),
+        ],
+      }),
+      ...g.taxes.slice(-3).reverse().map((t) => kv(`Semaine ${t.week + 1} · bénéfice ${signed(t.base)}`, t.amount > 0 ? `− ${chf(t.amount)}` : 'aucun impôt', t.amount > 0 ? 'bad' : 'ok')),
+      // Crédit.
+      sec('Plafond de crédit', chf(cl.limit)),
+      card({
+        accent: '#20a36b', title: `Encore ${chf(cl.available)} empruntables`, sub: `Déjà dû : ${chf(g.debt)} (intérêts compris).`,
+        right: pill(cl.capped ? 'plafond maximal' : 'évolutif', cl.capped ? 'warn' : 'info'),
+        body: [
+          meter(g.debt / Math.max(1, cl.limit), g.debt > cl.limit * 0.8 ? 'bad' : g.debt > cl.limit * 0.5 ? 'warn' : 'ok'),
+          kv('Socle accordé à toute entreprise', chf(cl.base)),
+          kv(`${Math.round(FINANCE.creditWorthShare * 100)} % de la valeur nette (${chf(cl.worth)})`, `+ ${chf(cl.fromWorth)}`),
+          kv(`${FINANCE.creditSalesWeeks} × les ventes des 7 derniers jours (${chf(cl.sales7)})`, `+ ${chf(cl.fromSales)}`),
+          el('p', { cls: 'ph-hint', text: `Le plafond monte avec vos ventes et votre valeur nette (maximum ${chf(FINANCE.creditMax)}). Il compte le total à rembourser, intérêts compris. Les prêts se signent au guichet de la banque.` }),
+        ],
+        actions: [this.serviceGps('banque', 'Banque du Quartier')],
+      }),
+      // Placements.
+      sec('Placements', placed > 0 ? chf(placed) : undefined),
+      el('p', { cls: 'ph-hint', text: `Banque en ligne : placez votre trésorerie disponible (minimum ${chf(FINANCE.investMin)}). Les placements comptent dans la valeur nette, mais pas pour payer loyers et salaires.` }),
+    ];
+    for (const def of INVESTMENTS) out.push(this.investCard(def.id));
+    // Notoriété.
+    out.push(sec('Notoriété', `−${Math.round(FINANCE.awarenessDecay * 100)} % par jour`));
+    if (!g.shops.length) out.push(el('p', { cls: 'ph-hint', text: 'Ouvrez un commerce : les campagnes de l’agence de publicité font connaître vos boutiques.' }));
+    for (const s of g.shops) {
+      const v = g.awarenessView(s.id), n = g.campaigns.filter((c) => c.shopId === s.id || c.shopId === null).length;
+      const d = Math.round(v.trend * 100);
+      out.push(card({
+        accent: SHOP_TYPE_BY_ID.get(s.type)?.color ?? '#7a5cff', title: s.name,
+        sub: n ? `${n} campagne${n > 1 ? 's' : ''} en cours` : v.now > 0 ? 'Aucune campagne : la notoriété s’estompe.' : 'Aucune campagne en cours.',
+        right: pill(`+${Math.round(v.now * 100)} % de clients`, v.now > 0 ? 'ok' : ''),
+        body: [meter(v.now / FINANCE.awarenessMax, 'ok'), el('div', { cls: 'ph-meter-l' }, el('span', { text: 'Tendance pour demain' }),
+          el('b', { cls: d > 0 ? 'ok' : d < 0 ? 'bad' : '', text: d > 0 ? `▲ +${d} pts` : d < 0 ? `▼ ${d} pts` : 'stable' }))],
+      }));
+    }
+    if (g.shops.length) out.push(el('p', { cls: 'ph-hint', text: `Chaque campagne donne son effet dès le lancement, puis ajoute ${Math.round(FINANCE.awarenessGain * 100)} % de cet effet chaque jour où elle dure : une longue campagne monte plus haut. Ensuite, la notoriété baisse de ${Math.round(FINANCE.awarenessDecay * 100)} % par jour (maximum +${Math.round(FINANCE.awarenessMax * 100)} % de clients par commerce).` }));
+    out.push(el('div', { cls: 'ph-actions' }, this.serviceGps('pub', 'Agence de publicité')));
+    return out;
+  }
+
+  private investCard(kind: InvestKind): HTMLElement {
+    const g = this.ctx.game, def = INVESTMENTS.find((i) => i.id === kind)!;
+    const bal = g.invest[kind] ?? 0, gain = bal - (g.investPrincipal[kind] ?? 0);
+    const amount = el('input', { cls: 'price fin-amount', attrs: { type: 'number', min: String(FINANCE.investMin), step: '100', value: String(Math.max(FINANCE.investMin, Math.min(5000, Math.floor(Math.max(0, g.cash) / 100) * 100))), 'aria-label': `Montant pour ${def.nameFr}` } });
+    const body: (Node | null)[] = [el('p', { cls: 'ph-hint', text: def.desc })];
+    if (bal > 0) body.push(kv('Montant versé', chf(g.investPrincipal[kind] ?? 0)), kv('Gain ou perte', signed(gain), gain >= 0 ? 'ok' : 'bad'));
+    if (def.dailyVol > 0 && g.fundReturns.length) {
+      const last = g.fundReturns.slice(-7), tot = last.reduce((a, r) => a * (1 + r), 1) - 1;
+      body.push(el('div', { cls: 'fin-spark', attrs: { title: 'Variation des 7 dernières nuits' } }, ...last.map((r) => el('i', { cls: r >= 0 ? 'pos' : 'neg', attrs: { style: `height:${Math.max(8, Math.min(100, Math.round(Math.abs(r) * 4000)))}%`, title: `${r >= 0 ? '+' : ''}${(r * 100).toFixed(2).replace('.', ',')} %` } }))),
+        kv(`Sur ${last.length} nuit${last.length > 1 ? 's' : ''}`, `${tot >= 0 ? '+' : ''}${(tot * 100).toFixed(1).replace('.', ',')} %`, tot >= 0 ? 'ok' : 'bad'));
+    }
+    return card({
+      accent: kind === 'fonds' ? '#e9a908' : '#20a36b', title: def.nameFr, sub: def.exitFee > 0 ? `Frais de retrait ${Math.round(def.exitFee * 100)} %` : 'Retrait gratuit et immédiat',
+      right: el('div', { cls: 'ph-price' }, el('b', { text: chf(bal) }), el('small', { text: bal > 0 ? 'placés' : 'rien de placé' })), body,
+      actions: [amount,
+        button('Placer', () => this.ctx.act(g.deposit(kind, Number(amount.value)), (d) => `${chf(d)} placés.`), 'small primary'),
+        bal > 0 ? button('Retirer', () => this.ctx.act(g.withdraw(kind, Number(amount.value)), (d) => `${chf(d)} versés sur le compte.`), 'small') : null,
+        bal > 0 ? button('Tout retirer', () => this.ctx.act(g.withdraw(kind, bal), (d) => `${chf(d)} versés sur le compte.`), 'small') : null],
+    });
   }
 
   /* ------------------------------ Équipe ------------------------------ */

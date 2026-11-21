@@ -80,3 +80,4 @@ console.log(log.join('\n'));
 const missing = OBJECTIVES.filter((o) => !g.achieved.includes(o.id)).map((o) => o.title);
 console.log(missing.length ? `Non atteints : ${missing.join(' ; ')}` : 'Les 13 objectifs sont atteints.');
 console.log(`Trésorerie finale ${Math.round(g.cash)} CHF, jour ${g.day + 1}`);
+console.log(`Impôts payés : ${Math.round(g.ledger.reduce((x, d) => x + (d.tax ?? 0), 0))} CHF ; plafond de crédit : ${Math.round(g.creditLimit().limit)} CHF`);

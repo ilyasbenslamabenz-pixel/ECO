@@ -128,7 +128,8 @@ export class InteriorAgents {
    * montre la raison de son départ (trop cher, rupture, attente, personne en caisse) et ressort.
    */
   feedback(kind: FeedbackKind): void {
-    if (kind === 'content') {
+    // Avis d'un client servi (ravi, ou gêné par la saleté) : sur un client déjà présent.
+    if (kind === 'content' || kind === 'sale') {
       const c = this.customers.find((x) => !x.bubble && (x.state === 'pay' || x.state === 'queue' || x.state === 'browse'));
       if (c) this.say(c, kind);
       return;
@@ -445,6 +446,7 @@ type Mood = 'content' | 'fache' | 'bof';
 const BUBBLES: Record<FeedbackKind, [string, string, Mood]> = {
   prix: ['Trop cher !', '#ef6b6b', 'fache'], rupture: ['Rupture…', '#f0b84a', 'bof'], attente: ['Trop d’attente', '#f0b84a', 'bof'],
   caisse: ['Personne en caisse ?', '#ef6b6b', 'fache'], content: ['Super boutique !', '#5cc77a', 'content'],
+  sale: ['C’est sale ici…', '#b08a5a', 'bof'],
 };
 
 /**

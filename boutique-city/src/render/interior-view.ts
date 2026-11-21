@@ -2,7 +2,8 @@
  * Intérieur d'un commerce ou d'un logement, en 3D : sol carrelé ou parquet, murs (coupés automatiquement du côté
  * de la caméra), vitrine et porte sur la façade (+z), trottoir et rue devant, mobilier, réserve au fond.
  * Ambiance propre à chaque type de commerce (motif et teintes du sol, soubassement des murs, décor mural au-dessus
- * de 2 m : étagères garnies, cadres, ardoise, miroir, horloge, appliques) et éclairage intérieur chaud.
+ * de 2 m : étagères garnies, cadres, ardoise, miroir, horloge, appliques) et éclairage intérieur chaud. Revêtements
+ * de sol et de murs choisis par le joueur (remplacent ceux du type) et saleté visible au sol selon la propreté.
  * Grille de cases de 1 m : la case (x, z) a son centre en (x + 0.5 − W/2, z + 0.5 − D/2). Fournit les collisions
  * (meubles, murs) et, en mode aménagement, la grille, le fantôme du meuble à poser et la surbrillance.
  * Dépend de three.
@@ -25,7 +26,11 @@ export type InteriorKind = ShopType | 'logement';
  * `kind` (facultatif) : type d'intérieur ; à défaut, il est déduit de la couleur des murs (styles de main.ts) ou du
  * titre (« Chez moi »), sinon ambiance neutre selon `floor`.
  */
-export interface InteriorOpts { gridW: number; gridD: number; floor: 'carrelage' | 'parquet'; wall: string; accent: string; title: string; facade: string; kind?: InteriorKind }
+export interface InteriorOpts {
+  gridW: number; gridD: number; floor: 'carrelage' | 'parquet'; wall: string; accent: string; title: string; facade: string; kind?: InteriorKind;
+  /** Revêtements choisis (ids du catalogue FLOORINGS / WALLINGS) ; absent ou « origine » : sol et murs du type. */
+  floorId?: string; wallId?: string;
+}
 
 /** Mur : groupe abaissé en vue de coupe, normale extérieure, distance au centre ; `deco` : décor mural (caché abaissé). */
 interface WallGroup { g: THREE.Group; n: [number, number]; d: number; deco: THREE.Group }
@@ -46,6 +51,14 @@ export class InteriorView {
   private readonly highlight: THREE.Mesh;
   items: InteriorItem[] = [];
   readonly sun: THREE.DirectionalLight;
+  /** Sol, matériaux des murs intérieurs (fond, côtés), soubassement du type, voile de saleté (revêtements, propreté). */
+  private readonly floorMat: THREE.MeshStandardMaterial;
+  private readonly floorBase: { spec: FloorSpec; rough: number };
+  private readonly wallMats: [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial];
+  private readonly wainscot: THREE.Object3D[] = [];
+  private readonly dirt: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>;
+  private surfKey = '';
+  private dirtLevel = -1;
 
   constructor(readonly opts: InteriorOpts) {
     this.W = opts.gridW; this.D = opts.gridD;
@@ -74,29 +87,42 @@ export class InteriorView {
     }
 
     // Sol intérieur, trottoir et rue devant la vitrine, sol sombre autour.
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: floorTexture(theme?.floor ?? (opts.floor === 'carrelage' ? FLOORS.carreaux : FLOORS.parquet), W, D), roughness: opts.floor === 'carrelage' ? 0.35 : 0.6 }));
+    this.floorBase = { spec: theme?.floor ?? (opts.floor === 'carrelage' ? FLOORS.carreaux : FLOORS.parquet), rough: opts.floor === 'carrelage' ? 0.35 : 0.6 };
+    this.floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(this.floorBase.spec, W, D), roughness: this.floorBase.rough });
+    this.floorMat.userData['own'] = true;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2), this.floorMat);
     floor.receiveShadow = true;
     this.scene.add(floor);
+    // Voile de saleté (taches et traces de pas), invisible tant que le magasin est propre.
+    this.dirt = new THREE.Mesh(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: dirtTexture(W, D, this.doorSpan()), transparent: true, opacity: 0, depthWrite: false, roughness: 0.95 }));
+    this.dirt.material.userData['own'] = true;
+    this.dirt.position.y = 0.006;
+    this.dirt.receiveShadow = true;
+    this.dirt.visible = false;
+    this.scene.add(this.dirt);
     // Socle sombre sous la pièce et seuil étroit devant la porte (plus de grand trottoir ni de fond noir).
     box(this.scene, W + 0.8, 0.35, D + 0.8, 0, -0.36, 0, mat('#232a35', { rough: 0.9 }), false);
     const [sl, sr] = this.doorSpan();
     box(this.scene, sr - sl + 1.2, 0.08, 2.2, (sl + sr) / 2, -0.09, D / 2 + 1.2, mat('#3a4250', { rough: 0.9 }), false);
 
     // Murs : fond, gauche, droite (pleins), façade (vitrines et porte).
-    const wallM = mat(opts.wall, { rough: 0.9 }), base = mat('#5a5048');
+    // Murs intérieurs : matériaux propres à cet intérieur (revêtement choisi : texture répétée tous les mètres).
+    const wallMat = (): THREE.MeshStandardMaterial => { const m = new THREE.MeshStandardMaterial({ color: opts.wall, roughness: 0.9 }); m.userData['own'] = true; return m; };
+    this.wallMats = [wallMat(), wallMat()];
+    const [wallB, wallS] = this.wallMats, base = mat('#5a5048');
     const mk = (n: [number, number], d: number): THREE.Group => { const g = new THREE.Group(), deco = new THREE.Group(); g.add(deco); this.scene.add(g); this.walls.push({ g, n, d, deco }); return g; };
     const back = mk([0, -1], D / 2);
-    box(back, W + 0.4, WALL_H, 0.2, 0, 0, -D / 2 - 0.1, wallM);
+    box(back, W + 0.4, WALL_H, 0.2, 0, 0, -D / 2 - 0.1, wallB);
     box(back, W, 0.12, 0.04, 0, 0, -D / 2 + 0.02, base, false);
     box(back, 1.0, 2.2, 0.06, W / 2 - 1.2, 0, -D / 2 + 0.03, mat('#8a6a4a'), false);
     const sign = textPlane(opts.title, 0.55, opts.accent, '#ffffff', W * 0.7);
     sign.position.set(-0.4, 2.45, -D / 2 + 0.04);
     back.add(sign);
     const left = mk([-1, 0], W / 2);
-    box(left, 0.2, WALL_H, D, -W / 2 - 0.1, 0, 0, wallM);
+    box(left, 0.2, WALL_H, D, -W / 2 - 0.1, 0, 0, wallS);
     box(left, 0.04, 0.12, D, -W / 2 + 0.02, 0, 0, base, false);
     const right = mk([1, 0], W / 2);
-    box(right, 0.2, WALL_H, D, W / 2 + 0.1, 0, 0, wallM);
+    box(right, 0.2, WALL_H, D, W / 2 + 0.1, 0, 0, wallS);
     box(right, 0.04, 0.12, D, W / 2 - 0.02, 0, 0, base, false);
     if (theme) this.decorate(theme, kind!, sign);
     const front = mk([0, 1], D / 2);
@@ -127,6 +153,41 @@ export class InteriorView {
     this.highlight.visible = false;
     this.scene.add(this.highlight);
     this.setItems([]);
+    this.setSurfaces(opts.floorId, opts.wallId);
+  }
+
+  /**
+   * Revêtements de sol et de murs (ids du catalogue) : remplacent le sol et les murs du type d'intérieur (le
+   * soubassement du type disparaît sous un revêtement mural). « origine » ou absent : rendu du type.
+   */
+  setSurfaces(floorId = 'origine', wallId = 'origine'): void {
+    const key = `${floorId}|${wallId}`;
+    if (key === this.surfKey) return;
+    this.surfKey = key;
+    const fs = FLOOR_SURF[floorId];
+    this.floorMat.map?.dispose();
+    this.floorMat.map = floorTexture(fs?.spec ?? this.floorBase.spec, this.W, this.D);
+    this.floorMat.roughness = fs?.rough ?? this.floorBase.rough;
+    this.floorMat.needsUpdate = true;
+    const ws = WALL_SURF[wallId];
+    this.wallMats.forEach((m, k) => {
+      m.map?.dispose();
+      m.map = ws ? wallTexture(ws, k === 0 ? this.W + 0.4 : this.D) : null;
+      m.color.set(ws ? '#ffffff' : this.opts.wall);
+      m.roughness = ws?.rough ?? 0.9;
+      m.needsUpdate = true;
+    });
+    for (const o of this.wainscot) o.visible = !ws;
+  }
+
+  /** Saleté visible selon la propreté (0..100) : sol terni puis taches et traces de pas sous 85 %. */
+  setDirt(clean: number): void {
+    const d = Math.round(Math.max(0, Math.min(1, (85 - clean) / 85)) * 20) / 20;
+    if (d === this.dirtLevel) return;
+    this.dirtLevel = d;
+    this.dirt.visible = d > 0;
+    this.dirt.material.opacity = 0.95 * Math.sqrt(d);
+    this.floorMat.color.set('#ffffff').lerp(DIRT_TINT, 0.5 * d);
   }
 
   /**
@@ -139,11 +200,9 @@ export class InteriorView {
     const [back, left, right] = this.walls as [WallGroup, WallGroup, WallGroup];
     const lam = mat(t.wainscot, { rough: 0.8 }), rail = mat(t.trim, { rough: 0.5 });
     // Soubassement et cimaise sur les trois murs intérieurs.
-    box(back.g, W, 1.0, 0.03, 0, 0, -D / 2 + 0.015, lam, false);
-    box(back.g, W, 0.06, 0.06, 0, 1.0, -D / 2 + 0.03, rail, false);
+    this.wainscot.push(box(back.g, W, 1.0, 0.03, 0, 0, -D / 2 + 0.015, lam, false), box(back.g, W, 0.06, 0.06, 0, 1.0, -D / 2 + 0.03, rail, false));
     for (const [w, sx] of [[left, -1], [right, 1]] as const) {
-      box(w.g, 0.03, 1.0, D, sx * (W / 2 - 0.015), 0, 0, lam, false);
-      box(w.g, 0.06, 0.06, D, sx * (W / 2 - 0.03), 1.0, 0, rail, false);
+      this.wainscot.push(box(w.g, 0.03, 1.0, D, sx * (W / 2 - 0.015), 0, 0, lam, false), box(w.g, 0.06, 0.06, D, sx * (W / 2 - 0.03), 1.0, 0, rail, false));
     }
     const r = hashRand(W * 31 + D * 7 + kind.length);
     /** Pose un élément (face avant +z) contre un mur, à l'abscisse u le long du mur et à la hauteur y. */
@@ -305,7 +364,7 @@ export function rotSize(def: string, rot: Rot): { w: number; d: number } {
 /* ------------------------------ Ambiances ------------------------------ */
 
 /** Motif du sol (texture répétée tous les mètres) : couleurs [a, b, joint ou ombre]. */
-interface FloorSpec { pattern: 'carreaux' | 'damier' | 'tomettes' | 'lames' | 'chevrons'; c: string[] }
+interface FloorSpec { pattern: 'carreaux' | 'damier' | 'tomettes' | 'lames' | 'chevrons' | 'lino' | 'marbre' | 'dalles'; c: string[] }
 const FLOORS = {
   carreaux: { pattern: 'carreaux', c: ['#e9e5de', '#dcd6cc', '#c4bdb2'] },
   parquet: { pattern: 'lames', c: ['#b8875a', '#a87a50', '#c09062', '#9e7048'] },
@@ -380,6 +439,32 @@ function floorTexture(f: FloorSpec, W: number, D: number): THREE.CanvasTexture {
       const rr = hashRand(5);
       for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { g.fillStyle = rr() < 0.5 ? a : b; g.globalAlpha = 0.85 + rr() * 0.15; g.fillRect(x * 32 + 1.5, y * 32 + 1.5, 29, 29); }
       g.globalAlpha = 1;
+    } else if (f.pattern === 'lino') {
+      // Lino moucheté : fond uni, mouchetures claires et sombres, lé de 1 m marqué d'un trait fin.
+      g.fillStyle = a; g.fillRect(0, 0, 128, 128);
+      const rr = hashRand(11);
+      for (let k = 0; k < 420; k++) { g.fillStyle = rr() < 0.5 ? b : j; g.globalAlpha = 0.35 + rr() * 0.4; g.fillRect(rr() * 128, rr() * 128, 1.5 + rr() * 2, 1.5 + rr() * 2); }
+      g.globalAlpha = 0.25; g.fillStyle = j; g.fillRect(0, 0, 128, 1);
+      g.globalAlpha = 1;
+    } else if (f.pattern === 'dalles') {
+      // Grandes dalles d'un mètre, légèrement nuancées, joint fin.
+      const gr = g.createLinearGradient(0, 0, 128, 128); gr.addColorStop(0, a); gr.addColorStop(1, b);
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      g.strokeStyle = j; g.lineWidth = 2; g.strokeRect(0, 0, 128, 128);
+    } else if (f.pattern === 'marbre') {
+      // Marbre poli : dalles de 50 cm, veines sinueuses grises, joint très fin.
+      g.fillStyle = a; g.fillRect(0, 0, 128, 128);
+      g.fillStyle = b; g.globalAlpha = 0.5; g.fillRect(0, 0, 64, 64); g.fillRect(64, 64, 64, 64); g.globalAlpha = 1;
+      const rr = hashRand(23);
+      g.strokeStyle = j; g.lineCap = 'round';
+      for (let k = 0; k < 7; k++) {
+        g.globalAlpha = 0.25 + rr() * 0.35; g.lineWidth = 0.6 + rr() * 1.4;
+        g.beginPath(); let x = rr() * 128, y = 0; g.moveTo(x, y);
+        while (y < 128) { const nx = x + (rr() - 0.5) * 28, ny = y + 10 + rr() * 16; g.quadraticCurveTo((x + nx) / 2 + (rr() - 0.5) * 14, (y + ny) / 2, nx, ny); x = nx; y = ny; }
+        g.stroke();
+      }
+      g.globalAlpha = 0.5; g.lineWidth = 1; g.strokeRect(0, 0, 128, 128); g.strokeRect(0, 0, 64, 64); g.strokeRect(64, 64, 64, 64);
+      g.globalAlpha = 1;
     } else if (f.pattern === 'chevrons') {
       // Bâtons rompus : lames de 12,5 × 50 cm alternées à 90°.
       for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
@@ -408,6 +493,111 @@ function floorTexture(f: FloorSpec, W: number, D: number): THREE.CanvasTexture {
   t.repeat.set(W, D);
   t.needsUpdate = true;
   return t;
+}
+
+/* ------------------------------ Revêtements et saleté ------------------------------ */
+
+/** Sols du catalogue des revêtements (ids de FLOORINGS) : motif et rugosité (« origine » : sol du type). */
+const FLOOR_SURF: Record<string, { spec: FloorSpec; rough: number }> = {
+  lino: { spec: { pattern: 'lino', c: ['#a9bdb1', '#e4ece6', '#5f6f66'] }, rough: 0.55 },
+  carrelage: { spec: { pattern: 'dalles', c: ['#f1eee8', '#e2ddd3', '#bdb6aa'] }, rough: 0.3 },
+  chene: { spec: { pattern: 'lames', c: ['#c08a55', '#b07c4a', '#c99760', '#a87444'] }, rough: 0.5 },
+  marbre: { spec: { pattern: 'marbre', c: ['#f2f0ec', '#e4e1db', '#8e8a86'] }, rough: 0.15 },
+};
+/** Revêtements muraux (ids de WALLINGS) : motif, couleurs [fond, motif, joint], rugosité. */
+interface WallSpec { pattern: 'uni' | 'papier' | 'lambris' | 'brique'; c: [string, string, string]; rough: number }
+const WALL_SURF: Record<string, WallSpec> = {
+  peinture: { pattern: 'uni', c: ['#f4f0e6', '#ebe6da', '#e0dace'], rough: 0.85 },
+  papier: { pattern: 'papier', c: ['#cfe0ea', '#7fa6c2', '#b8cfdd'], rough: 0.8 },
+  lambris: { pattern: 'lambris', c: ['#c2925f', '#b08050', '#7a5634'], rough: 0.65 },
+  brique: { pattern: 'brique', c: ['#b5573a', '#9c4a31', '#d8cbb8'], rough: 0.9 },
+};
+const DIRT_TINT = new THREE.Color('#9c8a6c');
+
+const wallCache = new Map<WallSpec, THREE.CanvasTexture>();
+/** Texture murale (1 m par répétition) d'un mur de longueur `len` et de hauteur WALL_H. */
+function wallTexture(w: WallSpec, len: number): THREE.CanvasTexture {
+  let base = wallCache.get(w);
+  if (!base) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 128;
+    const g = cv.getContext('2d')!;
+    const [a, b, j] = w.c;
+    g.fillStyle = a; g.fillRect(0, 0, 128, 128);
+    const rr = hashRand(31);
+    if (w.pattern === 'uni') {
+      for (let k = 0; k < 160; k++) { g.fillStyle = rr() < 0.5 ? b : j; g.globalAlpha = 0.25; g.fillRect(rr() * 128, rr() * 128, 3, 3); }
+    } else if (w.pattern === 'papier') {
+      // Rayures fines et petits losanges (motif répété tous les 50 cm).
+      g.fillStyle = j; for (let x = 0; x < 128; x += 32) g.fillRect(x + 14, 0, 4, 128);
+      g.fillStyle = b;
+      for (let y = 0; y < 2; y++) for (let x = 0; x < 4; x++) { const cx = x * 32 + 8 + (y ? 16 : 0), cy = y * 64 + 32; g.beginPath(); g.moveTo(cx, cy - 9); g.lineTo(cx + 6, cy); g.lineTo(cx, cy + 9); g.lineTo(cx - 6, cy); g.closePath(); g.fill(); }
+    } else if (w.pattern === 'lambris') {
+      // Lames verticales de 16 cm, rainures sombres, veinage léger.
+      for (let k = 0; k < 8; k++) {
+        g.fillStyle = k % 2 ? a : b; g.fillRect(k * 16, 0, 16, 128);
+        g.fillStyle = j; g.globalAlpha = 0.7; g.fillRect(k * 16, 0, 1.5, 128); g.globalAlpha = 0.12;
+        for (let v = 0; v < 3; v++) g.fillRect(k * 16 + 3 + rr() * 10, 0, 1, 128);
+        g.globalAlpha = 1;
+      }
+    } else {
+      // Briques de 25 × 8 cm en quinconce, joints clairs, teintes variées.
+      g.fillStyle = j; g.fillRect(0, 0, 128, 128);
+      const bh = 128 / 12;
+      for (let r = 0; r < 12; r++) for (let x = -1; x < 4; x++) {
+        g.fillStyle = rr() < 0.5 ? a : b; g.globalAlpha = 0.8 + rr() * 0.2;
+        g.fillRect(x * 32 + (r % 2 ? 16 : 0) + 1.5, r * bh + 1.2, 29, bh - 2.4);
+      }
+      g.globalAlpha = 1;
+    }
+    g.globalAlpha = 1;
+    base = new THREE.CanvasTexture(cv);
+    base.wrapS = base.wrapT = THREE.RepeatWrapping;
+    base.colorSpace = THREE.SRGBColorSpace;
+    base.anisotropy = 4;
+    wallCache.set(w, base);
+  }
+  const t = base.clone();
+  t.repeat.set(len, WALL_H);
+  t.needsUpdate = true;
+  return t;
+}
+
+/**
+ * Voile de saleté de tout le sol (un seul canevas, non répété) : taches brunes éparses, plus nombreuses près de la
+ * porte et le long de l'allée centrale, et traces de pas depuis l'entrée. Transparent ailleurs.
+ */
+function dirtTexture(W: number, D: number, door: [number, number]): THREE.CanvasTexture {
+  const px = 48, cv = document.createElement('canvas');
+  cv.width = Math.max(64, Math.round(W * px)); cv.height = Math.max(64, Math.round(D * px));
+  const g = cv.getContext('2d')!;
+  const rr = hashRand(W * 131 + D * 17);
+  const toX = (x: number): number => (x + W / 2) * px, toY = (z: number): number => (z + D / 2) * px;
+  const dx = (door[0] + door[1]) / 2;
+  const blot = (x: number, y: number, r: number, a: number): void => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgba(78,58,36,${a})`); gr.addColorStop(0.6, `rgba(92,70,44,${a * 0.6})`); gr.addColorStop(1, 'rgba(92,70,44,0)');
+    g.fillStyle = gr; g.beginPath(); g.ellipse(x, y, r, r * (0.6 + rr() * 0.4), rr() * Math.PI, 0, Math.PI * 2); g.fill();
+  };
+  // Taches éparses dans toute la pièce.
+  for (let k = 0; k < W * D * 0.6; k++) blot(rr() * cv.width, rr() * cv.height, px * (0.15 + rr() * 0.45), 0.25 + rr() * 0.35);
+  // Zone d'entrée et allée : plus encrassées.
+  for (let k = 0; k < D * 6; k++) { const z = D / 2 - rr() * D * 0.9; blot(toX(dx + (rr() - 0.5) * 2.4), toY(z), px * (0.2 + rr() * 0.5), 0.3 + rr() * 0.3); }
+  // Traces de pas depuis la porte.
+  g.fillStyle = 'rgba(60,44,28,0.55)';
+  for (let t = 0; t < 3; t++) {
+    let x = dx + (rr() - 0.5) * 1.2, z = D / 2 - 0.3;
+    const ang = (rr() - 0.5) * 1.2;
+    for (let s = 0; s < D * 2.2; s++) {
+      const side = s % 2 ? 0.09 : -0.09;
+      g.beginPath(); g.ellipse(toX(x + side), toY(z), px * 0.05, px * 0.1, ang, 0, Math.PI * 2); g.fill();
+      x += Math.sin(ang) * 0.32 + (rr() - 0.5) * 0.05; z -= Math.cos(ang) * 0.32;
+      if (z < -D / 2 + 0.3 || Math.abs(x) > W / 2 - 0.3) break;
+    }
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 /* ------------------------------ Décor mural ------------------------------ */

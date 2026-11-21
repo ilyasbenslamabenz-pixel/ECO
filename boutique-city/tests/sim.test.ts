@@ -275,7 +275,8 @@ test('équilibrage : chaque type de commerce bien géré est rentable', () => {
     furnish(g, s.data.id, type);
     stockUp(g, s.data.id);
     staff(g, s.data.id);
-    for (let d = 0; d < 14; d++) { keepAlive(g); g.advance(DAY); }
+    // Bien géré : le patron nettoie le magasin chaque jour (vers 15 h).
+    for (let d = 0; d < 14; d++) { keepAlive(g); g.advance(480); g.setPlace({ kind: 'commerce', shopId: s.data.id }); g.cleanShop(s.data.id); g.setPlace({ kind: 'rue' }); g.advance(DAY - 510); }
     const last = g.shop(s.data.id)!.history.slice(-7);
     const margin = last.reduce((a, d) => a + d.revenue - d.costOfSales - d.wages - d.rent - d.purchases * 0.06, 0) / 7;
     console.log(`${type} : ${margin.toFixed(0)} CHF / jour (marge − salaires − loyer − livraisons approx.)`);

@@ -1,6 +1,6 @@
 /**
  * Équilibrage : pour chaque type de commerce, 7 jours simulés depuis le début d'une partie (40 000 CHF), bien géré
- * (prix du quartier, réassort automatique, un employé, aménagement complet) puis mal géré (prix +60 %, pas de
+ * (prix du quartier, réassort automatique, un employé, aménagement complet, nettoyage quotidien par le patron) puis mal géré (prix +60 %, pas de
  * réassort, deux employés payés au-dessus du marché, stock initial faible). Tableau jour par jour : chiffre
  * d'affaires, charges, bénéfice, trésorerie. Puis milieu de partie : standard contre premium sur 21 jours.   npx tsx scripts/equilibrage.ts [fichier.md]
  */
@@ -20,6 +20,12 @@ const LAYOUTS: Record<ShopType, string[]> = {
   primeur: ['caisse', 'rayon', 'rayon', 'rayon', 'rayon', 'frigo', 'plante'],
 };
 const fmt = (v: number): string => Math.round(v).toLocaleString('fr-CH');
+/** Le patron entre dans le commerce, nettoie (30 minutes de jeu) et ressort. */
+function cleanUp(g: Game, id: number): void {
+  g.setPlace({ kind: 'commerce', shopId: id });
+  g.cleanShop(id);
+  g.setPlace({ kind: 'rue' });
+}
 
 function run(type: ShopType, good: boolean): { rows: string[]; firstProfitDay: number | null; endCash: number } {
   const g = new Game(7, 'Test');
@@ -53,9 +59,12 @@ function run(type: ShopType, good: boolean): { rows: string[]; firstProfitDay: n
   let first: number | null = null;
   for (let d = 0; d < 7; d++) {
     g.player.energy = 100; g.player.hunger = 100;
-    g.advance(1440);
+    // Bien géré : le patron passe nettoyer le magasin chaque jour vers 15 h (30 minutes de jeu).
+    g.advance(480);
+    if (good) cleanUp(g, id);
+    g.advance(1440 - (g.total - 7 * 60) % 1440);
     const y = g.ledger.at(-1)!;
-    const charges = y.purchases + y.wages + y.rent + y.equipment + y.marketing + y.finance + y.living;
+    const charges = y.purchases + y.wages + y.rent + y.equipment + y.marketing + y.finance + y.living + (y.tax ?? 0);
     const profit = dayProfit(y);
     if (first === null && profit > 0 && d > 0) first = d + 1;
     rows.push(`| ${d + 1} | ${fmt(y.revenue)} | ${fmt(charges)} | ${profit >= 0 ? '+' : ''}${fmt(profit)} | ${fmt(g.cash)} |`);
@@ -96,7 +105,7 @@ function mid(type: ShopType, premium: boolean): { profit: number; rep: number } 
   for (let d = 0; d < 21; d++) {
     if (d === 7 && premium) { g.train(g.employees[0]!.id); g.setPremium(id, true); }
     for (const e of g.employees) if (e.askedRaise) g.raiseWage(e.id, g.marketWage(e.skill, e.training ?? 0));
-    g.player.energy = 100; g.player.hunger = 100; g.advance(720); g.player.energy = 100; g.player.hunger = 100; g.advance(720);
+    g.player.energy = 100; g.player.hunger = 100; g.advance(480); cleanUp(g, id); g.player.energy = 100; g.player.hunger = 100; g.advance(1440 - (g.total - 7 * 60) % 1440);
     if (d >= 14) acc += dayProfit(g.ledger.at(-1)!);
   }
   return { profit: acc / 7, rep: sh.reputation };

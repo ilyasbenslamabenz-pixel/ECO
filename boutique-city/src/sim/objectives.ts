@@ -19,9 +19,9 @@ const bestDay = (g: Game): number => Math.max(g.today.revenue, ...g.ledger.map((
 const step = (v: number, goal: number, unit: string): { p: number; text: string } => ({ p: Math.min(1, v / goal), text: `${Math.floor(Math.min(v, goal)).toLocaleString('fr-CH')} / ${goal.toLocaleString('fr-CH')} ${unit}` });
 const flag = (ok: boolean): { p: number; text: string } => ({ p: ok ? 1 : 0, text: ok ? 'fait' : 'à faire' });
 
-/** Valeur nette : trésorerie + mobilier (revente) + véhicules (revente) + dépôts − dettes − loyers provisionnés non encore prélevés. */
+/** Valeur nette : trésorerie + placements (valeur de rachat) + mobilier (revente) + véhicules (revente) + dépôts − dettes − loyers provisionnés non encore prélevés. */
 export function netWorth(g: Game): number {
-  let v = g.cash - g.debt;
+  let v = g.cash - g.debt + g.investValue();
   for (const s of g.shops) {
     v += s.deposit - (s.rentDue ?? 0);
     for (const it of s.items) v += (FURNITURE_BY_ID.get(it.def)?.price ?? 0) * ECONOMY.resale;
@@ -48,7 +48,7 @@ export const OBJECTIVES: readonly Objective[] = [
     const best = Math.max(0, ...g.shops.map((s) => (s.premium ? 2 : 0) + Math.min(1, g.bestTraining(s.id))));
     return { p: best >= 2 ? 1 : best / 2, text: best >= 2 ? 'fait' : best >= 1 ? 'employé formé, gamme à activer' : 'former un employé' };
   } },
-  { id: 'valeur100k', title: 'Atteindre 60 000 CHF de valeur nette', hint: 'Trésorerie, mobilier, véhicules et dépôts, moins les dettes. Leviers : gamme premium, formation, une caisse de plus là où des clients attendent, contrat fournisseur quand vous achetez beaucoup.', progress: (g) => step(Math.max(0, netWorth(g)), 60_000, 'CHF') },
+  { id: 'valeur100k', title: 'Atteindre 60 000 CHF de valeur nette', hint: 'Trésorerie, placements, mobilier, véhicules et dépôts, moins les dettes. Leviers : gamme premium, formation, une caisse de plus là où des clients attendent, contrat fournisseur quand vous achetez beaucoup.', progress: (g) => step(Math.max(0, netWorth(g)), 60_000, 'CHF') },
 ];
 
 /** Titre de l'entrepreneur selon le nombre d'objectifs atteints. */

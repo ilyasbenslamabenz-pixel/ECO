@@ -3,7 +3,9 @@
  * puis onglets — aperçu et liste de contrôle, prix et stock (commande livrée, réassort automatique), employés,
  * horaires, résultats. Et le panneau Entreprise : trésorerie, journal, commerces, véhicules, prêts, objectifs.
  */
+import { STAFF, type StaffRole } from '../sim/catalog';
 import { ECONOMY, FURNITURE_BY_ID, PREMIUM, PREMIUM_BY_TYPE, SHOP_TYPE_BY_ID, TRAINING, VEHICLE_BY_ID, premiumDemand, productsOf, PRODUCT_BY_ID } from '../sim/catalog';
+import { CLEANING, FLOORINGS, WALLINGS, cleanAppeal, type SurfaceDef } from '../sim/catalog';
 import { clockView } from '../sim/clock';
 import { dayProfit, type DayStats, type Game, type Shop } from '../sim/game';
 import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
@@ -54,7 +56,7 @@ function readiness(g: Game, id: number): [boolean, string][] {
     [productsOf(s.type).some((p) => st.capacity[p.store] > 0), 'Des meubles de présentation adaptés'],
     ...(s.type === 'cafe' ? [[st.machines > 0, 'Machine à café (café, thé)'] as [boolean, string]] : []),
     [productsOf(s.type).some((p) => s.products[p.id]!.stock > 0), 'De la marchandise en rayon'],
-    [g.staffOf(id).length > 0 || g.player.tending === id, 'Quelqu’un à la caisse (employé, ou vous)'],
+    [g.staffOf(id).some((e) => g.roleOf(e) === 'caisse') || g.player.tending === id, 'Quelqu’un à la caisse (employé au rôle Caisse, ou vous)'],
     [st.blocked.length === 0, 'Tous les meubles accessibles'],
   ];
 }
@@ -71,7 +73,7 @@ export function shopView(ctx: UiCtx, shopId: number): View {
       const s = g.shop(shopId);
       if (!s) return [el('p', { text: 'Ce commerce n’existe plus.' })];
       const empties = productsOf(s.type).filter((p) => s.products[p.id]!.stock === 0 && g.storageFor(s, p) > 0).length;
-      const alerts: Partial<Record<Tab, boolean>> = { apercu: readiness(g, shopId).some(([ok]) => !ok), stock: empties > 0 };
+      const alerts: Partial<Record<Tab, boolean>> = { apercu: readiness(g, shopId).some(([ok]) => !ok) || g.cleanliness(s) < CLEANING.warn, stock: empties > 0 };
       const tabs = el('div', { cls: 'tabs sp-tabs', attrs: { role: 'tablist' } }, ...TABS.map(([id, label]) => {
         const b = button(label, () => { tab = id; ctx.panel.paint(true); }, `${tab === id ? 'on' : ''}${alerts[id] ? ' alert' : ''}`.trim());
         b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(tab === id));
@@ -126,6 +128,62 @@ function apercu(ctx: UiCtx, id: number): (Node | null)[] {
     section('Affluence aujourd’hui', legend([['#5cc77a', 'servis'], ['#ef6b6b', 'perdus'], ['#2a3647', 'fermé']])),
     hourChart(s.hourServed ?? [], s.hourLost ?? [], s.open, s.close),
     boost > 0 ? el('p', { cls: 'sp-note ok', text: `Publicité en cours : +${pct(boost)} de clients.` }) : null,
+    ...cleanBlock(ctx, id),
+    ...surfaceBlock(ctx, id),
+  ];
+}
+
+/* ------------------------------ Propreté et revêtements (aperçu) ------------------------------ */
+
+/** Propreté : jauge, effet sur la clientèle, nettoyage sur place, entretien de l'équipe, service de nuit. */
+function cleanBlock(ctx: UiCtx, id: number): (Node | null)[] {
+  const g = ctx.game, s = g.shop(id)!;
+  const c = g.cleanliness(s), tone: Tone = c >= CLEANING.fine ? 'ok' : c >= CLEANING.warn ? 'warn' : 'bad';
+  const loss = 1 - cleanAppeal(c);
+  const here = g.player.place.kind === 'commerce' && g.player.place.shopId === id;
+  const power = g.cleaningPower(s), fee = g.cleanServiceCost(id);
+  const effect = loss > 0.005 ? `Magasin ${c < CLEANING.warn ? 'sale' : 'un peu négligé'} : −${pct(loss)} de clients, la réputation en pâtit.` : 'Magasin propre : aucun effet sur la clientèle.';
+  return [
+    section('Propreté', badge(`${Math.round(c)} %`, tone)),
+    el('div', { cls: 'item prop-row' },
+      el('div', { cls: 'prop-main' }, meter(c / 100, tone),
+        el('div', { cls: `sub${tone === 'bad' ? ' bad' : ''}`, text: effect }),
+        el('div', { cls: 'sub', text: power > 0 ? `Entretien de l’équipe présente : +${Math.round(power * CLEANING.perPower)} points par heure.` : 'Aucun employé d’entretien présent en ce moment.' })),
+      el('div', { cls: 'row tight' },
+        button(`Nettoyer (${CLEANING.playerMinutes} min)`, () => ctx.act(g.cleanShop(id), (v) => `Magasin nettoyé : propreté ${v} %.`), here && c < 98 ? 'small primary' : 'small'))),
+    el('div', { cls: 'item' },
+      el('div', {}, el('b', { text: 'Service de nettoyage de nuit' }), el('div', { cls: 'sub', text: `Une équipe passe chaque nuit : magasin impeccable à l’ouverture. ${chf(fee)} par jour (selon la surface).` })),
+      s.cleanService
+        ? button('Résilier', () => ctx.act(g.setCleanService(id, false)), 'small')
+        : button(`Souscrire (${chf(fee)} / jour)`, () => ctx.act(g.setCleanService(id, true), 'Service de nettoyage souscrit.'), 'small')),
+    el('p', { cls: 'sp-note', text: `Chaque client salit un peu, chaque heure d’ouverture aussi. Sous ${CLEANING.fine} %, moins de clients entrent (jusqu’à −${pct(1 - CLEANING.minAppeal)} si tout est sale) et la réputation baisse ; alerte sous ${CLEANING.warn} %. « Nettoyer » se fait sur place et prend ${CLEANING.playerMinutes} minutes de jeu (+${CLEANING.playerGain} points).` }),
+  ];
+}
+
+/** Revêtements de sol et de murs : choix, prix pour ce local, bonus d'attrait (pose sur place). */
+function surfaceBlock(ctx: UiCtx, id: number): (Node | null)[] {
+  const g = ctx.game, s = g.shop(id)!;
+  const here = g.player.place.kind === 'commerce' && g.player.place.shopId === id;
+  const row = (part: 'sol' | 'murs', list: readonly SurfaceDef[], cur: string): HTMLElement =>
+    el('div', { cls: 'prop-surf' }, el('span', { cls: 'prop-surf-l', text: part === 'sol' ? 'Sol' : 'Murs' }),
+      el('div', { cls: 'prop-chips' }, ...list.map((d) => {
+        const cost = g.surfaceCost(id, part, d.id), on = d.id === cur;
+        const b = el('button', { cls: `prop-chip${on ? ' on' : ''}`, attrs: { type: 'button', title: d.desc, 'aria-pressed': String(on) } },
+          el('i', { attrs: { style: `background:${d.color}` } }),
+          el('span', {}, el('b', { text: d.nameFr }), el('small', { text: on ? 'en place' : `${cost ? chf(cost) : 'gratuit'}${d.appeal ? ` · attrait +${(d.appeal * 100).toLocaleString('fr-CH', { maximumFractionDigits: 1 })} %` : ''}` })));
+        b.addEventListener('click', () => {
+          if (on) return;
+          if (!cost) { ctx.act(g.setSurface(id, part, d.id)); return; }
+          void askConfirm(`Faire poser « ${d.nameFr} » (${part === 'sol' ? 'sol' : 'murs'}) dans ${s.name} pour ${chf(cost)} ? L’ancien revêtement n’est pas remboursé.`, 'Faire poser').then((y) => { if (y) ctx.act(g.setSurface(id, part, d.id)); });
+        });
+        return b;
+      })));
+  const appeal = g.surfaceAppeal(s);
+  return [
+    section('Aménagement · revêtements', el('em', { text: appeal > 0 ? `attrait +${(appeal * 100).toLocaleString('fr-CH', { maximumFractionDigits: 1 })} %` : 'd’origine' })),
+    row('sol', FLOORINGS, s.floorId ?? 'origine'),
+    row('murs', WALLINGS, s.wallId ?? 'origine'),
+    here ? null : el('p', { cls: 'sp-note', text: 'La pose se commande sur place, dans le commerce.' }),
   ];
 }
 
@@ -196,18 +254,30 @@ function rangeBlock(ctx: UiCtx, id: number): (Node | null)[] {
 }
 
 function equipe(ctx: UiCtx, id: number): (Node | null)[] {
-  const g = ctx.game, staff = g.staffOf(id), st = g.stats(g.shop(id)!);
-  const wages = staff.reduce((a, e) => a + e.wage, 0);
-  const avgSkill = staff.length ? staff.reduce((a, e) => a + e.skill, 0) / staff.length : 0;
+  const g = ctx.game, s = g.shop(id)!, staff = g.staffOf(id), st = g.stats(s);
+  const wagesDay = staff.reduce((a, e) => a + e.wage * g.hoursPerDay(e), 0);
+  const count = (r: StaffRole): number => staff.filter((e) => g.roleOf(e) === r).length;
+  const here = isOpen(g, s) ? g.onDuty(id) : [];
+  const gaps = g.cashierGaps(id);
+  const shelf = g.shelfBonus(s);
+  // Planning : une case par heure d'ouverture, nombre de caissiers présents.
+  const hours: HTMLElement[] = [];
+  for (let h = s.open; h < s.close; h++) {
+    const n = g.onDuty(id, 'caisse', h).length;
+    hours.push(el('span', { cls: `emp-hour ${n ? (n >= Math.max(1, st.registers) ? 'ok' : 'warn') : 'bad'}`, text: String(h), attrs: { title: `${h} h : ${n} caissier(s), ${g.onDuty(id, undefined, h).length} employé(s) présent(s)` } }));
+  }
   return [
     el('div', { cls: 'sp-strip' },
-      stat('Employés', String(staff.length), staff.length ? `compétence moy. ${pct(avgSkill)}` : 'personne', staff.length ? '' : 'warn'),
+      stat('Employés', String(staff.length), staff.length ? `${count('caisse')} caisse · ${count('rayon')} rayon · ${count('entretien')} entretien` : 'personne', staff.length ? '' : 'warn'),
+      stat('Présents', isOpen(g, s) ? String(here.length) : 'fermé', isOpen(g, s) ? `${here.filter((e) => g.roleOf(e) === 'caisse').length} en caisse${shelf > 0 ? ` · rayon +${pct(shelf)} clients` : ''}` : null),
       stat('Caisses', String(st.registers), st.registers ? `jusqu’à ${st.registers * ECONOMY.servePerRegister} clients / h` : 'aucune', st.registers ? '' : 'bad'),
-      stat('Formation', staff.length ? `${staff.reduce((a, e) => a + (e.training ?? 0), 0)} niveau(x)` : '—', `max ${TRAINING.maxLevel} par employé`),
-      stat('Salaires', `${chf(wages)} / h`, 'payés aux heures d’ouverture')),
+      stat('Salaires', `${chf(wagesDay)} / jour`, 'payés à l’heure travaillée')),
+    section('Caissiers par heure', gaps.length ? 'trou dans le planning' : staff.length ? 'caisse toujours tenue' : null),
+    el('div', { cls: 'emp-hours' }, ...hours),
+    gaps.length ? el('p', { cls: 'sp-note emp-alert', text: `Aucun caissier ${gaps.map(([a, b]) => `de ${a} h à ${b} h`).join(', ')} : les clients ne peuvent pas payer (sauf si vous tenez la caisse). Passez un employé au rôle Caisse, changez son équipe, ou embauchez.` }) : null,
     section('Équipe'),
     ...(staff.length ? staff.map((e) => employeeRow(ctx, e.id)) : [el('div', { cls: 'sp-empty', text: 'Aucun employé affecté à ce commerce.' })]),
-    el('p', { cls: 'sp-note', text: `Chaque caissier sert jusqu’à ${ECONOMY.servePerRegister} clients par heure selon sa compétence. Un employé de plus que de caisses ne sert pas plus de clients, mais deux employés ou plus découragent les voleurs. Former : +${pct(TRAINING.capacity)} de clients servis par niveau, mais le salaire du marché monte de ${TRAINING.wage} CHF / h (augmentez-le pour garder l’employé satisfait). Un employé formé permet la gamme premium. Pour embaucher : agence pour l’emploi. Vous pouvez aussi tenir la caisse vous-même (E derrière la caisse).` }),
+    el('p', { cls: 'sp-note', text: `Rôles — Caisse : sert jusqu’à ${ECONOMY.servePerRegister} clients par heure selon sa compétence (un caissier de plus que de caisses ne sert pas plus). Rayon : conseille et présente, +${pct(STAFF.shelfBonus)} de clients attirés par employé présent (selon compétence, jusqu’à +${pct(STAFF.shelfBonusMax)}). Entretien : garde le commerce propre. Équipes — matin (avant 14 h), soir (dès 14 h) ou journée complète, toujours dans les horaires d’ouverture ; un employé n’est payé et ne compte que pendant son équipe. Respectez l’équipe souhaitée et le salaire minimum pour garder vos employés satisfaits. Deux employés présents ou plus découragent les voleurs. Former : +${pct(TRAINING.capacity)} de clients servis par niveau, mais le salaire du marché monte de ${TRAINING.wage} CHF / h. Un employé formé permet la gamme premium. Pour embaucher : agence pour l’emploi. Vous pouvez aussi tenir la caisse vous-même (E derrière la caisse).` }),
   ];
 }
 

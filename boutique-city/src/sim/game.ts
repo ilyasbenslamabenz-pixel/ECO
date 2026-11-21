@@ -12,11 +12,14 @@ import {
   PRODUCT_BY_ID, SHOP_TYPE_BY_ID, TRAINING, VEHICLE_BY_ID, loanTotal, premiumDemand, productsOf, trainingCost,
   type CampaignKind, type ContractDef, type ContractKind, type ProductDef, type ServiceKind, type ShopType, type VehicleType,
 } from './catalog';
+import { SHIFT_BY_ID, STAFF, STAFF_ROLE_BY_ID, type ShiftKind, type StaffRole } from './catalog';
+import { CLEANING, FLOORING_BY_ID, WALLING_BY_ID, cleanAppeal, surfaceArea } from './catalog';
+import { FINANCE, INVESTMENTS, INVEST_BY_ID, type InvestKind } from './catalog';
 import { MINUTES_PER_DAY, START_MINUTE, clockView } from './clock';
 import { FACE_N, SIDEWALK_W, competitorsNear, generateDistrict, type Building, type District, type Premise } from './district';
 import { canPlace, layoutStats, type LayoutStats, type PlacedItem, type Rot } from './layout';
 import { randomName } from './names';
-import { OBJECTIVES } from './objectives';
+import { OBJECTIVES, netWorth } from './objectives';
 import { Rng } from './rng';
 
 export const SAVE_VERSION = 2;
@@ -31,13 +34,36 @@ export interface Employee {
   askedRaise?: boolean;
   /** Niveau de formation 0..TRAINING.maxLevel (absent : 0). */
   training?: number;
+  /** Rôle (absent : caisse). */
+  role?: StaffRole;
+  /** Équipe (absent : journée complète). */
+  shift?: ShiftKind;
+  /** Souhaits exprimés à l'embauche : équipe préférée, salaire minimum (CHF / h). Absents : aucun souhait. */
+  wantShift?: ShiftKind;
+  minWage?: number;
 }
-export interface Candidate { id: number; name: string; skill: number; wage: number; look: number }
+export interface Candidate {
+  id: number; name: string; skill: number; wage: number; look: number;
+  /** Équipe souhaitée (absent : journée complète). */
+  wantShift?: ShiftKind;
+  /** Salaire minimum accepté (absent : le salaire demandé). */
+  minWage?: number;
+}
 export interface ProductState { price: number; stock: number; auto: boolean }
 export interface Order { id: number; shopId: number; productId: string; qty: number; cost: number; deliverAt: number }
 export interface Vehicle { id: number; type: VehicleType; x: number; z: number; heading: number; cargo: Record<string, number> }
 export interface Loan { id: number; amount: number; total: number; remaining: number; daily: number; daysLeft: number }
 export interface Campaign { id: number; kind: CampaignKind; shopId: number | null; daysLeft: number; perDay: number }
+/** Impôt d'une semaine : semaine (0 = jours 1 à 7), bénéfice imposable, montant prélevé (0 : déficit ou exonération). */
+export interface TaxRecord { week: number; base: number; amount: number }
+/** État financier sauvegardé (placements, notoriété, impôts) ; absent des anciennes sauvegardes. */
+export interface FinanceSave {
+  invest: Record<InvestKind, number>;
+  principal: Record<InvestKind, number>;
+  fundReturns: number[];
+  awareness: Record<string, number>;
+  taxes: TaxRecord[];
+}
 
 /** Lieu du personnage, déclaré par l'interface. */
 export type Place =
@@ -91,6 +117,8 @@ export interface DayStats {
   living: number;
   /** Loyers encaissés des sous-locations (appartements et locaux). */
   rentalIncome: number;
+  /** Impôt sur le bénéfice prélevé ce jour-là (fin de semaine) ; absent : 0. */
+  tax?: number;
 }
 
 /**
@@ -148,26 +176,33 @@ export interface Shop {
   premium?: boolean;
   /** Mise en place de la gamme premium déjà payée (bascule libre ensuite). */
   premiumOwned?: boolean;
+  /** Propreté 0..100 (absent : 100). */
+  clean?: number;
+  /** Revêtements de sol et de murs (ids de FLOORINGS / WALLINGS ; absent : « origine », rendu par type). */
+  floorId?: string;
+  wallId?: string;
+  /** Service de nettoyage de nuit sous contrat (forfait quotidien). */
+  cleanService?: boolean;
 }
 
 export interface Notice { at: number; level: 'info' | 'ok' | 'warn' | 'error'; text: string }
 /** Événement visuel : un client a acheté dans un commerce du joueur. */
 export interface ClientEvent { shopId: number; premiseId: number; products: string[] }
-/** Avis visible d'un client (bulle dans le magasin) : raison d'un départ sans achat, ou client ravi. */
-export type FeedbackKind = 'prix' | 'rupture' | 'attente' | 'caisse' | 'content';
+/** Avis visible d'un client (bulle dans le magasin) : raison d'un départ sans achat, client ravi, ou magasin sale. */
+export type FeedbackKind = 'prix' | 'rupture' | 'attente' | 'caisse' | 'content' | 'sale';
 export interface Feedback { shopId: number; kind: FeedbackKind }
 
 export type Result<T = undefined> = { ok: true; data: T } | { ok: false; message: string };
 const ok = <T>(data: T): Result<T> => ({ ok: true, data });
 const fail = (message: string): Result<never> => ({ ok: false, message });
 
-const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, refusedPrice: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0, marketing: 0, finance: 0, living: 0, rentalIncome: 0 });
+const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, refusedPrice: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0, marketing: 0, finance: 0, living: 0, rentalIncome: 0, tax: 0 });
 const r2 = (v: number): number => Math.round(v * 100) / 100;
 const sumValues = (r: Record<string, number>): number => Object.values(r).reduce((a, b) => a + b, 0);
 
 /** Résultat d'une journée (toutes dépenses comprises). */
 export function dayProfit(d: DayStats): number {
-  return d.revenue + (d.rentalIncome ?? 0) - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living;
+  return d.revenue + (d.rentalIncome ?? 0) - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living - (d.tax ?? 0);
 }
 
 export interface GameSave {
@@ -193,6 +228,8 @@ export interface GameSave {
   marketDay?: boolean;
   /** Contrat fournisseur en cours (absent : aucun). */
   contract?: ContractKind | null;
+  /** Placements, notoriété, impôts (absent : rien de placé, aucune notoriété). */
+  finance?: FinanceSave;
   nextId: number;
   rng: number[];
 }
@@ -230,6 +267,15 @@ export class Game {
   marketDay = false;
   /** Contrat fournisseur avec le grossiste (remise sur les achats contre un forfait quotidien). */
   contract: ContractKind | null = null;
+  /** Placements : valeur actuelle et montant net versé, par produit. */
+  invest: Record<InvestKind, number> = { epargne: 0, fonds: 0 };
+  investPrincipal: Record<InvestKind, number> = { epargne: 0, fonds: 0 };
+  /** Rendements quotidiens du fonds (14 derniers jours, part : 0.01 = +1 %). */
+  fundReturns: number[] = [];
+  /** Notoriété (part de clients en plus) par commerce (id) et pour toute l'entreprise ('all'). */
+  awareness: Record<string, number> = {};
+  /** Impôts des dernières semaines (12 au plus). */
+  taxes: TaxRecord[] = [];
   private rng: Rng;
   private nextId = 1;
   /** Version de l'état (l'interface ne redessine que si elle change). */
@@ -378,13 +424,13 @@ export class Game {
           this.notify('ok', `Contrôle d’hygiène réussi chez ${s.name} : réputation en hausse.`);
         }
       }
-      const staff = this.staffOf(s.id).length;
+      const staff = this.onDuty(s.id).length;
       if (s.rate > 0 && this.rng.next() < (staff >= 2 ? 0.02 : 0.05)) {
         const stocked = productsOf(s.type).filter((p) => s.products[p.id]!.stock > 0);
         if (stocked.length) {
           const p = this.rng.pick(stocked), n = Math.min(s.products[p.id]!.stock, this.rng.int(3, 8));
           s.products[p.id]!.stock -= n;
-          this.notify('warn', `Vol à l’étalage chez ${s.name} : ${n} ${p.nameFr.toLowerCase()} disparu(s). Deux employés ou plus découragent les voleurs.`);
+          this.notify('warn', `Vol à l’étalage chez ${s.name} : ${n} ${p.nameFr.toLowerCase()} disparu(s). Deux employés présents ou plus découragent les voleurs.`);
         }
       }
     }
@@ -549,10 +595,87 @@ export class Game {
   }
 
   /** Bonus de clientèle des campagnes en cours pour un commerce. */
+  /**
+   * Bonus de clientèle d'un commerce : sa notoriété (campagnes ciblées) plus celle de l'entreprise (internet),
+   * plafonnée. Chaque campagne l'augmente dès le lancement puis chaque jour qu'elle dure ; elle s'estompe chaque nuit.
+   */
   marketingBoost(shopId: number): number {
-    let b = 0;
-    for (const c of this.campaigns) if (c.shopId === shopId || c.shopId === null) b += CAMPAIGN_BY_ID.get(c.kind)!.boost;
-    return b;
+    return Math.min(FINANCE.awarenessMax, (this.awareness[shopId] ?? 0) + (this.awareness['all'] ?? 0));
+  }
+  /** Notoriété prévue demain (après la nuit) pour une clé ('all' ou id de commerce), campagnes en cours comprises. */
+  private awarenessNext(key: string): number {
+    let gain = 0;
+    for (const c of this.campaigns) if (String(c.shopId ?? 'all') === key) gain += CAMPAIGN_BY_ID.get(c.kind)!.boost * FINANCE.awarenessGain;
+    return Math.min(FINANCE.awarenessMax, (this.awareness[key] ?? 0) * (1 - FINANCE.awarenessDecay) + gain);
+  }
+  /** Notoriété d'un commerce aujourd'hui et demain (tendance). */
+  awarenessView(shopId: number): { now: number; next: number; trend: number } {
+    const now = this.marketingBoost(shopId);
+    const next = Math.min(FINANCE.awarenessMax, this.awarenessNext(String(shopId)) + this.awarenessNext('all'));
+    return { now, next, trend: next - now };
+  }
+
+  /* ------------------------------ Finances : impôts, crédit, placements ------------------------------ */
+
+  /**
+   * Impôt de la semaine en cours : bénéfice depuis le début de la semaine (avant impôt), montant estimé, jours avant
+   * le prélèvement (0 : ce soir à minuit). Les premières semaines sont exonérées.
+   */
+  taxEstimate(): { week: number; base: number; due: number; daysLeft: number; exempt: boolean } {
+    const P = FINANCE.taxPeriod, week = Math.floor(this.today.day / P);
+    const days = [...this.ledger.filter((d) => Math.floor(d.day / P) === week), this.today];
+    const base = r2(days.reduce((a, d) => a + dayProfit(d) + (d.tax ?? 0), 0));
+    const exempt = week < FINANCE.taxGraceWeeks;
+    return { week, base, due: exempt ? 0 : r2(Math.max(0, base) * FINANCE.taxRate), daysLeft: week * P + P - 1 - this.today.day, exempt };
+  }
+
+  /** Plafond de crédit : socle + 150 % de la valeur nette positive + deux semaines de ventes récentes (borné). */
+  creditLimit(): { limit: number; base: number; worth: number; fromWorth: number; sales7: number; fromSales: number; capped: boolean; available: number } {
+    const worth = netWorth(this);
+    const sales7 = r2(this.ledger.slice(-7).reduce((a, d) => a + d.revenue, 0));
+    const fromWorth = Math.round(Math.max(0, worth) * FINANCE.creditWorthShare);
+    const fromSales = Math.round(sales7 * FINANCE.creditSalesWeeks);
+    const raw = FINANCE.creditBase + fromWorth + fromSales;
+    const limit = Math.min(FINANCE.creditMax, raw);
+    return { limit, base: FINANCE.creditBase, worth, fromWorth, sales7, fromSales, capped: raw > FINANCE.creditMax, available: Math.max(0, r2(limit - this.debt)) };
+  }
+
+  /** Valeur de rachat des placements (frais de retrait déduits). */
+  investValue(kind?: InvestKind): number {
+    const kinds = kind ? [kind] : INVESTMENTS.map((i) => i.id);
+    return r2(kinds.reduce((a, k) => a + (this.invest[k] ?? 0) * (1 - INVEST_BY_ID.get(k)!.exitFee), 0));
+  }
+
+  /** Place de l'argent (banque en ligne, depuis le téléphone). */
+  deposit(kind: InvestKind, amount: number): Result<number> {
+    const def = INVEST_BY_ID.get(kind);
+    if (!def) return fail('Placement inconnu');
+    if (!Number.isFinite(amount) || amount < FINANCE.investMin) return fail(`Placement minimal : ${FINANCE.investMin} CHF.`);
+    const a = r2(amount);
+    if (this.cash < a) return fail(`Trésorerie insuffisante (${Math.round(this.cash)} CHF disponibles).`);
+    this.cash -= a;
+    this.invest[kind] = r2((this.invest[kind] ?? 0) + a);
+    this.investPrincipal[kind] = r2((this.investPrincipal[kind] ?? 0) + a);
+    this.notify('ok', `${def.nameFr} : ${Math.round(a)} CHF placés.`);
+    this.bump();
+    return ok(a);
+  }
+
+  /** Retire `amount` CHF de valeur d'un placement (tout si amount ≥ solde) ; renvoie la somme versée, frais déduits. */
+  withdraw(kind: InvestKind, amount: number): Result<number> {
+    const def = INVEST_BY_ID.get(kind);
+    if (!def) return fail('Placement inconnu');
+    const bal = this.invest[kind] ?? 0;
+    if (bal <= 0) return fail('Rien n’est placé sur ce produit.');
+    if (!Number.isFinite(amount) || amount <= 0) return fail('Montant invalide');
+    const take = Math.min(bal, r2(amount));
+    const fee = r2(take * def.exitFee), paid = r2(take - fee);
+    this.investPrincipal[kind] = take >= bal ? 0 : r2((this.investPrincipal[kind] ?? 0) * (1 - take / bal));
+    this.invest[kind] = take >= bal ? 0 : r2(bal - take);
+    this.cash += paid;
+    this.notify('ok', `${def.nameFr} : ${Math.round(paid)} CHF retirés${fee > 0 ? ` (frais ${Math.round(fee)} CHF)` : ''}.`);
+    this.bump();
+    return ok(paid);
   }
 
   /* ------------------------------ Lieu, position ------------------------------ */
@@ -617,6 +740,7 @@ export class Game {
     for (const e of this.staffOf(s.id)) e.shopId = null;
     this.orders = this.orders.filter((o) => o.shopId !== s.id);
     this.campaigns = this.campaigns.filter((c) => c.shopId !== s.id);
+    delete this.awareness[s.id];
     if (this.player.tending === s.id) this.player.tending = null;
     this.shops = this.shops.filter((x) => x !== s);
     const parts = [`dépôt rendu ${Math.round(q.deposit)} CHF`, `mobilier revendu ${q.resale} CHF`];
@@ -853,20 +977,117 @@ export class Game {
 
   /* ------------------------------ Employés ------------------------------ */
 
-  hire(candidateId: number, shopId: number): Result<Employee> {
+  /** Embauche un candidat (par défaut : caissier en journée complète, au salaire demandé). */
+  hire(candidateId: number, shopId: number, opts: { role?: StaffRole; shift?: ShiftKind } = {}): Result<Employee> {
     const here = this.needService('emploi', "à l'agence pour l'emploi");
     if (!here.ok) return here;
     const c = this.candidates.find((x) => x.id === candidateId);
     if (!c) return fail('Candidat introuvable');
     if (!this.shop(shopId)) return fail('Commerce introuvable');
+    const role = opts.role ?? 'caisse', shift = opts.shift ?? 'journee';
+    if (!STAFF_ROLE_BY_ID.has(role)) return fail('Rôle inconnu');
+    if (!SHIFT_BY_ID.has(shift)) return fail('Équipe inconnue');
     if (this.cash < c.wage * 8) return fail(`Trésorerie insuffisante : il faut au moins une journée de salaire (${c.wage * 8} CHF).`);
-    const e: Employee = { id: c.id, name: c.name, skill: c.skill, wage: c.wage, shopId, hiredDay: this.day, look: c.look, mood: 0.75, unhappy: 0 };
+    const e: Employee = {
+      id: c.id, name: c.name, skill: c.skill, wage: c.wage, shopId, hiredDay: this.day, look: c.look, mood: 0.75, unhappy: 0,
+      role, shift, wantShift: c.wantShift ?? 'journee', minWage: c.minWage ?? c.wage,
+    };
     this.employees.push(e);
     this.candidates = this.candidates.filter((x) => x !== c);
-    this.notify('ok', `${e.name} rejoint ${this.shop(shopId)!.name} (${e.wage} CHF / h).`);
+    this.notify('ok', `${e.name} rejoint ${this.shop(shopId)!.name} : ${STAFF_ROLE_BY_ID.get(role)!.nameFr.toLowerCase()}, ${SHIFT_BY_ID.get(shift)!.nameFr.toLowerCase()} (${e.wage} CHF / h).`);
+    if (e.wantShift !== shift) this.notify('warn', `${e.name} préférait l’équipe « ${SHIFT_BY_ID.get(e.wantShift!)!.nameFr} » : sa satisfaction va baisser.`);
     this.refreshCapacities();
     this.bump();
     return ok(e);
+  }
+
+  /** Change le rôle d'un employé (caisse, rayon, entretien). */
+  setRole(employeeId: number, role: StaffRole): Result {
+    const e = this.employees.find((x) => x.id === employeeId);
+    if (!e) return fail('Employé introuvable');
+    if (!STAFF_ROLE_BY_ID.has(role)) return fail('Rôle inconnu');
+    e.role = role;
+    this.warnGaps(e);
+    this.refreshCapacities();
+    this.bump();
+    return ok(undefined);
+  }
+
+  /** Change l'équipe d'un employé (matin, soir, journée complète). */
+  setShift(employeeId: number, shift: ShiftKind): Result {
+    const e = this.employees.find((x) => x.id === employeeId);
+    if (!e) return fail('Employé introuvable');
+    if (!SHIFT_BY_ID.has(shift)) return fail('Équipe inconnue');
+    e.shift = shift;
+    if (e.wantShift && e.wantShift !== shift) this.notify('warn', `${e.name} préfère l’équipe « ${SHIFT_BY_ID.get(e.wantShift)!.nameFr} » : sa satisfaction va baisser.`);
+    this.warnGaps(e);
+    this.refreshCapacities();
+    this.bump();
+    return ok(undefined);
+  }
+
+  /** Avertit si le commerce de l'employé a des heures d'ouverture sans caissier. */
+  private warnGaps(e: Employee): void {
+    if (e.shopId === null) return;
+    const gaps = this.cashierGaps(e.shopId);
+    if (gaps.length) this.notify('warn', `${this.shop(e.shopId)!.name} : aucun caissier ${gaps.map(([a, b]) => `de ${a} h à ${b} h`).join(', ')}.`);
+  }
+
+  roleOf(e: Employee): StaffRole { return e.role ?? 'caisse'; }
+  shiftOf(e: Employee): ShiftKind { return e.shift ?? 'journee'; }
+
+  /** L'employé est-il à son poste à l'heure h (commerce ouvert et dans son équipe) ? */
+  worksAt(e: Employee, h: number): boolean {
+    const s = e.shopId === null ? undefined : this.shop(e.shopId);
+    if (!s || !(h >= s.open && h < s.close)) return false;
+    const sh = SHIFT_BY_ID.get(this.shiftOf(e))!;
+    return h >= sh.from && h < sh.to;
+  }
+
+  /** Employés présents dans un commerce à l'heure h (par défaut l'heure courante), éventuellement d'un rôle donné. */
+  onDuty(shopId: number, role?: StaffRole, h = clockView(this.total).hour): Employee[] {
+    return this.staffOf(shopId).filter((e) => this.worksAt(e, h) && (!role || this.roleOf(e) === role));
+  }
+
+  /** Heures travaillées (et payées) par jour selon l'équipe et les horaires du commerce. */
+  hoursPerDay(e: Employee): number {
+    let n = 0;
+    for (let h = 0; h < 24; h++) if (this.worksAt(e, h)) n++;
+    return n;
+  }
+
+  /** Plages d'ouverture sans aucun caissier présent, ex. [[14, 19]] = de 14 h à 19 h. */
+  cashierGaps(shopId: number): [number, number][] {
+    const s = this.shop(shopId);
+    if (!s) return [];
+    const out: [number, number][] = [];
+    for (let h = s.open; h < s.close; h++) {
+      if (this.onDuty(shopId, 'caisse', h).length) continue;
+      const last = out.at(-1);
+      if (last && last[1] === h) last[1] = h + 1; else out.push([h, h + 1]);
+    }
+    return out;
+  }
+
+  /** Souhaits non respectés d'un employé (texte court pour l'interface). */
+  unmetWishes(e: Employee): string[] {
+    const out: string[] = [];
+    if (e.wantShift && e.wantShift !== this.shiftOf(e)) out.push(`préfère l’équipe « ${SHIFT_BY_ID.get(e.wantShift)!.nameFr} »`);
+    if (e.minWage && e.wage < e.minWage) out.push(`veut au moins ${e.minWage} CHF / h`);
+    return out;
+  }
+
+  /**
+   * Puissance d'entretien d'un commerce à l'heure courante : somme des compétences des employés d'entretien
+   * présents (1 ≈ un agent d'entretien pleinement compétent). 0 si fermé ou personne.
+   */
+  cleaningPower(s: Shop): number {
+    return this.onDuty(s.id, 'entretien').reduce((a, e) => a + e.skill, 0);
+  }
+
+  /** Bonus de clients attirés par les employés de rayon présents (STAFF.shelfBonus × compétence chacun, plafonné). */
+  shelfBonus(s: Shop): number {
+    return Math.min(STAFF.shelfBonusMax, this.onDuty(s.id, 'rayon').reduce((a, e) => a + STAFF.shelfBonus * e.skill, 0));
   }
 
   assign(employeeId: number, shopId: number | null): Result {
@@ -1001,7 +1222,8 @@ export class Game {
     const o = LOAN_OFFERS[offerIndex];
     if (!o) return fail('Offre inconnue');
     const total = loanTotal(o);
-    if (this.debt + total > ECONOMY.maxDebt) return fail(`La banque refuse : endettement maximal ${ECONOMY.maxDebt} CHF.`);
+    const cl = this.creditLimit();
+    if (this.debt + total > cl.limit) return fail(`La banque refuse : plafond de crédit ${Math.round(cl.limit).toLocaleString('fr-CH')} CHF (déjà dû : ${Math.round(this.debt).toLocaleString('fr-CH')} CHF, ce prêt : ${total.toLocaleString('fr-CH')} CHF à rembourser). Le plafond monte avec vos ventes et votre valeur nette.`);
     const l: Loan = { id: this.nextId++, amount: o.amount, total, remaining: total, daily: r2(total / o.days), daysLeft: o.days };
     this.loans.push(l);
     this.cash += o.amount;
@@ -1042,9 +1264,95 @@ export class Game {
     if (def.scope === 'shop') this.shop(shopId!)!.today.marketing += cost;
     const c: Campaign = { id: this.nextId++, kind, shopId: def.scope === 'all' ? null : shopId, daysLeft: days, perDay: def.perDay };
     this.campaigns.push(c);
+    const key = String(c.shopId ?? 'all');
+    this.awareness[key] = Math.min(FINANCE.awarenessMax, (this.awareness[key] ?? 0) + def.boost);
     this.notify('ok', `${def.nameFr} lancée pour ${days} jour(s).`);
     this.bump();
     return ok(c);
+  }
+
+  /* ------------------------------ Propreté et revêtements ------------------------------ */
+
+  /** Propreté d'un commerce, 0..100 (sauvegardes antérieures : 100). */
+  cleanliness(s: Shop): number { return s.clean ?? 100; }
+
+  /** Bonus d'attrait des revêtements (part, sol + murs). */
+  surfaceAppeal(s: Shop): number {
+    return (FLOORING_BY_ID.get(s.floorId ?? 'origine')?.appeal ?? 0) + (WALLING_BY_ID.get(s.wallId ?? 'origine')?.appeal ?? 0);
+  }
+
+  /** Prix de pose d'un revêtement dans un commerce (selon la surface du local). */
+  surfaceCost(shopId: number, part: 'sol' | 'murs', id: string): number {
+    const s = this.shop(shopId), def = (part === 'sol' ? FLOORING_BY_ID : WALLING_BY_ID).get(id);
+    if (!s || !def) return 0;
+    const p = this.premise(s.premiseId)!;
+    return Math.round(def.perM2 * surfaceArea(part, p.gridW, p.gridD));
+  }
+
+  /** Fait poser un revêtement de sol ou de murs (sur place, payé aussitôt ; l'ancien n'est pas remboursé). */
+  setSurface(shopId: number, part: 'sol' | 'murs', id: string): Result<number> {
+    const s = this.shop(shopId), def = (part === 'sol' ? FLOORING_BY_ID : WALLING_BY_ID).get(id);
+    if (!s || !def) return fail('Revêtement inconnu');
+    if (((part === 'sol' ? s.floorId : s.wallId) ?? 'origine') === id) return ok(0);
+    if (!(this.player.place.kind === 'commerce' && this.player.place.shopId === shopId)) return fail('Rendez-vous dans le commerce pour changer les revêtements.');
+    const cost = this.surfaceCost(shopId, part, id);
+    if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
+    this.cash -= cost;
+    s.today.equipment += cost; this.today.equipment += cost;
+    if (part === 'sol') s.floorId = id; else s.wallId = id;
+    this.notify('ok', `${s.name} : ${part === 'sol' ? 'nouveau sol' : 'nouveaux murs'} « ${def.nameFr} »${cost ? ` posé${part === 'sol' ? '' : 's'} pour ${cost} CHF` : ''}.${def.appeal ? ` Attrait +${Math.round(def.appeal * 1000) / 10} %.` : ''}`);
+    this.bump();
+    return ok(cost);
+  }
+
+  /**
+   * Le personnage nettoie le commerce où il se trouve : CLEANING.playerMinutes minutes de jeu passent (le commerce
+   * continue de tourner), la propreté remonte de CLEANING.playerGain points, un peu d'énergie dépensée.
+   */
+  cleanShop(shopId: number): Result<number> {
+    const s = this.shop(shopId);
+    if (!s) return fail('Commerce introuvable');
+    if (!(this.player.place.kind === 'commerce' && this.player.place.shopId === shopId)) return fail('Entrez dans le commerce pour le nettoyer.');
+    if (this.cleanliness(s) >= 98) return fail(`${s.name} est déjà impeccable.`);
+    if (this.player.energy < CLEANING.playerEnergy + 2) return fail('Vous êtes trop fatigué pour nettoyer : allez dormir.');
+    this.advance(CLEANING.playerMinutes);
+    s.clean = Math.min(100, this.cleanliness(s) + CLEANING.playerGain);
+    this.player.energy = Math.max(0, this.player.energy - CLEANING.playerEnergy);
+    this.bump();
+    return ok(Math.round(s.clean));
+  }
+
+  /** Forfait quotidien du service de nettoyage de nuit pour un commerce (selon la surface). */
+  cleanServiceCost(shopId: number): number {
+    const s = this.shop(shopId);
+    if (!s) return 0;
+    return Math.max(CLEANING.serviceMin, Math.round(this.premise(s.premiseId)!.area * CLEANING.servicePerM2));
+  }
+
+  /** Souscrit (ou résilie) le service de nettoyage de nuit : propreté remise à 100 % chaque nuit, forfait prélevé à minuit. */
+  setCleanService(shopId: number, on: boolean): Result<number> {
+    const s = this.shop(shopId);
+    if (!s) return fail('Commerce introuvable');
+    if (!!s.cleanService === on) return ok(0);
+    s.cleanService = on;
+    const cost = this.cleanServiceCost(shopId);
+    this.notify(on ? 'ok' : 'info', on ? `${s.name} : service de nettoyage de nuit souscrit (${cost} CHF par jour). Le magasin sera impeccable chaque matin.` : `${s.name} : service de nettoyage résilié.`);
+    this.bump();
+    return ok(cost);
+  }
+
+  /** Salissure due à un client servi ; avis « c'est sale » de temps en temps sous le seuil d'alerte. */
+  private soil(s: Shop): void {
+    const c = this.cleanliness(s);
+    s.clean = Math.max(0, c - CLEANING.perCustomer);
+    if (c < CLEANING.warn && this.rng.next() < 0.3 * (CLEANING.warn - c) / CLEANING.warn) this.feel(s, 'sale');
+  }
+
+  /** Heure d'ouverture : salissure, entretien par l'équipe, alerte une fois par jour sous le seuil. */
+  private cleanHour(s: Shop): void {
+    const regain = CLEANING.perPower * this.cleaningPower(s);
+    s.clean = Math.max(0, Math.min(100, this.cleanliness(s) - CLEANING.perOpenHour + regain));
+    if (s.clean < CLEANING.warn) this.warnOnce(s, '__sale', `${s.name} est sale (propreté ${Math.round(s.clean)} %) : moins de clients et réputation en baisse. Nettoyez (bouton « Nettoyer » sur place), embauchez un employé d’entretien ou souscrivez le service de nettoyage.`);
   }
 
   /* ------------------------------ Simulation ------------------------------ */
@@ -1128,7 +1436,9 @@ export class Game {
       s.servedThisHour = 0;
       const open = h >= s.open && h < s.close;
       if (!open) { s.rate = 0; s.capacity = 0; continue; }
-      for (const e of this.staffOf(s.id)) {
+      this.cleanHour(s);
+      // Salaires : seuls les employés dont l'équipe couvre cette heure travaillent (et sont payés).
+      for (const e of this.onDuty(s.id, undefined, h)) {
         s.today.wages += e.wage; this.today.wages += e.wage; this.cash -= e.wage;
         // Expérience : la compétence progresse avec les heures travaillées (jusqu'à 100 %).
         const before = Math.floor(e.skill * 10);
@@ -1140,9 +1450,11 @@ export class Game {
       const p = this.premise(s.premiseId)!;
       const weekend = weekday >= 5 ? t.weekend : 1;
       s.rate = p.footfall * t.hourly[h]! * weekend * this.weatherFactor(s.type) * (this.marketDay ? 1.25 : 1) * t.capture * this.attractiveness(s, st) * (1 + this.marketingBoost(s.id));
+      s.rate *= 1 + this.shelfBonus(s);
       s.capacity = this.capacityNow(s);
       if (s.capacity <= 0 && s.rate > 0) {
         if (st.registers === 0) this.warnOnce(s, '__caisse', `${s.name} n'a pas de caisse : aucun client ne peut payer (Aménager).`);
+        else if (this.staffOf(s.id).length) this.warnOnce(s, '__shift', `${s.name} : aucun caissier présent à ${h} h. Vérifiez les rôles et les équipes (onglet Employés), ou tenez la caisse vous-même.`);
         else this.warnOnce(s, '__staff', `${s.name} est ouvert mais personne ne tient la caisse : embauchez à l'agence pour l'emploi, ou tenez-la vous-même.`);
       }
     }
@@ -1154,7 +1466,7 @@ export class Game {
     const c = clockView(this.total);
     if (!(c.hour >= s.open && c.hour < s.close)) return 0;
     const st = this.stats(s);
-    const staff = this.staffOf(s.id).map((e) => this.serviceSkill(e)).sort((a, b) => b - a);
+    const staff = this.onDuty(s.id, 'caisse', c.hour).map((e) => this.serviceSkill(e)).sort((a, b) => b - a);
     const tended = Math.min(st.registers, staff.length);
     let skill = staff.slice(0, tended).reduce((a, b) => a + b, 0);
     if (this.player.tending === s.id && st.registers > tended) skill += 1;
@@ -1181,7 +1493,9 @@ export class Game {
     const comp = 1 / (1 + 0.6 * this.competition(this.premise(s.premiseId)!, s.type));
     // Gamme premium : la clientèle suit la réputation (peu de clients tant que le commerce n'est pas reconnu).
     const range = s.premium ? premiumDemand(s.reputation) : 1;
-    return price * variety * decor * rep * comp * range;
+    // Revêtements (sol et murs) : bonus d'attrait ; saleté : moins de clients sous CLEANING.fine.
+    const surfaces = (1 + this.surfaceAppeal(s)) * cleanAppeal(this.cleanliness(s));
+    return price * variety * decor * rep * comp * range * surfaces;
   }
 
   private sellable(s: Shop, pr: ProductDef, st: LayoutStats): boolean {
@@ -1218,7 +1532,8 @@ export class Game {
     }
     if (bought.length === 0) { s.today.lostStock++; this.today.lostStock++; this.feel(s, refused >= missing ? 'prix' : 'rupture'); return; }
     if (refused > 0 && this.rng.next() < 0.5) this.feel(s, 'prix');
-    else if (missing === 0 && refused === 0 && this.rng.next() < 0.12) this.feel(s, 'content');
+    else if (missing === 0 && refused === 0 && this.cleanliness(s) >= CLEANING.warn && this.rng.next() < 0.12) this.feel(s, 'content');
+    this.soil(s);
     s.servedThisHour++;
     (s.hourServed ??= new Array(24).fill(0))[clockView(this.total).hour]++;
     s.today.customers++; this.today.customers++;
@@ -1226,7 +1541,7 @@ export class Game {
   }
 
   private feel(s: Shop, kind: FeedbackKind): void {
-    if (kind !== 'content') { const h = clockView(this.total).hour; (s.hourLost ??= new Array(24).fill(0))[h]++; }
+    if (kind !== 'content' && kind !== 'sale') { const h = clockView(this.total).hour; (s.hourLost ??= new Array(24).fill(0))[h]++; }
     if (this.feedback.length < 100) this.feedback.push({ shopId: s.id, kind });
   }
 
@@ -1234,7 +1549,9 @@ export class Game {
     const d = s.today;
     const served = d.customers, lost = d.lostStock + d.lostCapacity + d.lostStaff;
     if (served + lost < 3) return;
-    const target = Math.min(1, Math.max(0, (served / (served + lost)) * 1.05 - 0.05));
+    // Magasin sale : la réputation visée baisse (jusqu'à −CLEANING.repPenalty à 0 % de propreté).
+    const dirt = CLEANING.repPenalty * (1 - Math.min(1, this.cleanliness(s) / CLEANING.fine));
+    const target = Math.min(1, Math.max(0, (served / (served + lost)) * 1.05 - 0.05 - dirt));
     s.reputation += (target - s.reputation) * 0.04;
   }
 
@@ -1263,6 +1580,12 @@ export class Game {
         this.notify('info', `${s.name} : loyer du mois prélevé (${Math.round(s.rentDue)} CHF).`);
         s.rentDue = 0;
       }
+      // Service de nettoyage de nuit : forfait du jour (compté avec le personnel), magasin impeccable au matin.
+      if (s.cleanService) {
+        const fee = this.cleanServiceCost(s.id);
+        this.cash -= fee; s.today.wages += fee; this.today.wages += fee;
+        s.clean = 100;
+      }
       s.history.push(s.today);
       if (s.history.length > 60) s.history.shift();
       s.today = emptyDay(this.day);
@@ -1281,13 +1604,15 @@ export class Game {
     // Employés : satisfaction selon le salaire comparé au marché ; demande d'augmentation ; démission.
     for (const e of [...this.employees]) {
       const ratio = e.wage / this.marketWage(e.skill, e.training ?? 0);
-      const target = Math.max(0, Math.min(1, 0.7 + (ratio - 1) * 2.2));
+      // Souhaits de l'embauche non respectés (équipe préférée, salaire minimum) : satisfaction visée plus basse.
+      const badShift = !!e.wantShift && e.wantShift !== this.shiftOf(e), lowWage = !!e.minWage && e.wage < e.minWage;
+      const target = Math.max(0, Math.min(1, 0.7 + (ratio - 1) * 2.2 - (badShift ? STAFF.shiftMood : 0) - (lowWage ? STAFF.minWageMood : 0)));
       e.mood = r2((e.mood ?? 0.75) + (target - (e.mood ?? 0.75)) * 0.35);
       if (ratio < 0.94 && !e.askedRaise) { e.askedRaise = true; this.notify('warn', `${e.name} demande une augmentation : le marché paie ${this.marketWage(e.skill, e.training ?? 0)} CHF / h pour sa compétence (actuellement ${e.wage}).`); }
       e.unhappy = e.mood < 0.3 ? (e.unhappy ?? 0) + 1 : 0;
       if (e.unhappy >= 3) {
         this.employees = this.employees.filter((x) => x !== e);
-        this.notify('error', `${e.name} a démissionné (salaire trop bas).`);
+        this.notify('error', `${e.name} a démissionné (${badShift && ratio >= 0.94 && !lowWage ? 'équipe imposée qui ne lui convenait pas' : 'salaire trop bas'}).`);
       }
     }
     // Sous-locations : loyer payé, loyer encaissé, arrivées et départs de locataires.
@@ -1324,6 +1649,7 @@ export class Game {
     }
     const done = this.loans.filter((l) => l.remaining <= 0.01 || l.daysLeft <= 0);
     if (done.length) { this.loans = this.loans.filter((l) => !done.includes(l)); this.notify('ok', `Prêt remboursé (${done.length}).`); }
+    this.financeNight();
     for (const c of this.campaigns) c.daysLeft--;
     const ended = this.campaigns.filter((c) => c.daysLeft <= 0);
     if (ended.length) { this.campaigns = this.campaigns.filter((c) => c.daysLeft > 0); this.notify('info', `Campagne de publicité terminée (${ended.length}).`); }
@@ -1336,7 +1662,50 @@ export class Game {
       this.notify(profit >= 0 ? 'ok' : 'info', `Bilan du jour ${y.day + 1} : ${Math.round(y.revenue)} CHF de ventes, ${y.customers} clients, solde ${profit >= 0 ? '+' : ''}${Math.round(profit)} CHF.`);
     }
     if (this.cash < 0) this.notify('error', `Trésorerie négative (${Math.round(this.cash)} CHF) : réduisez les dépenses, empruntez ou résiliez un bail.`);
+    const tx = this.taxEstimate();
+    if (tx.daysLeft === 0 && !tx.exempt && this.shops.length) this.notify('info', `Impôt sur le bénéfice prélevé ce soir à minuit : environ ${Math.round(Math.max(0, tx.base) * FINANCE.taxRate)} CHF (${Math.round(FINANCE.taxRate * 100)} % du bénéfice de la semaine, selon la journée).`);
     if (weekday === 0) this.refreshCandidates();
+  }
+
+  /**
+   * Nuit, côté finances (avant la fin des campagnes) : la notoriété s'estompe et les campagnes en cours la font
+   * remonter ; intérêts du compte épargne et variation du fonds (tirage déterministe propre au jour, sans toucher au
+   * générateur principal) ; en fin de semaine, impôt sur le bénéfice inscrit au bilan du jour qui s'achève.
+   */
+  private financeNight(): void {
+    const keys = new Set([...Object.keys(this.awareness), ...this.campaigns.map((c) => String(c.shopId ?? 'all'))]);
+    const next: Record<string, number> = {};
+    for (const k of keys) {
+      if (k !== 'all' && !this.shop(Number(k))) continue;
+      const v = this.awarenessNext(k);
+      if (v >= 0.005) next[k] = Math.round(v * 10000) / 10000;
+    }
+    this.awareness = next;
+    const y = this.today;
+    for (const def of INVESTMENTS) {
+      let r = def.dailyMean;
+      if (def.dailyVol > 0) {
+        r = Math.max(-0.08, Math.min(0.08, def.dailyMean + def.dailyVol * new Rng(((this.seed ^ 0x6a09e667) + y.day * 0x9e3779b1) >>> 0).normal()));
+        this.fundReturns.push(Math.round(r * 100000) / 100000);
+        if (this.fundReturns.length > 14) this.fundReturns.shift();
+      }
+      if ((this.invest[def.id] ?? 0) > 0) this.invest[def.id] = r2(this.invest[def.id] * (1 + r));
+    }
+    const P = FINANCE.taxPeriod;
+    if (y.day % P === P - 1) {
+      const t = this.taxEstimate();
+      if (!t.exempt) {
+        const rec: TaxRecord = { week: t.week, base: t.base, amount: t.due };
+        this.taxes.push(rec);
+        if (this.taxes.length > 12) this.taxes.shift();
+        if (t.due > 0) {
+          this.cash -= t.due; y.tax = r2((y.tax ?? 0) + t.due);
+          this.notify('info', `Impôt sur le bénéfice de la semaine ${t.week + 1} prélevé : ${Math.round(t.due)} CHF (${Math.round(FINANCE.taxRate * 100)} % de ${Math.round(t.base)} CHF de bénéfice).`);
+        } else if (this.shops.length) this.notify('ok', `Semaine ${t.week + 1} sans bénéfice (${Math.round(t.base)} CHF) : aucun impôt à payer.`);
+      } else if (this.shops.length && t.week === FINANCE.taxGraceWeeks - 1) {
+        this.notify('info', `Fin de la période d’exonération : dès maintenant, ${Math.round(FINANCE.taxRate * 100)} % du bénéfice de chaque semaine est prélevé en impôt (provision visible dans l’appli Finances).`);
+      }
+    }
   }
 
   /**
@@ -1363,7 +1732,12 @@ export class Game {
     this.candidates = [];
     for (let k = 0; k < 6; k++) {
       const skill = r2(0.55 + this.rng.next() * 0.45);
-      this.candidates.push({ id: this.nextId++, name: randomName(this.rng), skill, wage: Math.round(20 + skill * 14 + this.rng.next() * 3), look: this.rng.int(0, 999) });
+      const c: Candidate = { id: this.nextId++, name: randomName(this.rng), skill, wage: Math.round(20 + skill * 14 + this.rng.next() * 3), look: this.rng.int(0, 999) };
+      // Souhaits tirés de l'allure (aucun tirage aléatoire de plus) : une moitié veut la journée complète, un quart le
+      // matin, un quart le soir ; salaire minimum accepté de 0 à 3 CHF / h sous le salaire demandé.
+      c.wantShift = (['journee', 'journee', 'matin', 'soir'] as const)[c.look % 4]!;
+      c.minWage = c.wage - (Math.floor(c.look / 4) % 4);
+      this.candidates.push(c);
     }
   }
 
@@ -1402,6 +1776,7 @@ export class Game {
       player: structuredClone(this.player), shops: structuredClone(this.shops), employees: structuredClone(this.employees),
       candidates: structuredClone(this.candidates), orders: structuredClone(this.orders), vehicles: structuredClone(this.vehicles),
       loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals }, weather: this.weather, marketDay: this.marketDay, contract: this.contract,
+      finance: { invest: { ...this.invest }, principal: { ...this.investPrincipal }, fundReturns: [...this.fundReturns], awareness: { ...this.awareness }, taxes: structuredClone(this.taxes) },
       nextId: this.nextId, rng: this.rng.state(),
     };
   }
@@ -1426,7 +1801,18 @@ export class Game {
     this.weather = s.weather ?? 'soleil';
     this.marketDay = s.marketDay ?? false;
     this.contract = s.contract && CONTRACT_BY_ID.has(s.contract) ? s.contract : null;
+    const f = s.finance;
+    this.invest = { epargne: f?.invest?.epargne ?? 0, fonds: f?.invest?.fonds ?? 0 };
+    this.investPrincipal = { epargne: f?.principal?.epargne ?? 0, fonds: f?.principal?.fonds ?? 0 };
+    this.fundReturns = [...(f?.fundReturns ?? [])];
+    this.awareness = { ...(f?.awareness ?? {}) };
+    // Anciennes sauvegardes : les campagnes en cours gardent leur effet (notoriété de départ).
+    if (!f) for (const c of this.campaigns) { const k = String(c.shopId ?? 'all'); this.awareness[k] = Math.min(FINANCE.awarenessMax, (this.awareness[k] ?? 0) + (CAMPAIGN_BY_ID.get(c.kind)?.boost ?? 0)); }
+    this.taxes = structuredClone(f?.taxes ?? []);
+    // Sauvegardes antérieures : employés sans rôle ni équipe → caisse, journée complète ; candidats sans souhait.
+    for (const e of this.employees) { e.role ??= 'caisse'; e.shift ??= 'journee'; }
+    for (const c of this.candidates) { c.wantShift ??= 'journee'; c.minWage ??= c.wage; }
     // Sauvegardes antérieures : champs ajoutés depuis.
-    for (const d of [...this.ledger, this.today, ...this.shops.flatMap((x) => [x.today, ...x.history])]) { d.refusedPrice ??= 0; d.rentalIncome ??= 0; }
+    for (const d of [...this.ledger, this.today, ...this.shops.flatMap((x) => [x.today, ...x.history])]) { d.refusedPrice ??= 0; d.rentalIncome ??= 0; d.tax ??= 0; }
   }
 }

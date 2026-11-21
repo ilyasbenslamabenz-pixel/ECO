@@ -7,6 +7,7 @@ import {
   CAMPAIGNS, CONTRACTS, ECONOMY, FOODS, TRAINING, FURNITURE, HOME_BY_ID, LOAN_OFFERS, PRODUCTS, SERVICE_BY_ID, SHOP_TYPES, SHOP_TYPE_BY_ID,
   VEHICLES, VEHICLE_BY_ID, loanTotal, type ServiceKind, type ShopType,
 } from '../sim/catalog';
+import { SHIFTS, SHIFT_BY_ID, STAFF, STAFF_ROLES, STAFF_ROLE_BY_ID, type ShiftKind, type StaffRole } from '../sim/catalog';
 import type { Building, Home, Premise } from '../sim/district';
 import type { Game } from '../sim/game';
 import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
@@ -154,7 +155,7 @@ function meubles(ctx: UiCtx): (Node | null)[] {
 
 function banque(ctx: UiCtx): (Node | null)[] {
   const g = ctx.game;
-  const out: (Node | null)[] = [el('div', { cls: 'kpis' }, kpi('Trésorerie', chf(g.cash)), kpi('Dette', chf(g.debt)), kpi('Plafond', chf(ECONOMY.maxDebt)))];
+  const out: (Node | null)[] = [el('div', { cls: 'kpis' }, kpi('Trésorerie', chf(g.cash)), kpi('Dette', chf(g.debt)), kpi('Plafond', chf(g.creditLimit().limit)))];
   out.push(sec('Prêts proposés'));
   LOAN_OFFERS.forEach((o, k) => {
     const total = loanTotal(o);
@@ -178,9 +179,16 @@ function emploi(ctx: UiCtx): (Node | null)[] {
   out.push(sec('Candidats de la semaine'));
   for (const c of g.candidates) {
     const s = g.shops.length ? remember(`hire-${c.id}`, shopSelect(g)) : null;
-    out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: c.name }), el('div', { cls: 'muted small', text: `compétence ${pct(c.skill)} (${num(c.skill * ECONOMY.servePerRegister)} clients / h en caisse) · ${c.wage} CHF / h` })),
-      s ? el('div', { cls: 'row tight' }, s, button('Embaucher', () => ctx.act(g.hire(c.id, Number(s.value))), 'small primary')) : null));
+    const want = c.wantShift ?? 'journee';
+    const role = remember(`hire-role-${c.id}`, roleSelect('caisse'));
+    const shift = remember(`hire-shift-${c.id}`, shiftSelect('journee', want));
+    const wish = `Souhaite : ${SHIFT_LABEL[want].toLowerCase()}, au moins ${c.minWage ?? c.wage} CHF / h`;
+    out.push(el('div', { cls: 'item col' }, el('div', {}, el('b', { text: c.name }),
+      el('div', { cls: 'muted small', text: `compétence ${pct(c.skill)} (${num(c.skill * ECONOMY.servePerRegister)} clients / h en caisse) · demande ${c.wage} CHF / h` }),
+      el('div', { cls: 'small emp-wish', text: wish })),
+      s ? el('div', { cls: 'row tight emp-wrap' }, s, role, shift, button('Embaucher', () => ctx.act(g.hire(c.id, Number(s.value), { role: role.value as StaffRole, shift: shift.value as ShiftKind })), 'small primary')) : null));
   }
+  out.push(note(`Caisse : encaisse les clients. Rayon : conseille et présente, +${pct(STAFF.shelfBonus)} de clients par employé présent (selon compétence, jusqu’à +${pct(STAFF.shelfBonusMax)}). Entretien : garde le commerce propre. Équipes : matin (avant 14 h), soir (dès 14 h) ou journée complète ; le salaire est payé à l’heure travaillée. Une équipe non souhaitée ou un salaire sous le minimum fait baisser la satisfaction.`));
   if (!g.candidates.length) out.push(note('Plus de candidats cette semaine : nouveaux candidats lundi.'));
   if (g.employees.length) {
     out.push(sec('Vos employés'));
@@ -189,8 +197,27 @@ function emploi(ctx: UiCtx): (Node | null)[] {
   return out;
 }
 
+const SHIFT_LABEL: Record<ShiftKind, string> = { journee: 'Journée complète', matin: 'Matin (avant 14 h)', soir: 'Soir (dès 14 h)' };
+/** Menu des rôles (caisse, rayon, entretien). */
+function roleSelect(value: StaffRole): HTMLSelectElement {
+  const s = el('select', { attrs: { 'aria-label': 'Rôle' } }, ...STAFF_ROLES.map((r) => el('option', { text: r.nameFr, attrs: { value: r.id, title: r.desc } })));
+  s.value = value;
+  return s;
+}
+/** Menu des équipes ; l'équipe souhaitée par le salarié est signalée. */
+function shiftSelect(value: ShiftKind, want?: ShiftKind): HTMLSelectElement {
+  const s = el('select', { attrs: { 'aria-label': 'Équipe' } }, ...SHIFTS.map((x) => el('option', { text: `${SHIFT_LABEL[x.id]}${x.id === want ? ' ★ souhaitée' : ''}`, attrs: { value: x.id } })));
+  s.value = value;
+  return s;
+}
+
 export function employeeRow(ctx: UiCtx, id: number): HTMLElement {
   const g = ctx.game, e = g.employees.find((x) => x.id === id)!;
+  const role = roleSelect(g.roleOf(e)), shift = shiftSelect(g.shiftOf(e), e.wantShift);
+  role.addEventListener('change', () => ctx.act(g.setRole(e.id, role.value as StaffRole)));
+  shift.addEventListener('change', () => ctx.act(g.setShift(e.id, shift.value as ShiftKind)));
+  const hours = g.hoursPerDay(e), wishes = g.unmetWishes(e);
+  const work = e.shopId === null ? 'sans affectation' : hours ? `${hours} h / jour (${chf(hours * e.wage)})` : 'ne travaille jamais avec ces horaires';
   const s = el('select', { attrs: { 'aria-label': 'Affectation' } }, el('option', { text: 'Sans affectation', attrs: { value: '' } }), ...g.shops.map((sh) => el('option', { text: sh.name, attrs: { value: String(sh.id) } })));
   s.value = e.shopId === null ? '' : String(e.shopId);
   s.addEventListener('change', () => ctx.act(g.assign(e.id, s.value ? Number(s.value) : null)));
@@ -199,9 +226,11 @@ export function employeeRow(ctx: UiCtx, id: number): HTMLElement {
   const next = g.nextTrainingCost(e);
   const train = next === null ? null : button(`Former (${chf(next)})`, () => ctx.act(g.train(e.id), () => `${e.name} : formation niveau ${lv + 1} terminée.`), 'small');
   if (train) train.title = `Niveau ${lv + 1} / ${TRAINING.maxLevel} : +${pct(TRAINING.capacity)} de clients servis en caisse, salaire du marché +${TRAINING.wage} CHF / h.`;
-  return el('div', { cls: 'item' }, el('div', {}, el('b', { text: `${face} ${e.name}` }),
-    el('div', { cls: 'muted small', text: `compétence ${pct(e.skill)} · formation ${lv} / ${TRAINING.maxLevel} · ${num(g.serviceSkill(e) * ECONOMY.servePerRegister)} clients / h · ${e.wage} CHF / h (marché ${mw}) · satisfaction ${pct(mood)}${e.askedRaise ? ' · demande une augmentation' : ''}` })),
-    el('div', { cls: 'row tight' }, s,
+  return el('div', { cls: 'item col' }, el('div', {}, el('b', { text: `${face} ${e.name} · ${STAFF_ROLE_BY_ID.get(g.roleOf(e))!.nameFr} · ${SHIFT_BY_ID.get(g.shiftOf(e))!.nameFr}` }),
+    el('div', { cls: 'muted small', text: `compétence ${pct(e.skill)} · formation ${lv} / ${TRAINING.maxLevel} · ${g.roleOf(e) === 'caisse' ? `${num(g.serviceSkill(e) * ECONOMY.servePerRegister)} clients / h · ` : ''}${e.wage} CHF / h (marché ${mw}) · satisfaction ${pct(mood)}${e.askedRaise ? ' · demande une augmentation' : ''}` }),
+    el('div', { cls: `small ${hours ? 'muted' : 'warn'}`, text: `Travaille ${work}` }),
+    wishes.length ? el('div', { cls: 'small warn', text: `Mécontent : ${wishes.join(', ')}` }) : null),
+    el('div', { cls: 'row tight emp-wrap' }, s, role, shift,
       button(`+2 CHF/h`, () => ctx.act(g.raiseWage(e.id, e.wage + 2)), e.askedRaise ? 'small primary' : 'small'),
       train,
       button('Licencier', () => ctx.act(g.fire(e.id), (p) => `Indemnité versée : ${chf(p)}.`), 'small danger')));

@@ -721,3 +721,36 @@ kbd { font-family: var(--font); }
 .help-grid { grid-template-columns: 74px 1fr; }
 .help-grid kbd { white-space: nowrap; }
 .ph-sec em { white-space: nowrap; }
+
+/* Employés : rôles */
+.row.tight.emp-wrap { flex-wrap: wrap; justify-content: flex-end; }
+.emp-wish { color: #ffd98a; margin-top: 2px; }
+.emp-hours { display: flex; flex-wrap: wrap; gap: 3px; margin: 4px 0 6px; }
+.emp-hour { min-width: 26px; text-align: center; font-size: 11px; padding: 3px 2px; border-radius: 6px; background: #1b2535; }
+.emp-hour.ok { background: #143823; color: #9ff0bf; } .emp-hour.warn { background: #3a2c0e; color: #ffd98a; } .emp-hour.bad { background: #3a1d24; color: #ffb3bd; }
+.sp-note.emp-alert { color: #ffb3bd; border-left-color: #c94a5a; }
+
+/* Propreté */
+.ib-actions button.warn { background: #3a2c0e; border-color: #8a6a1e; color: #ffd98a; }
+.prop-row { align-items: center; }
+.prop-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.prop-surf { display: flex; gap: 10px; align-items: flex-start; margin: 6px 0; }
+.prop-surf-l { width: 44px; flex: none; padding-top: 8px; font-weight: 700; color: #c9d4e0; }
+.prop-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.prop-chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 6px; border-radius: 10px; background: #1b2535; border: 2px solid #2a3647; text-align: left; }
+.prop-chip i { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.35); flex: none; }
+.prop-chip span { display: flex; flex-direction: column; line-height: 1.15; }
+.prop-chip small { font-size: 11px; color: #9fb0c2; }
+.prop-chip.on { border-color: var(--ok); background: #143823; }
+.prop-chip.on small { color: #9ff0bf; }
+
+/* Finances */
+.fin-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.fin-strip .ph-actions { grid-column: 1 / -1; margin-top: 2px; }
+.ph-card > .ph-kv { margin-top: 4px; }
+.ph-body > .ph-kv { margin: 3px 0; }
+.ph-actions > input.fin-amount { flex: 1 1 70px; min-width: 0; width: 70px; padding: 5px 7px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fin-spark { display: flex; align-items: center; gap: 3px; height: 34px; margin: 6px 0 2px; padding: 0 2px; border-bottom: 1px dashed #2a3647; }
+.fin-spark i { flex: 1; align-self: flex-end; border-radius: 3px 3px 0 0; }
+.fin-spark i.pos { background: #2f9a63; }
+.fin-spark i.neg { background: #c4505f; }

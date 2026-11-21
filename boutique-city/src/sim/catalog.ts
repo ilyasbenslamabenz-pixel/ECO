@@ -272,11 +272,48 @@ export const loanTotal = (o: LoanOffer): number => Math.round(o.amount * (1 + (o
 export type CampaignKind = 'flyers' | 'affiches' | 'internet';
 export interface CampaignDef { id: CampaignKind; nameFr: string; perDay: number; /** Clients en plus (part). */ boost: number; scope: 'shop' | 'all'; desc: string }
 export const CAMPAIGNS: readonly CampaignDef[] = [
-  { id: 'flyers', nameFr: 'Distribution de flyers', perDay: 90, boost: 0.25, scope: 'shop', desc: 'Un commerce, +25 % de clients.' },
-  { id: 'affiches', nameFr: 'Affiches dans le quartier', perDay: 260, boost: 0.5, scope: 'shop', desc: 'Un commerce, +50 % de clients.' },
-  { id: 'internet', nameFr: 'Publicité sur internet', perDay: 380, boost: 0.22, scope: 'all', desc: 'Tous vos commerces, +22 % de clients.' },
+  { id: 'flyers', nameFr: 'Distribution de flyers', perDay: 90, boost: 0.25, scope: 'shop', desc: 'Un commerce : +25 % de clients dès le lancement, la notoriété grimpe pendant la campagne puis s’estompe.' },
+  { id: 'affiches', nameFr: 'Affiches dans le quartier', perDay: 260, boost: 0.5, scope: 'shop', desc: 'Un commerce : +50 % de clients dès le lancement, la notoriété grimpe pendant la campagne puis s’estompe.' },
+  { id: 'internet', nameFr: 'Publicité sur internet', perDay: 380, boost: 0.22, scope: 'all', desc: 'Tous vos commerces : +22 % de clients dès le lancement, la notoriété grimpe pendant la campagne puis s’estompe.' },
 ];
 export const CAMPAIGN_BY_ID: ReadonlyMap<CampaignKind, CampaignDef> = new Map(CAMPAIGNS.map((c) => [c.id, c]));
+
+/* ------------------------------ Finances : impôts, crédit, placements, notoriété ------------------------------ */
+
+export const FINANCE = {
+  /** Impôt sur le bénéfice : part du bénéfice positif de chaque semaine (7 jours), prélevée à minuit le 7e jour. */
+  taxRate: 0.18,
+  taxPeriod: 7,
+  /** Semaines exonérées au début (aide à la création d'entreprise). */
+  taxGraceWeeks: 1,
+  /** Plafond de crédit = socle + part de la valeur nette positive + semaines de ventes récentes, borné par creditMax. */
+  creditBase: 20_000,
+  creditWorthShare: 1.5,
+  /** Ventes des 7 derniers jours comptées `creditSalesWeeks` fois. */
+  creditSalesWeeks: 2,
+  creditMax: 300_000,
+  /** Notoriété (part de clients en plus) : perte de 20 % par jour, gain quotidien de 25 % de l'effet de chaque campagne en cours. */
+  awarenessDecay: 0.2,
+  awarenessGain: 0.25,
+  /** Notoriété maximale d'un commerce (+100 % de clients). */
+  awarenessMax: 1,
+  /** Placement minimal (CHF). */
+  investMin: 100,
+} as const;
+
+export type InvestKind = 'epargne' | 'fonds';
+export interface InvestDef {
+  id: InvestKind; nameFr: string; desc: string;
+  /** Rendement quotidien moyen et volatilité quotidienne (écart type). */
+  dailyMean: number; dailyVol: number;
+  /** Frais de retrait (part du montant retiré). */
+  exitFee: number;
+}
+export const INVESTMENTS: readonly InvestDef[] = [
+  { id: 'epargne', nameFr: 'Compte épargne', dailyMean: 0.00012, dailyVol: 0, exitFee: 0, desc: 'Sans risque : environ +0,36 % par mois, intérêts ajoutés chaque nuit. Retrait immédiat et gratuit.' },
+  { id: 'fonds', nameFr: 'Fonds Croissance du quartier', dailyMean: 0.0003, dailyVol: 0.01, exitFee: 0.01, desc: 'Risqué : en moyenne +0,9 % par mois, mais la valeur varie chaque nuit (±1 % environ, parfois plus). Frais de retrait de 1 %.' },
+];
+export const INVEST_BY_ID: ReadonlyMap<InvestKind, InvestDef> = new Map(INVESTMENTS.map((i) => [i.id, i]));
 
 /* ------------------------------ Personnage ------------------------------ */
 
@@ -360,6 +397,40 @@ export const TRAINING = {
 export const trainingCost = (level: number): number => TRAINING.base + TRAINING.step * (level - 1);
 
 /**
+ * Rôles des employés : caisse (sert les clients), rayon (conseille et présente : attire plus de clients),
+ * entretien (garde le commerce propre). Un employé ne compte que pendant son équipe, aux heures d'ouverture.
+ */
+export type StaffRole = 'caisse' | 'rayon' | 'entretien';
+export interface StaffRoleDef { id: StaffRole; nameFr: string; desc: string }
+export const STAFF_ROLES: readonly StaffRoleDef[] = [
+  { id: 'caisse', nameFr: 'Caisse', desc: 'Encaisse les clients : sans caissier présent, personne ne peut payer.' },
+  { id: 'rayon', nameFr: 'Rayon', desc: 'Conseille les clients et soigne la présentation : attire plus de clients.' },
+  { id: 'entretien', nameFr: 'Entretien', desc: 'Nettoie le commerce pendant son équipe.' },
+];
+export const STAFF_ROLE_BY_ID: ReadonlyMap<StaffRole, StaffRoleDef> = new Map(STAFF_ROLES.map((r) => [r.id, r]));
+
+/** Équipes : matin (avant 14 h), soir (à partir de 14 h), journée complète. Limitées aux heures d'ouverture. */
+export type ShiftKind = 'matin' | 'soir' | 'journee';
+export interface ShiftDef { id: ShiftKind; nameFr: string; from: number; to: number }
+export const SHIFTS: readonly ShiftDef[] = [
+  { id: 'journee', nameFr: 'Journée complète', from: 0, to: 24 },
+  { id: 'matin', nameFr: 'Matin', from: 0, to: 14 },
+  { id: 'soir', nameFr: 'Soir', from: 14, to: 24 },
+];
+export const SHIFT_BY_ID: ReadonlyMap<ShiftKind, ShiftDef> = new Map(SHIFTS.map((s) => [s.id, s]));
+
+export const STAFF = {
+  /** Clients attirés en plus par employé de rayon présent (× compétence). */
+  shelfBonus: 0.15,
+  /** Plafond du bonus de rayon. */
+  shelfBonusMax: 0.3,
+  /** Baisse de la satisfaction visée quand l'équipe ne correspond pas au souhait du salarié. */
+  shiftMood: 0.2,
+  /** Baisse de la satisfaction visée quand le salaire passe sous le minimum demandé à l'embauche. */
+  minWageMood: 0.3,
+} as const;
+
+/**
  * Contrats fournisseurs avec le grossiste : forfait quotidien contre une remise sur tous les achats (emportés ou
  * livrés). Intéressant seulement quand on achète beaucoup (plusieurs commerces).
  */
@@ -370,3 +441,57 @@ export const CONTRACTS: readonly ContractDef[] = [
   { id: 'partenaire', nameFr: 'Contrat Partenaire', perDay: 150, discount: 0.15, freeDelivery: true, desc: '−15 % sur tous les achats, forfait de livraison offert.' },
 ];
 export const CONTRACT_BY_ID: ReadonlyMap<ContractKind, ContractDef> = new Map(CONTRACTS.map((c) => [c.id, c]));
+
+/* ------------------------------ Propreté et revêtements ------------------------------ */
+
+/**
+ * Propreté d'un commerce (0..100 %) : baisse à chaque client servi et à chaque heure d'ouverture ; sous les seuils,
+ * l'attrait (clients attendus) et la réputation baissent. Remontée : « Nettoyer » sur place (le joueur), employés
+ * d'entretien, ou service de nettoyage de nuit sous contrat (forfait quotidien selon la surface).
+ */
+export const CLEANING = {
+  /** Points perdus par client servi. */
+  perCustomer: 0.12,
+  /** Points perdus par heure d'ouverture. */
+  perOpenHour: 0.5,
+  /** Au-dessus de ce niveau, aucun effet sur l'attrait. */
+  fine: 75,
+  /** Attrait à 0 % de propreté (× ; linéaire jusqu'à `fine`). */
+  minAppeal: 0.8,
+  /** Réputation visée en moins à 0 % de propreté (points ; linéaire jusqu'à `fine`). */
+  repPenalty: 0.2,
+  /** Alerte (une fois par jour) sous ce niveau. */
+  warn: 50,
+  /** Nettoyage par le joueur : durée (minutes de jeu), points rendus, énergie dépensée. */
+  playerMinutes: 30,
+  playerGain: 45,
+  playerEnergy: 6,
+  /** Points rendus par heure d'ouverture pour 1 point d'entretien de l'équipe (cleaningPower). */
+  perPower: 6,
+  /** Service de nettoyage de nuit : CHF par m² et par jour (minimum `serviceMin`) ; remet à 100 % chaque nuit. */
+  servicePerM2: 0.35,
+  serviceMin: 25,
+} as const;
+
+/** Revêtement de sol ou de murs : prix au m² (sol : surface du local ; murs : 3 murs × 3 m de haut), bonus d'attrait. */
+export interface SurfaceDef { id: string; nameFr: string; perM2: number; /** Attrait en plus (part, cumul sol + murs). */ appeal: number; /** Pastille de l'interface (CSS). */ color: string; desc: string }
+export const FLOORINGS: readonly SurfaceDef[] = [
+  { id: 'origine', nameFr: 'Sol d’origine', perM2: 0, appeal: 0, color: '#b9a88f', desc: 'Le sol livré avec le local.' },
+  { id: 'lino', nameFr: 'Lino moucheté', perM2: 12, appeal: 0.02, color: '#9fb3a8', desc: 'Pratique et bon marché.' },
+  { id: 'carrelage', nameFr: 'Grands carreaux clairs', perM2: 28, appeal: 0.04, color: '#e8e4dc', desc: 'Lumineux, facile à entretenir.' },
+  { id: 'chene', nameFr: 'Parquet de chêne', perM2: 45, appeal: 0.06, color: '#b07a48', desc: 'Chaleureux, apprécié des clients.' },
+  { id: 'marbre', nameFr: 'Marbre poli', perM2: 80, appeal: 0.09, color: '#eceae6', desc: 'Luxueux : l’effet « waouh ».' },
+];
+export const WALLINGS: readonly SurfaceDef[] = [
+  { id: 'origine', nameFr: 'Peinture d’origine', perM2: 0, appeal: 0, color: '#d9d2c4', desc: 'Les murs livrés avec le local.' },
+  { id: 'peinture', nameFr: 'Peinture fraîche', perM2: 6, appeal: 0.015, color: '#f3efe6', desc: 'Un coup de neuf, blanc cassé.' },
+  { id: 'papier', nameFr: 'Papier peint à motifs', perM2: 14, appeal: 0.03, color: '#9cc0d8', desc: 'Motifs discrets, ambiance soignée.' },
+  { id: 'lambris', nameFr: 'Lambris de bois', perM2: 24, appeal: 0.045, color: '#a8784c', desc: 'Bois clair du sol au plafond.' },
+  { id: 'brique', nameFr: 'Briques apparentes', perM2: 38, appeal: 0.06, color: '#b5573a', desc: 'Style atelier, très tendance.' },
+];
+export const FLOORING_BY_ID: ReadonlyMap<string, SurfaceDef> = new Map(FLOORINGS.map((f) => [f.id, f]));
+export const WALLING_BY_ID: ReadonlyMap<string, SurfaceDef> = new Map(WALLINGS.map((f) => [f.id, f]));
+/** Surface (m²) concernée par un revêtement dans un local de W × D cases (murs : fond et côtés, 3 m de haut). */
+export const surfaceArea = (part: 'sol' | 'murs', W: number, D: number): number => part === 'sol' ? W * D : (W + 2 * D) * 3;
+/** Attrait selon la propreté (× sur la clientèle) pour un niveau 0..100. */
+export const cleanAppeal = (clean: number): number => CLEANING.minAppeal + (1 - CLEANING.minAppeal) * Math.min(1, Math.max(0, clean) / CLEANING.fine);

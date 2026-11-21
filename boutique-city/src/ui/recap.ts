@@ -4,6 +4,7 @@
  * uniquement les bilans enregistrés par la simulation.
  */
 import { WEEKDAYS_FR } from '../sim/clock';
+import { FINANCE } from '../sim/catalog';
 import { dayProfit, type DayStats, type Game } from '../sim/game';
 import { button, chf, el, num, signed } from './dom';
 
@@ -37,6 +38,13 @@ export function showRecap(g: Game, onClose: () => void): HTMLElement | null {
   if (!tips.length && y.customers > 0) tips.push('Aucun client perdu : la journée s’est bien passée. Pensez à agrandir ou à ouvrir un deuxième commerce.');
   if (!tips.length && !g.shops.length) tips.push('Pas encore de commerce : louez un local (anneau jaune devant les locaux libres, carte : touche M).');
   const trend = prev ? y.revenue - prev.revenue : null;
+  // Impôt : prélevé ce soir (semaine écoulée) ou provision de la semaine en cours.
+  const taxRec = (y.tax ?? 0) > 0 ? g.taxes.at(-1) : undefined;
+  const tx = g.taxEstimate();
+  const rate = Math.round(FINANCE.taxRate * 100);
+  const taxNote = taxRec ? `Impôt de la semaine ${taxRec.week + 1} prélevé : ${chf(taxRec.amount)} (${rate} % de ${chf(taxRec.base)} de bénéfice).`
+    : tx.exempt ? 'Impôt sur le bénéfice : première semaine exonérée.'
+    : `Impôt de la semaine ${tx.week + 1} : provision ${chf(tx.due)} (${rate} % du bénéfice à ce jour), prélevée ${tx.daysLeft <= 0 ? 'ce soir à minuit' : `dans ${tx.daysLeft + 1} jours`}.`;
 
   // Causes de pertes : barre empilée.
   const causes: [string, number, string][] = [['Sans caissier', y.lostStaff, '#ef6b6b'], ['Rupture ou trop cher', y.lostStock, '#f0b84a'], ['Attente trop longue', y.lostCapacity, '#5fc3ff']];
@@ -50,7 +58,7 @@ export function showRecap(g: Game, onClose: () => void): HTMLElement | null {
     ['Ventes', y.revenue, 1], ['Loyers encaissés (sous-locations)', y.rentalIncome ?? 0, 1],
     ['Achats de marchandise', y.purchases, -1], ['Salaires', y.wages, -1], ['Loyer (provision du jour)', y.rent, -1],
     ['Équipement et mobilier', y.equipment, -1], ['Publicité', y.marketing, -1], ['Remboursements de prêts', y.finance, -1],
-    ['Vie courante (logement, repas, assurances)', y.living, -1],
+    ['Vie courante (logement, repas, assurances)', y.living, -1], ['Impôt sur le bénéfice (semaine)', y.tax ?? 0, -1],
   ] as [string, number, number][]).filter(([label, v]) => v > 0 || label === 'Ventes');
 
   let closed = false;
@@ -74,7 +82,8 @@ export function showRecap(g: Game, onClose: () => void): HTMLElement | null {
           el('div', { cls: 'sec', text: 'Compte de résultat du jour' }),
           el('table', { cls: 'tbl pnl' }, ...pnl.map(([label, v, k]) => el('tr', {}, el('td', { text: label }), el('td', { cls: k > 0 ? 'num ok' : 'num bad', text: `${k > 0 ? '+' : '−'} ${chf(v)}` }))),
             el('tr', { cls: 'total' }, el('td', { text: 'Résultat' }), el('td', { cls: profit >= 0 ? 'num ok' : 'num bad', text: signed(profit) }))),
-          el('p', { cls: 'rc-foot', text: 'Le loyer des locaux est provisionné chaque jour et prélevé une fois par mois (30 jours après la signature).' })),
+          el('p', { cls: 'rc-foot', text: 'Le loyer des locaux est provisionné chaque jour et prélevé une fois par mois (30 jours après la signature).' }),
+          g.shops.length ? el('p', { cls: 'rc-foot', text: taxNote }) : null),
         el('div', { cls: 'rc-col' },
           el('div', { cls: 'sec', text: `Clients perdus · ${num(lost)}` }),
           lossBlock,
