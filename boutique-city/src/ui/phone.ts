@@ -328,7 +328,7 @@ export class Phone {
     const t = g.today;
     const lines = ([
       ['Ventes', t.revenue, 1], ['Loyers encaissés', t.rentalIncome ?? 0, 1], ['Achats de marchandise', t.purchases, -1], ['Salaires', t.wages, -1],
-      ['Loyers (provision)', t.rent, -1], ['Équipement', t.equipment, -1], ['Publicité', t.marketing, -1], ['Prêts', t.finance, -1], ['Vie courante', t.living, -1],
+      ['Loyers (provisions et payés)', t.rent, -1], ['Équipement', t.equipment, -1], ['Publicité', t.marketing, -1], ['Prêts', t.finance, -1], ['Vie courante', t.living, -1],
     ] as [string, number, number][]).filter(([l, v]) => v > 0 || l === 'Ventes');
     return [
       tiles(tile('Compte', chf(g.cash), g.cash < 0 ? 'bad' : ''), tile('Dettes', chf(g.debt), g.debt > 0 ? 'warn' : ''), tile('Aujourd’hui', signed(today), today >= 0 ? 'ok' : 'bad')),

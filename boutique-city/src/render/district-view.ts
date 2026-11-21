@@ -162,7 +162,8 @@ export class DistrictView {
       new THREE.BoxGeometry(1.86, 0.06, 0.08).translate(0, 2.32, 0.06),
       new THREE.BoxGeometry(0.04, 0.32, 0.06).translate(-0.12, 1.1, 0.12), new THREE.BoxGeometry(0.04, 0.32, 0.06).translate(0.12, 1.1, 0.12),
     ].map((g) => g.toNonIndexed()))!;
-    this.group.add(instanced(fg, new THREE.MeshStandardMaterial({ color: 0x3a4048, roughness: 0.35, metalness: 0.6 }), frames, 'portes', true, true));
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0x3a4048, roughness: 0.35, metalness: 0.6 });
+    for (const im of this.tiles(frames, (part) => instanced(fg, frameMat, part, 'portes', true, true))) this.group.add(im);
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x6b5a3a, emissive: 0xffd9a0, emissiveIntensity: 0.55, roughness: 0.15, metalness: 0.2 });
     this.doorGlass.push(glassMat);
     this.group.add(instanced(new THREE.PlaneGeometry(1.84, 2.2).translate(0, 1.22, 0.02), glassMat, glass, 'portes-vitrees', false, false));
@@ -210,17 +211,24 @@ export class DistrictView {
     }
     const g = new THREE.Group();
     g.name = 'immeubles-kit';
+    // Six tons de façade (teinte douce multipliée à la texture du modèle), selon la position.
+    const tones = [0xffffff, 0xffe8d2, 0xdfeaff, 0xfff1c4, 0xffdcdc, 0xdcf2e2].map((c) => new THREE.Color(c));
     for (const [k, ms] of per) {
       const mg = assets.merged(k);
       if (!mg) return null;
-      const im = instanced(mg.geo, mg.mat as THREE.Material, ms, `immeuble ${k}`, true, true);
-      // Six tons de façade (teinte douce multipliée à la texture du modèle).
-      const tones = [0xffffff, 0xffe8d2, 0xdfeaff, 0xfff1c4, 0xffdcdc, 0xdcf2e2].map((c) => new THREE.Color(c));
-      ms.forEach((m, i) => { const e = m.elements; im.setColorAt(i, tones[Math.abs(Math.floor(e[12]! * 7.3 + e[14]! * 3.1)) % tones.length]!); });
-      if (im.instanceColor) im.instanceColor.needsUpdate = true;
-      g.add(im);
+      for (const im of this.tiles(ms, (part) => instanced(mg.geo, mg.mat as THREE.Material, part, `immeuble ${k}`, true, true))) {
+        const m = new THREE.Matrix4();
+        for (let i = 0; i < im.count; i++) { im.getMatrixAt(i, m); const e = m.elements; im.setColorAt(i, tones[Math.abs(Math.floor(e[12]! * 7.3 + e[14]! * 3.1)) % tones.length]!); }
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        g.add(im);
+      }
     }
     return g;
+  }
+
+  /** Familles d'instances découpées en tuiles d'îlot (voir `tiled`), bords des tuiles sur l'axe des rues. */
+  private tiles(ms: THREE.Matrix4[], build: (part: THREE.Matrix4[]) => THREE.InstancedMesh | null): THREE.InstancedMesh[] {
+    return tiled(ms, build, (-this.d.nx / 2) * PITCH, (-this.d.nz / 2) * PITCH);
   }
 
   /** Matériau des globes des lampadaires (allumés la nuit, voir setNight). */
@@ -251,10 +259,11 @@ export class DistrictView {
       const z = (j - d.nz / 2) * PITCH;
       for (let x = -d.size.w / 2 + 22; x < d.size.w / 2; x += 26) { add(x, z - off, 0, 1); add(x + 13, z + off, 0, -1); }
     }
-    const kit = assets.instances('rue.lampadaire', poles, 1.6, 5.4, 1.6);
-    if (kit) { kit.castShadow = true; kit.name = 'lampadaires-kit'; g.add(kit); }
-    else g.add(instanced(new THREE.CylinderGeometry(0.08, 0.12, 5.2, 8).translate(0, 2.6, 0), new THREE.MeshStandardMaterial({ color: 0x3a4048, metalness: 0.5, roughness: 0.4 }), poles, 'mâts', true, false));
-    g.add(instanced(new THREE.SphereGeometry(0.15, 10, 8), this.lampMat, bulbs, 'globes', false, false));
+    const kit = this.tiles(poles, (part) => assets.instances('rue.lampadaire', part, 1.6, 5.4, 1.6));
+    for (const im of kit) { im.castShadow = true; im.name = 'lampadaires-kit'; g.add(im); }
+    if (!kit.length) g.add(instanced(new THREE.CylinderGeometry(0.08, 0.12, 5.2, 8).translate(0, 2.6, 0), new THREE.MeshStandardMaterial({ color: 0x3a4048, metalness: 0.5, roughness: 0.4 }), poles, 'mâts', true, false));
+    const bulb = new THREE.SphereGeometry(0.15, 10, 8);
+    for (const im of this.tiles(bulbs, (part) => instanced(bulb, this.lampMat, part, 'globes', false, false))) g.add(im);
     this.lightPoints = bulbs.map((m) => new THREE.Vector3().setFromMatrixPosition(m));
     return g;
   }
@@ -268,7 +277,7 @@ export class DistrictView {
   }
 
   /** Lignes blanches discontinues au milieu des rues. */
-  private markings(): THREE.InstancedMesh {
+  private markings(): THREE.Group {
     const d = this.d, out: THREE.Matrix4[] = [];
     const q = new THREE.Quaternion();
     for (let i = 0; i <= d.nx; i++) {
@@ -291,7 +300,9 @@ export class DistrictView {
         }
       }
     }
-    return instanced(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xd8d8d0 }), out, 'marquage', false, false);
+    const g = new THREE.Group(), geo = new THREE.BoxGeometry(1, 1, 1), m = new THREE.MeshBasicMaterial({ color: 0xd8d8d0 });
+    for (const im of this.tiles(out, (part) => instanced(geo, m, part, 'marquage', false, false))) g.add(im);
+    return g;
   }
 
   /** Arbres : parc aéré (quelques arbres plus petits), alignements le long des trottoirs. */
@@ -338,7 +349,7 @@ export class DistrictView {
         if (!per.has(k)) per.set(k, []);
         per.get(k)!.push(m.clone().multiply(new THREE.Matrix4().makeRotationY(rnd() * 6.28)));
       });
-      for (const [k, ms] of per) { const im = assets.instances(k, ms, 4.2, 6.5, 4.2); if (im) { im.castShadow = true; im.name = `arbres ${k}`; g.add(im); } }
+      for (const [k, ms] of per) for (const im of this.tiles(ms, (part) => assets.instances(k, part, 4.2, 6.5, 4.2))) { im.castShadow = true; im.name = `arbres ${k}`; g.add(im); }
       if (g.children.length) return g;
     }
     g.add(instanced(new THREE.CylinderGeometry(0.18, 0.25, 2.4, 6).translate(0, 1.2, 0), new THREE.MeshStandardMaterial({ color: 0x6b4f3a }), trunks, 'troncs', true, false));
@@ -475,8 +486,7 @@ export class DistrictView {
     }
     for (const [k, ms] of per) {
       const [w, h, dd] = size[k] ?? [0.7, 0.6, 0.7];
-      const im = assets.instances(k, ms, w, h, dd);
-      if (im) { im.castShadow = h > 1.8; im.name = `décor ${k}`; g.add(im); }
+      for (const im of this.tiles(ms, (part) => assets.instances(k, part, w, h, dd))) { im.castShadow = h > 1.8; im.name = `décor ${k}`; g.add(im); }
     }
     return g;
   }
@@ -525,8 +535,8 @@ export class DistrictView {
     for (const [k, ms] of per) {
       const sz = assets.size(k);
       const wide = /truck|garbage|firetruck|ambulance|delivery|van/.test(k) ? 2.3 : 1.9;
-      const im = sz ? assets.instances(k, ms, wide, 4, 6.5) : null;
-      if (im) { im.castShadow = false; im.name = `garée ${k}`; g.add(im); }
+      if (!sz) continue;
+      for (const im of this.tiles(ms, (part) => assets.instances(k, part, wide, 4, 6.5))) { im.castShadow = false; im.name = `garée ${k}`; g.add(im); }
     }
     return g;
   }
@@ -579,8 +589,7 @@ export class DistrictView {
       if (e) put(e, x + 5.5, z - 6, Math.PI, 3, 4);
     }
     for (const [k, v] of per) {
-      const im = assets.instances(k, v.m, v.w, v.h, v.w);
-      if (im) { im.name = `horizon ${k}`; im.castShadow = false; g.add(im); }
+      for (const im of this.tiles(v.m, (part) => assets.instances(k, part, v.w, v.h, v.w))) { im.name = `horizon ${k}`; im.castShadow = false; g.add(im); }
     }
     return g;
   }
@@ -679,6 +688,36 @@ function instanced(geo: THREE.BufferGeometry, mat: THREE.Material, ms: THREE.Mat
   m.receiveShadow = receive;
   m.computeBoundingSphere();
   return m;
+}
+
+/** Triangles dessinés par un maillage instancié (toutes instances). */
+function trisOf(m: THREE.InstancedMesh): number {
+  const g = m.geometry;
+  return ((g.index ? g.index.count : g.attributes['position']!.count) / 3) * m.count;
+}
+
+/**
+ * Découpage spatial : au-delà de TILE_MIN_TRIS triangles, une famille d'instances est répartie en tuiles d'un îlot
+ * (PITCH m, bords sur l'axe des rues) avec un InstancedMesh par tuile. three écarte alors les tuiles hors du champ
+ * de la caméra et de la caméra d'ombre, au lieu de dessiner tout le quartier (et ses ombres) à chaque image : un
+ * seul InstancedMesh couvrant le quartier n'est jamais découpé. Les familles légères restent en un seul maillage
+ * (un appel de dessin coûte plus que quelques milliers de triangles).
+ */
+const TILE_MIN_TRIS = 6000;
+function tiled(ms: THREE.Matrix4[], build: (part: THREE.Matrix4[]) => THREE.InstancedMesh | null, ox: number, oz: number): THREE.InstancedMesh[] {
+  const whole = build(ms);
+  if (!whole) return [];
+  if (trisOf(whole) < TILE_MIN_TRIS || ms.length < 2) return [whole];
+  whole.dispose();
+  const per = new Map<number, THREE.Matrix4[]>();
+  for (const m of ms) {
+    const key = Math.floor((m.elements[12]! - ox) / PITCH) * 1024 + Math.floor((m.elements[14]! - oz) / PITCH);
+    const list = per.get(key);
+    if (list) list.push(m); else per.set(key, [m]);
+  }
+  const out: THREE.InstancedMesh[] = [];
+  for (const part of per.values()) { const im = build(part); if (im) out.push(im); }
+  return out;
 }
 
 /** Repère rond (local à louer, vue éloignée) : matériau partagé. */

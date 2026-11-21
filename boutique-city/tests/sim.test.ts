@@ -417,6 +417,7 @@ test('gamme premium : employé formé requis, mise en place payée une fois, pri
   furnish(g, id, 'cafe');
   stockUp(g, id);
   staff(g, id);
+  keepAlive(g); g.advance(DAY / 2);
   assert.equal(g.setPremium(id, true).ok, false, 'refus sans employé formé');
   assert.ok(g.train(g.employees[0]!.id).ok);
   const shop = g.shop(id)!, cafe = PRODUCT_BY_ID.get('cafe')!;
@@ -485,6 +486,7 @@ test('contrat fournisseur : signé chez le grossiste, remise, livraison offerte,
   const g2 = new Game(save.seed, save.companyName, old as typeof save);
   assert.equal(g2.contract, null, 'ancienne sauvegarde : pas de contrat');
   assert.deepEqual(g2.achieved, ['sortir'], 'objectifs disparus ignorés');
+  goTo(g, 'grossiste');
   assert.ok(g.signContract(null).ok && g.contract === null, 'contrat résilié');
 });
 
