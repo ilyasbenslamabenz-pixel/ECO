@@ -60,7 +60,7 @@ try {
   await page.keyboard.up('KeyS');
   check(await ev(() => window.__bc.state().inside === null), 'sorti dans la rue en marchant');
   const p0 = await ev(() => [window.__bc.game.player.x, window.__bc.game.player.z]);
-  await page.keyboard.down('KeyD'); await page.waitForTimeout(1200); await page.keyboard.up('KeyD');
+  await page.keyboard.down('KeyD'); await page.waitForTimeout(3000); await page.keyboard.up('KeyD');
   const p1 = await ev(() => [window.__bc.game.player.x, window.__bc.game.player.z]);
   check(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) > 0.5, 'le personnage marche dans la rue', JSON.stringify([p0, p1]));
   await shot('03-rue');
@@ -80,7 +80,18 @@ try {
   // Magasin de meubles : achats par le panneau.
   await goIn(await service('meubles'));
   await page.waitForSelector('#panel:not(.hidden)');
-  const buy = async (name, qty) => { const row = page.locator('#panel tr', { has: page.locator(`b:text-is("${name}")`) }); await row.locator('input').fill(String(qty)); await row.locator('button').click(); await page.waitForTimeout(150); };
+  /** Ligne du panneau dont une cellule porte `name` : quantité saisie puis bouton (actions DOM, relues à chaque fois). */
+  const rowAct = async (name, qty, btnText = '') => {
+    await page.waitForFunction((n) => [...document.querySelectorAll('#panel tr')].some((tr) => [...tr.querySelectorAll('b, td')].some((c) => c.textContent.trim() === n)), name, { timeout: 30000 });
+    await ev(([n, q, t]) => {
+      const tr = [...document.querySelectorAll('#panel tr')].find((r) => [...r.querySelectorAll('b, td')].some((c) => c.textContent.trim() === n));
+      const inp = tr.querySelector('input.qty');
+      if (inp && q !== null) { inp.value = String(q); inp.dispatchEvent(new Event('change', { bubbles: true })); }
+      [...tr.querySelectorAll('button')].find((b) => !t || b.textContent.includes(t)).click();
+    }, [name, qty, btnText]);
+    await page.waitForTimeout(200);
+  };
+  const buy = (name, qty) => rowAct(name, qty);
   await buy('Caisse', 1); await buy('Rayonnage', 3); await buy('Vitrine réfrigérée', 2); await buy('Plante', 2);
   await shot('06-meubles');
   check(await ev(() => JSON.stringify(window.__bc.game.shops[0].storage) === JSON.stringify({ caisse: 1, rayon: 3, frigo: 2, plante: 2 })), 'meubles livrés dans la réserve', await ev(() => JSON.stringify(window.__bc.game.shops[0].storage)));
@@ -89,9 +100,7 @@ try {
   // Grossiste à pied : 24 pains au plus.
   await goIn(await service('grossiste'));
   await page.waitForSelector('#panel:not(.hidden)');
-  const pain = page.locator('#panel tr', { has: page.locator('td:text-is("Pain")') });
-  await pain.locator('input').fill('50');
-  await pain.locator('button:has-text("Emporter")').click();
+  await rowAct('Pain', 50, 'Emporter');
   await page.waitForTimeout(200);
   await shot('07-grossiste');
   check(await ev(() => window.__bc.game.player.carry.pain === 24), 'marchandise portée (24 au plus à pied)');
@@ -144,9 +153,8 @@ try {
   await page.click('.ibar button:has-text("Gestion")');
   await page.click('#panel .tabs button:has-text("Prix et stock")');
   for (const name of ['Lait', 'Fruits et légumes', 'Boissons fraîches', 'Conserves et épicerie', 'Snacks', 'Pain']) {
-    const row = page.locator('#panel table.stock tr', { has: page.locator(`b:text-is("${name}")`) });
-    await row.locator('button').click();
-    await row.locator('input[type=checkbox]').check();
+    await rowAct(name, null);
+    await ev((n) => { const tr = [...document.querySelectorAll('#panel table.stock tr')].find((r) => r.querySelector('b')?.textContent === n); const cb = tr.querySelector('input[type=checkbox]'); if (!cb.checked) cb.click(); }, name);
     await page.waitForTimeout(120);
   }
   await shot('09-stock');
