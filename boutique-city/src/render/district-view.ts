@@ -135,6 +135,7 @@ export class DistrictView {
       const m = new THREE.Matrix4().compose(pos, new THREE.Quaternion(), size);
       this.awnings.setMatrixAt(k, m);
       this.awningInfo.push({ m, x: pos.x, z: pos.z, n, half: front * 0.45, hidden: false });
+      this.overheads.push({ minX: pos.x - size.x / 2, maxX: pos.x + size.x / 2, minZ: pos.z - size.z / 2, maxZ: pos.z + size.z / 2, y0: pos.y - size.y / 2, h: pos.y + size.y / 2 });
       this.awningIndex.set(b.id, k);
       this.awnings.setColorAt(k, new THREE.Color(0x8a8f96));
     });
@@ -173,7 +174,12 @@ export class DistrictView {
     this.group.add(this.streetProps());
     this.group.add(this.parkedCars());
     this.group.add(this.outskirts());
+    // Décor statique : matrices calculées une fois (pas de recalcul local à chaque image).
+    this.group.traverse((o) => { o.updateMatrix(); o.matrixAutoUpdate = false; });
   }
+
+  /** Volumes au-dessus du trottoir qui doivent écarter la caméra (auvents, parasols des snacks), pour Collider. */
+  readonly overheads: Rect[] = [];
 
   /**
    * Bâtiments du City Kit (Kenney) : pour chaque immeuble, le modèle dont les proportions (hauteur / largeur)
@@ -341,7 +347,8 @@ export class DistrictView {
     });
     // Modèles d'arbres (City Kit Suburban, Nature Kit) répartis au hasard, un InstancedMesh par modèle.
     // Tous les arbres du Nature Kit et du City Kit Suburban (feuillus, pins, palmiers, automne).
-    const kinds = ['rue.arbre-grand', 'rue.arbre-petit', ...filesMatching(/^nat-tree_/)].filter((k) => assets.has(k));
+    // Sans les modèles massifs ou d'automne (troncs bruns trapus, blocs) : lus comme des objets étranges en ville.
+    const kinds = ['rue.arbre-grand', 'rue.arbre-petit', ...filesMatching(/^nat-tree_/).filter((k) => !/_fall$|tree_fat|tree_blocks/.test(k))].filter((k) => assets.has(k));
     if (kinds.length) {
       const per = new Map<string, THREE.Matrix4[]>();
       trunks.forEach((m, i) => {
@@ -443,7 +450,13 @@ export class DistrictView {
         srv.forEach((k, i) => { const [x, z] = at((i % 2 ? 1 : -1) * (6.5 + Math.floor(i / 2) * 0.9), 0.8); put(k, x, z, rnd() * 6, 2.2); });
         for (const [s2, k] of [[-6.2, 'f:cardboardBoxClosed'], [6.4, 'f:cardboardBoxOpen']] as const) { const [x, z] = at(s2, 2.2); put(k, x, z, rnd(), 2.2); }
       } else if (b.service === 'snack') {
-        for (const s of [-4.5, 4.5]) { const [x, z] = at(s, 1.6); put(s < 0 ? 'rue.parasol-a' : 'rue.parasol-b', x, z, ry, 2.5); }
+        for (const s of [-4.5, 4.5]) {
+          const [x, z] = at(s, 1.6);
+          put(s < 0 ? 'rue.parasol-a' : 'rue.parasol-b', x, z, ry, 2.5);
+          // Toile du parasol (≈ 3 m de large, entre 2 et 2,9 m) : volume pour la caméra, on marche dessous.
+          if (!free(x, z, 2.5)) continue;
+          this.overheads.push({ minX: x - 1.4, maxX: x + 1.4, minZ: z - 1.4, maxZ: z + 1.4, y0: 2.1, h: 2.95 });
+        }
       } else if (b.service === 'garage') {
         for (const s of [-4, -3, 4.2]) { const [x, z] = at(s, 0.8); put('rue.cone', x, z, rnd(), 2.2); }
         // Vitrine du garage : voitures de course et karts exposés sur le trottoir.
@@ -618,6 +631,7 @@ export class DistrictView {
         g.rotation.y = Math.atan2(n[0], n[1]);
         if (st.sign) { const p = textPlane(st.sign, 0.75, st.color, '#ffffff', front * 0.85); p.position.y = 3.65; g.add(p); }
         if (st.poster) { const p = textPlane(st.poster, 0.42, '#ffd166', '#2d3440', 2.6); p.position.set(front * 0.22, 1.55, 0.02); g.add(p); }
+        g.updateMatrix(); g.matrixAutoUpdate = false;
         this.group.add(g);
         this.signs.set(b.id, { key, obj: g });
       }
@@ -627,8 +641,10 @@ export class DistrictView {
         pin.scale.set(0.014, 0.014, 1);
         pin.renderOrder = 9;
         pin.position.set(b.x + n[0] * (depth / 2 + 1), b.floors * FLOOR_H + 4, b.z + n[1] * (depth / 2 + 1));
+        pin.updateMatrix(); pin.matrixAutoUpdate = false;
         this.pins.set(b.id, pin);
         this.group.add(pin);
+        this.lastCam.set(NaN, NaN, NaN);
       } else if (!st.pin && pin) { this.group.remove(pin); this.pins.delete(b.id); }
     }
     if (this.awnings.instanceColor) this.awnings.instanceColor.needsUpdate = true;
@@ -641,10 +657,15 @@ export class DistrictView {
    * au-dessus ou derrière eux (caméra rabattue contre une façade) : ils cacheraient le joueur devant la porte.
    */
   updateLabels(camera: THREE.Camera, dt: number): void {
+    this.ringPhase += dt;
+    (this.rings.material as THREE.MeshBasicMaterial).opacity = 0.55 + 0.35 * Math.sin(this.ringPhase * 3);
     const cp = camera.position;
+    // Repères et auvents ne dépendent que de la position de la caméra : rien à faire si elle n'a pas bougé.
+    if (cp.distanceToSquared(this.lastCam) < 0.0025) return;
+    this.lastCam.copy(cp);
     for (const pin of this.pins.values()) pin.visible = cp.distanceTo(pin.position) > PIN_MIN_DIST;
     let dirty = false;
-    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    const zero = DistrictView.ZERO;
     this.awningInfo.forEach((a, k) => {
       const rx = cp.x - a.x, rz = cp.z - a.z;
       const out = rx * a.n[0] + rz * a.n[1], side = Math.abs(rx * a.n[1] - rz * a.n[0]);
@@ -653,9 +674,10 @@ export class DistrictView {
       if (hide !== a.hidden) { a.hidden = hide; this.awnings.setMatrixAt(k, hide ? zero : a.m); dirty = true; }
     });
     if (dirty) this.awnings.instanceMatrix.needsUpdate = true;
-    this.ringPhase += dt;
-    (this.rings.material as THREE.MeshBasicMaterial).opacity = 0.55 + 0.35 * Math.sin(this.ringPhase * 3);
   }
+  /** Dernière position de caméra traitée par updateLabels. */
+  private readonly lastCam = new THREE.Vector3(NaN, NaN, NaN);
+  private static readonly ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
   /** Bâtiment sous un rayon (null : aucun). */
   pick(ray: THREE.Raycaster): Building | null {
