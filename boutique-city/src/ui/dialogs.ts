@@ -356,9 +356,9 @@ export function rivalBuyView(ctx: UiCtx, premiseId: number): View {
       staff.addEventListener('change', () => { buyWithStaff = staff.checked; });
       const wage = g.marketWage(0.72);
       return [
-        el('div', { cls: 'kpis' }, kpi('Chiffre d’affaires', `≈ ${chf(q.revenue)} / j`), kpi('Clients', `≈ ${num(q.customers)} / j`), kpi('Réputation', pct(q.reputation))),
+        el('div', { cls: 'kpis' }, kpi('Ventes / jour', `≈ ${chf(q.revenue)}`), kpi('Clients / jour', `≈ ${num(q.customers)}`), kpi('Réputation', pct(q.reputation))),
         sec('Prix'),
-        el('table', { cls: 'tbl' },
+        el('table', { cls: 'tbl riv-tbl' },
           el('tr', {}, el('td', { text: `Fonds de commerce (${RIVALS.buyRevenueDays} jours de ventes × réputation, mobilier compris)` }), el('td', { text: chf(q.price) })),
           el('tr', {}, el('td', { text: 'Dépôt de garantie du bail (rendu à la résiliation)' }), el('td', { text: chf(q.deposit) })),
           el('tr', {}, el('th', { text: 'Total à payer' }), el('th', { text: chf(q.total) }))),

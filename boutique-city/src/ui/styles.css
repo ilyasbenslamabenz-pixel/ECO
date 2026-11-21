@@ -789,7 +789,10 @@ kbd { font-family: var(--font); }
 .riv-legend { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-top: 5px; font-size: 11px; color: #9aa7b8; }
 .riv-legend span { display: inline-flex; align-items: center; gap: 4px; }
 .riv-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
-.ph-line.riv-line { grid-template-columns: 1fr auto auto auto; }
+.riv-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 2px; border-top: 1px solid #1a2330; font-size: 12.5px; }
+.riv-row small { display: block; color: #9aa7b8; font-size: 11px; margin-top: 2px; }
+.riv-row button { flex: none; }
 .riv-promo { color: #ff8a7a; font-size: 13px; margin: 6px 0; }
 .riv-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; cursor: pointer; }
 .riv-check input { width: 16px; height: 16px; }
+.riv-tbl td:last-child, .riv-tbl th:last-child { white-space: nowrap; text-align: right; }

@@ -2,6 +2,7 @@
  * Téléphone du joueur (touche T) : écran d'accueil à applis, comme le smartphone d'un jeu de gestion de vie.
  * Applis : Commerces (gestion à distance), Immobilier (locaux et appartements libres, baux, sous-locations, GPS),
  * Banque (trésorerie, prêts, résultats), Équipe (employés), Marché (prix du grossiste, prix des concurrents),
+ * Concurrence (entreprises rivales, menaces, parts de marché, rachats),
  * Messages (historique des notifications), Objectifs, Véhicules, Carte, Entreprise, Réglages.
  * Redessiné quand la partie change (au plus deux fois par seconde), jamais sous le pointeur ni pendant une saisie.
  *
@@ -535,8 +536,8 @@ export class Phone {
     const g = this.ctx.game, rv = g.rivalry;
     const threats = rv.threats(), promos = rv.shops.filter((s) => s.promo > 0).length;
     const out: (Node | null)[] = [
-      tiles(tile('Rivaux actifs', String(rv.active.length)), tile('Commerces rivaux', String(rv.shops.filter((s) => s.co).length), '', `${rv.shops.filter((s) => !s.co).length} indépendants`),
-        tile('Menaces', String(threats.length), threats.length ? 'warn' : 'ok', promos ? `${promos} en promotion` : 'aucune promotion')),
+      tiles(tile('Rivaux actifs', String(rv.active.length)), tile('Commerces rivaux', String(rv.shops.filter((s) => s.co).length), '', `+ ${rv.shops.filter((s) => !s.co).length} indép.`),
+        tile('Menaces', String(threats.length), threats.length ? 'warn' : 'ok', promos ? `${promos} en promo` : 'pas de promo')),
       rv.awake ? null : el('p', { cls: 'ph-hint', text: `Les entreprises rivales observent le quartier. Dès le jour ${RIVALS.startDay + 1}, elles ouvriront des commerces, ajusteront leurs prix et lanceront des promotions.` }),
     ];
     // Menaces : rivaux du même type près de vos commerces.
@@ -547,8 +548,8 @@ export class Phone {
       out.push(card({
         accent: co?.color ?? '#7d6a8c', title: t.rival.name, sub: `à ${t.dist} m de ${t.shop.name}`,
         right: t.rival.promo > 0 ? pill(`promo ${t.rival.promo} j`, 'bad') : t.rival.opened > 0 && g.day - t.rival.opened < 7 ? pill('nouveau', 'warn') : pill(co ? co.brand : 'indépendant', 'info'),
-        body: [el('div', { cls: 'ph-kvs' }, kv('Clients / jour', `≈ ${num(t.rival.customers || rv.estimate(t.rival).customers)}`), kv('Prix', rivalPriceText(t.rival.price), t.rival.price < 0.97 ? 'bad' : ''),
-          kv('Effet promo', loss > 0.005 && t.rival.promo > 0 ? `−${Math.round(loss * 100)} % clients` : '—', loss > 0.005 && t.rival.promo > 0 ? 'bad' : ''))],
+        body: [el('div', { cls: 'ph-kvs' }, kv('Clients/j', `≈ ${num(t.rival.customers || rv.estimate(t.rival).customers)}`), kv('Prix', rivalPriceText(t.rival.price), t.rival.price < 0.97 ? 'bad' : ''),
+          kv('Vos clients', loss > 0.005 && t.rival.promo > 0 ? `−${Math.round(loss * 100)} %` : '—', loss > 0.005 && t.rival.promo > 0 ? 'bad' : ''))],
         actions: [this.onMap(q.doorX, q.doorZ, t.rival.name), button('Racheter…', () => { this.close(); this.ctx.panel.open(rivalBuyView(this.ctx, q.id)); }, 'small')],
       }));
     }
@@ -572,11 +573,11 @@ export class Phone {
         accent: co.color, title: co.name, sub: [...new Set(list.map((s) => SHOP_TYPE_BY_ID.get(s.type)!.nameFr.toLowerCase()))].join(', ') || 'aucun commerce',
         right: el('b', { text: `${list.length} commerce${list.length > 1 ? 's' : ''}` }),
         body: [
-          el('div', { cls: 'ph-kvs' }, kv('Trésorerie', `≈ ${chf(Math.round(co.cash / 1000) * 1000)}`, co.cash < 0 ? 'bad' : ''), kv('Réputation', pct(co.reputation)), kv('Clients / jour', `≈ ${num(cust)}`)),
+          el('div', { cls: 'ph-kvs' }, kv('Trésorerie', `${Math.round(co.cash / 1000)} k CHF`, co.cash < 0 ? 'bad' : ''), kv('Réputation', pct(co.reputation)), kv('Clients/j', `≈ ${num(cust)}`)),
           ...list.map((s) => {
             const q = rv.quote(s.premiseId), p = rv.avgProfit(s);
-            return el('div', { cls: 'ph-line riv-line' }, el('span', { text: `${s.name}${s.promo > 0 ? ' · promo' : ''}` }), el('b', { text: `${chf(rv.avgRevenue(s))} / j` }),
-              el('span', { cls: p < 0 ? 'trend up' : 'trend', text: `prix ${rivalPriceText(s.price)}` }),
+            return el('div', { cls: 'riv-row' },
+              el('div', {}, el('b', { text: s.name }), el('small', { text: `${chf(rv.avgRevenue(s))} / j · prix ${rivalPriceText(s.price)}${p < 0 ? ' · en perte' : ''}${s.promo > 0 ? ' · promo' : ''}` })),
               q ? button(chf(q.total), () => { this.close(); this.ctx.panel.open(rivalBuyView(this.ctx, s.premiseId)); }, 'small') : null);
           }),
         ],

@@ -97,7 +97,15 @@ export class Scene3D {
   constructor(readonly canvas: HTMLCanvasElement, district: District) {
     // Anticrénelage multi-échantillon seulement sur les écrans de densité normale : sur un écran haute densité
     // (pixel ratio ≥ 1,5) le crénelage se voit à peine et le MSAA coûte cher (≈ 25 % de l'image en rendu logiciel).
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: (window.devicePixelRatio || 1) < 1.5, powerPreference: 'high-performance' });
+    // Le MSAA est fixé à la création du contexte : si la qualité basse est la préférence enregistrée (« bc-qualite »,
+    // réglage de l'interface), il est omis dès le chargement et un FXAA léger le remplace (voir `fxaa`).
+    let low = false;
+    try { low = localStorage.getItem('bc-qualite') === 'basse'; } catch { /* stockage indisponible */ }
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !low && (window.devicePixelRatio || 1) < 1.5, powerPreference: 'high-performance' });
+    this.msaa = this.renderer.getContext().getContextAttributes()?.antialias === true;
+    this.fxaa = !this.msaa && (window.devicePixelRatio || 1) < 1.5;
+    // Compteurs remis à zéro à chaque image (voir frame) : scène et passe FXAA comptées ensemble.
+    this.renderer.info.autoReset = false;
     this.renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -167,11 +175,12 @@ export class Scene3D {
   }
   private readonly shadowCenter = new THREE.Vector3();
 
-  /** Niveau de qualité : 0 = basse (résolution 1, pas d'ombres), 1 = moyenne, 2 = haute. */
+  /** Niveau de qualité : 0 = basse (résolution 1, pas d'ombres, FXAA au lieu du MSAA), 1 = moyenne, 2 = haute. */
   quality = 2;
   setQuality(level: number): void {
     this.quality = Math.max(0, Math.min(2, level));
     const dpr = window.devicePixelRatio || 1;
+    this.fxaa = !this.msaa && (this.quality === 0 || dpr < 1.5);
     this.renderer.setPixelRatio([1, Math.min(1.25, dpr), Math.min(1.75, dpr)][this.quality]!);
     this.renderer.shadowMap.enabled = this.quality > 0;
     this.sun.castShadow = this.quality > 0;
@@ -220,12 +229,56 @@ export class Scene3D {
     return this.ray(sx, sy).ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), p) ? p : null;
   }
 
+  /** Contexte avec MSAA ? Sinon, FXAA actif quand les pixels sont gros (qualité basse, ou écran de densité normale). */
+  private readonly msaa: boolean;
+  private fxaa: boolean;
+  private fxaaPass: { scene: THREE.Scene; camera: THREE.Camera; mat: THREE.RawShaderMaterial; tex: THREE.FramebufferTexture | null } | null = null;
+  private readonly bufSize = new THREE.Vector2();
+
+  /**
+   * FXAA léger sur l'image finale (déjà tonemappée, dans l'espace de l'écran) : copie du tampon de dessin dans une
+   * texture, puis un triangle plein écran qui adoucit les bords contrastés (9 lectures au plus, rien sur les zones
+   * unies). Le rendu de la scène lui-même est inchangé.
+   */
+  private antialias(): void {
+    const r = this.renderer;
+    if (!this.fxaaPass) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+      const mat = new THREE.RawShaderMaterial({
+        uniforms: { tDiffuse: { value: null }, texel: { value: new THREE.Vector2() } },
+        vertexShader: FXAA_VERT, fragmentShader: FXAA_FRAG, depthTest: false, depthWrite: false,
+      });
+      const quad = new THREE.Mesh(geo, mat);
+      quad.frustumCulled = false;
+      const scene = new THREE.Scene();
+      scene.add(quad);
+      this.fxaaPass = { scene, camera: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), mat, tex: null };
+    }
+    const p = this.fxaaPass, size = r.getDrawingBufferSize(this.bufSize);
+    if (!p.tex || p.tex.image.width !== size.x || p.tex.image.height !== size.y) {
+      p.tex?.dispose();
+      p.tex = new THREE.FramebufferTexture(size.x, size.y);
+      p.tex.minFilter = p.tex.magFilter = THREE.LinearFilter;
+      p.mat.uniforms['tDiffuse']!.value = p.tex;
+      (p.mat.uniforms['texel']!.value as THREE.Vector2).set(1 / size.x, 1 / size.y);
+    }
+    r.copyFramebufferToTexture(p.tex);
+    const clear = r.autoClear;
+    r.autoClear = false;
+    r.render(p.scene, p.camera);
+    r.autoClear = clear;
+  }
+
   /** Une image : `focus` = point suivi (tête du personnage ou véhicule). */
   frame(dt: number, focus: THREE.Vector3, snap = false): void {
+    this.renderer.info.reset();
     if (this.interior) {
       this.cam.apply(this.camera, focus, dt, undefined, snap);
       this.interior.view.updateCutaway(this.camera, snap ? 1 : dt);
       this.renderer.render(this.interior.view.scene, this.camera);
+      if (this.fxaa) this.antialias();
       return;
     }
     this.cam.apply(this.camera, focus, dt, (a, b) => this.collider.clearFraction(a.x, a.y, a.z, b.x, b.y, b.z), snap);
@@ -264,5 +317,30 @@ export class Scene3D {
       a.needsUpdate = true;
     }
     this.renderer.render(this.street, this.camera);
+    if (this.fxaa) this.antialias();
   }
 }
+
+const FXAA_VERT = `precision highp float;
+attribute vec3 position; attribute vec2 uv; varying vec2 vUv;
+void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+/** FXAA « console » (Lottes) : direction du bord d'après 4 voisins diagonaux, puis 2 ou 4 lectures le long du bord. */
+const FXAA_FRAG = `precision highp float;
+uniform sampler2D tDiffuse; uniform vec2 texel; varying vec2 vUv;
+float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+void main() {
+  vec4 m = texture2D(tDiffuse, vUv);
+  float lNW = luma(texture2D(tDiffuse, vUv + vec2(-1.0, -1.0) * texel).rgb), lNE = luma(texture2D(tDiffuse, vUv + vec2(1.0, -1.0) * texel).rgb);
+  float lSW = luma(texture2D(tDiffuse, vUv + vec2(-1.0, 1.0) * texel).rgb), lSE = luma(texture2D(tDiffuse, vUv + vec2(1.0, 1.0) * texel).rgb);
+  float lM = luma(m.rgb);
+  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE))), lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+  if (lMax - lMin < max(0.0312, lMax * 0.125)) { gl_FragColor = m; return; }
+  vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
+  float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
+  dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * texel;
+  vec3 a = 0.5 * (texture2D(tDiffuse, vUv - dir / 6.0).rgb + texture2D(tDiffuse, vUv + dir / 6.0).rgb);
+  vec3 b = 0.5 * a + 0.25 * (texture2D(tDiffuse, vUv - dir * 0.5).rgb + texture2D(tDiffuse, vUv + dir * 0.5).rgb);
+  float lB = luma(b);
+  gl_FragColor = vec4(lB < lMin || lB > lMax ? a : b, m.a);
+}`;

@@ -353,9 +353,9 @@ export function runTours(g: Game, manual = false, only?: (w: Warehouse) => boole
       g.cash -= cost; g.today.purchases += cost;
       for (const [sid, q] of perShop) { const s = g.shop(sid)!; s.today.purchases += r2(cost * q / units); }
     }
-    const rep: TourReport = { day: g.day, warehouseId: w.id, units, stops, cost, capacity: cap, missing: [], manual };
-    out.push(rep);
-    if (units > 0) g.notify('ok', `Tournée ${manual ? 'immédiate' : only ? 'de mi-journée' : 'de nuit'} (${warehouseName(g, w.premiseId)}) : ${units} unités livrées dans ${stops} commerce(s), ${Math.round(cost)} CHF.${left <= 0 && needs(g).some((n) => (w.stock[n.productId] ?? 0) > 0) ? ` Véhicule plein (${cap} unités) : le reste partira à la prochaine tournée.` : ''}`);
+    if (units <= 0) continue;
+    out.push({ day: g.day, warehouseId: w.id, units, stops, cost, capacity: cap, missing: [], manual });
+    g.notify('ok', `Tournée ${manual ? 'immédiate' : only ? 'de mi-journée' : 'de nuit'} (${warehouseName(g, w.premiseId)}) : ${units} unités livrées dans ${stops} commerce(s), ${Math.round(cost)} CHF.${left <= 0 && needs(g).some((n) => (w.stock[n.productId] ?? 0) > 0) ? ` Véhicule plein (${cap} unités) : le reste partira à la prochaine tournée.` : ''}`);
   }
   // Produits encore sous le minimum alors qu'aucun entrepôt n'en a : alerte « entrepôt vide ».
   for (const nd of needs(g)) if (!g.logi.warehouses.some((w) => (w.stock[nd.productId] ?? 0) > 0)) missing.add(nd.productId);

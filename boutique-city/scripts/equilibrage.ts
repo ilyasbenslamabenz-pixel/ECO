@@ -157,11 +157,11 @@ function logi(depot: boolean): { profit: number; buy: number } {
     // Entrepôt : le grossiste assure les 3 premiers jours, le temps du premier arrivage et de la première tournée.
     if (depot && d === 3) for (const id of ids) for (const pr of productsOf('epicerie')) g.setAuto(id, pr.id, false);
     if (depot) {
-      // Commande à l'importateur : de quoi tenir environ 4 jours par produit (stock + arrivages).
+      // Commande à l'importateur : de quoi tenir 4 à 5 jours par produit (stock + arrivages).
       const w = L.warehouse(g, wid)!, lines: Record<string, number> = {};
       for (const pr of productsOf('epicerie')) {
         const have = (w.stock[pr.id] ?? 0) + g.logi.imports.reduce((a, o) => a + (o.lines[pr.id] ?? 0), 0);
-        const k = Math.floor((700 - have) / L.palletOf(pr));
+        const k = Math.floor((800 - have) / L.palletOf(pr));
         if (k > 0) lines[pr.id] = k;
       }
       L.placeImport(g, wid, lines);
@@ -170,7 +170,6 @@ function logi(depot: boolean): { profit: number; buy: number } {
     for (const id of ids) cleanUp(g, id);
     g.player.energy = 100; g.player.hunger = 100; g.advance(1440 - (g.total - 7 * 60) % 1440);
     if (d >= 7) { acc += dayProfit(g.ledger.at(-1)!); buy += g.ledger.at(-1)!.purchases; }
-    if (process.env["DBG"]) { const y = g.ledger.at(-1)!; console.error(depot, d, Math.round(y.revenue), y.lostStock, Math.round(y.purchases), Math.round(y.rent), Math.round(y.equipment), depot ? JSON.stringify(L.warehouse(g, wid)!.stock) : ""); }
   }
   return { profit: acc / 14, buy: buy / 14 };
 }

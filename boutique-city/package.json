@@ -10,7 +10,8 @@
     "dev": "node scripts/build.mjs --dev",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "tsx --test tests/*.test.ts",
-    "e2e": "node tests/e2e.mjs"
+    "e2e": "node tests/e2e.mjs",
+    "e2e:v7": "node tests/e2e-v7.mjs"
   },
   "dependencies": { "three": "0.187.0" },
   "devDependencies": {

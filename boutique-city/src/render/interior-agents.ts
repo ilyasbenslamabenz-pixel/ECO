@@ -23,12 +23,31 @@ type Step = { kind: 'browse'; cell: [number, number]; look: [number, number] } |
  */
 interface Register { uid: number; front: [number, number][]; back: [number, number][]; dir: [number, number]; queue: Customer[]; tended: boolean; center: [number, number]; line: [number, number][] | null }
 
+/**
+ * Étiquette flottante (bulle d'avis, humeur, montant d'une vente) : sprite dans le repère de la scène, replacé à
+ * chaque image par `layout` pour ne jamais en recouvrir une autre à l'écran.
+ */
+interface Label {
+  sp: THREE.Sprite;
+  /** Taille (m), priorité de placement (montants 3, plaintes 2, avis positifs 1, humeurs 0), date de création (s). */
+  w: number; h: number; prio: number; born: number;
+  /** Ancrage (bas de l'étiquette) et centre sans décalage ; montée propre (montants) et décalage de mise en page lissé, en m vers le haut de l'écran. */
+  at: THREE.Vector3; base: THREE.Vector3; rise: number; lift: number;
+  /** Déjà mise en page une fois (le premier placement se fait d'emblée, sans lissage). */
+  placed: boolean;
+}
+
 interface Mover { h: Person; x: number; z: number; heading: number; route: [number, number][]; speed: number; face: number | null }
-interface Customer extends Mover { amount?: number; bubble?: THREE.Sprite; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'done' | 'react' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
+interface Customer extends Mover { amount?: number; bubble?: Label; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'done' | 'react' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
 interface Staff extends Mover { id: number; idle: number }
 
 /** Longueur maximale d'une file d'attente dessinée (au-delà, les clients se rangent au plus près). */
 const MAX_LINE = 10;
+/** Au plus 3 bulles d'avis (voir `bubble` : la moins importante cède sa place) et 3 humeurs affichées à la fois. */
+const MAX_BUBBLES = 3, MAX_ICONS = 3;
+/** Écart (m) entre deux étiquettes voisines à l'écran. */
+const LABEL_GAP = 0.08;
+const UP = new THREE.Vector3(), V = new THREE.Vector3();
 
 const headingTo = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
 
@@ -145,53 +164,116 @@ export class InteriorAgents {
     this.next(c);
   }
 
-  /** Textes flottants (montants des ventes) : montent et s'effacent en 1,6 s. */
-  private floats: { sp: THREE.Sprite; t: number; x: number; z: number }[] = [];
+  /** Montants des ventes : montent vers le haut de l'écran et s'effacent en 1,6 s. */
+  private floats: { l: Label; t: number; x: number; z: number }[] = [];
   private floatText(text: string, x: number, z: number): void {
-    const sp = new THREE.Sprite(moneyMaterial(text));
-    sp.scale.set(1.25, 0.4, 1);
-    // Plusieurs ventes rapprochées à la même caisse : chaque montant part un cran plus haut (jamais superposés).
-    let y = 1.55;
-    for (const f of this.floats) if (f.t < 1.2 && Math.hypot(f.x - x, f.z - z) < 1.2) y = Math.max(y, f.sp.position.y + 0.5);
-    sp.position.set(x, y, z);
-    sp.renderOrder = 22;
-    this.group.add(sp);
-    this.floats.push({ sp, t: 0, x, z });
+    const l = this.label(moneyMaterial(text), 1.25, 0.4, 3, 22);
+    l.at.set(x, 1.55, z);
+    // Ventes rapprochées à la même caisse : le montant prend le plus bas créneau libre de la pile. Tous montent à la
+    // même vitesse : deux créneaux espacés d'une hauteur ne se recouvrent jamais, et la pile ne grimpe pas sans fin.
+    const step = l.h + LABEL_GAP;
+    const near = this.floats.filter((f) => Math.hypot(f.x - x, f.z - z) < 1.2).map((f) => f.l.rise);
+    l.rise = [0, ...near.map((r) => r + step)].sort((a, b) => a - b).find((r) => near.every((o) => Math.abs(o - r) >= step - 1e-6)) ?? 0;
+    this.floats.push({ l, t: 0, x, z });
   }
 
-  /**
-   * Hauteur (repère du personnage) d'une bulle de hauteur `h` : juste au-dessus de la tête, relevée d'un cran par
-   * bulle déjà affichée chez un voisin proche, pour que deux bulles ne se recouvrent jamais.
-   */
-  private bubbleY(c: Customer, h: number): number {
-    const used = new Set<number>();
-    for (const o of this.customers) if (o !== c && o.bubble && Math.hypot(o.x - c.x, o.z - c.z) < 2) used.add(o.bubble.userData['lvl'] as number);
-    let n = 0;
-    while (used.has(n)) n++;
-    c.bubble!.userData['lvl'] = n;
-    return c.h.top + 0.15 + h / 2 + n * (h + 0.1);
+  /** Horloge (s) des étiquettes, et caméra du dernier rendu, relevée par les étiquettes elles-mêmes (voir `label`). */
+  private clock = 0;
+  private cam: THREE.PerspectiveCamera | null = null;
+  private readonly peek = (_r: THREE.WebGLRenderer, _s: THREE.Scene, cam: THREE.Camera): void => {
+    if ((cam as THREE.PerspectiveCamera).isPerspectiveCamera) this.cam = cam as THREE.PerspectiveCamera;
+  };
+
+  private label(material: THREE.SpriteMaterial, w: number, h: number, prio: number, order: number): Label {
+    const sp = new THREE.Sprite(material);
+    sp.scale.set(w, h, 1);
+    sp.renderOrder = order;
+    sp.onBeforeRender = this.peek;
+    this.group.add(sp);
+    return { sp, w, h, prio, born: this.clock, at: new THREE.Vector3(), base: new THREE.Vector3(), rise: 0, lift: 0, placed: false };
+  }
+
+  /** Bulle (plainte : prio 2, avis positif : 1, humeur : 0) au-dessus d'un client, à la place de la précédente. */
+  private bubble(c: Customer, material: THREE.SpriteMaterial, w: number, prio: number, life: number): void {
+    this.unbubble(c);
+    // Au plus MAX_BUBBLES bulles d'avis : les plaintes passent avant les avis positifs, les récentes avant les
+    // anciennes (la plus faible s'efface ; une nouvelle bulle plus faible que toutes n'est pas montrée).
+    const shown = prio > 0 ? this.customers.filter((o) => o.bubble && o.bubble.prio > 0) : [];
+    if (shown.length >= MAX_BUBBLES) {
+      const weakest = shown.reduce((a, b) => (b.bubble!.prio < a.bubble!.prio || (b.bubble!.prio === a.bubble!.prio && b.bubble!.born < a.bubble!.born) ? b : a));
+      if (weakest.bubble!.prio > prio) return;
+      this.unbubble(weakest);
+    }
+    c.bubble = this.label(material, w, 0.6, prio, 20);
+    c.bubbleT = life;
+  }
+
+  private unbubble(c: Customer): void {
+    if (!c.bubble) return;
+    this.group.remove(c.bubble.sp);
+    c.bubble = undefined;
   }
 
   /** Humeur (visage dessiné, lisible sans police d'émojis) au-dessus d'un client. */
-  private sayIcon(c: Customer, mood: Mood): void {
-    if (c.bubble) c.h.group.remove(c.bubble);
-    const sp = new THREE.Sprite(iconMaterial(mood));
-    sp.scale.set(0.6, 0.6, 1);
-    sp.renderOrder = 20;
-    c.bubble = sp; c.bubbleT = 1.6;
-    sp.position.y = this.bubbleY(c, 0.6);
-    c.h.group.add(sp);
-  }
+  private sayIcon(c: Customer, mood: Mood): void { this.bubble(c, iconMaterial(mood), 0.6, 0, 1.6); }
 
-  private say(c: Customer, kind: FeedbackKind): void {
-    if (c.bubble) c.h.group.remove(c.bubble);
-    const sp = new THREE.Sprite(bubbleMaterial(kind));
-    sp.scale.set(1.8, 0.6, 1);
-    sp.renderOrder = 20;
-    c.bubble = sp;
-    c.bubbleT = 3.2;
-    sp.position.y = this.bubbleY(c, 0.6);
-    c.h.group.add(sp);
+  private say(c: Customer, kind: FeedbackKind): void { this.bubble(c, bubbleMaterial(kind), 1.8, kind === 'content' ? 1 : 2, 3.2); }
+
+  /**
+   * Mise en page des étiquettes à l'écran : chacune part de son ancrage (au-dessus de la tête du client, ou de la
+   * caisse) et s'élève selon l'axe « haut » de la caméra, donc vers le haut de l'écran quel que soit l'angle de vue,
+   * jusqu'à ne plus recouvrir aucune étiquette déjà placée. Montants et bulles d'avis sont placés de bas en haut de
+   * l'écran (chaque bulle reste près de son client ; une bulle déjà relevée reste au-dessus de sa voisine, sans
+   * permutation au moindre pas), les humeurs ensuite, là où il reste de la place. Une humeur sans place proche (ou
+   * au-delà de MAX_ICONS) est masquée, de même qu'une bulle d'avis repoussée trop loin. Décalages lissés.
+   */
+  private layout(dt: number): void {
+    for (const c of this.customers) if (c.bubble) c.bubble.at.set(c.x, c.h.top * c.h.group.scale.y + 0.12, c.z);
+    const labels = [...this.customers.flatMap((c) => (c.bubble ? [c.bubble] : [])), ...this.floats.map((f) => f.l)];
+    if (!labels.length) return;
+    const cam = this.cam;
+    const up = cam ? UP.setFromMatrixColumn(cam.matrixWorld, 1).normalize() : UP.set(0, 1, 0);
+    const tanHalf = cam ? Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) / cam.zoom : 1;
+    // Rectangle de chaque étiquette à l'écran (coordonnées normalisées), sans décalage ; `unit` : mètres par unité
+    // d'écran à sa profondeur (0 : hors champ ou caméra inconnue, pas de mise en page).
+    const recs = labels.map((l) => {
+      l.base.copy(l.at).addScaledVector(up, l.h / 2 + l.rise);
+      if (cam) V.copy(l.base).applyMatrix4(cam.matrixWorldInverse);
+      if (!cam || -V.z <= cam.near) return { l, unit: 0, x: 0, y: 0, hw: 0, hh: 0 };
+      const unit = -V.z * tanHalf;
+      V.applyMatrix4(cam.projectionMatrix);
+      return { l, unit, x: V.x, y: V.y, hw: l.w / (unit * cam.aspect) / 2, hh: l.h / unit / 2 };
+    });
+    const key = (r: (typeof recs)[number]): number => r.y - r.hh + (r.l.lift > 1e-3 ? r.hh : 0);
+    recs.sort((a, b) => Number(a.l.prio === 0) - Number(b.l.prio === 0) || key(a) - key(b));
+    const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
+    const k = 1 - Math.exp(-dt * 12);
+    let icons = 0;
+    for (const { l, unit, x, y, hw, hh } of recs) {
+      let lift = 0, show = true;
+      if (unit > 0) {
+        const gap = LABEL_GAP / unit;
+        let s = 0;
+        for (let moved = true, n = 0; moved && n <= placed.length; n++) {
+          moved = false;
+          for (const q of placed) {
+            if (x - hw < q.x1 && x + hw > q.x0 && y - hh + s < q.y1 + gap && y + hh + s > q.y0 - gap) { s = q.y1 + gap - (y - hh); moved = true; }
+          }
+        }
+        // Montants toujours affichés ; bulle d'avis relevée de plus de trois hauteurs, humeur de plus d'une : masquée.
+        show = l.prio >= 3 || (l.prio > 0 ? s <= 6 * hh : icons < MAX_ICONS && s <= 2 * hh);
+        if (show) placed.push({ x0: x - hw, x1: x + hw, y0: y - hh + s, y1: y + hh + s });
+        // Montant : décalage seulement croissant (il continue de monter, sans redescendre quand un voisin s'efface).
+        lift = l.prio >= 3 && l.placed ? Math.max(l.lift, s * unit) : s * unit;
+      }
+      if (show && l.prio === 0) icons++;
+      l.lift = l.placed ? l.lift + (lift - l.lift) * k : lift;
+      l.placed = true;
+      l.sp.visible = show;
+      l.sp.position.copy(l.base).addScaledVector(up, l.lift);
+      // Apparition des bulles : léger rebond d'échelle.
+      if (l.prio < 3) { const a = Math.min(1, (this.clock - l.born) / 0.22), e = a - 1, pop = 0.55 + 0.45 * (1 + 2.70158 * e * e * e + 1.70158 * e * e); l.sp.scale.set(l.w * pop, l.h * pop, 1); }
+    }
   }
 
   private rand(): number { this.seed = (this.seed * 16807) % 2147483647; return this.seed / 2147483647; }
@@ -305,6 +387,7 @@ export class InteriorAgents {
 
   update(dt: number, timeScale: number, open: boolean): void {
     const ts = Math.max(0.5, Math.min(4, timeScale));
+    this.clock += dt;
     // Employés : un par caisse, derrière la caisse enregistreuse, face aux clients ; geste d'encaissement pendant un
     // paiement. Les autres passent entre les rayons.
     this.registers.forEach((r) => { r.tended = false; });
@@ -338,7 +421,7 @@ export class InteriorAgents {
     const keep: Customer[] = [];
     for (const c of this.customers) {
       const arrived = this.step(c, dt, ts);
-      if (c.bubble && (c.bubbleT! -= dt) <= 0) { c.h.group.remove(c.bubble); c.bubble = undefined; }
+      if (c.bubble && (c.bubbleT! -= dt) <= 0) this.unbubble(c);
       const arrive = c.arrive;
       if (c.state === 'walk' && arrived) {
         if (arrive?.kind === 'browse') {
@@ -375,6 +458,7 @@ export class InteriorAgents {
         c.timer -= dt * ts;
         if (c.timer <= 0) { c.h.gesture(null); c.face = null; this.next(c); }
       } else if (c.state === 'leave' && arrived) {
+        this.unbubble(c);
         this.group.remove(c.h.group);
         disposeOwn(c.h.group);
         continue;
@@ -382,12 +466,13 @@ export class InteriorAgents {
       keep.push(c);
     }
     this.customers = keep;
-    for (const f of this.floats) { f.t += dt; f.sp.position.y += dt * 0.55; (f.sp.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, (1.6 - f.t) / 0.5)); }
-    for (const f of this.floats.filter((x) => x.t >= 1.6)) { this.group.remove(f.sp); (f.sp.material as THREE.SpriteMaterial).map?.dispose(); (f.sp.material as THREE.SpriteMaterial).dispose(); }
+    for (const f of this.floats) { f.t += dt; f.l.rise += dt * 0.55; (f.l.sp.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, (1.6 - f.t) / 0.5)); }
+    for (const f of this.floats.filter((x) => x.t >= 1.6)) this.dropFloat(f.l);
     this.floats = this.floats.filter((x) => x.t < 1.6);
     this.separate();
     this.separate();
     for (const c of this.customers) { c.h.group.position.set(c.x, 0, c.z); c.h.group.rotation.y = c.heading; }
+    this.layout(dt);
   }
 
   /**
@@ -429,9 +514,18 @@ export class InteriorAgents {
   playerPos: [number, number] | null = null;
 
   clear(): void {
-    for (const c of this.customers) this.group.remove(c.h.group);
+    for (const c of this.customers) { this.unbubble(c); this.group.remove(c.h.group); }
     this.customers = [];
     for (const r of this.registers) r.queue = [];
+    for (const f of this.floats) this.dropFloat(f.l);
+    this.floats = [];
+  }
+
+  /** Retire un montant et libère son matériau (propre à chaque montant). */
+  private dropFloat(l: Label): void {
+    this.group.remove(l.sp);
+    const m = l.sp.material as THREE.SpriteMaterial;
+    m.map?.dispose(); m.dispose();
   }
 }
 

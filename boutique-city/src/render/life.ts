@@ -2,9 +2,11 @@
  * Vie du quartier (modèles Kenney animés) : animaux de compagnie qui se promènent sur les trottoirs (Cube Pets),
  * mini-zoo clôturé dans le parc avec un bassin, skate-park (Mini Skate) avec deux skateurs, promeneurs du parc
  * (Blocky Characters), une personne en fauteuil roulant. Animations mises à jour seulement près de la caméra.
+ * Décor fixe (clôture, bassin, modules du skate-park…) fusionné en un maillage par matériau, matrices figées.
  * Rien n'est créé si les modèles manquent. Dépend de three.
  */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { PITCH, STREET_W, blockCenter, type District } from '../sim/district';
 import { assets, fitInto } from '../assets';
 import { mat } from './kit';
@@ -42,6 +44,8 @@ const ANIMAL_SIZE: Record<string, number> = {
 export class StreetLife {
   readonly group = new THREE.Group();
   private readonly movers: Mover[] = [];
+  /** Décor fixe en attente de fusion (voir `still`) : géométries par matériau équivalent et réglage d'ombre. */
+  private readonly statics = new Map<string, { mat: THREE.Material; cast: boolean; receive: boolean; geos: THREE.BufferGeometry[] }>();
 
   constructor(private readonly d: District) {
     this.group.name = 'vie-du-quartier';
@@ -70,7 +74,7 @@ export class StreetLife {
       for (let zz = zoo.z0; zz < zoo.z1; zz += 2) { this.prop(fence, 2, 1, 0.3, zoo.x0, zz + 1, Math.PI / 2); this.prop(fence, 2, 1, 0.3, zoo.x1, zz + 1, Math.PI / 2); }
     }
     const pond = new THREE.Mesh(new THREE.CircleGeometry(2.6, 28).rotateX(-Math.PI / 2), mat('#3f8fbf', { rough: 0.15, metal: 0.1 }));
-    pond.position.set(zoo.x1 - 4, 0.2, zoo.z0 + 4); this.group.add(pond);
+    pond.position.set(zoo.x1 - 4, 0.2, zoo.z0 + 4); this.still(pond);
     for (const [dx, dz, k] of [[-1, 0.6, 'f:nat-lily_large'], [1.1, -0.8, 'f:nat-lily_small'], [0.2, 1.4, 'f:nat-lily_small']] as const) this.prop(k, 0.9, 0.2, 0.9, zoo.x1 - 4 + dx, zoo.z0 + 4 + dz, rnd() * 6, 0.21);
     this.add('f:pet-animal-fish', ANIMAL_SIZE['fish']!, { zone: { x0: zoo.x1 - 5.5, z0: zoo.z0 + 2.5, x1: zoo.x1 - 2.5, z1: zoo.z0 + 5.5 }, speed: 0.5, y: 0.05 });
     this.prop('f:nat-tree_oak', 2.4, 3.6, 2.4, zoo.x0 + 2.5, zoo.z1 - 2.5, rnd() * 6);
@@ -88,12 +92,12 @@ export class StreetLife {
     const sk = z.skate;
     const sx = (sk.x0 + sk.x1) / 2, sz = (sk.z0 + sk.z1) / 2;
     const border = new THREE.Mesh(new THREE.PlaneGeometry(sk.x1 - sk.x0 + 1.2, sk.z1 - sk.z0 + 1.2).rotateX(-Math.PI / 2), mat('#6f7378', { rough: 0.95 }));
-    border.position.set(sx, 0.185, sz); border.receiveShadow = true; this.group.add(border);
+    border.position.set(sx, 0.185, sz); border.receiveShadow = true; this.still(border);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(sk.x1 - sk.x0, sk.z1 - sk.z0).rotateX(-Math.PI / 2), mat('#c9cbcd', { rough: 0.9 }));
-    ground.position.set(sx, 0.19, sz); ground.receiveShadow = true; this.group.add(ground);
+    ground.position.set(sx, 0.19, sz); ground.receiveShadow = true; this.still(ground);
     // Piste centrale marquée (bande légèrement plus foncée) : là où roulent les skateurs.
     const lane = new THREE.Mesh(new THREE.PlaneGeometry(sk.x1 - sk.x0 - 7, 4.2).rotateX(-Math.PI / 2), mat('#b3b6b9', { rough: 0.9 }));
-    lane.position.set(sx, 0.195, sz); this.group.add(lane);
+    lane.position.set(sx, 0.195, sz); this.still(lane);
     const sp: [string, number, number, number, number, number, number][] = [
       ['f:skt-half-pipe', 4, 2.2, 3, sk.x0 + 2, sz, Math.PI / 2], ['f:skt-half-pipe', 4, 2.2, 3, sk.x1 - 2, sz, -Math.PI / 2],
       // Rails : modèles longs selon z (boîte allongée en profondeur), tournés parallèlement à la piste.
@@ -116,7 +120,7 @@ export class StreetLife {
     ];
     for (const [k, o] of riders) {
       const m = this.add(k, 1.3, o);
-      if (m) { const board = assets.fitted('f:skt-skateboard', 0.85, 0.13, 0.3); if (board) { board.rotation.y = Math.PI / 2; board.position.y = -0.13; m.obj.add(board); } }
+      if (m) { const board = assets.fitted('f:skt-skateboard', 0.85, 0.13, 0.3); if (board) { board.rotation.y = Math.PI / 2; board.position.y = -0.13; m.obj.add(fix(board)); } }
     }
 
     // Promeneurs du parc (Blocky Characters) et une personne en fauteuil roulant ; joueur d'arcade près des parasols.
@@ -127,17 +131,58 @@ export class StreetLife {
       this.add(`f:blk-character-${'abcdefghijklmnopqr'[Math.floor(rnd() * 18)]}`, 1.15, { a, b, speed: 0.9 + rnd() * 0.4, t: rnd(), person: true });
     }
     const wc = this.add('f:character-female-b', 1.0, { a: new THREE.Vector2(pc.x - 14, pc.z - 2), b: new THREE.Vector2(pc.x + 4, pc.z - 2), speed: 0.8, walk: 'wheelchair-move-forward', idle: 'wheelchair-sit', person: true });
-    if (wc) { const ch = assets.fitted('f:wheelchair', 0.62, 0.72, 0.75); if (ch) { ch.rotation.y = Math.PI; wc.obj.add(ch); } }
+    if (wc) { const ch = assets.fitted('f:wheelchair', 0.62, 0.72, 0.75); if (ch) { ch.rotation.y = Math.PI; wc.obj.add(fix(ch)); } }
     this.add('f:arc-character-gamer', 1.0, { a: new THREE.Vector2(pc.x - 7, pc.z + 2.5), b: new THREE.Vector2(pc.x - 7, pc.z + 2.5), speed: 0, idle: 'emote-yes', person: true });
+    this.mergeStill();
   }
 
-  /** Objet fixe ajusté dans une boîte, posé au sol du trottoir / parc. */
+  /** Objet fixe ajusté dans une boîte, posé au sol du trottoir / parc (fusionné au décor fixe). */
   private prop(key: string, w: number, h: number, d: number, x: number, z: number, ry: number, y = 0.17): void {
     const o = assets.fitted(key, w, h, d);
     if (!o) return;
     o.position.set(x, y, z); o.rotation.y = ry;
-    o.traverse((c) => { if ((c as THREE.Mesh).isMesh) c.castShadow = h > 1.2; });
-    this.group.add(o);
+    this.still(o, h > 1.2);
+  }
+
+  /**
+   * Décor fixe : les maillages de `o` (déjà placé, sans parent) attendent la fusion, géométrie ramenée dans le repère
+   * du groupe, rangés par matériau équivalent et par réglage d'ombre (`cast` : ombre portée imposée).
+   */
+  private still(o: THREE.Object3D, cast?: boolean): void {
+    o.updateMatrixWorld(true);
+    o.traverse((c) => {
+      const m = c as THREE.Mesh;
+      if (!m.isMesh) return;
+      const castShadow = cast ?? m.castShadow;
+      // Cas rares (plusieurs matériaux, repère miroir) : maillage gardé tel quel, matrice figée.
+      if (Array.isArray(m.material) || m.matrixWorld.determinant() <= 0) {
+        const k = new THREE.Mesh(m.geometry, m.material);
+        k.matrix.copy(m.matrixWorld); k.matrixAutoUpdate = false; k.matrixWorldNeedsUpdate = true;
+        k.castShadow = castShadow; k.receiveShadow = m.receiveShadow;
+        this.group.add(k);
+        return;
+      }
+      const key = `${materialKey(m.material)}|${castShadow}|${m.receiveShadow}`;
+      let e = this.statics.get(key);
+      if (!e) this.statics.set(key, (e = { mat: m.material, cast: castShadow, receive: m.receiveShadow, geos: [] }));
+      e.geos.push(m.geometry.clone().applyMatrix4(m.matrixWorld));
+    });
+  }
+
+  /** Fusion du décor fixe : un maillage par matériau équivalent et réglage d'ombre, matrice figée. */
+  private mergeStill(): void {
+    for (const e of this.statics.values()) {
+      const merged = mergeAll(e.geos);
+      // Attributs incompatibles (cas improbable) : géométries gardées séparées, matrices figées quand même.
+      for (const g of merged ? [merged] : e.geos) {
+        const m = new THREE.Mesh(g, e.mat);
+        m.name = 'décor fixe';
+        m.castShadow = e.cast; m.receiveShadow = e.receive;
+        m.matrixAutoUpdate = false; m.updateMatrix();
+        this.group.add(m);
+      }
+    }
+    this.statics.clear();
   }
 
   /** Personnage ou animal animé. */
@@ -145,10 +190,16 @@ export class StreetLife {
     const c = assets.clone(key);
     if (!c) return null;
     const fitted = fitInto(c.obj, o.person ? 3 : size, o.person ? size : size, o.person ? 3 : size, false);
+    // Animaux et promeneurs « Blocky » (pièces rigides animées) : un seul maillage à squelette (voir rigidSkin).
+    const rigid = c.animations.length ? rigidSkin(c.obj) : [];
+    // Enveloppes d'ajustement et nœuds que l'animation ne touche pas : matrices figées (seul `holder` se déplace).
+    const animated = animatedNodes(c.animations);
+    fitted.traverse((n) => { if (!animated.has(n.name)) { n.updateMatrix(); n.matrixAutoUpdate = false; } });
     const holder = new THREE.Group();
     holder.add(fitted);
-    // Animaux (animation par nœuds) : découpés hors champ ; personnages à squelette : jamais (boîte non mise à jour).
-    holder.traverse((m) => { if ((m as THREE.Mesh).isMesh) { m.castShadow = o.person !== true; m.frustumCulled = !(m as THREE.SkinnedMesh).isSkinnedMesh; } });
+    // Découpés hors champ : pièces rigides (boule englobante élargie), pas les personnages à squelette du modèle
+    // (boîte non mise à jour par l'animation).
+    holder.traverse((m) => { if ((m as THREE.Mesh).isMesh) { m.castShadow = o.person !== true; m.frustumCulled = rigid.includes(m as THREE.SkinnedMesh) || !(m as THREE.SkinnedMesh).isSkinnedMesh; } });
     const mixer = c.animations.length ? new THREE.AnimationMixer(c.obj) : null;
     const actions = new Map<string, THREE.AnimationAction>();
     if (mixer) for (const clip of c.animations) actions.set(clip.name, mixer.clipAction(clip));
@@ -227,4 +278,122 @@ export class StreetLife {
       }
     }
   }
+}
+
+/** Objet fixe (sous-arbre entier) : matrices calculées une fois. */
+function fix<T extends THREE.Object3D>(o: T): T {
+  o.traverse((n) => { n.updateMatrix(); n.matrixAutoUpdate = false; });
+  return o;
+}
+
+/**
+ * Modèle animé par pièces rigides (Cube Pets, Blocky Characters : chaque pièce est un nœud animé) : les pièces sont
+ * regroupées en un maillage à squelette par matériau, chaque pièce liée à son propre nœud comme à un os (poids 1).
+ * Les nœuds d'origine restent animés et servent d'os (leurs maillages sont masqués) : mouvement identique, mais un
+ * appel de dessin par modèle au lieu d'un par pièce (de même pour l'ombre). Boule englobante de la pose de repos,
+ * élargie de moitié pour les gestes, pour le découpage hors champ. Renvoie les maillages créés (aucun si le modèle
+ * ne s'y prête pas : déjà à squelette, une seule pièce, plusieurs matériaux par pièce, attributs incompatibles).
+ */
+function rigidSkin(model: THREE.Object3D): THREE.SkinnedMesh[] {
+  const parts: THREE.Mesh[] = [];
+  let skinned = false;
+  model.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned = true; else if ((o as THREE.Mesh).isMesh) parts.push(o as THREE.Mesh); });
+  if (skinned || parts.length < 2 || parts.some((m) => Array.isArray(m.material))) return [];
+  model.updateMatrixWorld(true);
+  const toModel = model.matrixWorld.clone().invert(), mtx = new THREE.Matrix4();
+  const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  parts.forEach((m, i) => {
+    const g = m.geometry.clone().applyMatrix4(mtx.multiplyMatrices(toModel, m.matrixWorld));
+    const n = g.getAttribute('position').count, idx = new Uint16Array(n * 4), w = new Float32Array(n * 4);
+    for (let v = 0; v < n; v++) { idx[v * 4] = i; w[v * 4] = 1; }
+    g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
+    const mt = m.material as THREE.Material;
+    const list = byMat.get(mt);
+    if (list) list.push(g); else byMat.set(mt, [g]);
+  });
+  const merged = [...byMat].map(([mt, gs]) => ({ mt, geo: mergeAll(gs) }));
+  if (merged.some((x) => !x.geo)) return [];
+  // Des nœuds quelconques servent d'os : Skeleton ne lit que leur matrixWorld (inverses prises dans la pose actuelle).
+  const skeleton = new THREE.Skeleton(parts as unknown as THREE.Bone[]);
+  const out = merged.map(({ mt, geo }) => {
+    const s = new THREE.SkinnedMesh(geo!, mt);
+    model.add(s);
+    s.updateMatrixWorld(true);
+    s.bind(skeleton, s.matrixWorld);
+    geo!.computeBoundingSphere();
+    s.boundingSphere = geo!.boundingSphere!.clone();
+    s.boundingSphere.radius *= 1.5;
+    s.receiveShadow = parts[0]!.receiveShadow;
+    return s;
+  });
+  for (const m of parts) m.visible = false;
+  return out;
+}
+
+/** Noms des nœuds animés par une liste de clips (calculé une fois par modèle : les clips sont partagés). */
+const animatedCache = new WeakMap<THREE.AnimationClip[], Set<string>>();
+function animatedNodes(clips: THREE.AnimationClip[]): Set<string> {
+  let s = animatedCache.get(clips);
+  if (!s) {
+    s = new Set(clips.flatMap((c) => c.tracks.map((t) => THREE.PropertyBinding.parseTrackName(t.name).nodeName)));
+    animatedCache.set(clips, s);
+  }
+  return s;
+}
+
+/**
+ * Signature d'un matériau : deux matériaux de même signature rendent à l'identique (type, couleurs, rugosité,
+ * cartes…), même s'ils viennent de fichiers différents (chaque modèle Kenney embarque sa copie de matériaux et de
+ * palette). Matériau d'un autre type : propre à lui-même (jamais regroupé).
+ */
+function materialKey(m: THREE.Material): string {
+  const s = m as THREE.MeshStandardMaterial;
+  if (!s.isMeshStandardMaterial || s.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) return m.uuid;
+  const tex = (t: THREE.Texture | null): string => (t ? textureKey(t) : '-');
+  return [m.type, s.color.getHexString(), s.emissive.getHexString(), s.emissiveIntensity, s.roughness, s.metalness, s.envMapIntensity,
+    tex(s.map), tex(s.normalMap), s.normalScale.x, s.normalScale.y, tex(s.roughnessMap), tex(s.metalnessMap), tex(s.emissiveMap), tex(s.aoMap), tex(s.alphaMap), tex(s.lightMap), tex(s.bumpMap),
+    m.side, m.transparent, m.opacity, m.alphaTest, m.vertexColors, s.flatShading, s.wireframe, s.fog, m.toneMapped, m.depthWrite, m.depthTest, m.blending, m.polygonOffset].join('|');
+}
+
+/**
+ * Signature d'une texture : contenu de l'image (empreinte des pixels) et réglages d'échantillonnage. Repli sur
+ * l'identifiant de la texture si l'image est illisible.
+ */
+const textureKeys = new WeakMap<THREE.Texture, string>();
+function textureKey(t: THREE.Texture): string {
+  let k = textureKeys.get(t);
+  if (k) return k;
+  k = t.uuid;
+  const img = t.image as (CanvasImageSource & { width?: number; height?: number }) | null;
+  try {
+    if (img && img.width && img.height && typeof document !== 'undefined') {
+      const cv = document.createElement('canvas');
+      cv.width = img.width; cv.height = img.height;
+      const g = cv.getContext('2d', { willReadFrequently: true })!;
+      g.drawImage(img, 0, 0);
+      const px = g.getImageData(0, 0, cv.width, cv.height).data;
+      let h = 2166136261;
+      for (let i = 0; i < px.length; i++) h = Math.imul(h ^ px[i]!, 16777619);
+      k = `${cv.width}x${cv.height}:${(h >>> 0).toString(36)}`;
+    }
+  } catch { /* image illisible : texture propre à elle-même */ }
+  k += `|${t.wrapS},${t.wrapT},${t.magFilter},${t.minFilter},${t.anisotropy},${t.flipY},${t.colorSpace},${t.channel},${t.offset.x},${t.offset.y},${t.repeat.x},${t.repeat.y},${t.rotation}`;
+  textureKeys.set(t, k);
+  return k;
+}
+
+/**
+ * Géométries fusionnées en une seule, ou null si elles ne sont pas compatibles (mêmes attributs, de même format,
+ * toutes indexées ou aucune) : vérifié avant `mergeGeometries`, qui sinon se plaint dans la console.
+ */
+function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
+  if (geos.length === 1) return geos[0]!;
+  const sig = (g: THREE.BufferGeometry): string => `${g.index ? 'i' : '-'}|${Object.keys(g.morphAttributes).length}|` + Object.entries(g.attributes)
+    .map(([n, a]) => `${n}:${a.itemSize}:${a.normalized}:${a.array.constructor.name}:${(a as THREE.BufferAttribute).gpuType ?? ''}`).sort().join(',');
+  const first = sig(geos[0]!);
+  if (geos.some((g) => sig(g) !== first)) return null;
+  const out = mergeGeometries(geos, false);
+  out?.computeBoundingSphere();
+  return out;
 }
