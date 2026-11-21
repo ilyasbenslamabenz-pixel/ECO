@@ -151,7 +151,7 @@ export class InteriorAgents {
     sp.scale.set(1.25, 0.4, 1);
     // Plusieurs ventes rapprochées à la même caisse : chaque montant part un cran plus haut (jamais superposés).
     const near = this.floats.filter((f) => f.t < 0.9 && Math.hypot(f.x - x, f.z - z) < 1.2).length;
-    sp.position.set(x, 1.55 + near * 0.46, z);
+    sp.position.set(x, 1.55 + near * 0.5, z);
     sp.renderOrder = 22;
     this.group.add(sp);
     this.floats.push({ sp, t: 0, x, z });
@@ -163,7 +163,7 @@ export class InteriorAgents {
    */
   private bubbleY(c: Customer, h: number): number {
     const used = new Set<number>();
-    for (const o of this.customers) if (o !== c && o.bubble && Math.hypot(o.x - c.x, o.z - c.z) < 1.4) used.add(o.bubble.userData['lvl'] as number);
+    for (const o of this.customers) if (o !== c && o.bubble && Math.hypot(o.x - c.x, o.z - c.z) < 2) used.add(o.bubble.userData['lvl'] as number);
     let n = 0;
     while (used.has(n)) n++;
     c.bubble!.userData['lvl'] = n;

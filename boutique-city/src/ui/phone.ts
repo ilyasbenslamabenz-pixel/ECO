@@ -45,7 +45,9 @@ export interface PhoneHooks {
   showOnMap: (x: number, z: number, label: string) => void;
 }
 
-type Tone = 'ok' | 'bad' | 'warn' | '';
+type Tone = 'ok' | 'bad' | 'warn' | 'wrap' | '';
+/** Première lettre en capitale (« lundi » → « Lundi »). */
+const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 const hhmm = (h: number, m: number): string => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 const WEATHER: Record<string, [IconName, string]> = { soleil: ['sun', 'Ensoleillé'], nuages: ['cloud', 'Nuageux'], pluie: ['rain', 'Pluie'] };
 
@@ -177,7 +179,7 @@ export class Phone {
     return el('div', { cls: 'ph-homescreen' },
       el('div', { cls: 'ph-clock' },
         el('b', { text: hhmm(c.hour, c.minute) }),
-        el('span', { cls: 'ph-date' }, el('span', { text: `${WEEKDAYS_FR[c.weekday]} · jour ${c.day + 1}` }), el('span', { cls: 'ph-weather' }, icon(wi), wl))),
+        el('span', { cls: 'ph-date' }, el('span', { text: `${cap(WEEKDAYS_FR[c.weekday]!)} · jour ${c.day + 1}` }), el('span', { cls: 'ph-weather' }, icon(wi), wl))),
       el('div', { cls: 'ph-widgets' },
         el('button', { cls: 'ph-widget', attrs: { type: 'button' }, on: { click: () => this.go('banque') } },
           el('span', { text: 'Compte' }), el('b', { cls: g.cash < 0 ? 'bad' : '', text: chf(g.cash) }),
@@ -214,7 +216,7 @@ export class Phone {
   }
   private serviceGps(service: string, label: string): HTMLButtonElement | null {
     const b = this.ctx.game.district.buildings.find((x) => x.service === service);
-    return b ? this.gps(b.doorX, b.doorZ, label, 'primary') : null;
+    return b ? iconButton('route', `Itinéraire : ${label}`, () => { this.ctx.waypoint(b.doorX, b.doorZ, label); this.close(); }, 'small primary') : null;
   }
 
   /* ------------------------------ Commerces ------------------------------ */
@@ -396,7 +398,7 @@ export class Phone {
       const rv = g.rivals[t.id] ?? 1;
       out.push(el('div', { cls: 'ph-sec', attrs: { style: `--app:${t.color}` } },
         el('span', { cls: 'ph-sec-dot' }), el('span', { text: t.nameFr }), mine.has(t.id) ? pill('à moi', 'ok') : null,
-        el('em', { cls: rv < 0.995 ? 'bad' : '', text: rv < 0.995 ? `concurrents −${Math.round((1 - rv) * 100)} %` : 'concurrents : prix habituels' })));
+        el('em', { cls: rv < 0.995 ? 'bad' : '', text: rv < 0.995 ? `concurrence −${Math.round((1 - rv) * 100)} %` : 'prix habituels' })));
       for (const p of PRODUCTS.filter((x) => x.shop === t.id)) {
         const m = g.marketIndex(p.id);
         out.push(el('div', { cls: 'ph-line' }, el('span', { text: p.nameFr }), el('b', { text: chf2(p.cost * m) }),
@@ -423,7 +425,7 @@ export class Phone {
     let lastDay = -1;
     list.forEach((n) => {
       const d = Math.floor(n.at / 1440);
-      if (d !== lastDay) { lastDay = d; out.push(sec(d === today ? 'Aujourd’hui' : d === today - 1 ? 'Hier' : `${WEEKDAYS_FR[d % 7]} · jour ${d + 1}`)); }
+      if (d !== lastDay) { lastDay = d; out.push(sec(d === today ? 'Aujourd’hui' : d === today - 1 ? 'Hier' : `${cap(WEEKDAYS_FR[d % 7]!)} · jour ${d + 1}`)); }
       const isNew = all.indexOf(n) < this.fresh;
       const c = clockView(n.at);
       out.push(el('div', { cls: `ph-msg ${n.level}${isNew ? ' new' : ''}` },
@@ -442,7 +444,7 @@ export class Phone {
     const done = OBJECTIVES.filter((o) => g.achieved.includes(o.id));
     const cur = todo[0];
     const out: (Node | null)[] = [
-      tiles(tile('Rang', rankOf(g.achieved.length)), tile('Atteints', `${done.length} / ${OBJECTIVES.length}`)),
+      tiles(tile('Rang', rankOf(g.achieved.length), 'wrap'), tile('Atteints', `${done.length} / ${OBJECTIVES.length}`)),
       meter(done.length / OBJECTIVES.length, 'ok'),
     ];
     if (cur) {

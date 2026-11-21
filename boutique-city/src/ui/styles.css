@@ -428,15 +428,6 @@ input, select { border: 2px solid #2a3647; background: #0f151e; border-radius: 1
 .load-tip { margin: 14px 0 0; padding-top: 12px; border-top: 2px solid #232e3e; width: 100%; font-size: 12.5px; color: #c9d4e0; }
 .load-tip b { display: block; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #ffcc4d; margin-bottom: 2px; }
 
-/* Écrans étroits */
-@media (max-width: 640px) {
-  .sp-stats, .kpis.rc-kpis { grid-template-columns: repeat(2, 1fr); }
-  .sp-stats .sp-stat:nth-child(3) { border-left: 0; }
-  .sp-stats .sp-stat:nth-child(n+3) { border-top: 2px solid #232e3e; }
-  .sp-checks, .sp-losses { grid-template-columns: 1fr 1fr; }
-  .rc-cols { grid-template-columns: 1fr; }
-  .rc-head { flex-wrap: wrap; }
-  .menu-steps { grid-template-columns: repeat(2, 1fr); }
 }
 .sp-checks.objlist li.todo { background: #18212e; color: var(--ink); }
 .sp-checks.objlist li.todo i { border-color: #3a4a60; }
@@ -692,7 +683,6 @@ kbd { font-family: var(--font); }
 .ph-barcol i { width: 100%; border-radius: 4px 4px 0 0; min-height: 2px; }
 .ph-barcol i.pos { background: #5cc77a; } .ph-barcol i.neg { background: #ef6b6b; }
 .ph-barcol.cur span { color: #ffcc4d; font-weight: 800; }
-.ph-barcol.cur i { box-shadow: 0 0 0 2px #ffcc4d; }
 .ph-ledger { display: grid; border-radius: 12px; background: #141b26; border: 2px solid #2a3647; overflow: hidden; }
 .ph-ledger > div { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; font-size: 12.5px; }
 .ph-ledger > div + div { border-top: 1px solid #1e2836; }
@@ -722,3 +712,12 @@ kbd { font-family: var(--font); }
 .ph-keys { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 10px; font-size: 12px; }
 .ph-keys > div { display: flex; align-items: center; gap: 7px; }
 .ph-keys kbd { min-width: 26px; color: var(--ink); }
+/* Correctifs : les classes utilitaires .ok/.warn/.bad ne doivent pas teinter le texte des messages et notifications */
+.toast.ok, .toast.warn, .toast.error, .ph-msg.ok, .ph-msg.warn, .ph-msg.error { color: var(--ink); }
+.ph-actions button { white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+.ph-tiles.n3 .ph-tile b { font-size: 14.5px; }
+.ph-tile b.wrap { white-space: normal; font-size: 14px; line-height: 1.15; }
+.ph-barcol.cur i.pos { background: #7ee0a0; } .ph-barcol.cur i.neg { background: #ff8a8a; }
+.help-grid { grid-template-columns: 74px 1fr; }
+.help-grid kbd { white-space: nowrap; }
+.ph-sec em { white-space: nowrap; }

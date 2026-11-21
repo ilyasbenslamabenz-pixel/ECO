@@ -514,7 +514,9 @@ function frame(k: number, kind: InteriorKind): THREE.Group {
 function mirror(): THREE.Group {
   const g = new THREE.Group();
   box(g, 0.7, 0.9, 0.04, 0, 0, 0.02, mat('#c9a227', { metal: 0.6, rough: 0.35 }));
-  box(g, 0.6, 0.8, 0.01, 0, 0.05, 0.045, mat('#dfeef6', { metal: 0.9, rough: 0.08 }), false);
+  // Verre : clair et légèrement lumineux (sans carte d'environnement, un vrai métal paraîtrait noir).
+  box(g, 0.6, 0.8, 0.01, 0, 0.05, 0.045, mat('#d6e8f2', { rough: 0.12, emissive: 0.25 }), false);
+  box(g, 0.08, 0.6, 0.012, -0.15, 0.15, 0.046, mat('#ffffff', { opacity: 0.5 }), false);
   return g;
 }
 

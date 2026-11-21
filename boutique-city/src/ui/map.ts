@@ -66,11 +66,21 @@ function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, heading: num
   ctx.restore();
 }
 
-/** Étiquette arrondie (fond sombre, pastille de couleur). */
-function tag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string, strong = false): void {
+type Rect = [number, number, number, number];
+/**
+ * Étiquette arrondie (fond sombre, pastille de couleur), gardée dans le cadre ; si `placed` est fourni, elle est
+ * décalée vers le haut tant qu'elle chevauche une étiquette déjà posée.
+ */
+function tag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string, strong = false, placed?: Rect[]): void {
   ctx.font = `${strong ? 700 : 600} ${strong ? 16 : 14}px Rubik, system-ui, sans-serif`;
   const w = ctx.measureText(text).width + 26, h = strong ? 24 : 21;
-  const l = x - w / 2, t = y - h;
+  const l = Math.max(4, Math.min(ctx.canvas.width - w - 4, x - w / 2));
+  let t = Math.max(4, y - h);
+  if (placed) {
+    const hit = (): boolean => placed.some(([a, b, c, d]) => l < a + c && l + w > a && t < b + d && t + h > b);
+    for (let k = 0; k < 6 && hit(); k++) t -= h + 3;
+    placed.push([l, t, w, h]);
+  }
   ctx.fillStyle = 'rgba(15, 21, 30, 0.9)'; ctx.strokeStyle = color; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(l, t, w, h, h / 2); ctx.fill(); ctx.stroke();
   ctx.fillStyle = color; ctx.beginPath(); ctx.arc(l + 10, t + h / 2, 4, 0, Math.PI * 2); ctx.fill();
@@ -152,11 +162,12 @@ export class BigMap {
       ctx.beginPath(); ctx.arc(tx(p.b.doorX), tz(p.b.doorZ), 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
     for (const v of g.vehicles) { ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#0b1119'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(tx(v.x), tz(v.z), 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
-    // Étiquettes : services, mes commerces, chez moi.
-    for (const p of list) {
-      if (p.kind !== 'service' && p.kind !== 'shop' && p.kind !== 'myhome') continue;
-      tag(ctx, tx(p.b.doorX), tz(p.b.doorZ) - 8, p.label, p.color, p.kind === 'shop');
-    }
+    // Étiquettes : le joueur d'abord (sous la flèche), puis mes commerces, chez moi et services, sans chevauchement.
+    // La flèche du joueur compte comme une étiquette : aucune autre ne la recouvre.
+    const placed: Rect[] = [[tx(px) - 22, tz(pz) - 22, 44, 44]];
+    tag(ctx, tx(px), tz(pz) + 48, 'Vous', COL.player, true, placed);
+    const order: Poi['kind'][] = ['shop', 'myhome', 'service'];
+    for (const kind of order) for (const p of list) if (p.kind === kind) tag(ctx, tx(p.b.doorX), tz(p.b.doorZ) - 8, p.label, p.color, kind === 'shop', placed);
     if (dest) {
       const x = tx(dest.x), y = tz(dest.z);
       ctx.strokeStyle = COL.dest; ctx.lineWidth = 4; ctx.setLineDash([10, 7]);
@@ -164,7 +175,6 @@ export class BigMap {
       ctx.fillStyle = COL.dest; ctx.strokeStyle = '#0b1119'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
     arrow(ctx, tx(px), tz(pz), heading, 18, COL.player);
-    tag(ctx, tx(px), tz(pz) - 30, 'Vous', COL.player, true);
     north(ctx, cv.width - 34, 34, 20);
 
     // Lieu sous le pointeur (infobulle) et clic = destination.

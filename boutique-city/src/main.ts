@@ -181,14 +181,14 @@ function showHelp(): void {
   // Groupes de touches : chaque entrée = touches (plusieurs = alternatives), description.
   const groups: [string, [string[], string][]][] = [
     ['Se déplacer', [
-      [['Z', 'Q', 'S', 'D'], 'marcher (ou les flèches)'], [['Maj'], 'courir'], [['Espace'], 'freiner en véhicule'],
-      [['Souris'], 'glisser : tourner la caméra · molette : zoom']]],
+      [['ZQSD'], 'marcher (ou les flèches)'], [['Maj'], 'courir'], [['Espace'], 'freiner en véhicule'],
+      [['Souris'], 'glisser : caméra · molette : zoom']]],
     ['Agir', [
       [['E'], 'entrer, parler, conduire, tenir la caisse, dormir'], [['B'], 'aménager le commerce'], [['R'], 'tourner le meuble en main'],
       [['Clic droit'], 'annuler la pose d’un meuble']]],
     ['Interface', [
-      [['T'], 'téléphone : commerces, immobilier, banque, messages…'], [['M'], 'carte du quartier (clic = destination)'],
-      [['P'], 'pause / reprise'], [['1', '2', '3', '4'], 'vitesse : pause, normale, rapide, très rapide'], [['H'], 'cette aide'], [['Échap'], 'fermer, revenir, se réveiller']]],
+      [['T'], 'téléphone (gestion à distance)'], [['M'], 'carte (clic = destination)'],
+      [['P'], 'pause / reprise'], [['1–4'], 'vitesse du temps'], [['H'], 'cette aide'], [['Échap'], 'fermer, revenir, se réveiller']]],
   ];
   const steps = ['Louez un local (anneau jaune)', 'Achetez des meubles et aménagez (B)', 'Approvisionnez au grossiste', 'Tenez la caisse ou embauchez'];
   const close = (): void => wrap.remove();
