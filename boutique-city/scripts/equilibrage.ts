@@ -2,7 +2,7 @@
  * Équilibrage : pour chaque type de commerce, 7 jours simulés depuis le début d'une partie (40 000 CHF), bien géré
  * (prix du quartier, réassort automatique, un employé, aménagement complet) puis mal géré (prix +60 %, pas de
  * réassort, deux employés payés au-dessus du marché, stock initial faible). Tableau jour par jour : chiffre
- * d'affaires, charges, bénéfice, trésorerie.   npx tsx scripts/equilibrage.ts [fichier.md]
+ * d'affaires, charges, bénéfice, trésorerie. Puis milieu de partie : standard contre premium sur 21 jours.   npx tsx scripts/equilibrage.ts [fichier.md]
  */
 import { writeFileSync } from 'node:fs';
 import { FURNITURE_BY_ID, SHOP_TYPES, productsOf, type ShopType } from '../src/sim/catalog';
@@ -72,6 +72,42 @@ for (const t of SHOP_TYPES) {
       `Premier jour bénéficiaire : ${r.firstProfitDay ?? 'aucun sur 7 jours'} · trésorerie finale : ${fmt(r.endCash)} CHF`, '');
   }
 }
+// Milieu de partie : même commerce bien géré sur 21 jours, en gamme standard ou formé puis passé en premium au jour 8.
+function mid(type: ShopType, premium: boolean): { profit: number; rep: number } {
+  const g = new Game(7, 'Test');
+  const p = g.district.premises.filter((x) => g.isFree(x)).sort((a, b) => b.footfall - a.footfall)[0]!;
+  const id = (g.rent(p.id, type) as { ok: true; data: { id: number } }).data.id;
+  const go = (k: 'meubles' | 'emploi'): void => { const b = serviceBuilding(g.district, k)!; g.setPlace({ kind: 'service', service: k, buildingId: b.id }); };
+  go('meubles');
+  for (const f of LAYOUTS[type]) g.buyFurniture(f, 1, id);
+  const sh = g.shop(id)!;
+  for (const f of LAYOUTS[type]) {
+    const def = FURNITURE_BY_ID.get(f)!;
+    let done = false;
+    for (let z = 0; z < p.gridD && !done; z += 2) for (let x = 0; x < p.gridW && !done; x++) {
+      if (canPlace(sh.items, p.gridW, p.gridD, def, x, z, 0)) continue;
+      const r = g.place(id, f, x, z, 0);
+      if (r.ok && layoutStats(sh.items, p.gridW, p.gridD).blocked.length === 0) done = true; else if (r.ok) g.pickUp(id, r.data.uid);
+    }
+  }
+  for (const pr of productsOf(type)) { g.order(id, pr.id, Math.max(20, g.room(sh, pr.id))); g.setAuto(id, pr.id, true); }
+  go('emploi'); g.hire(g.candidates[0]!.id, id); g.setPlace({ kind: 'rue' });
+  let acc = 0;
+  for (let d = 0; d < 21; d++) {
+    if (d === 7 && premium) { g.train(g.employees[0]!.id); g.setPremium(id, true); }
+    for (const e of g.employees) if (e.askedRaise) g.raiseWage(e.id, g.marketWage(e.skill, e.training ?? 0));
+    g.player.energy = 100; g.player.hunger = 100; g.advance(720); g.player.energy = 100; g.player.hunger = 100; g.advance(720);
+    if (d >= 14) acc += dayProfit(g.ledger.at(-1)!);
+  }
+  return { profit: acc / 7, rep: sh.reputation };
+}
+out.push('## Milieu de partie : gamme premium (jours 15 à 21)', '', 'Même commerce bien géré ; « premium » = employé formé puis gamme premium activée au jour 8. Bénéfice moyen par jour, toutes dépenses.', '',
+  '| Type | Standard | Premium | Réputation |', '|---|---|---|---|');
+for (const t of SHOP_TYPES) {
+  const a = mid(t.id, false), b = mid(t.id, true);
+  out.push(`| ${t.nameFr} | ${a.profit >= 0 ? '+' : ''}${fmt(a.profit)} | ${b.profit >= 0 ? '+' : ''}${fmt(b.profit)} | ${Math.round(b.rep * 100)} % |`);
+}
+out.push('');
 const text = out.join('\n');
 if (process.argv[2]) writeFileSync(process.argv[2], text);
 console.log(text);

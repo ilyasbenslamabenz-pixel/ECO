@@ -141,7 +141,8 @@ function stock(ctx: UiCtx, id: number): (Node | null)[] {
     value += ps.stock * unitCost; pendingAll += pend;
     if (ps.stock === 0 && cap > 0) empty++;
     const price = el('input', { cls: 'price', attrs: { type: 'number', step: '0.1', min: '0', value: String(ps.price), 'aria-label': `Prix ${p.nameFr}` } });
-    price.addEventListener('change', () => ctx.act(g.setPrice(id, p.id, Number(price.value))));
+    // Champ vidé ou invalide : ignoré (on remet le prix actuel) plutôt que de tomber au prix plancher.
+    price.addEventListener('change', () => { const v = Number(price.value); if (price.value.trim() === '' || !Number.isFinite(v) || v <= 0) { price.value = String(ps.price); return; } ctx.act(g.setPrice(id, p.id, v)); });
     const auto = el('input', { attrs: { type: 'checkbox', 'aria-label': `Réassort automatique ${p.nameFr}` } });
     auto.checked = ps.auto;
     auto.addEventListener('change', () => ctx.act(g.setAuto(id, p.id, auto.checked)));
@@ -155,12 +156,12 @@ function stock(ctx: UiCtx, id: number): (Node | null)[] {
     const stTone: Tone = cap === 0 ? 'muted' : ps.stock === 0 ? 'bad' : frac < 0.25 ? 'warn' : 'ok';
     const marginU = ps.price - unitCost, marginP = ps.price > 0 ? marginU / ps.price : 0;
     const est = room > 0 ? g.orderCost(p.id, room, id) : 0;
-    const orderBtn = button(room > 0 ? `+${room}` : 'Plein', () => ctx.act(g.order(id, p.id, room), (o) => `Livraison demain 7 h : ${o.qty} ${p.nameFr.toLowerCase()} (${chf2(o.cost)}).`), room > 0 ? 'small order' : 'small');
+    const orderBtn = button(room > 0 ? `+${room}` : 'Plein', () => ctx.act(g.order(id, p.id, room), (o) => `Livraison ${g.deliveryLabel(o.deliverAt)} : ${o.qty} ${p.nameFr.toLowerCase()} (${chf2(o.cost)}).`), room > 0 ? 'small order' : 'small');
     if (room > 0) orderBtn.title = `Commander ${room} unités (environ ${chf(est + g.deliveryFee(est, id))} livraison comprise)`;
     tbl.append(el('tr', { cls: stTone === 'bad' ? 'row-bad' : '' },
       el('td', {}, el('b', { text: p.nameFr }), el('div', { cls: 'sub', text: `achat ${chf2(unitCost)}${p.needsMachine ? ' · machine' : ''}` })),
       el('td', { cls: `sp-st ${ps.stock === 0 && cap > 0 ? 'bad' : ''}`.trim() },
-        el('div', { cls: 'sp-stnum' }, el('b', { text: String(ps.stock) }), el('span', { text: ` / ${cap}` }), pend ? el('em', { text: `+${pend} demain` }) : null),
+        el('div', { cls: 'sp-stnum' }, el('b', { text: String(ps.stock) }), el('span', { text: ` / ${cap}` }), pend ? el('em', { text: `+${pend} ${g.deliveryLabel(Math.min(...g.orders.filter((o) => o.shopId === id && o.productId === p.id).map((o) => o.deliverAt)))}` }) : null),
         cap > 0 ? meter(frac, stTone, 'thin') : el('div', { cls: 'sub', text: 'aucun meuble adapté' })),
       el('td', {}, el('div', { cls: 'sp-price' }, price, el('span', { cls: `gap ${gapTone}`, text: gapText })), el('div', { cls: 'sub', text: `quartier ${chf2(ref)}` })),
       el('td', { cls: 'c' }, el('b', { cls: marginU >= 0 ? '' : 'bad', text: chf2(marginU) }), el('div', { cls: 'sub', text: `${Math.round(marginP * 100)} %` })),
@@ -171,10 +172,10 @@ function stock(ctx: UiCtx, id: number): (Node | null)[] {
     ...rangeBlock(ctx, id),
     el('div', { cls: 'sp-strip' },
       stat('Ruptures', String(empty), null, empty ? 'bad' : 'ok'),
-      stat('En commande', `${num(pendingAll)} u.`, 'livrées à 7 h'),
+      stat('En commande', `${num(pendingAll)} u.`, 'livraisons à 7 h et 14 h'),
       stat('Valeur du stock', chf(value), 'au prix d’achat')),
     tbl,
-    el('p', { cls: 'sp-note', text: 'Commander = livraison le lendemain à 7 h (frais de livraison). Moins cher : acheter chez le grossiste et transporter vous-même. Auto : commande livrée chaque soir à 21 h quand le rayon est à moitié vide. Écart : votre prix comparé à celui du quartier ; au-delà de +10 %, des clients reposent l’article.' }),
+    el('p', { cls: 'sp-note', text: `Commander = livraison au prochain passage du grossiste (7 h ou 14 h, commande au moins 2 h avant ; prochain : ${g.deliveryLabel()}), frais de livraison en plus. Moins cher : acheter chez le grossiste et transporter vous-même. Auto : à 11 h et à 21 h, commande de quoi remplir le rayon s’il est rempli à moins de 75 %, livrée au passage suivant. Écart : votre prix comparé à celui du quartier ; dès qu’il le dépasse, des clients reposent l’article (environ 1 sur 5 à +10 %, 1 sur 2 à +30 %).` }),
   ];
 }
 
@@ -206,7 +207,7 @@ function equipe(ctx: UiCtx, id: number): (Node | null)[] {
       stat('Salaires', `${chf(wages)} / h`, 'payés aux heures d’ouverture')),
     section('Équipe'),
     ...(staff.length ? staff.map((e) => employeeRow(ctx, e.id)) : [el('div', { cls: 'sp-empty', text: 'Aucun employé affecté à ce commerce.' })]),
-    el('p', { cls: 'sp-note', text: `Chaque caissier sert jusqu’à ${ECONOMY.servePerRegister} clients par heure selon sa compétence ; les autres réassortent. Former : +${pct(TRAINING.capacity)} de clients servis par niveau, mais le salaire du marché monte de ${TRAINING.wage} CHF / h (augmentez-le pour garder l’employé satisfait). Un employé formé permet la gamme premium. Pour embaucher : agence pour l’emploi. Vous pouvez aussi tenir la caisse vous-même (E derrière la caisse).` }),
+    el('p', { cls: 'sp-note', text: `Chaque caissier sert jusqu’à ${ECONOMY.servePerRegister} clients par heure selon sa compétence. Un employé de plus que de caisses ne sert pas plus de clients, mais deux employés ou plus découragent les voleurs. Former : +${pct(TRAINING.capacity)} de clients servis par niveau, mais le salaire du marché monte de ${TRAINING.wage} CHF / h (augmentez-le pour garder l’employé satisfait). Un employé formé permet la gamme premium. Pour embaucher : agence pour l’emploi. Vous pouvez aussi tenir la caisse vous-même (E derrière la caisse).` }),
   ];
 }
 
@@ -252,9 +253,19 @@ function resultats(ctx: UiCtx, id: number): (Node | null)[] {
     section('14 derniers jours', legend([['rgba(95,195,255,0.7)', 'ventes'], ['#5cc77a', 'marge après salaires et loyer']])),
     chart(days.map((d) => d.revenue), days.map(shopResult)),
     ledger(days.slice().reverse(), false),
-    el('div', { cls: 'sp-danger' }, el('div', {}, el('b', { text: 'Résilier le bail' }), el('div', { cls: 'sub', text: 'Le dépôt est rendu et le mobilier revendu à 40 %.' })),
-      button('Résilier le bail…', () => void askConfirm(`Résilier le bail de ${s.name} ? Le dépôt est rendu et le mobilier revendu à 40 %.`, 'Résilier', true).then((y) => { if (y) { ctx.act(g.release(id)); ctx.panel.close(); } }), 'danger')),
+    el('div', { cls: 'sp-danger' }, el('div', {}, el('b', { text: 'Résilier le bail' }), el('div', { cls: 'sub', text: releaseText(g, id) })),
+      button('Résilier le bail…', () => void askConfirm(`Résilier le bail de ${s.name} ? ${releaseText(g, id)}`, 'Résilier', true).then((y) => { if (y) { ctx.act(g.release(id), (t) => `Bail résilié : ${chf(t)} récupérés.`); ctx.panel.close(); } }), 'danger')),
   ];
+}
+
+/** Décompte de la résiliation, en clair (montant net réellement versé, stock perdu). */
+function releaseText(g: Game, id: number): string {
+  const q = g.releaseQuote(id);
+  if (!q) return '';
+  const parts = [`dépôt ${chf(q.deposit)}`, `mobilier revendu à 40 % ${chf(q.resale)}`];
+  if (q.refunds > 0) parts.push(`commandes et publicité remboursées ${chf(q.refunds)}`);
+  if (q.rentDue > 0) parts.push(`moins le loyer dû ${chf(q.rentDue)}`);
+  return `Vous récupérez ${chf(q.total)} (${parts.join(', ')}).${q.stockUnits > 0 ? ` Le stock en rayon (${num(q.stockUnits)} articles, ${chf(q.stockValue)} à l’achat) est perdu.` : ''}`;
 }
 
 function ledger(days: DayStats[], all: boolean): HTMLElement {

@@ -63,6 +63,8 @@ export interface Player {
   place: Place;
   /** Retour forcé au logement (évanouissement) : l'interface téléporte puis remet à faux. */
   teleportHome: boolean;
+  /** Jours de loyer du logement déjà payés d'avance (première semaine) ; absent : 0. */
+  homePrepaid?: number;
 }
 
 export interface DayStats {
@@ -110,6 +112,8 @@ export interface Sublet {
   since: number;
   /** Dépôt de garantie (locaux). */
   deposit: number;
+  /** Jours de loyer payés d'avance (appartement : première semaine) ; absent : 0. */
+  prepaid?: number;
 }
 
 export interface Shop {
@@ -319,7 +323,7 @@ export class Game {
     if (this.cash < upfront) return fail(`Trésorerie insuffisante : ${Math.round(upfront)} CHF à verser.`);
     this.cash -= upfront;
     if (kind === 'logement') this.today.rent += upfront;
-    const sl: Sublet = { id: this.nextId++, kind, ref, cost, ask: r2(cost * 1.25), tenant: null, since: 0, deposit: kind === 'local' ? upfront : 0 };
+    const sl: Sublet = { id: this.nextId++, kind, ref, cost, ask: r2(cost * 1.25), tenant: null, since: 0, deposit: kind === 'local' ? upfront : 0, prepaid: kind === 'logement' ? 7 : 0 };
     this.sublets.push(sl);
     this.notify('ok', `Bail signé pour sous-louer ${kind === 'logement' ? 'un appartement' : 'un local'} (${Math.round(cost)} CHF / jour). Fixez le loyer demandé dans l’appli Immobilier.`);
     this.bump();
@@ -330,6 +334,7 @@ export class Game {
   setSubletAsk(id: number, ask: number): Result<number> {
     const sl = this.sublets.find((x) => x.id === id);
     if (!sl) return fail('Sous-location introuvable');
+    if (!Number.isFinite(ask) || ask <= 0) return fail('Loyer invalide');
     const m = this.marketRent(sl.kind, sl.ref);
     sl.ask = r2(Math.min(m * 2.5, Math.max(m * 0.5, ask)));
     this.bump();
@@ -340,11 +345,14 @@ export class Game {
   endSublet(id: number): Result<number> {
     const sl = this.sublets.find((x) => x.id === id);
     if (!sl) return fail('Sous-location introuvable');
-    this.cash += sl.deposit;
+    // Jours payés d'avance et non utilisés : remboursés.
+    const unused = r2((sl.prepaid ?? 0) * sl.cost);
+    this.cash += sl.deposit + unused;
+    if (unused > 0) this.today.rent -= unused;
     this.sublets = this.sublets.filter((x) => x !== sl);
-    this.notify('info', `Bail résilié${sl.tenant ? ` (locataire ${sl.tenant} parti)` : ''}.${sl.deposit ? ` Dépôt rendu : ${Math.round(sl.deposit)} CHF.` : ''}`);
+    this.notify('info', `Bail résilié${sl.tenant ? ` (locataire ${sl.tenant} parti)` : ''}.${sl.deposit ? ` Dépôt rendu : ${Math.round(sl.deposit)} CHF.` : ''}${unused > 0 ? ` Loyer payé d’avance rendu : ${Math.round(unused)} CHF.` : ''}`);
     this.bump();
-    return ok(sl.deposit);
+    return ok(r2(sl.deposit + unused));
   }
 
   /**
@@ -584,21 +592,39 @@ export class Game {
     return ok(shop);
   }
 
-  release(shopId: number): Result<number> {
+  /**
+   * Décompte d'une résiliation : dépôt rendu, mobilier revendu, commandes non livrées et jours de publicité restants
+   * remboursés, loyer provisionné retenu ; stock en rayon perdu (unités et valeur d'achat).
+   */
+  releaseQuote(shopId: number): { deposit: number; resale: number; refunds: number; rentDue: number; stockUnits: number; stockValue: number; total: number } | null {
     const s = this.shop(shopId);
-    if (!s) return fail('Commerce introuvable');
+    if (!s) return null;
     let stored = 0;
     for (const [id, n] of Object.entries(s.storage)) stored += (FURNITURE_BY_ID.get(id)?.price ?? 0) * n;
     const resale = Math.round((this.stats(s).value + stored) * ECONOMY.resale);
-    this.cash += s.deposit + resale - (s.rentDue ?? 0);
+    const refunds = r2(this.orders.filter((o) => o.shopId === s.id).reduce((a, o) => a + o.cost, 0)
+      + this.campaigns.filter((c) => c.shopId === s.id).reduce((a, c) => a + c.daysLeft * c.perDay, 0));
+    let stockUnits = 0, stockValue = 0;
+    for (const pr of productsOf(s.type)) { const n = s.products[pr.id]!.stock; stockUnits += n; stockValue += n * this.unitCost(pr, s); }
+    const rentDue = r2(s.rentDue ?? 0);
+    return { deposit: s.deposit, resale, refunds, rentDue, stockUnits, stockValue: r2(stockValue), total: r2(s.deposit + resale + refunds - rentDue) };
+  }
+
+  release(shopId: number): Result<number> {
+    const s = this.shop(shopId), q = this.releaseQuote(shopId);
+    if (!s || !q) return fail('Commerce introuvable');
+    this.cash += q.total;
     for (const e of this.staffOf(s.id)) e.shopId = null;
     this.orders = this.orders.filter((o) => o.shopId !== s.id);
     this.campaigns = this.campaigns.filter((c) => c.shopId !== s.id);
     if (this.player.tending === s.id) this.player.tending = null;
     this.shops = this.shops.filter((x) => x !== s);
-    this.notify('info', `Bail résilié : ${s.name}. Dépôt rendu (${s.deposit} CHF), mobilier revendu ${resale} CHF.`);
+    const parts = [`dépôt rendu ${Math.round(q.deposit)} CHF`, `mobilier revendu ${q.resale} CHF`];
+    if (q.refunds > 0) parts.push(`commandes et publicité remboursées ${Math.round(q.refunds)} CHF`);
+    if (q.rentDue > 0) parts.push(`loyer dû retenu ${Math.round(q.rentDue)} CHF`);
+    this.notify('info', `Bail résilié : ${s.name}. ${parts.join(', ')} : ${Math.round(q.total)} CHF au total.${q.stockUnits > 0 ? ` ${q.stockUnits} articles en rayon perdus.` : ''}`);
     this.bump();
-    return ok(s.deposit + resale);
+    return ok(q.total);
   }
 
   /** Achat de meubles au magasin de meubles, livrés dans la réserve du commerce. */
@@ -685,7 +711,7 @@ export class Game {
   setPrice(shopId: number, productId: string, price: number): Result<number> {
     const s = this.shop(shopId), pr = PRODUCT_BY_ID.get(productId);
     if (!s || !pr || !s.products[productId]) return fail('Produit inconnu');
-    if (!Number.isFinite(price)) return fail('Prix invalide');
+    if (!Number.isFinite(price) || price <= 0) return fail('Prix invalide');
     const base = pr.basePrice * (s.premium ? PREMIUM.priceMult : 1);
     const v = r2(Math.min(base * 3, Math.max(base * 0.3, price)));
     s.products[productId]!.price = v;
@@ -720,7 +746,10 @@ export class Game {
     const pr = PRODUCT_BY_ID.get(productId)!;
     const shop = shopId === undefined ? undefined : this.shop(shopId);
     const contract = 1 - (this.contractDef()?.discount ?? 0);
-    return r2(qty * this.unitCost(pr, shop) * this.marketIndex(productId) * (qty >= ECONOMY.bulkQty ? 1 - ECONOMY.bulkDiscount : 1) * contract);
+    const unit = this.unitCost(pr, shop) * this.marketIndex(productId) * contract;
+    // Remise de gros sans effet de seuil : en dessous de bulkQty, on ne paie jamais plus que bulkQty unités remisées.
+    const bulk = ECONOMY.bulkQty * unit * (1 - ECONOMY.bulkDiscount);
+    return r2(qty >= ECONOMY.bulkQty ? qty * unit * (1 - ECONOMY.bulkDiscount) : Math.min(qty * unit, bulk));
   }
   /** Frais de livraison : forfait une fois par livraison et par commerce (offert si une commande part déjà ce jour-là), plus une part du montant. */
   deliveryFee(goods: number, shopId?: number): number {
@@ -830,6 +859,7 @@ export class Game {
     const c = this.candidates.find((x) => x.id === candidateId);
     if (!c) return fail('Candidat introuvable');
     if (!this.shop(shopId)) return fail('Commerce introuvable');
+    if (this.cash < c.wage * 8) return fail(`Trésorerie insuffisante : il faut au moins une journée de salaire (${c.wage * 8} CHF).`);
     const e: Employee = { id: c.id, name: c.name, skill: c.skill, wage: c.wage, shopId, hiredDay: this.day, look: c.look, mood: 0.75, unhappy: 0 };
     this.employees.push(e);
     this.candidates = this.candidates.filter((x) => x !== c);
@@ -853,6 +883,7 @@ export class Game {
     const e = this.employees.find((x) => x.id === employeeId);
     if (!e) return fail('Employé introuvable');
     const pay = Math.round(e.wage * 8 * ECONOMY.severanceDays);
+    if (this.cash < pay) return fail(`Trésorerie insuffisante pour l’indemnité de licenciement (${pay} CHF).`);
     this.cash -= pay;
     this.today.wages += pay;
     this.employees = this.employees.filter((x) => x !== e);
@@ -939,9 +970,13 @@ export class Game {
     const def = HOME_BY_ID.get(h.def)!;
     const first = def.rentDay * 7;
     if (this.cash < first) return fail(`Il faut ${first} CHF (une semaine d'avance).`);
-    this.cash -= first;
-    this.today.living += first;
+    // Ancien logement : jours payés d'avance et non utilisés remboursés.
+    const oldH = this.player.home === null ? undefined : this.district.homes.find((x) => x.id === this.player.home);
+    const unused = oldH ? (this.player.homePrepaid ?? 0) * HOME_BY_ID.get(oldH.def)!.rentDay : 0;
+    this.cash += unused - first;
+    this.today.living += first - unused;
     this.player.home = homeId;
+    this.player.homePrepaid = 7;
     this.notify('ok', `Nouveau logement : ${def.nameFr} (${def.rentDay} CHF / jour, première semaine payée).`);
     this.bump();
     return ok(undefined);
@@ -1070,7 +1105,19 @@ export class Game {
     const due = this.orders.filter((o) => o.deliverAt <= this.total);
     if (due.length) {
       this.orders = this.orders.filter((o) => o.deliverAt > this.total);
-      for (const o of due) { const s = this.shop(o.shopId); if (s) s.products[o.productId]!.stock += o.qty; }
+      for (const o of due) {
+        const s = this.shop(o.shopId);
+        if (!s) continue;
+        // Plus de place en rayon (meubles retirés depuis la commande) : le surplus est repris et remboursé.
+        const ps = s.products[o.productId]!, pr = PRODUCT_BY_ID.get(o.productId)!;
+        const q = Math.max(0, Math.min(o.qty, this.storageFor(s, pr) - ps.stock));
+        ps.stock += q;
+        if (q < o.qty) {
+          const back = r2(o.cost * (o.qty - q) / o.qty);
+          this.cash += back; s.today.purchases -= back; this.today.purchases -= back;
+          this.notify('warn', `${s.name} : ${o.qty - q} ${pr.nameFr.toLowerCase()} repris par le livreur faute de place en rayon (${Math.round(back)} CHF remboursés).`);
+        }
+      }
       this.notify('info', `Livraison reçue : ${due.length} commande(s).`);
     }
     if (h === 21 || h === 11) this.autoReorder();
@@ -1226,7 +1273,9 @@ export class Game {
     // Logement, assurance des véhicules, prêts, campagnes.
     if (this.player.home) {
       const def = HOME_BY_ID.get(this.district.homes.find((h) => h.id === this.player.home)!.def)!;
-      this.cash -= def.rentDay; this.today.living += def.rentDay;
+      // Jours payés d'avance (première semaine) consommés avant tout nouveau débit.
+      if ((this.player.homePrepaid ?? 0) > 0) this.player.homePrepaid! -= 1;
+      else { this.cash -= def.rentDay; this.today.living += def.rentDay; }
     }
     for (const v of this.vehicles) { const ins = VEHICLE_BY_ID.get(v.type)!.insurance; this.cash -= ins; this.today.living += ins; }
     // Employés : satisfaction selon le salaire comparé au marché ; demande d'augmentation ; démission.
@@ -1243,7 +1292,8 @@ export class Game {
     }
     // Sous-locations : loyer payé, loyer encaissé, arrivées et départs de locataires.
     for (const sl of this.sublets) {
-      this.cash -= sl.cost; this.today.rent += sl.cost;
+      if ((sl.prepaid ?? 0) > 0) sl.prepaid! -= 1;
+      else { this.cash -= sl.cost; this.today.rent += sl.cost; }
       if (sl.tenant) {
         this.cash += sl.ask; this.today.rentalIncome += sl.ask;
         sl.since++;
@@ -1266,7 +1316,8 @@ export class Game {
     this.marketDay = this.weather !== 'pluie' && this.rng.next() < 0.12;
     if (this.marketDay) this.notify('ok', 'Jour de marché dans le quartier : +25 % de passants aujourd’hui. Pensez au stock !');
     for (const l of this.loans) {
-      const pay = Math.min(l.daily, l.remaining);
+      // Dernière échéance : le solde exact (pas de reliquat d'arrondi).
+      const pay = l.daysLeft <= 1 ? l.remaining : Math.min(l.daily, l.remaining);
       this.cash -= pay; this.today.finance += pay;
       l.remaining = r2(l.remaining - pay);
       l.daysLeft--;
@@ -1298,7 +1349,8 @@ export class Game {
       this.market[pr.id] = r2(Math.min(1.2, Math.max(0.85, m + (this.rng.next() - 0.5) * 0.08 + (1 - m) * 0.15)));
     }
     for (const t of SHOP_TYPES) {
-      const mine = this.shops.filter((x) => x.type === t.id && x.today.customers + (x.history.at(-1)?.customers ?? 0) > 0).length;
+      // Appelée à minuit : la journée écoulée est déjà dans l'historique (today vient d'être remis à zéro).
+      const mine = this.shops.filter((x) => x.type === t.id && (x.history.at(-1)?.customers ?? 0) > 0).length;
       const target = Math.max(0.85, 1 - 0.05 * mine);
       const cur = this.rivals[t.id] ?? 1;
       const next = r2(cur + (target - cur) * 0.3);
@@ -1313,6 +1365,12 @@ export class Game {
       const skill = r2(0.55 + this.rng.next() * 0.45);
       this.candidates.push({ id: this.nextId++, name: randomName(this.rng), skill, wage: Math.round(20 + skill * 14 + this.rng.next() * 3), look: this.rng.int(0, 999) });
     }
+  }
+
+  /** Moment d'une livraison en clair : « aujourd’hui à 14 h », « demain à 7 h » (par défaut : la prochaine livraison). */
+  deliveryLabel(at = this.nextDelivery()): string {
+    const d = Math.floor(at / MINUTES_PER_DAY) - this.day, h = Math.floor((at % MINUTES_PER_DAY) / 60);
+    return `${d <= 0 ? 'aujourd’hui' : d === 1 ? 'demain' : `dans ${d} jours`} à ${h} h`;
   }
 
   /** Prochaine livraison du grossiste : 7 h ou 14 h (commande au moins 2 h avant), sinon le lendemain à 7 h. */

@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ECONOMY, FURNITURE_BY_ID, LOAN_OFFERS, SERVICES, productsOf, type ServiceKind, type ShopType } from '../src/sim/catalog';
+import { ECONOMY, FURNITURE_BY_ID, HOME_BY_ID, LOAN_OFFERS, SERVICES, productsOf, type ServiceKind, type ShopType } from '../src/sim/catalog';
 import { generateDistrict, serviceBuilding } from '../src/sim/district';
 import { canPlace, layoutStats, neighbourCells, registerSides, unreachable, type PlacedItem } from '../src/sim/layout';
 import { Game, dayProfit } from '../src/sim/game';
@@ -397,8 +397,9 @@ test('formation des employés : coût par niveau, capacité de caisse, salaire d
   assert.equal(e.training, 3);
   assert.equal(g.nextTrainingCost(e), null);
   assert.equal(g.train(e.id).ok, false, 'pas de quatrième niveau');
+  staff(g, s.data.id);
+  const e2 = g.employees[1]!;
   g.cash = 100;
-  const e2 = (staff(g, s.data.id), g.employees[1]!);
   assert.equal(g.train(e2.id).ok, false, 'trésorerie insuffisante');
   // Formé mais salaire inchangé : il finit par demander une augmentation.
   g.cash = 50_000;
@@ -431,7 +432,7 @@ test('gamme premium : employé formé requis, mise en place payée une fois, pri
   assert.ok(shop.premium && shop.premiumOwned);
   assert.ok(Math.abs(shop.products['cafe']!.price - price0 * PREMIUM.priceMult) < 0.02, 'prix de vente relevés');
   assert.ok(Math.abs(g.refPrice(cafe, shop) - ref0 * PREMIUM.priceMult) < 0.02, 'prix de référence premium');
-  assert.ok(g.orderCost('cafe', 10, id) > g.orderCost('cafe', 10) * 1.4, 'achats premium plus chers');
+  assert.ok(Math.abs(g.orderCost('cafe', 10, id) - g.orderCost('cafe', 10) * PREMIUM.costMult) < 0.02, 'achats premium plus chers');
   // Bonne réputation : autant de clients ; réputation faible : bien moins.
   const attrHi = g.attractiveness(shop);
   assert.ok(Math.abs(attrHi / attr0 - premiumDemand(0.95)) < 0.01 && attrHi >= attr0 * 0.95, `attrait ${attr0.toFixed(2)} → ${attrHi.toFixed(2)}`);
@@ -506,4 +507,115 @@ test('objectif « Monter en gamme » : formation puis gamme premium', async () =
   assert.equal(o.progress(g).p, 1);
   g.checkObjectives();
   assert.ok(g.achieved.includes('gamme'));
+});
+
+test('corrections : semaine de loyer payée une seule fois (logement, sous-location), remboursement des jours non utilisés', () => {
+  const g = new Game(7);
+  g.setPlace({ kind: 'rue' });
+  const home = g.district.homes.find((h) => g.homeFree(h.id) && h.id !== g.player.home)!;
+  const perDay = HOME_BY_ID.get(home.def)!.rentDay;
+  const c0 = g.cash;
+  assert.ok(g.rentHome(home.id).ok);
+  assert.ok(Math.abs(c0 - g.cash - 7 * perDay) < 0.01, 'une semaine d’avance');
+  // Sans commerce ni véhicule : aucune autre dépense pendant la semaine payée d'avance.
+  const c1 = g.cash;
+  for (let d = 0; d < 14; d++) { keepAlive(g); g.advance(DAY / 2); }
+  assert.ok(Math.abs(c1 - g.cash) < 0.01, `pas de double loyer la première semaine (${c1 - g.cash})`);
+  assert.equal(g.player.homePrepaid, 0);
+  keepAlive(g); g.advance(DAY / 2); keepAlive(g); g.advance(DAY / 2);
+  assert.ok(Math.abs(c1 - g.cash - perDay) < 0.01, 'loyer quotidien ensuite');
+  // Sous-location d'appartement : 7 jours d'avance, rendus au prorata à la résiliation.
+  const other = g.district.homes.find((h) => g.homeFree(h.id))!;
+  const sl = g.leaseForSublet('logement', other.id);
+  assert.ok(sl.ok);
+  if (!sl.ok) return;
+  assert.equal(sl.data.prepaid, 7);
+  keepAlive(g); g.advance(DAY);
+  assert.equal(g.sublets[0]!.prepaid, 6);
+  const cash = g.cash;
+  const r = g.endSublet(sl.data.id);
+  assert.ok(r.ok && Math.abs(r.data - 6 * sl.data.cost) < 0.02, 'six jours rendus');
+  assert.ok(Math.abs(g.cash - cash - 6 * sl.data.cost) < 0.02);
+});
+
+test('corrections : résiliation (remboursements, loyer dû, montant annoncé), valeur nette, livraison plafonnée', async () => {
+  const { netWorth } = await import('../src/sim/objectives');
+  const g = new Game(7);
+  const s = g.rent(bestFree(g), 'epicerie');
+  assert.ok(s.ok);
+  if (!s.ok) return;
+  const id = s.data.id;
+  furnish(g, id, 'epicerie');
+  for (let d = 0; d < 3; d++) { keepAlive(g); g.advance(DAY); }
+  const shop = g.shop(id)!;
+  assert.ok((shop.rentDue ?? 0) > 0);
+  // Valeur nette : le loyer provisionné est une dette.
+  const nw = netWorth(g);
+  shop.rentDue = (shop.rentDue ?? 0) + 1000;
+  assert.ok(Math.abs(nw - netWorth(g) - 1000) < 1e-6, 'loyer dû soustrait de la valeur nette');
+  shop.rentDue! -= 1000;
+  // Commande et campagne en cours : remboursées à la résiliation.
+  const o = g.order(id, 'pain', 30);
+  assert.ok(o.ok);
+  goTo(g, 'pub');
+  assert.ok(g.startCampaign('flyers', id, 5).ok);
+  const q = g.releaseQuote(id)!;
+  assert.ok(o.ok && Math.abs(q.refunds - (o.data.cost + 5 * 90)) < 0.02, `remboursements ${q.refunds}`);
+  assert.ok(Math.abs(q.total - (q.deposit + q.resale + q.refunds - q.rentDue)) < 0.02);
+  const cash = g.cash;
+  const r = g.release(id);
+  assert.ok(r.ok && Math.abs(r.data - q.total) < 0.02, 'montant renvoyé = montant versé');
+  assert.ok(Math.abs(g.cash - cash - q.total) < 0.02);
+  assert.equal(g.orders.length, 0);
+  assert.ok(g.notices.at(-1)!.text.includes(`${Math.round(q.total)} CHF au total`));
+  // Livraison : rayons retirés entre la commande et la livraison → surplus repris et remboursé.
+  const s2 = g.rent(bestFree(g), 'epicerie');
+  assert.ok(s2.ok);
+  if (!s2.ok) return;
+  furnish(g, s2.data.id, 'epicerie');
+  const sh = g.shop(s2.data.id)!;
+  const ord = g.order(s2.data.id, 'pain', 1000);
+  assert.ok(ord.ok);
+  for (const it of sh.items.filter((i) => i.def === 'rayon').slice(0, 2)) g.pickUp(sh.id, it.uid);
+  const cap = g.storageFor(sh, (await import('../src/sim/catalog')).PRODUCT_BY_ID.get('pain')!);
+  const before = g.cash;
+  keepAlive(g); g.advance(DAY);
+  assert.ok(sh.products['pain']!.stock <= cap, `stock ${sh.products['pain']!.stock} ≤ place ${cap}`);
+  assert.ok(g.notices.some((n) => n.text.includes('repris par le livreur')), 'surplus signalé');
+  assert.ok(Number.isFinite(g.cash) && g.cash !== before);
+});
+
+test('corrections : saisies invalides refusées, licenciement et embauche sans trésorerie, prêts soldés exactement, remise de gros sans seuil', () => {
+  const g = new Game(7);
+  const s = g.rent(bestFree(g), 'epicerie');
+  assert.ok(s.ok);
+  if (!s.ok) return;
+  const id = s.data.id;
+  assert.equal(g.setPrice(id, 'pain', 0).ok, false, 'prix nul refusé');
+  assert.equal(g.setPrice(id, 'pain', Number('abc')).ok, false, 'prix NaN refusé');
+  g.setPlace({ kind: 'rue' });
+  const home = g.district.homes.find((h) => g.homeFree(h.id))!;
+  const sl = g.leaseForSublet('logement', home.id);
+  assert.ok(sl.ok);
+  if (sl.ok) {
+    assert.equal(g.setSubletAsk(sl.data.id, NaN).ok, false, 'loyer NaN refusé');
+    assert.ok(Number.isFinite(g.sublets[0]!.ask));
+  }
+  staff(g, id);
+  const e = g.employees[0]!;
+  g.cash = 10;
+  assert.equal(g.fire(e.id).ok, false, 'licenciement refusé sans de quoi payer l’indemnité');
+  assert.equal(g.cash, 10);
+  goTo(g, 'emploi');
+  assert.equal(g.hire(g.candidates[0]!.id, id).ok, false, 'embauche refusée sans trésorerie');
+  // Remise de gros : 100 unités ne coûtent jamais moins que 99.
+  for (let n = 80; n <= 120; n++) assert.ok(g.orderCost('pain', n) >= g.orderCost('pain', n - 1) - 1e-9, `coût croissant à ${n}`);
+  // Prêt : la dernière échéance solde exactement.
+  g.cash = 100_000;
+  goTo(g, 'banque');
+  assert.ok(g.takeLoan(0).ok);
+  for (let d = 0; d < LOAN_OFFERS[0]!.days + 1; d++) { keepAlive(g); g.advance(DAY); }
+  assert.equal(g.loans.length, 0, 'prêt soldé');
+  const paid = g.ledger.reduce((a, d) => a + d.finance, 0);
+  assert.ok(Math.abs(paid - Math.round(LOAN_OFFERS[0]!.amount * (1 + (LOAN_OFFERS[0]!.rate * LOAN_OFFERS[0]!.days) / 365))) < 0.05, `total remboursé ${paid}`);
 });

@@ -19,11 +19,11 @@ const bestDay = (g: Game): number => Math.max(g.today.revenue, ...g.ledger.map((
 const step = (v: number, goal: number, unit: string): { p: number; text: string } => ({ p: Math.min(1, v / goal), text: `${Math.floor(Math.min(v, goal)).toLocaleString('fr-CH')} / ${goal.toLocaleString('fr-CH')} ${unit}` });
 const flag = (ok: boolean): { p: number; text: string } => ({ p: ok ? 1 : 0, text: ok ? 'fait' : 'à faire' });
 
-/** Valeur nette : trésorerie + mobilier (revente) + véhicules (revente) + dépôts − dettes. */
+/** Valeur nette : trésorerie + mobilier (revente) + véhicules (revente) + dépôts − dettes − loyers provisionnés non encore prélevés. */
 export function netWorth(g: Game): number {
   let v = g.cash - g.debt;
   for (const s of g.shops) {
-    v += s.deposit;
+    v += s.deposit - (s.rentDue ?? 0);
     for (const it of s.items) v += (FURNITURE_BY_ID.get(it.def)?.price ?? 0) * ECONOMY.resale;
     for (const [id, n] of Object.entries(s.storage)) v += (FURNITURE_BY_ID.get(id)?.price ?? 0) * ECONOMY.resale * n;
   }

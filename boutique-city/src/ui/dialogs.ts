@@ -62,7 +62,7 @@ function grossiste(ctx: UiCtx, b: Building): (Node | null)[] {
   const order = [...SHOP_TYPES].sort((a, c) => Number(types.has(c.id)) - Number(types.has(a.id)));
   const out: (Node | null)[] = [
     el('div', { cls: 'row' }, el('label', { cls: 'field grow' }, el('span', { text: 'Emporter avec' }), carrier),
-      dest ? el('label', { cls: 'field grow' }, el('span', { text: 'Ou livrer demain à 7 h à' }), dest) : null),
+      dest ? el('label', { cls: 'field grow' }, el('span', { text: `Ou livrer (${g.deliveryLabel()}) à` }), dest) : null),
     near.length ? null : note(`Pour charger beaucoup : garez un véhicule à moins de ${ECONOMY.loadDistance} m de la porte.`),
     note(`Remise de ${pct(ECONOMY.bulkDiscount)} dès ${ECONOMY.bulkQty} unités. Livraison : ${ECONOMY.deliveryBase} CHF + ${pct(ECONOMY.deliveryRate)} du montant.`),
     ...contractBlock(ctx),
@@ -76,7 +76,7 @@ function grossiste(ctx: UiCtx, b: Building): (Node | null)[] {
         const c = carrier.value === 'pied' ? 'pied' : Number(carrier.value);
         ctx.act(g.buyStock(p.id, Number(q.value), c), (n) => `${n} ${p.nameFr.toLowerCase()} chargés.`);
       }, 'small primary');
-      const deliver = dest ? button('Livrer', () => ctx.act(g.order(Number(dest.value), p.id, Number(q.value)), (o) => `${o.qty} ${p.nameFr.toLowerCase()} livrés demain à 7 h (${chf2(o.cost)}).`), 'small') : null;
+      const deliver = dest ? button('Livrer', () => ctx.act(g.order(Number(dest.value), p.id, Number(q.value)), (o) => `${o.qty} ${p.nameFr.toLowerCase()} livrés ${g.deliveryLabel(o.deliverAt)} (${chf2(o.cost)}).`), 'small') : null;
       tbl.append(el('tr', {}, el('td', { text: p.nameFr }), el('td', {}, el('b', { text: chf2(g.orderCost(p.id, 1)) }), el('span', { cls: g.marketIndex(p.id) > 1.02 ? 'small trend up' : g.marketIndex(p.id) < 0.98 ? 'small trend down' : 'small trend', text: g.marketIndex(p.id) > 1.02 ? ` ▲ ${Math.round((g.marketIndex(p.id) - 1) * 100)} %` : g.marketIndex(p.id) < 0.98 ? ` ▼ ${Math.round((1 - g.marketIndex(p.id)) * 100)} %` : ' =' })), el('td', {}, q), el('td', { cls: 'nowrap' }, take, deliver)));
     }
     out.push(tbl);
@@ -318,7 +318,8 @@ export function subletBlock(ctx: UiCtx, id: number): (Node | null)[] {
   const g = ctx.game, sl = g.sublets.find((x) => x.id === id);
   if (!sl) return [note('Ce bail est terminé.')];
   const ask = el('input', { cls: 'price', attrs: { type: 'number', step: '1', min: '0', value: String(Math.round(sl.ask)), 'aria-label': 'Loyer demandé par jour' } });
-  ask.addEventListener('change', () => ctx.act(g.setSubletAsk(sl.id, Number(ask.value))));
+  // Champ vidé ou invalide : ignoré (le loyer actuel est remis).
+  ask.addEventListener('change', () => { const v = Number(ask.value); if (ask.value.trim() === '' || !Number.isFinite(v) || v <= 0) { ask.value = String(Math.round(sl.ask)); return; } ctx.act(g.setSubletAsk(sl.id, v)); });
   const chance = g.tenantChance(sl);
   return [
     el('div', { cls: 'kpis' }, kpi('Locataire', sl.tenant ?? 'aucun'), kpi('Vous payez', `${chf2(sl.cost)} / j`), kpi('Marge', sl.tenant ? signed(sl.ask - sl.cost) + ' / j' : '—')),

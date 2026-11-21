@@ -318,24 +318,24 @@ export const HOME_BY_ID: ReadonlyMap<string, HomeDef> = new Map(HOMES.map((h) =>
 export interface PremiumDef { type: ShopType; nameFr: string; cost: number; desc: string }
 export const PREMIUM = {
   /** Prix de vente de référence du quartier pour la gamme premium (× prix habituel). */
-  priceMult: 1.6,
+  priceMult: 1.5,
   /** Prix d'achat au grossiste de la gamme premium (× coût habituel). */
-  costMult: 1.45,
+  costMult: 1.4,
   /** Demande premium = base + slope × réputation (plafonnée à max). */
-  demandBase: 0.25,
+  demandBase: 0.2,
   demandSlope: 0.9,
-  demandMax: 1.1,
+  demandMax: 1.05,
   /** Formation minimale d'au moins un employé du commerce pour passer en premium. */
   minTraining: 1,
 } as const;
 export const PREMIUM_RANGES: readonly PremiumDef[] = [
-  { type: 'epicerie', nameFr: 'Épicerie fine', cost: 5500, desc: 'Produits bio, fromages affinés, conserves de producteurs.' },
-  { type: 'cafe', nameFr: 'Café de spécialité', cost: 4500, desc: 'Torréfaction artisanale, pâtisseries maison.' },
-  { type: 'vetements', nameFr: 'Mode de créateurs', cost: 6000, desc: 'Pièces de créateurs locaux, matières nobles.' },
-  { type: 'fleuriste', nameFr: 'Atelier floral', cost: 4500, desc: 'Compositions sur mesure, fleurs de saison rares.' },
-  { type: 'boulangerie', nameFr: 'Boulangerie artisanale', cost: 4500, desc: 'Levain naturel, farines anciennes, pâtisserie fine.' },
-  { type: 'fastfood', nameFr: 'Burgers gourmets', cost: 4500, desc: 'Viande locale, pains briochés, sauces maison.' },
-  { type: 'primeur', nameFr: 'Primeur bio', cost: 4500, desc: 'Fruits et légumes bio de petits producteurs.' },
+  { type: 'epicerie', nameFr: 'Épicerie fine', cost: 6500, desc: 'Produits bio, fromages affinés, conserves de producteurs.' },
+  { type: 'cafe', nameFr: 'Café de spécialité', cost: 5500, desc: 'Torréfaction artisanale, pâtisseries maison.' },
+  { type: 'vetements', nameFr: 'Mode de créateurs', cost: 7000, desc: 'Pièces de créateurs locaux, matières nobles.' },
+  { type: 'fleuriste', nameFr: 'Atelier floral', cost: 5500, desc: 'Compositions sur mesure, fleurs de saison rares.' },
+  { type: 'boulangerie', nameFr: 'Boulangerie artisanale', cost: 5500, desc: 'Levain naturel, farines anciennes, pâtisserie fine.' },
+  { type: 'fastfood', nameFr: 'Burgers gourmets', cost: 5500, desc: 'Viande locale, pains briochés, sauces maison.' },
+  { type: 'primeur', nameFr: 'Primeur bio', cost: 5500, desc: 'Fruits et légumes bio de petits producteurs.' },
 ];
 export const PREMIUM_BY_TYPE: ReadonlyMap<ShopType, PremiumDef> = new Map(PREMIUM_RANGES.map((p) => [p.type, p]));
 /** Part de la demande premium selon la réputation (0..1). */
