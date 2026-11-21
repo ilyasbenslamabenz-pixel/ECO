@@ -148,10 +148,10 @@ export class InteriorAgents {
   private floats: { sp: THREE.Sprite; t: number; x: number; z: number }[] = [];
   private floatText(text: string, x: number, z: number): void {
     const sp = new THREE.Sprite(moneyMaterial(text));
-    sp.scale.set(1.05, 0.34, 1);
+    sp.scale.set(1.25, 0.4, 1);
     // Plusieurs ventes rapprochées à la même caisse : chaque montant part un cran plus haut (jamais superposés).
     const near = this.floats.filter((f) => f.t < 0.9 && Math.hypot(f.x - x, f.z - z) < 1.2).length;
-    sp.position.set(x, 1.55 + near * 0.4, z);
+    sp.position.set(x, 1.55 + near * 0.46, z);
     sp.renderOrder = 22;
     this.group.add(sp);
     this.floats.push({ sp, t: 0, x, z });
@@ -174,21 +174,21 @@ export class InteriorAgents {
   private sayIcon(c: Customer, mood: Mood): void {
     if (c.bubble) c.h.group.remove(c.bubble);
     const sp = new THREE.Sprite(iconMaterial(mood));
-    sp.scale.set(0.5, 0.5, 1);
+    sp.scale.set(0.6, 0.6, 1);
     sp.renderOrder = 20;
     c.bubble = sp; c.bubbleT = 1.6;
-    sp.position.y = this.bubbleY(c, 0.5);
+    sp.position.y = this.bubbleY(c, 0.6);
     c.h.group.add(sp);
   }
 
   private say(c: Customer, kind: FeedbackKind): void {
     if (c.bubble) c.h.group.remove(c.bubble);
     const sp = new THREE.Sprite(bubbleMaterial(kind));
-    sp.scale.set(1.5, 0.5, 1);
+    sp.scale.set(1.8, 0.6, 1);
     sp.renderOrder = 20;
     c.bubble = sp;
     c.bubbleT = 3.2;
-    sp.position.y = this.bubbleY(c, 0.5);
+    sp.position.y = this.bubbleY(c, 0.6);
     c.h.group.add(sp);
   }
 
