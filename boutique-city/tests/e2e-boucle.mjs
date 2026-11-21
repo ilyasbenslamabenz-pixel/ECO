@@ -156,7 +156,7 @@ try {
   check(recaps[1].clients > 20 && recaps[2].clients > 20 && recaps[2].ventes > 100, '5-6. ventes les jours 2 et 3 (stock livré, employés en caisse)', JSON.stringify(recaps));
 
   // 7. Sauvegarde, rechargement, reprise.
-  const before = await ev(() => { const g = window.__bc.game; return { total: g.total, cash: Math.round(g.cash), shops: g.shops.length, items: g.shops[0].items.length, emp: g.employees.length, hist: g.shops[0].history.length }; });
+  const before = await ev(() => { const g = window.__bc.game; const s0 = g.shops[0]; return { total: g.total, cash: Math.round(g.cash), shops: g.shops.length, items: s0.items.length, emp: g.employees.length, hist: s0.history.length, produits: JSON.stringify(s0.products), rentDue: Math.round(s0.rentDue ?? 0), rep: Math.round(s0.reputation * 1000), obj: g.achieved.length, ledger: g.ledger.length, day: g.day }; });
   await page.keyboard.press('t');
   await page.waitForTimeout(300);
   await ev(() => document.querySelector('.ph-app[data-app="reglages"]').click());
@@ -173,7 +173,7 @@ try {
   console.log(`rechargement : menu affiché en ${((Date.now() - t0) / 1000).toFixed(1)} s (rendu logiciel)`);
   await tap('.menu-card button.primary');
   await page.waitForFunction(() => window.__bc?.ready, null, { timeout: 60000 });
-  const after = await ev(() => { const g = window.__bc.game; return { total: g.total, cash: Math.round(g.cash), shops: g.shops.length, items: g.shops[0].items.length, emp: g.employees.length, hist: g.shops[0].history.length }; });
+  const after = await ev(() => { const g = window.__bc.game; const s0 = g.shops[0]; return { total: g.total, cash: Math.round(g.cash), shops: g.shops.length, items: s0.items.length, emp: g.employees.length, hist: s0.history.length, produits: JSON.stringify(s0.products), rentDue: Math.round(s0.rentDue ?? 0), rep: Math.round(s0.reputation * 1000), obj: g.achieved.length, ledger: g.ledger.length, day: g.day }; });
   // L'horloge peut avancer d'une ou deux minutes entre le clic et le départ (la sauvegarde de sortie les garde).
   const same = Math.abs(after.total - before.total) <= 2 && JSON.stringify({ ...before, total: 0 }) === JSON.stringify({ ...after, total: 0 });
   check(same, '7. rechargement : partie identique', `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
