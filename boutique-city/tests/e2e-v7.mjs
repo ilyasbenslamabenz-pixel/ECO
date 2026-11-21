@@ -177,10 +177,13 @@ try {
     await page.keyboard.press('e');
     await page.waitForTimeout(400);
   };
-  /** Ferme le récapitulatif de fin de journée s'il est affiché, puis remet le jeu en pause. */
+  /**
+   * Ferme le récapitulatif de fin de journée s'il est affiché. La fermeture relance le jeu (vitesse 1) : pause dans la
+   * même évaluation, sinon quelques images passent à vitesse 1 (à 23 h 59, minuit sonnerait hors de advanceTo).
+   */
   const closeRecap = async () => {
     for (let k = 0; k < 4 && await ev(() => !!document.querySelector('.recap')); k++) {
-      await ev(() => document.querySelector('.recap button.primary')?.click());
+      await ev(() => { document.querySelector('.recap button.primary')?.click(); window.__bc.setSpeed(0); });
       await page.waitForTimeout(200);
     }
     await pause();
@@ -219,8 +222,10 @@ try {
     await ev((a) => { document.querySelector('.phone .ph-back')?.click(); document.querySelector(`.ph-app[data-app="${a}"]`).click(); }, app);
     await page.waitForFunction(() => !!document.querySelector('.phone .ph-body'), null, { timeout: 60000 });
   };
+  /** Ferme le téléphone : Échap revient à l'accueil, puis fermeture et pause dans la même évaluation (voir closeRecap). */
   const phoneClose = async () => {
-    for (let k = 0; k < 4 && await phoneIsOpen(); k++) { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+    if (await ev(() => !!document.querySelector('.phone .ph-back'))) { await page.keyboard.press('Escape'); await page.waitForTimeout(150); }
+    await ev(() => { const v = document.querySelector('.ph-veil'); if (v && !v.classList.contains('hidden')) v.click(); window.__bc.setSpeed(0); });
     await pause();
   };
   /** Panneau du commerce : depuis la barre intérieure (sur place) ou depuis le téléphone (à distance). */
@@ -230,7 +235,7 @@ try {
     if (await ev(() => window.__bc.state().inside?.kind === 'shop')) await tap('.ibar button', 'Gestion');
     else {
       await phoneOpen('commerces');
-      await ev(() => [...document.querySelectorAll('.phone .ph-body button')].find((b) => b.textContent.trim() === 'Gérer').click());
+      await ev(() => { [...document.querySelectorAll('.phone .ph-body button')].find((b) => b.textContent.trim() === 'Gérer').click(); window.__bc.setSpeed(0); });
     }
     await page.waitForFunction(() => !!document.querySelector('#panel .sp-tabs'), null, { timeout: 60000 });
     await pause();
@@ -717,11 +722,11 @@ try {
   section('Impôt sur le bénéfice');
   await goIn(await shopBuilding());
   await advanceTo(at(6, 23, 59));
-  nm = await noticeMark();
   await advanceTo(at(7, 0, 1), true);
-  const w1 = await ev((m) => { const g = window.__bc.game; return { taxes: g.taxes.length, tax6: g.ledger.find((d) => d.day === 6)?.tax ?? null, notice: window.__qa.notices(m, 'Fin de la période d’exonération').length, recap: document.querySelector('.recap')?.textContent ?? '' }; }, nm);
+  // Annonce cherchée dans tout le journal, datée de minuit fin du jour 7 (indépendant des marques de journal).
+  const w1 = await ev(() => { const g = window.__bc.game; return { taxes: g.taxes.length, tax6: g.ledger.find((d) => d.day === 6)?.tax ?? null, notice: window.__qa.notices(0, 'Fin de la période d’exonération').filter((n) => n.at === 7 * 1440).length, recap: document.querySelector('.recap')?.textContent ?? '' }; });
   check(w1.taxes === 0 && w1.tax6 === 0 && w1.notice === 1, 'fin de la semaine 1 (jour 7) : exonérée, aucun impôt, fin de l’exonération annoncée', JSON.stringify({ taxes: w1.taxes, impôtJour7: w1.tax6, annonce: w1.notice }));
-  check(!w1.recap.includes('Impôt sur le bénéfice (semaine)'), 'récapitulatif du jour 7 : pas de ligne d’impôt');
+  check(w1.recap.includes('Récapitulatif du jour 7') && !w1.recap.includes('Impôt sur le bénéfice (semaine)'), 'récapitulatif du jour 7 : pas de ligne d’impôt');
   await closeRecap();
   await advanceTo(at(13, 12, 0));
   await phoneOpen('finances');
@@ -732,14 +737,13 @@ try {
   await shot('09a-finances-impot-estime');
   await phoneClose();
   await advanceTo(at(13, 23, 59));
-  const pre = await ev(() => { const g = window.__bc.game; return { cash: g.cash, est: g.taxEstimate() }; });
   nm = await noticeMark();
   await advanceTo(at(14, 0, 0), true);
   const levy = await ev((m) => {
     const g = window.__bc.game, d13 = g.ledger.find((d) => d.day === 13);
     // Bénéfice de la semaine 2 recalculé à part (jours 8 à 14, avant impôt).
     const base = g.ledger.filter((d) => d.day >= 7 && d.day <= 13).reduce((a, d) => a + d.revenue + (d.rentalIncome ?? 0) - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living, 0);
-    return { taxes: g.taxes, tax13: d13?.tax, base: Math.round(base * 100) / 100, notice: window.__qa.notices(m, 'Impôt sur le bénéfice de la semaine 2 prélevé')[0]?.text ?? window.__qa.notices(m, 'Semaine 2 sans bénéfice')[0]?.text ?? null, recap: document.querySelector('.recap')?.textContent ?? '', chfAmount: window.__qa.chf(g.taxes[0]?.amount ?? 0) };
+    return { taxes: g.taxes, tax13: d13?.tax, base: Math.round(base * 100) / 100, notice: window.__qa.notices(0, 'Impôt sur le bénéfice de la semaine 2 prélevé')[0]?.text ?? window.__qa.notices(0, 'Semaine 2 sans bénéfice')[0]?.text ?? null, recap: document.querySelector('.recap')?.textContent ?? '', chfAmount: window.__qa.chf(g.taxes[0]?.amount ?? 0) };
   }, nm);
   await shot('09b-recap-impot');
   const rec = levy.taxes[0];
