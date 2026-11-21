@@ -39,7 +39,7 @@ export class InteriorView {
   constructor(readonly opts: InteriorOpts) {
     this.W = opts.gridW; this.D = opts.gridD;
     const W = this.W, D = this.D;
-    this.scene.background = new THREE.Color(0x1b2129);
+    this.scene.background = backdrop();
     this.scene.add(new THREE.HemisphereLight(0xfff6ea, 0x4a4036, 1.6));
     const sun = new THREE.DirectionalLight(0xfff0dc, 1.6);
     sun.position.set(-W * 0.4, 12, D * 0.9);
@@ -56,11 +56,10 @@ export class InteriorView {
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ map: floorTexture(opts.floor, W, D), roughness: opts.floor === 'carrelage' ? 0.35 : 0.6 }));
     floor.receiveShadow = true;
     this.scene.add(floor);
-    const walkway = box(this.scene, W + 8, 0.12, 3, 0, -0.12, D / 2 + 1.6, mat('#b9b4aa', { rough: 0.9 }), false);
-    walkway.receiveShadow = true;
-    box(this.scene, W + 30, 0.02, 14, 0, -0.16, D / 2 + 10, mat('#3b3f45', { rough: 0.95 }), false);
-    box(this.scene, W + 30, 0.02, 0.2, 0, -0.14, D / 2 + 10, mat('#d8d8d0'), false);
-    box(this.scene, W + 60, 0.01, D + 60, 0, -0.2, 0, mat('#151a20'), false);
+    // Socle sombre sous la pièce et seuil étroit devant la porte (plus de grand trottoir ni de fond noir).
+    box(this.scene, W + 0.8, 0.35, D + 0.8, 0, -0.36, 0, mat('#232a35', { rough: 0.9 }), false);
+    const [sl, sr] = this.doorSpan();
+    box(this.scene, sr - sl + 1.2, 0.08, 2.2, (sl + sr) / 2, -0.09, D / 2 + 1.2, mat('#3a4250', { rough: 0.9 }), false);
 
     // Murs : fond, gauche, droite (pleins), façade (vitrines et porte).
     const wallM = mat(opts.wall, { rough: 0.9 }), base = mat('#5a5048');
@@ -78,17 +77,15 @@ export class InteriorView {
     box(right, 0.2, WALL_H, D, W / 2 + 0.1, 0, 0, wallM);
     const front = mk([0, 1], D / 2);
     const [dl, dr] = this.doorSpan();
-    const glass = mat('#a9d4ea', { opacity: 0.28, rough: 0.05 }), frame = mat('#2c3036', { metal: 0.5, rough: 0.4 }), facade = mat(opts.facade, { rough: 0.85 });
+    // Façade basse (vue dégagée sur la boutique) : allège de 0,9 m avec une tablette, cadre de porte.
+    const frame = mat('#2c3036', { metal: 0.5, rough: 0.4 }), facade = mat(opts.facade, { rough: 0.85 });
     for (const [a, b] of [[-W / 2 - 0.2, dl], [dr, W / 2 + 0.2]] as const) {
       const cx = (a + b) / 2, len = b - a;
-      box(front, len, 0.5, 0.2, cx, 0, D / 2 + 0.1, facade);
-      box(front, len, 2.1, 0.06, cx, 0.5, D / 2 + 0.1, glass, false);
-      box(front, len, WALL_H - 2.6, 0.2, cx, 2.6, D / 2 + 0.1, facade);
-      for (let x = a + 0.05; x <= b; x += Math.max(1, len / Math.max(1, Math.round(len / 1.6)))) box(front, 0.06, 2.1, 0.12, x, 0.5, D / 2 + 0.1, frame, false);
+      box(front, len, 0.9, 0.2, cx, 0, D / 2 + 0.1, facade);
+      box(front, len + 0.04, 0.06, 0.3, cx, 0.9, D / 2 + 0.1, frame, false);
     }
-    box(front, dr - dl, WALL_H - 2.4, 0.2, (dl + dr) / 2, 2.4, D / 2 + 0.1, facade);
-    box(front, 0.08, 2.4, 0.16, dl, 0, D / 2 + 0.1, frame, false);
-    box(front, 0.08, 2.4, 0.16, dr, 0, D / 2 + 0.1, frame, false);
+    box(front, 0.1, 0.96, 0.24, dl, 0, D / 2 + 0.1, frame, false);
+    box(front, 0.1, 0.96, 0.24, dr, 0, D / 2 + 0.1, frame, false);
     // Paillasson.
     box(this.scene, dr - dl - 0.2, 0.01, 0.9, (dl + dr) / 2, 0, D / 2 - 0.5, mat('#3a3430', { rough: 1 }), false);
 
@@ -260,4 +257,19 @@ function floorTexture(kind: 'carrelage' | 'parquet', W: number, D: number): THRE
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   return t;
+}
+
+/** Fond dégradé sombre (bleu nuit vers violet) derrière les intérieurs. */
+let backdropTex: THREE.CanvasTexture | null = null;
+function backdrop(): THREE.CanvasTexture {
+  if (backdropTex) return backdropTex;
+  const cv = document.createElement('canvas');
+  cv.width = 4; cv.height = 256;
+  const g = cv.getContext('2d')!;
+  const gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#2a3a5c'); gr.addColorStop(0.55, '#1a2236'); gr.addColorStop(1, '#2a1b33');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+  backdropTex = new THREE.CanvasTexture(cv);
+  backdropTex.colorSpace = THREE.SRGBColorSpace;
+  return backdropTex;
 }

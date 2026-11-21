@@ -40,6 +40,8 @@ export class Scene3D {
   private readonly duskSky = new THREE.Color(0xe8a070);
   private readonly nightSky = new THREE.Color(0x0e1626);
   private readonly greySky = new THREE.Color(0x8d98a3);
+  private skyMat!: THREE.ShaderMaterial;
+  private sky!: THREE.Mesh;
   /** Couverture nuageuse 0..1 (1 = pluie) et averse : gouttes autour de la caméra. */
   private cloud = 0;
   private rain: THREE.LineSegments | null = null;
@@ -81,6 +83,8 @@ export class Scene3D {
     const sky = this.nightSky.clone().lerp(this.daySky, day).lerp(this.duskSky, dusk * 0.6).lerp(this.greySky.clone().multiplyScalar(0.25 + 0.75 * day), wet * 0.75);
     (this.street.fog as THREE.Fog).near = 160 - 110 * wet; (this.street.fog as THREE.Fog).far = 620 - 330 * wet;
     (this.street.background as THREE.Color).copy(sky);
+    (this.skyMat.uniforms['horizon']!.value as THREE.Color).copy(sky).lerp(new THREE.Color(1, 1, 1), 0.25 * day);
+    (this.skyMat.uniforms['top']!.value as THREE.Color).copy(sky).multiplyScalar(0.62 + 0.1 * (1 - day)).lerp(new THREE.Color(0x2f62b8), 0.35 * day * (1 - wet));
     (this.street.fog as THREE.Fog).color.copy(sky);
     this.renderer.toneMappingExposure = 0.85 + 0.2 * day;
     this.view.setNight(this.night);
@@ -96,6 +100,17 @@ export class Scene3D {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.street.background = new THREE.Color(0xa9cbe6);
+    // Ciel en dégradé (dôme) : couleur du zénith et de l'horizon suivant l'heure et la météo.
+    this.skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false, fog: false,
+      uniforms: { top: { value: new THREE.Color(0x5d93d6) }, horizon: { value: new THREE.Color(0xcfe3f2) } },
+      vertexShader: 'varying vec3 vP; void main() { vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main() { float h = clamp(vP.y * 1.6, 0.0, 1.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.7)), 1.0); }',
+    });
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 24, 12), this.skyMat);
+    this.sky.renderOrder = -10;
+    this.sky.frustumCulled = false;
+    this.street.add(this.sky);
     this.street.fog = new THREE.Fog(0xa9cbe6, 160, 620);
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1200);
 
@@ -170,7 +185,7 @@ export class Scene3D {
     this.interior.view.dispose();
     this.interior = null;
     this.street.add(this.player.group);
-    Object.assign(this.cam, { yaw: this.streetCam.yaw || this.cam.yaw, pitch: this.streetCam.pitch || 0.38, dist: this.streetCam.dist || 9, minDist: 2.5, maxDist: 45, minPitch: 0.05, maxPitch: 1.4 });
+    Object.assign(this.cam, { yaw: this.streetCam.yaw || this.cam.yaw, pitch: this.streetCam.pitch || 0.3, dist: this.streetCam.dist || 14, minDist: 2.5, maxDist: 45, minPitch: 0.05, maxPitch: 1.4 });
   }
 
   /** Rayon depuis un point du canevas (pixels CSS). */
@@ -195,6 +210,7 @@ export class Scene3D {
     }
     this.cam.apply(this.camera, focus, dt, (a, b) => this.collider.clearFraction(a.x, a.y, a.z, b.x, b.y, b.z), snap);
     this.sun.position.set(focus.x - 90, 160, focus.z + 60);
+    this.sky.position.set(focus.x, 0, focus.z);
     this.sun.target.position.set(focus.x, 0, focus.z);
     this.people.update(dt);
     this.life.update(dt, focus);

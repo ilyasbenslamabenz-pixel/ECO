@@ -7,8 +7,8 @@ import * as THREE from 'three';
 
 export class FollowCamera {
   yaw = 0.5;
-  pitch = 0.38;
-  dist = 9;
+  pitch = 0.3;
+  dist = 14;
   minDist = 2.5;
   maxDist = 45;
   minPitch = 0.05;

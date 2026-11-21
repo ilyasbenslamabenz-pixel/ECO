@@ -303,3 +303,6 @@ input, select { border: 2px solid #2a3647; background: #0f151e; border-radius: 1
 .help-card { width: min(560px, calc(100vw - 32px)); }
 .help-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; margin: 8px 0; }
 .help-grid kbd { display: inline-block; min-width: 30px; text-align: center; padding: 3px 8px; border-radius: 8px; background: #253247; border: 2px solid #3a4a60; border-bottom-width: 4px; font: 700 13px var(--font); }
+/* Notifications : recentrées entre la carte d'objectif et le panneau quand celui-ci est ouvert */
+#panel:not(.hidden) ~ #toasts { left: calc(50vw - 65px); width: min(420px, calc(100vw - 840px)); }
+#panel.wide:not(.hidden) ~ #toasts { left: calc(50vw - 160px); width: min(380px, calc(100vw - 1010px)); }

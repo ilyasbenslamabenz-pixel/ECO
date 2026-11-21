@@ -209,7 +209,12 @@ export class DistrictView {
     for (const [k, ms] of per) {
       const mg = assets.merged(k);
       if (!mg) return null;
-      g.add(instanced(mg.geo, mg.mat as THREE.Material, ms, `immeuble ${k}`, true, true));
+      const im = instanced(mg.geo, mg.mat as THREE.Material, ms, `immeuble ${k}`, true, true);
+      // Six tons de façade (teinte douce multipliée à la texture du modèle).
+      const tones = [0xffffff, 0xffe8d2, 0xdfeaff, 0xfff1c4, 0xffdcdc, 0xdcf2e2].map((c) => new THREE.Color(c));
+      ms.forEach((m, i) => { const e = m.elements; im.setColorAt(i, tones[Math.abs(Math.floor(e[12]! * 7.3 + e[14]! * 3.1)) % tones.length]!); });
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      g.add(im);
     }
     return g;
   }
@@ -269,6 +274,18 @@ export class DistrictView {
     for (let j = 0; j <= d.nz; j++) {
       const z = (j - d.nz / 2) * PITCH;
       for (let x = -d.size.w / 2; x < d.size.w / 2; x += 6) out.push(new THREE.Matrix4().compose(new THREE.Vector3(x + 1.5, 0.02, z), q, new THREE.Vector3(3, 0.01, 0.18)));
+    }
+    // Passages piétons (bandes) de part et d'autre de chaque carrefour.
+    const half = STREET_W / 2;
+    for (let i = 0; i <= d.nx; i++) for (let j = 0; j <= d.nz; j++) {
+      const x = (i - d.nx / 2) * PITCH, z = (j - d.nz / 2) * PITCH;
+      for (let k = -5; k <= 5; k++) {
+        const t = k * 1.2;
+        for (const sgn of [-1, 1]) {
+          out.push(new THREE.Matrix4().compose(new THREE.Vector3(x + t, 0.025, z + sgn * (half + 2.2)), q, new THREE.Vector3(0.6, 0.01, 3)));
+          out.push(new THREE.Matrix4().compose(new THREE.Vector3(x + sgn * (half + 2.2), 0.025, z + t), q, new THREE.Vector3(3, 0.01, 0.6)));
+        }
+      }
     }
     return instanced(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xd8d8d0 }), out, 'marquage', false, false);
   }

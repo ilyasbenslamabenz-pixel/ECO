@@ -319,7 +319,7 @@ function start(game: Game): void {
     car = null;
     game.setDriving(null);
     scene.player.group.visible = true;
-    scene.cam.dist = 9;
+    scene.cam.dist = 14; scene.cam.pitch = 0.3;
   };
 
   const interact = (): void => { const a = currentAction(); if (a) a.run(); };
