@@ -510,6 +510,8 @@ function start(game: Game): void {
     else if (fps > 57 && scene.quality < 2) { if ((fpsHigh += 3) >= 12) { scene.setQuality(scene.quality + 1); fpsHigh = 0; } }
     else fpsHigh = 0;
     debug['fps'] = Math.round(fps);
+    debug['calls'] = scene.renderer.info.render.calls;
+    debug['triangles'] = scene.renderer.info.render.triangles;
   };
 
   const ibar = el('div', { cls: 'ibar hidden' });

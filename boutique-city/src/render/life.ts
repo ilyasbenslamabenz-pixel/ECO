@@ -118,7 +118,7 @@ export class StreetLife {
     const o = assets.fitted(key, w, h, d);
     if (!o) return;
     o.position.set(x, y, z); o.rotation.y = ry;
-    o.traverse((c) => { if ((c as THREE.Mesh).isMesh) c.castShadow = true; });
+    o.traverse((c) => { if ((c as THREE.Mesh).isMesh) c.castShadow = h > 1.2; });
     this.group.add(o);
   }
 
@@ -129,7 +129,8 @@ export class StreetLife {
     const fitted = fitInto(c.obj, o.person ? 3 : size, o.person ? size : size, o.person ? 3 : size, false);
     const holder = new THREE.Group();
     holder.add(fitted);
-    holder.traverse((m) => { if ((m as THREE.Mesh).isMesh) { m.castShadow = true; m.frustumCulled = false; } });
+    // Animaux (animation par nœuds) : découpés hors champ ; personnages à squelette : jamais (boîte non mise à jour).
+    holder.traverse((m) => { if ((m as THREE.Mesh).isMesh) { m.castShadow = o.person !== true; m.frustumCulled = !(m as THREE.SkinnedMesh).isSkinnedMesh; } });
     const mixer = c.animations.length ? new THREE.AnimationMixer(c.obj) : null;
     const actions = new Map<string, THREE.AnimationAction>();
     if (mixer) for (const clip of c.animations) actions.set(clip.name, mixer.clipAction(clip));

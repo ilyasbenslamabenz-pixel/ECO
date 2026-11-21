@@ -154,7 +154,12 @@ try {
 
   // 7. Sauvegarde, rechargement, reprise.
   const before = await ev(() => { const g = window.__bc.game; return { total: g.total, cash: Math.round(g.cash), shops: g.shops.length, items: g.shops[0].items.length, emp: g.employees.length, hist: g.shops[0].history.length }; });
-  await tap('#hud button:has-text("Sauvegarder")');
+  await page.keyboard.press('t');
+  await page.waitForTimeout(300);
+  await ev(() => document.querySelector('.ph-app[data-app="reglages"]').click());
+  await page.waitForTimeout(300);
+  await ev(() => [...document.querySelectorAll('.ph-body button')].find((b) => b.textContent.includes('Sauvegarder')).click());
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   // Rechargement de la page à l'adresse normale (« ?nouveau » ignorerait la sauvegarde).
   await page.goto(`${base}/index.html`);
   const t0 = Date.now();

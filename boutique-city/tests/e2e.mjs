@@ -235,14 +235,38 @@ try {
   await ev(() => { for (let d = 0; d < 4; d++) { window.__bc.keepAlive(); window.__bc.advance(720); } });
   await page.waitForTimeout(400);
   if (await page.locator('.recap').count()) await page.click('.recap button.primary');
-  await page.click('#hud button:has-text("Entreprise")');
+  // Téléphone : ouverture (T), pause, applis, Immobilier, Marché, Entreprise.
+  await page.keyboard.press('t');
+  await page.waitForTimeout(400);
+  const ph = await ev(() => ({ open: !document.querySelector('.phone').classList.contains('hidden'), apps: document.querySelectorAll('.ph-app').length, veil: !document.querySelector('.ph-veil').classList.contains('hidden') }));
+  check(ph.open && ph.apps === 11 && ph.veil, 'téléphone ouvert (11 applis, scène voilée)', JSON.stringify(ph));
+  await shot('14a-telephone');
+  await ev(() => document.querySelector('.ph-app[data-app="immo"]').click());
+  await page.waitForTimeout(400);
+  check(await ev(() => document.querySelectorAll('.ph-body .ph-card').length > 3), 'appli Immobilier : locaux libres listés');
+  await ev(() => document.querySelector('.ph-back').click());
+  await ev(() => document.querySelector('.ph-app[data-app="marche"]').click());
+  await page.waitForTimeout(400);
+  check(await ev(() => document.querySelectorAll('.ph-body .ph-line').length > 10), 'appli Marché : prix du grossiste');
+  await shot('14b-marche');
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  check(await ev(() => document.querySelector('.phone').classList.contains('hidden')), 'téléphone fermé (Échap)');
+  await page.keyboard.press('t');
+  await page.waitForTimeout(300);
+  await ev(() => document.querySelector('.ph-app[data-app="entreprise"]').click());
   await page.waitForTimeout(500);
   await shot('14-entreprise');
   const res = await ev(() => { const s = window.__bc.game.shops[0]; return { clients: s.history.reduce((a, d) => a + d.customers, 0), ventes: Math.round(s.history.reduce((a, d) => a + d.revenue, 0)) }; });
   check(res.clients > 60 && res.ventes > 200, 'le commerce vend avec son employé', JSON.stringify(res));
 
   // Sauvegarde et reprise.
-  await page.click('#hud button:has-text("Sauvegarder")');
+  await page.keyboard.press('t');
+  await page.waitForTimeout(300);
+  await ev(() => document.querySelector('.ph-app[data-app="reglages"]').click());
+  await page.waitForTimeout(300);
+  await ev(() => [...document.querySelectorAll('.ph-body button')].find((b) => b.textContent.includes('Sauvegarder')).click());
+  await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
   await page.goto(`${base}/index.html`);
   await page.waitForSelector('.menu-card button.primary');
   const label = await page.textContent('.menu-card button.primary');

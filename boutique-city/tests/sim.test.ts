@@ -315,3 +315,61 @@ test('objectifs, avis clients et progression des employés', async () => {
   const h = new Game(g.seed, 'x', JSON.parse(JSON.stringify(g.save())));
   assert.deepEqual(h.achieved, g.achieved);
 });
+
+test('sous-location, marché, concurrents, météo, loyer mensuel, employés et sauvegarde', () => {
+  const g = new Game(11, 'Bailleur SA');
+  g.cash = 200_000;
+  g.setPlace({ kind: 'rue' });
+  // Appartement à sous-louer.
+  const home = g.district.homes.find((h) => g.homeFree(h.id))!;
+  const sl = g.leaseForSublet('logement', home.id);
+  assert.ok(sl.ok, sl.ok ? '' : sl.message);
+  if (!sl.ok) return;
+  assert.equal(g.homeFree(home.id), false);
+  assert.ok(!g.rentHome(home.id).ok, 'impossible d’emménager dans un logement sous-loué');
+  const m = g.marketRent('logement', home.id);
+  assert.ok(g.setSubletAsk(sl.data.id, m * 10).ok);
+  assert.equal(g.sublets[0]!.ask, Math.round(m * 2.5 * 100) / 100, 'loyer demandé plafonné à 250 %');
+  g.setSubletAsk(sl.data.id, m * 0.9);
+  assert.ok(g.tenantChance(g.sublets[0]!) > 0.5, 'loyer bas : locataire probable');
+  // Local à sous-louer : plus libre, dépôt rendu à la résiliation.
+  const p = g.district.premises.find((x) => g.isFree(x))!;
+  const sp = g.leaseForSublet('local', p.id);
+  assert.ok(sp.ok && !g.isFree(p));
+  let income = 0, rentPaid = 0;
+  for (let d = 0; d < 8; d++) { keepAlive(g); g.advance(DAY); income += g.ledger.at(-1)!.rentalIncome; rentPaid += g.ledger.at(-1)!.rent; }
+  assert.ok(g.sublets.some((x) => x.tenant), 'un locataire finit par arriver');
+  assert.ok(income > 0 && rentPaid > 0, `loyers encaissés ${income} / payés ${rentPaid}`);
+  if (sp.ok) { const cash = g.cash; assert.ok(g.endSublet(sp.data.id).ok); assert.ok(g.cash >= cash, 'dépôt rendu'); assert.ok(g.isFree(p)); }
+  // Marché, concurrents, météo.
+  for (const pr of productsOf('epicerie')) { const k = g.marketIndex(pr.id); assert.ok(k >= 0.85 && k <= 1.2, `indice ${k}`); }
+  assert.ok(['soleil', 'nuages', 'pluie'].includes(g.weather));
+  assert.ok(g.weatherFactor('epicerie') > 0.5 && g.weatherFactor('epicerie') < 1.2);
+  // Commerce : loyer provisionné chaque jour, prélevé au 30e jour.
+  const p2 = g.district.premises.find((x) => g.isFree(x))!;
+  const s = g.rent(p2.id, 'epicerie');
+  assert.ok(s.ok);
+  if (!s.ok) return;
+  furnish(g, s.data.id, 'epicerie');
+  stockUp(g, s.data.id);
+  staff(g, s.data.id);
+  const emp = g.employees[0]!;
+  assert.ok(g.raiseWage(emp.id, emp.wage + 2).ok && (emp.mood ?? 0) > 0.75, 'augmentation : satisfaction en hausse');
+  for (let d = 0; d < 29; d++) { keepAlive(g); g.advance(DAY); }
+  assert.ok((g.shop(s.data.id)!.rentDue ?? 0) > 0, 'loyer provisionné');
+  keepAlive(g); g.advance(DAY);
+  assert.ok(g.notices.some((n) => n.text.includes('loyer du mois prélevé')), 'loyer mensuel prélevé');
+  assert.ok(g.rivals['epicerie']! < 1, 'les concurrents baissent leurs prix');
+  // Sauvegarde : tout est restauré ; une ancienne sauvegarde sans les nouveaux champs se charge.
+  const save = g.save();
+  const g2 = new Game(save.seed, save.companyName, structuredClone(save));
+  assert.deepEqual(g2.sublets, g.sublets);
+  assert.deepEqual(g2.market, g.market);
+  assert.equal(g2.weather, g.weather);
+  assert.equal(Math.round(g2.cash), Math.round(g.cash));
+  const old = structuredClone(save) as Partial<typeof save>;
+  delete old.sublets; delete old.market; delete old.rivals; delete old.weather; delete old.marketDay;
+  const g3 = new Game(save.seed, save.companyName, old as typeof save);
+  assert.deepEqual(g3.sublets, []);
+  assert.equal(g3.weather, 'soleil');
+});

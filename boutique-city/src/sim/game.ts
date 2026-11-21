@@ -1096,7 +1096,7 @@ export class Game {
       const rent = r2(p.rent / 30);
       s.today.rent += rent; this.today.rent += rent;
       s.rentDue = r2((s.rentDue ?? 0) + rent);
-      if ((this.day + 1 - (s.leaseDay ?? 0)) % 30 === 0) {
+      if (this.day > (s.leaseDay ?? 0) && (this.day - (s.leaseDay ?? 0)) % 30 === 0) {
         this.cash -= s.rentDue;
         this.notify('info', `${s.name} : loyer du mois prélevé (${Math.round(s.rentDue)} CHF).`);
         s.rentDue = 0;

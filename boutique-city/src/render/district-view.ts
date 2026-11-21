@@ -458,7 +458,7 @@ export class DistrictView {
     for (const [k, ms] of per) {
       const [w, h, dd] = size[k] ?? [0.7, 0.6, 0.7];
       const im = assets.instances(k, ms, w, h, dd);
-      if (im) { im.castShadow = h > 0.7; im.name = `décor ${k}`; g.add(im); }
+      if (im) { im.castShadow = h > 1.8; im.name = `décor ${k}`; g.add(im); }
     }
     return g;
   }
@@ -505,7 +505,7 @@ export class DistrictView {
       const sz = assets.size(k);
       const wide = /truck|garbage|firetruck|ambulance|delivery|van/.test(k) ? 2.3 : 1.9;
       const im = sz ? assets.instances(k, ms, wide, 4, 6.5) : null;
-      if (im) { im.castShadow = true; im.name = `garée ${k}`; g.add(im); }
+      if (im) { im.castShadow = false; im.name = `garée ${k}`; g.add(im); }
     }
     return g;
   }
