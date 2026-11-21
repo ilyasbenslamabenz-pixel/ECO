@@ -20,7 +20,7 @@ import { Scene3D } from './render/scene';
 import type { BuildingState } from './render/district-view';
 import { drive, type DriveState } from './world/vehicle';
 import { competitorView, homeView, premiseView, serviceView, subletView, type UiCtx } from './ui/dialogs';
-import { $, askConfirm, button, chf, el } from './ui/dom';
+import { $, askConfirm, button, chf, el, icon, signed, type IconName } from './ui/dom';
 import { BigMap, MiniMap } from './ui/map';
 import { Panel } from './ui/panel';
 import { showRecap } from './ui/recap';
@@ -52,12 +52,31 @@ function writeSave(g: Game): void {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(g.save())); } catch { /* stockage indisponible */ }
 }
 
+const TOAST_ICON: Record<'ok' | 'error' | 'info' | 'warn', IconName> = { ok: 'check', error: 'alert', warn: 'alert', info: 'info' };
+/**
+ * Notification courte (en haut au centre) : pictogramme et couleur selon le type, au plus 3 à la fois (la plus
+ * ancienne part), un message identique au précédent encore affiché le rallonge avec un compteur « ×2 ».
+ */
 function toast(text: string, kind: 'ok' | 'error' | 'info' | 'warn' = 'info'): void {
   const box = $('toasts');
-  const t = el('div', { cls: `toast ${kind}`, text });
+  const life = kind === 'error' ? 5500 : kind === 'warn' ? 4800 : 3800;
+  const dismiss = (t: HTMLElement): void => { t.classList.add('out'); setTimeout(() => t.remove(), 250); };
+  const arm = (t: HTMLElement): void => { clearTimeout(Number(t.dataset['timer'])); t.dataset['timer'] = String(setTimeout(() => dismiss(t), life)); };
+  const same = [...box.children].find((c) => (c as HTMLElement).dataset['text'] === text && !c.classList.contains('out')) as HTMLElement | undefined;
+  if (same) {
+    const n = Number(same.dataset['n'] ?? '1') + 1;
+    same.dataset['n'] = String(n);
+    same.querySelector('.toast-n')!.textContent = `×${n}`;
+    same.classList.remove('bump'); void same.offsetWidth; same.classList.add('bump');
+    arm(same);
+    return;
+  }
+  const t = el('div', { cls: `toast ${kind}`, attrs: { role: kind === 'error' ? 'alert' : 'status', 'data-text': text } },
+    el('span', { cls: 'toast-ico' }, icon(TOAST_ICON[kind])), el('span', { cls: 'toast-txt', text }), el('i', { cls: 'toast-n' }));
   box.append(t);
-  while (box.children.length > 4) box.firstElementChild?.remove();
-  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, kind === 'error' ? 5500 : 4200);
+  const live = [...box.children].filter((c) => !c.classList.contains('out'));
+  for (const old of live.slice(0, Math.max(0, live.length - 3))) dismiss(old as HTMLElement);
+  arm(t);
 }
 
 function menu(): void {
@@ -159,17 +178,28 @@ type Inside = { kind: 'shop'; shopId: number } | { kind: 'home'; homeId: number 
 /** Fiche d'aide : raccourcis et boucle de jeu (touche H, et au premier lancement). */
 function showHelp(): void {
   if (document.querySelector('.help-card')) return;
-  const keys: [string, string][] = [
-    ['Z Q S D', 'marcher (Maj : courir) — ou les flèches'], ['Souris', 'glisser : tourner la caméra · molette : zoom'], ['E', 'entrer, interagir, conduire, tenir la caisse, dormir'],
-    ['T', 'téléphone : commerces, immobilier, banque, marché, messages…'], ['M', 'carte du quartier (cliquer un lieu = destination)'], ['B', 'aménager le commerce (R : tourner un meuble)'],
-    ['P', 'pause'], ['H', 'cette aide'], ['Échap', 'fermer / revenir'],
+  // Groupes de touches : chaque entrée = touches (plusieurs = alternatives), description.
+  const groups: [string, [string[], string][]][] = [
+    ['Se déplacer', [
+      [['Z', 'Q', 'S', 'D'], 'marcher (ou les flèches)'], [['Maj'], 'courir'], [['Espace'], 'freiner en véhicule'],
+      [['Souris'], 'glisser : tourner la caméra · molette : zoom']]],
+    ['Agir', [
+      [['E'], 'entrer, parler, conduire, tenir la caisse, dormir'], [['B'], 'aménager le commerce'], [['R'], 'tourner le meuble en main'],
+      [['Clic droit'], 'annuler la pose d’un meuble']]],
+    ['Interface', [
+      [['T'], 'téléphone : commerces, immobilier, banque, messages…'], [['M'], 'carte du quartier (clic = destination)'],
+      [['P'], 'pause / reprise'], [['1', '2', '3', '4'], 'vitesse : pause, normale, rapide, très rapide'], [['H'], 'cette aide'], [['Échap'], 'fermer, revenir, se réveiller']]],
   ];
+  const steps = ['Louez un local (anneau jaune)', 'Achetez des meubles et aménagez (B)', 'Approvisionnez au grossiste', 'Tenez la caisse ou embauchez'];
   const close = (): void => wrap.remove();
   const wrap = el('div', { cls: 'confirm', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Aide' } },
     el('div', { cls: 'confirm-card help-card' },
-      el('div', { cls: 'kicker', text: 'Aide' }), el('h2', { text: 'Comment jouer' }),
-      el('p', { cls: 'small', text: 'Louez un local (anneau jaune), achetez des meubles au magasin de meubles, aménagez (B), achetez la marchandise au grossiste, tenez la caisse ou embauchez, puis développez votre empire : plusieurs commerces, sous-locations, publicité, véhicules.' }),
-      el('div', { cls: 'help-grid' }, ...keys.flatMap(([k, t]) => [el('kbd', { text: k }), el('span', { cls: 'small', text: t })])),
+      el('div', { cls: 'help-head' }, el('div', {}, el('div', { cls: 'kicker', text: 'Aide · touche H' }), el('h2', { text: 'Comment jouer' })), button('×', close, 'icon-x')),
+      el('ol', { cls: 'help-steps' }, ...steps.map((t, k) => el('li', {}, el('b', { text: String(k + 1) }), el('span', { text: t })))),
+      el('p', { cls: 'help-goal', text: 'Ensuite, développez votre empire : plusieurs commerces, sous-locations, publicité, véhicules. Suivez la carte d’objectif en haut à gauche.' }),
+      el('div', { cls: 'help-cols' }, ...groups.map(([title, keys]) => el('div', { cls: 'help-col' },
+        el('div', { cls: 'sec', text: title }),
+        el('div', { cls: 'help-grid' }, ...keys.flatMap(([ks, t]) => [el('span', { cls: 'help-keys' }, ...ks.map((k) => el('kbd', { text: k }))), el('span', { text: t })]))))),
       el('div', { cls: 'row end' }, button("C'est parti !", close, 'primary'))));
   wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
   wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape' || e.key === 'Enter') close(); });
@@ -393,7 +423,9 @@ function start(game: Game): void {
   };
 
   const interact = (): void => { const a = currentAction(); if (a) a.run(); };
-  const prompt = el('button', { cls: 'prompt hidden', attrs: { type: 'button' }, on: { click: () => interact() } });
+  // Invite d'action : touche E (cliquable) et libellé ; le DOM n'est réécrit que si le libellé change.
+  const promptLabel = el('span');
+  const prompt = el('button', { cls: 'prompt hidden', attrs: { type: 'button' }, on: { click: () => interact() } }, el('kbd', { text: 'E' }), promptLabel);
   document.body.append(prompt);
 
   /* ------------------------------ Aménagement ------------------------------ */
@@ -482,12 +514,23 @@ function start(game: Game): void {
   const cash = el('b', { cls: 'cash' });
   const delta = el('span', { cls: 'delta' });
   const energy = el('i'), hunger = el('i');
-  const carry = el('span', { cls: 'carry' });
-  const speedBtns = ['❚❚', '▶', '▶▶', '▶▶▶'].map((t, k) => button(t, () => { speed = k; paint(); }, 'spd'));
-  speedBtns.forEach((b, k) => b.setAttribute('aria-label', k === 0 ? 'Pause' : `Vitesse ${k}`));
+  const energyVal = el('b'), hungerVal = el('b');
+  const weatherBox = el('span', { cls: 'weather' });
+  const carryNum = el('b');
+  const carry = el('span', { cls: 'carry hidden', attrs: { title: 'Marchandise portée' } }, icon('box'), carryNum);
+  // Vitesse : pause, puis 1 à 3 chevrons (touches 1 à 4).
+  const speedBtns = [0, 1, 2, 3].map((k) => {
+    const b = button('', () => { speed = k; paint(); }, 'spd');
+    if (k === 0) b.append(icon('pause'));
+    else for (let i = 0; i < k; i++) b.append(icon('play'));
+    const l = ['Pause', 'Vitesse normale', 'Rapide', 'Très rapide'][k]!;
+    b.setAttribute('aria-label', l); b.title = `${l} (${k + 1})`;
+    return b;
+  });
+  let shownWeatherHud = '';
   // Téléphone (applis) : gestion à distance, immobilier, banque, marché, messages…
   const phone = new Phone(ctx, {
-    openMap: () => bigmap.toggle(game.player.x, game.player.z, game.player.heading),
+    openMap: () => bigmap.toggle(game.player.x, game.player.z, game.player.heading, waypoint),
     openCompany: () => panel.open(companyView(ctx)),
     save: () => { writeSave(game); toast('Partie sauvegardée', 'ok'); },
     toggleSound: () => sound.toggle(),
@@ -508,19 +551,20 @@ function start(game: Game): void {
   /** Caméra temporairement centrée sur un lieu (« Voir sur la carte »). */
   let lookAt: { x: number; z: number; t: number } | null = null;
   const phoneBadge = el('i', { cls: 'badge hidden' });
-  const phoneBtn = el('button', { cls: 'round phone-btn', attrs: { type: 'button', 'aria-label': 'Téléphone (T)', title: 'Téléphone (T)' }, on: { click: () => phone.toggle() } }, el('span', { text: '📱' }), phoneBadge);
+  const phoneBtn = el('button', { cls: 'round phone-btn', attrs: { type: 'button', 'aria-label': 'Téléphone (T)', title: 'Téléphone (T)' }, on: { click: () => phone.toggle() } }, icon('phone'), el('kbd', { text: 'T' }), phoneBadge);
+  const mapBtn = el('button', { cls: 'round map-btn', attrs: { type: 'button', 'aria-label': 'Carte (M)', title: 'Carte (M)' }, on: { click: () => bigmap.toggle(game.player.x, game.player.z, game.player.heading, waypoint) } }, icon('map'), el('kbd', { text: 'M' }));
+  const need = (cls: string, title: string, ic: IconName, bar: HTMLElement, val: HTMLElement): HTMLElement =>
+    el('div', { cls: `need ${cls}`, attrs: { title } }, icon(ic), el('div', { cls: 'track' }, bar), val);
   hud.replaceChildren(
     el('div', { cls: 'hud-left' },
-      el('div', { cls: 'when' }, clock, dayLabel),
-      el('div', { cls: 'speeds' }, ...speedBtns)),
+      el('div', { cls: 'when' }, clock, el('div', { cls: 'when-sub' }, dayLabel, weatherBox)),
+      el('div', { cls: 'speeds', attrs: { role: 'group', 'aria-label': 'Vitesse du temps' } }, ...speedBtns)),
     el('div', { cls: 'hud-right' },
-      el('div', { cls: 'needs' },
-        el('div', { cls: 'need e', attrs: { title: 'Énergie' } }, el('span', { text: '⚡' }), el('div', { cls: 'track' }, energy)),
-        el('div', { cls: 'need h', attrs: { title: 'Faim' } }, el('span', { text: '🍔' }), el('div', { cls: 'track' }, hunger))),
+      el('div', { cls: 'needs' }, need('e', 'Énergie : dormez chez vous ou buvez un café au snack', 'bolt', energy, energyVal), need('h', 'Faim : mangez au snack', 'food', hunger, hungerVal)),
       carry,
-      el('div', { cls: 'wallet' }, cash, delta),
+      el('div', { cls: 'wallet', attrs: { title: 'Trésorerie · résultat du jour' } }, cash, delta),
       phoneBtn,
-      el('button', { cls: 'round', attrs: { type: 'button', 'aria-label': 'Carte (M)', title: 'Carte (M)' }, on: { click: () => bigmap.toggle(game.player.x, game.player.z, game.player.heading) } }, el('span', { text: '🗺️' }))));
+      mapBtn));
   // Objectif en cours (carte repliable en haut à gauche).
   const objCard = el('button', { cls: 'objective', attrs: { type: 'button', 'aria-label': 'Objectif en cours' } });
   let objOpen = true, objSig = '';
@@ -544,18 +588,28 @@ function start(game: Game): void {
   const paint = (): void => {
     const c = clockView(game.total);
     clock.textContent = `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}`;
-    dayLabel.textContent = `${formatClock(game.total).split('·').slice(0, 2).join('·').trim()} · ${{ soleil: '☀️', nuages: '⛅', pluie: '🌧️' }[game.weather]}`;
+    dayLabel.textContent = formatClock(game.total).split('·').slice(0, 2).join('·').trim();
+    if (game.weather !== shownWeatherHud) {
+      shownWeatherHud = game.weather;
+      const [wi, wl] = ({ soleil: ['sun', 'Soleil'], nuages: ['cloud', 'Nuageux'], pluie: ['rain', 'Pluie'] } as Record<string, [IconName, string]>)[game.weather] ?? ['sun', 'Soleil'];
+      weatherBox.replaceChildren(icon(wi), el('span', { text: wl }));
+      weatherBox.className = `weather ${game.weather}`;
+    }
     cash.textContent = chf(game.cash);
     cash.classList.toggle('neg', game.cash < 0);
     const today = dayProfit(game.today);
-    delta.textContent = `${today >= 0 ? '+' : '−'}${chf(Math.abs(today))} aujourd’hui`;
+    delta.textContent = `${signed(today)} aujourd’hui`;
     delta.classList.toggle('neg', today < 0);
+    hud.querySelector('.wallet')?.classList.toggle('neg', game.cash < 0);
     energy.style.width = `${game.player.energy}%`;
     hunger.style.width = `${game.player.hunger}%`;
+    energyVal.textContent = String(Math.round(game.player.energy));
+    hungerVal.textContent = String(Math.round(game.player.hunger));
     energy.classList.toggle('low', game.player.energy < 15);
     hunger.classList.toggle('low', game.player.hunger < 15);
     const n = Object.values(game.player.carry).reduce((a, b) => a + b, 0);
-    carry.textContent = n ? `📦 ${n}` : '';
+    carryNum.textContent = String(n);
+    carry.classList.toggle('hidden', n === 0);
     speedBtns.forEach((b, k) => b.classList.toggle('on', k === speed));
     const u = phone.unread;
     phoneBadge.textContent = String(Math.min(99, u));
@@ -593,7 +647,9 @@ function start(game: Game): void {
     if (inside.kind === 'home') {
       if (ibarSig === 'home') return;
       ibarSig = 'home';
-      ibar.replaceChildren(el('b', { text: 'Chez moi' }), el('span', { cls: 'muted small', text: 'Approchez-vous du lit (E) pour dormir.' }), button('Sortir', exitInterior, 'small'));
+      ibar.replaceChildren(
+        el('div', { cls: 'ib-id' }, el('span', { cls: 'ib-sign home' }, icon('home')), el('div', {}, el('b', { text: 'Chez moi' }), el('div', { cls: 'ib-sub', text: 'Approchez-vous du lit et appuyez sur E pour dormir.' }))),
+        el('div', { cls: 'ib-actions' }, ibtn('Sortir', exitInterior, '', 'Échap')));
       return;
     }
     const s = game.shop(inside.shopId);
@@ -605,15 +661,29 @@ function start(game: Game): void {
     const sig = `${id}|${open}|${s.today.customers}|${Math.round(s.today.revenue)}|${n}|${build.on}`;
     if (sig === ibarSig) return;
     ibarSig = sig;
+    const t = SHOP_TYPE_BY_ID.get(s.type)!;
     ibar.replaceChildren(
-      el('div', {}, el('b', { text: s.name }), el('div', { cls: 'muted small', text: `${open ? 'Ouvert' : 'Fermé'} · ${s.today.customers} clients aujourd’hui · ${chf(s.today.revenue)}` })),
-      button(build.on ? 'Terminer (B)' : 'Aménager (B)', () => setBuild(!build.on), build.on ? 'small primary' : 'small'),
-      button('Gestion', () => ctx.openShop(id), 'small'),
-      n > 0 ? button(`Décharger (${n})`, () => { act(game.unload(id)); refreshInterior(true); renderInteriorBar(); }, 'small primary') : '',
-      button('Sortir', exitInterior, 'small'));
+      el('div', { cls: 'ib-id', attrs: { style: `--shop:${t.color}` } },
+        el('span', { cls: 'ib-sign', text: s.name.charAt(0).toUpperCase() }),
+        el('div', {}, el('div', { cls: 'ib-title' }, el('b', { text: s.name }), el('span', { cls: `tag-badge ${open ? 'ok' : 'muted'}`, text: open ? 'Ouvert' : 'Fermé' })),
+          el('div', { cls: 'ib-sub', text: `${t.nameFr} · ${s.open} h – ${s.close} h` }))),
+      el('div', { cls: 'ib-stats' },
+        el('div', {}, el('span', { text: 'Clients' }), el('b', { text: String(s.today.customers) })),
+        el('div', {}, el('span', { text: 'Ventes' }), el('b', { text: chf(s.today.revenue) }))),
+      el('div', { cls: 'ib-actions' },
+        n > 0 ? ibtn(`Décharger (${n})`, () => { act(game.unload(id)); refreshInterior(true); renderInteriorBar(); }, 'primary') : null,
+        ibtn(build.on ? 'Terminer' : 'Aménager', () => setBuild(!build.on), build.on ? 'primary' : '', 'B'),
+        ibtn('Gestion', () => ctx.openShop(id)),
+        ibtn('Sortir', exitInterior)));
   };
+  /** Bouton de la barre d'intérieur, avec sa touche éventuelle. */
+  function ibtn(text: string, run: () => void, cls = '', key?: string): HTMLButtonElement {
+    const b = button(text, run, cls);
+    if (key) b.append(el('kbd', { text: key }));
+    return b;
+  }
 
-  const sleepCover = el('div', { cls: 'sleep hidden' }, el('div', { text: 'Zzz…' }), el('p', { cls: 'small', text: 'Vous dormez. Échap pour vous réveiller.' }));
+  const sleepCover = el('div', { cls: 'sleep hidden' }, el('div', { cls: 'sleep-z', text: 'Zzz…' }), el('p', {}, 'Vous dormez, le temps file. ', el('kbd', { text: 'Échap' }), ' pour vous réveiller.'));
   document.body.append(sleepCover);
 
   /* ------------------------------ Clavier ------------------------------ */
@@ -631,11 +701,12 @@ function start(game: Game): void {
     }
     if (k === 'h') showHelp();
     else if (k === 't') phone.toggle();
-    else if (k === 'm') bigmap.toggle(game.player.x, game.player.z, game.player.heading);
+    else if (k === 'm') bigmap.toggle(game.player.x, game.player.z, game.player.heading, waypoint);
     else if (k === 'e') interact();
     else if (k === 'b') setBuild(!build.on);
     else if (k === 'r' && build.on) { build.rot = ((build.rot + 1) % 4) as Rot; }
     else if (k === 'p') { speed = speed === 0 ? 1 : 0; paint(); }
+    else if (k === '1' || k === '2' || k === '3' || k === '4') { speed = Number(k) - 1; paint(); }
   };
 
   /* ------------------------------ Reprise d'une sauvegarde ------------------------------ */
@@ -790,7 +861,7 @@ function start(game: Game): void {
     if ((refreshT += dt) > 0.5) { refreshT = 0; renderInteriorBar(); renderObjective(); if (build.on) renderBuildBar(); }
     const a = currentAction();
     prompt.classList.toggle('hidden', !a || build.on);
-    if (a) prompt.textContent = `E · ${a.label}`;
+    if (a && promptLabel.textContent !== a.label) promptLabel.textContent = a.label;
     minimap.visible = !inside;
     if (!inside) minimap.draw(game.player.x, game.player.z, game.player.heading, waypoint);
 

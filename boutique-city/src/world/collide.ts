@@ -1,11 +1,20 @@
 /**
  * Collisions de la rue : les immeubles sont des rectangles alignés sur les axes. Un cercle (personnage, véhicule)
  * est repoussé hors des rectangles voisins (grille de hachage de 24 m). Occlusion caméra : le segment tête →
- * caméra traverse-t-il un immeuble (en tenant compte de sa hauteur) ? TypeScript pur.
+ * caméra traverse-t-il un volume (immeuble jusqu'à sa hauteur, ou volume en hauteur comme un auvent : entre `y0`
+ * et `h`) ? TypeScript pur.
  */
 import type { District } from '../sim/district';
 
-export interface Rect { minX: number; maxX: number; minZ: number; maxZ: number; h: number }
+/**
+ * Volume aligné sur les axes : emprise (x, z), sommet `h`, base `y0` (0 par défaut : posé au sol). Un volume dont
+ * la base est au-dessus de la tête (auvent, parasol) ne gêne pas la marche, seulement la caméra.
+ */
+export interface Rect { minX: number; maxX: number; minZ: number; maxZ: number; h: number; y0?: number }
+/** Base (m) au-delà de laquelle un volume ne bloque plus la marche (on passe dessous). */
+const WALK_UNDER = 2.2;
+/** Marge (m) autour des volumes pour la caméra (pas de plan proche qui frôle un mur). */
+const CAM_MARGIN = 0.3;
 const CELL = 24;
 export const FLOOR_H = 3.2;
 
@@ -51,6 +60,7 @@ export class Collider {
     for (let pass = 0; pass < 2; pass++) {
       for (const k of this.near(x, z, radius)) {
         const r = this.rects[k]!;
+        if ((r.y0 ?? 0) > WALK_UNDER) continue;
         const cx = Math.max(r.minX, Math.min(x, r.maxX)), cz = Math.max(r.minZ, Math.min(z, r.maxZ));
         let dx = x - cx, dz = z - cz;
         const d2 = dx * dx + dz * dz;
@@ -74,20 +84,35 @@ export class Collider {
     return { x, z, hit };
   }
 
-  /** Part (0..1) du segment a → b libre avant le premier immeuble traversé. */
+  /**
+   * Part (0..1) du segment a → b libre avant le premier volume traversé (immeubles, voitures garées, auvents…).
+   * Intersection exacte segment / boîte (méthode des dalles) : pas d'échantillonnage, peu coûteux même appelé
+   * une vingtaine de fois par image par la caméra.
+   */
   clearFraction(ax: number, ay: number, az: number, bx: number, by: number, bz: number): number {
-    const len = Math.hypot(bx - ax, by - ay, bz - az);
-    const steps = Math.max(2, Math.ceil(len / 0.5));
+    const dx = bx - ax, dy = by - ay, dz = bz - az;
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-6) return 1;
     const cand = this.near((ax + bx) / 2, (az + bz) / 2, len / 2 + 1);
-    if (!cand.size) return 1;
-    for (let s = 1; s <= steps; s++) {
-      const t = s / steps;
-      const x = ax + (bx - ax) * t, y = ay + (by - ay) * t, z = az + (bz - az) * t;
-      for (const k of cand) {
-        const r = this.rects[k]!;
-        if (y < r.h && x > r.minX - 0.3 && x < r.maxX + 0.3 && z > r.minZ - 0.3 && z < r.maxZ + 0.3) return Math.max(0, (s - 1) / steps);
-      }
+    let best = 1;
+    for (const k of cand) {
+      const r = this.rects[k]!;
+      const m = CAM_MARGIN;
+      let t0 = 0, t1 = best;
+      // Dalles x, z puis y (base du volume : y0 avec marge, ou rien en dessous pour un volume posé au sol).
+      const slab = (o: number, d: number, lo: number, hi: number): boolean => {
+        if (Math.abs(d) < 1e-9) return o > lo && o < hi;
+        let u = (lo - o) / d, v = (hi - o) / d;
+        if (u > v) { const w = u; u = v; v = w; }
+        if (u > t0) t0 = u;
+        if (v < t1) t1 = v;
+        return t0 < t1;
+      };
+      if (!slab(ax, dx, r.minX - m, r.maxX + m) || !slab(az, dz, r.minZ - m, r.maxZ + m)) continue;
+      if (!slab(ay, dy, r.y0 !== undefined && r.y0 > 0 ? r.y0 - m : -1e6, r.h)) continue;
+      best = t0;
+      if (best <= 0) return 0;
     }
-    return 1;
+    return best;
   }
 }

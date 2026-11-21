@@ -373,3 +373,135 @@ test('sous-location, marché, concurrents, météo, loyer mensuel, employés et 
   assert.deepEqual(g3.sublets, []);
   assert.equal(g3.weather, 'soleil');
 });
+
+test('formation des employés : coût par niveau, capacité de caisse, salaire du marché, plafond', () => {
+  const g = new Game(7);
+  const s = g.rent(bestFree(g), 'epicerie');
+  assert.ok(s.ok);
+  if (!s.ok) return;
+  furnish(g, s.data.id, 'epicerie');
+  staff(g, s.data.id);
+  const e = g.employees[0]!;
+  const skill0 = e.skill, serve0 = g.serviceSkill(e), market0 = g.marketWage(e.skill, 0);
+  assert.equal(g.nextTrainingCost(e), 600);
+  const cash = g.cash;
+  const r = g.train(e.id);
+  assert.ok(r.ok && r.data === 600, 'formation niveau 1 payée');
+  assert.equal(Math.round(cash - g.cash), 600);
+  assert.equal(e.training, 1);
+  assert.ok(e.skill > skill0 || e.skill === 1, 'compétence en hausse');
+  assert.ok(g.serviceSkill(e) > serve0 * 1.1, `capacité ${serve0.toFixed(2)} → ${g.serviceSkill(e).toFixed(2)}`);
+  assert.ok(g.marketWage(e.skill, 1) >= market0 + 2, 'salaire du marché plus élevé');
+  assert.equal(g.nextTrainingCost(e), 1100);
+  assert.ok(g.train(e.id).ok && g.train(e.id).ok);
+  assert.equal(e.training, 3);
+  assert.equal(g.nextTrainingCost(e), null);
+  assert.equal(g.train(e.id).ok, false, 'pas de quatrième niveau');
+  g.cash = 100;
+  const e2 = (staff(g, s.data.id), g.employees[1]!);
+  assert.equal(g.train(e2.id).ok, false, 'trésorerie insuffisante');
+  // Formé mais salaire inchangé : il finit par demander une augmentation.
+  g.cash = 50_000;
+  e.wage = g.marketWage(e.skill, 0);
+  keepAlive(g); g.advance(DAY);
+  assert.ok(e.askedRaise, 'un employé formé payé au tarif de base demande une augmentation');
+});
+
+test('gamme premium : employé formé requis, mise en place payée une fois, prix, coûts et clientèle selon la réputation', async () => {
+  const { PREMIUM, PREMIUM_BY_TYPE, PRODUCT_BY_ID, premiumDemand } = await import('../src/sim/catalog');
+  const g = new Game(7);
+  const s = g.rent(bestFree(g), 'cafe');
+  assert.ok(s.ok);
+  if (!s.ok) return;
+  const id = s.data.id;
+  furnish(g, id, 'cafe');
+  stockUp(g, id);
+  staff(g, id);
+  assert.equal(g.setPremium(id, true).ok, false, 'refus sans employé formé');
+  assert.ok(g.train(g.employees[0]!.id).ok);
+  const shop = g.shop(id)!, cafe = PRODUCT_BY_ID.get('cafe')!;
+  const price0 = shop.products['cafe']!.price, ref0 = g.refPrice(cafe, shop);
+  shop.reputation = 0.95;
+  const attr0 = g.attractiveness(shop);
+  const cash = g.cash, cost = PREMIUM_BY_TYPE.get('cafe')!.cost;
+  const r = g.setPremium(id, true);
+  assert.ok(r.ok && r.data === cost, 'mise en place payée');
+  assert.equal(Math.round(cash - g.cash), cost);
+  assert.ok(shop.premium && shop.premiumOwned);
+  assert.ok(Math.abs(shop.products['cafe']!.price - price0 * PREMIUM.priceMult) < 0.02, 'prix de vente relevés');
+  assert.ok(Math.abs(g.refPrice(cafe, shop) - ref0 * PREMIUM.priceMult) < 0.02, 'prix de référence premium');
+  assert.ok(g.orderCost('cafe', 10, id) > g.orderCost('cafe', 10) * 1.4, 'achats premium plus chers');
+  // Bonne réputation : autant de clients ; réputation faible : bien moins.
+  const attrHi = g.attractiveness(shop);
+  assert.ok(Math.abs(attrHi / attr0 - premiumDemand(0.95)) < 0.01 && attrHi >= attr0 * 0.95, `attrait ${attr0.toFixed(2)} → ${attrHi.toFixed(2)}`);
+  shop.reputation = 0.25;
+  assert.ok(g.attractiveness(shop) < attrHi * 0.45, 'réputation faible : peu de clientèle premium');
+  shop.reputation = 0.95;
+  // Une journée : coût des ventes au prix premium, marge unitaire plus élevée.
+  keepAlive(g); g.advance(DAY);
+  const d = g.shop(id)!.history.at(-1)!;
+  assert.ok(d.customers > 0 && d.revenue > 0);
+  assert.ok((d.revenue - d.costOfSales) / d.revenue > 0.7, 'marge brute confortable en premium');
+  // Retour au standard puis re-bascule gratuite.
+  assert.ok(g.setPremium(id, false).ok && !shop.premium);
+  assert.ok(Math.abs(shop.products['cafe']!.price - price0) < 0.05, 'prix revenus au standard');
+  const c2 = g.cash;
+  const r2 = g.setPremium(id, true);
+  assert.ok(r2.ok && r2.data === 0 && g.cash === c2, 'deuxième passage en premium gratuit');
+  // Sauvegarde : la gamme est conservée.
+  const h = new Game(g.seed, 'x', JSON.parse(JSON.stringify(g.save())));
+  assert.equal(h.shop(id)!.premium, true);
+});
+
+test('contrat fournisseur : signé chez le grossiste, remise, livraison offerte, forfait quotidien, sauvegarde', () => {
+  const g = new Game(7);
+  const s = g.rent(bestFree(g), 'epicerie');
+  assert.ok(s.ok);
+  if (!s.ok) return;
+  const id = s.data.id;
+  furnish(g, id, 'epicerie');
+  g.setPlace({ kind: 'rue' });
+  assert.equal(g.signContract('essentiel').ok, false, 'à signer chez le grossiste');
+  const base = g.orderCost('pain', 50), fee = g.deliveryFee(base);
+  goTo(g, 'grossiste');
+  const cash = g.cash;
+  assert.ok(g.signContract('essentiel').ok);
+  assert.equal(Math.round(cash - g.cash), 45, 'premier jour payé à la signature');
+  assert.ok(Math.abs(g.orderCost('pain', 50) - base * 0.92) < 0.02, 'remise de 8 %');
+  assert.ok(g.signContract('partenaire').ok);
+  assert.ok(Math.abs(g.orderCost('pain', 50) - base * 0.85) < 0.02, 'remise de 15 %');
+  assert.ok(g.deliveryFee(base) < fee - 30, 'forfait de livraison offert');
+  // Forfait prélevé à minuit, dans les achats du jour.
+  const before = g.cash;
+  g.advance(DAY - (g.total % DAY));
+  keepAlive(g);
+  assert.ok(g.ledger.at(-1)!.purchases >= 150, 'forfait compté dans les achats');
+  assert.ok(g.cash <= before - 150 + 1e-6 || g.cash < before, 'forfait payé');
+  const save = g.save();
+  assert.equal(new Game(save.seed, save.companyName, structuredClone(save)).contract, 'partenaire');
+  const old = structuredClone(save) as Partial<typeof save>;
+  delete old.contract;
+  old.achieved = ['sortir', 'jour2000'];
+  const g2 = new Game(save.seed, save.companyName, old as typeof save);
+  assert.equal(g2.contract, null, 'ancienne sauvegarde : pas de contrat');
+  assert.deepEqual(g2.achieved, ['sortir'], 'objectifs disparus ignorés');
+  assert.ok(g.signContract(null).ok && g.contract === null, 'contrat résilié');
+});
+
+test('objectif « Monter en gamme » : formation puis gamme premium', async () => {
+  const { OBJECTIVES } = await import('../src/sim/objectives');
+  const o = OBJECTIVES.find((x) => x.id === 'gamme')!;
+  const g = new Game(7);
+  const s = g.rent(bestFree(g), 'fastfood');
+  assert.ok(s.ok);
+  if (!s.ok) return;
+  furnish(g, s.data.id, 'fastfood');
+  assert.equal(o.progress(g).p, 0);
+  staff(g, s.data.id);
+  g.train(g.employees[0]!.id);
+  assert.equal(o.progress(g).p, 0.5);
+  assert.ok(g.setPremium(s.data.id, true).ok);
+  assert.equal(o.progress(g).p, 1);
+  g.checkObjectives();
+  assert.ok(g.achieved.includes('gamme'));
+});
