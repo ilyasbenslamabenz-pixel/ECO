@@ -91,6 +91,7 @@ const COMPETITOR_NAMES: Record<ShopType, string[]> = {
   epicerie: ['Épicerie du Coin', 'Chez Karim', 'Primeur Atlas', 'Mini-Marché Zitoun'],
   cafe: ['Café des Arts', 'Le Petit Noir', 'Café Lamrani', 'Brûlerie Hamria'],
   vetements: ['Mode Zahra', 'Atelier Textile', 'Jeans & Co', 'Boutique Riad'],
+  fleuriste: ['Fleurs du Riad', 'Le Jardin de Lina', 'Rose & Jasmin'],
 };
 
 /** Centre d'un îlot (i, j). */

@@ -29,12 +29,18 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
 7. **Vie du personnage** : énergie et faim baissent ; manger au snack, dormir chez soi. À zéro d'énergie, taxi et
    longue nuit.
 8. **Banque** (prêts remboursés chaque jour), **publicité** (plus de clients pendant la campagne), **garage**.
+9. **Objectifs** (13, du premier pas à 100 000 CHF de valeur nette) et rang d'entrepreneur ; **récapitulatif** chaque
+   soir ; **affluence** par heure (servis / perdus) ; **avis clients** en bulles (trop cher, rupture, attente) ;
+   employés qui progressent avec l'expérience ; **cycle jour/nuit** (lampadaires, vitrines éclairées) ; sons.
+10. Quatre types de commerce : épicerie, café, boutique de vêtements, fleuriste.
 
 Sauvegarde automatique chaque jour de jeu (dans le navigateur) et bouton Sauvegarder.
 
 ## Modèles 3D
-25 modèles **Kenney, licence CC0** (domaine public), dans `models/` (2,3 Mo) : 7 bâtiments du City Kit (Commercial),
-4 personnages animés des Mini Characters, 14 meubles du Furniture Kit. Sources et licences : `models/CREDITS.txt`.
+51 modèles **Kenney, licence CC0** (domaine public), dans `models/` (5 Mo) : 10 bâtiments du City Kit Commercial,
+4 maisons du City Kit Suburban, 6 personnages animés des Mini Characters, 14 meubles du Furniture Kit, 5 voitures du
+Car Kit (circulation, camionnette du joueur), 11 produits du Food Kit (marchandise visible en rayon), 1 lampadaire du
+City Kit Roads. Sources et licences : `models/CREDITS.txt`. Page publiée : tous les GLB dans `models/pack.json`.
 - `src/assets.ts` : section CONFIG puis ASSETS (clé → fichier, échelle, rotation), chargement unique (GLTFLoader +
   LoadingManager, écran de chargement avec barre de progression), clones (SkeletonUtils.clone pour les personnages),
   ajustement automatique par boîte englobante.

@@ -10,18 +10,35 @@ La licence de chaque pack a été lue dans son fichier License.txt d'origine, pr
 
 1. City Kit (Commercial) 2.1 — Kenney, 21-07-2025, CC0
    kenney-city-kit-commercial/3D/city/Models/GLB format/
-   building-a.glb, building-d.glb, building-f.glb, building-h.glb, building-l.glb,
+   building-a.glb, building-b.glb, building-d.glb, building-e.glb, building-f.glb, building-g.glb,
+   building-h.glb, building-l.glb,
    building-skyscraper-a.glb, building-skyscraper-b.glb
 
 2. Mini Characters 1.0 — Kenney, 17-07-2024, CC0 (animations incluses : idle, walk, sprint, sit…)
    kenney-mini-characters/3D/characters/Models/GLB format/
-   character-female-a.glb, character-female-c.glb, character-male-a.glb, character-male-c.glb
+   character-female-a.glb, character-female-c.glb, character-female-d.glb, character-male-a.glb,
+   character-male-c.glb, character-male-e.glb
 
 3. Furniture Kit 2.1 — Kenney, 11-11-2018, CC0
    kenney-furniture-kit/3D/interior-furniture/Models/GLTF format/
    desk.glb, computerScreen.glb, bookcaseOpen.glb, kitchenBar.glb, kitchenCabinet.glb,
    kitchenCoffeeMachine.glb, tableRound.glb, chair.glb, pottedPlant.glb, lampRoundFloor.glb,
    rugRectangle.glb, bedDouble.glb, loungeSofa.glb, kitchenFridgeLarge.glb
+
+4. Car Kit 3.1 — Kenney, CC0
+   kenney-car-kit/3D/vehicles-racing/Models/GLB format/  (renommés car-<nom>.glb)
+   sedan, taxi, van, suv, delivery
+
+5. Food Kit 2.0 — Kenney, CC0
+   kenney-food-kit/3D/food/Models/GLB format/  (renommés food-<nom>.glb)
+   loaf, carton, apple, soda, can, cheese, cup, mug, croissant, sandwich, lemon
+
+6. City Kit Suburban 2.0 — Kenney, CC0
+   kenney-city-kit-suburban/3D/city/Models/GLB format/  (renommés house-<lettre>.glb)
+   building-type-a, building-type-c, building-type-g, building-type-k
+
+7. City Kit Roads 2.0 — Kenney, CC0
+   kenney-city-kit-roads/3D/city/Models/GLB format/light-square.glb  (renommé streetlight.glb)
 
 Modification : la texture de chaque pack (Textures/colormap.png, CC0, même source) a été intégrée dans
 chaque fichier GLB qui la référence (scripts/embed-textures.mjs) ; géométrie et animations inchangées.

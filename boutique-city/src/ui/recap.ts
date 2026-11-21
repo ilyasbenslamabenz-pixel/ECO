@@ -23,6 +23,7 @@ export function showRecap(g: Game, onClose: () => void): HTMLElement | null {
   const tips: string[] = [];
   if (y.lostStaff > 0) tips.push(`${y.lostStaff} clients repartis faute de caissier : embauchez ou tenez la caisse.`);
   if (y.lostStock > 0) tips.push(`${y.lostStock} clients sans les produits voulus : réassortez (réassort automatique conseillé).`);
+  if (y.refusedPrice > 0) tips.push(`${y.refusedPrice} articles reposés car trop chers : rapprochez vos prix de ceux du quartier.`);
   if (y.lostCapacity > 0) tips.push(`${y.lostCapacity} clients lassés d’attendre : une caisse et un caissier de plus aux heures d’affluence.`);
   const trend = prev ? y.revenue - prev.revenue : null;
   const wrap = el('div', { cls: 'confirm recap', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Récapitulatif de la journée' } },

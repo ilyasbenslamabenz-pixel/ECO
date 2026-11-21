@@ -6,6 +6,7 @@
 import { FURNITURE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf, PRODUCT_BY_ID } from '../sim/catalog';
 import { clockView } from '../sim/clock';
 import { dayProfit, type DayStats } from '../sim/game';
+import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
 import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
 import { employeeRow, kpi, type UiCtx } from './dialogs';
 import type { View } from './panel';
@@ -52,8 +53,10 @@ function apercu(ctx: UiCtx, id: number): (Node | null)[] {
     el('div', { cls: 'kpis' }, kpi('Clients perdus', num(lost)), kpi('Réputation', pct(s.reputation)), kpi('Attrait', s.rate > 0 || open ? g.attractiveness(s).toFixed(2) : '—')),
     el('div', { cls: 'sec', text: `Pour ouvrir (${t.nameFr})` }),
     el('ul', { cls: 'checks' }, ...checks.map(([ok, label]) => el('li', { cls: ok ? 'ok' : 'todo', text: `${ok ? '✓' : '•'} ${label}` }))),
-    lost ? el('p', { cls: 'muted small', text: `Perdus : ${s.today.lostStaff} sans caissier, ${s.today.lostStock} rupture, ${s.today.lostCapacity} attente trop longue.` }) : null,
+    lost || s.today.refusedPrice ? el('p', { cls: 'muted small', text: `Avis du jour : ${s.today.lostStaff} sans caissier, ${s.today.lostStock} rupture ou trop cher, ${s.today.lostCapacity} attente trop longue, ${s.today.refusedPrice} article(s) reposé(s) pour le prix.` }) : null,
     Object.keys(s.storage).length ? el('p', { cls: 'small', text: `Réserve : ${Object.entries(s.storage).map(([k, n]) => `${n} × ${FURNITURE_BY_ID.get(k)!.nameFr}`).join(', ')} — posez-les avec « Aménager ».` }) : null,
+    el('div', { cls: 'sec', text: 'Affluence aujourd’hui (servis / perdus par heure)' }),
+    hourChart(s.hourServed ?? [], s.hourLost ?? [], s.open, s.close),
     g.marketingBoost(id) > 0 ? el('p', { cls: 'small ok', text: `Publicité en cours : +${pct(g.marketingBoost(id))} de clients.` }) : null,
   ];
 }
@@ -167,9 +170,31 @@ export function companyView(ctx: UiCtx): View {
           out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: VEHICLE_BY_ID.get(v.type)!.nameFr }), el('div', { cls: 'muted small', text: load || 'vide' })), button('Y aller', () => ctx.waypoint(v.x, v.z, 'Véhicule'), 'small')));
         }
       }
+      out.push(el('div', { cls: 'sec', text: `Objectifs · ${rankOf(g.achieved.length)} · valeur nette ${chf(netWorth(g))}` }),
+        el('ul', { cls: 'checks objlist' }, ...OBJECTIVES.map((o) => { const done = g.achieved.includes(o.id); return el('li', { cls: done ? 'ok' : 'todo', text: `${done ? '✓' : '•'} ${o.title}${done ? '' : ` — ${o.progress(g).text}`}` }); })));
       if (g.loans.length) out.push(el('p', { cls: 'small', text: `Prêts : ${g.loans.map((l) => `${chf(l.remaining)} restants (${chf2(l.daily)} / jour)`).join(' · ')}` }));
       out.push(el('div', { cls: 'sec', text: 'Journal (toutes dépenses)' }), chart(days.map((d) => d.revenue), days.map(dayProfit)), ledger(days.slice().reverse(), true));
       return out;
     },
   };
+}
+
+/** Barres par heure (6 h – 23 h) : clients servis (vert) et perdus (rouge) ; zone grisée hors ouverture. */
+function hourChart(served: number[], lost: number[], open: number, close: number): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg', W = 360, H = 90, h0 = 6, n = 18;
+  const max = Math.max(1, ...served.map((v, k) => v + (lost[k] ?? 0)));
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'chart');
+  const bw = W / n, y0 = H - 14;
+  const rect = (x: number, y: number, w: number, h: number, fill: string): void => { const r = document.createElementNS(ns, 'rect'); r.setAttribute('x', String(x)); r.setAttribute('y', String(y)); r.setAttribute('width', String(w)); r.setAttribute('height', String(Math.max(0, h))); r.setAttribute('fill', fill); svg.append(r); };
+  for (let k = 0; k < n; k++) {
+    const hr = h0 + k, x = k * bw;
+    if (hr < open || hr >= close) rect(x, 0, bw, y0, 'rgba(255,255,255,0.04)');
+    const sv = served[hr] ?? 0, ls = lost[hr] ?? 0, sc = (y0 - 4) / max;
+    rect(x + 2, y0 - sv * sc, bw - 4, sv * sc, 'rgba(92,199,122,0.8)');
+    rect(x + 2, y0 - (sv + ls) * sc, bw - 4, ls * sc, 'rgba(239,107,107,0.8)');
+    if (k % 3 === 0) { const t = document.createElementNS(ns, 'text'); t.setAttribute('x', String(x + 2)); t.setAttribute('y', String(H - 2)); t.setAttribute('fill', '#9fb0c2'); t.setAttribute('font-size', '10'); t.textContent = `${hr} h`; svg.append(t); }
+  }
+  return svg;
 }

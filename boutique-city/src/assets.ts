@@ -24,7 +24,7 @@ export const CONFIG = {
 
 /* ------------------------------ ASSETS ------------------------------ */
 
-export type AssetKind = 'batiment' | 'meuble' | 'personnage';
+export type AssetKind = 'batiment' | 'meuble' | 'personnage' | 'vehicule' | 'produit';
 export interface AssetDef {
   file: string;
   kind: AssetKind;
@@ -41,6 +41,35 @@ export const ASSETS: Record<string, AssetDef> = {
   'bat.f': { file: 'building-f.glb', kind: 'batiment', scale: 1, rot: 0 },
   'bat.h': { file: 'building-h.glb', kind: 'batiment', scale: 1, rot: 0 },
   'bat.l': { file: 'building-l.glb', kind: 'batiment', scale: 1, rot: 0 },
+  'bat.b': { file: 'building-b.glb', kind: 'batiment', scale: 1, rot: 0 },
+  'bat.e': { file: 'building-e.glb', kind: 'batiment', scale: 1, rot: 0 },
+  'bat.g': { file: 'building-g.glb', kind: 'batiment', scale: 1, rot: 0 },
+  // City Kit Suburban : petits immeubles d'habitation.
+  'maison.a': { file: 'house-a.glb', kind: 'batiment', scale: 1, rot: 0 },
+  'maison.c': { file: 'house-c.glb', kind: 'batiment', scale: 1, rot: 0 },
+  'maison.g': { file: 'house-g.glb', kind: 'batiment', scale: 1, rot: 0 },
+  'maison.k': { file: 'house-k.glb', kind: 'batiment', scale: 1, rot: 0 },
+  // City Kit Roads : lampadaire (rue, allumé la nuit).
+  'rue.lampadaire': { file: 'streetlight.glb', kind: 'meuble', scale: 1, rot: 0 },
+  // Car Kit : circulation et camionnette du joueur.
+  'auto.berline': { file: 'car-sedan.glb', kind: 'vehicule', scale: 1, rot: 2 },
+  'auto.taxi': { file: 'car-taxi.glb', kind: 'vehicule', scale: 1, rot: 2 },
+  'auto.camionnette': { file: 'car-van.glb', kind: 'vehicule', scale: 1, rot: 2 },
+  'auto.suv': { file: 'car-suv.glb', kind: 'vehicule', scale: 1, rot: 2 },
+  'auto.livraison': { file: 'car-delivery.glb', kind: 'vehicule', scale: 1, rot: 2 },
+  // Food Kit : marchandise visible sur les présentoirs.
+  'produit.pain': { file: 'food-loaf.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.lait': { file: 'food-carton.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.fruits': { file: 'food-apple.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.boissons': { file: 'food-soda.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.conserves': { file: 'food-can.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.snacks': { file: 'food-cheese.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.cafe': { file: 'food-cup.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.the': { file: 'food-mug.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.croissant': { file: 'food-croissant.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.sandwich': { file: 'food-sandwich.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.jus': { file: 'food-lemon.glb', kind: 'produit', scale: 1, rot: 0 },
+  'produit.plantes': { file: 'pottedPlant.glb', kind: 'produit', scale: 1, rot: 0 },
   'bat.tour-a': { file: 'building-skyscraper-a.glb', kind: 'batiment', scale: 1, rot: 0 },
   'bat.tour-b': { file: 'building-skyscraper-b.glb', kind: 'batiment', scale: 1, rot: 0 },
   // Mini Characters : clients et employés animés.
@@ -48,6 +77,8 @@ export const ASSETS: Record<string, AssetDef> = {
   'perso.f-c': { file: 'character-female-c.glb', kind: 'personnage', scale: 1, rot: 2 },
   'perso.h-a': { file: 'character-male-a.glb', kind: 'personnage', scale: 1, rot: 2 },
   'perso.h-c': { file: 'character-male-c.glb', kind: 'personnage', scale: 1, rot: 2 },
+  'perso.f-d': { file: 'character-female-d.glb', kind: 'personnage', scale: 1, rot: 2 },
+  'perso.h-e': { file: 'character-male-e.glb', kind: 'personnage', scale: 1, rot: 2 },
   // Furniture Kit : mobilier des commerces et du logement.
   'meuble.bureau': { file: 'desk.glb', kind: 'meuble', scale: 1, rot: 2 },
   'meuble.ecran': { file: 'computerScreen.glb', kind: 'meuble', scale: 1, rot: 2 },
@@ -188,11 +219,44 @@ export class AssetLib {
         geo.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
         geo.scale(1 / size.x, 1 / size.y, 1 / size.z);
         geo.computeBoundingSphere();
+        geo.userData['shared'] = true;
         out = { geo, mat: mats.length === 1 ? mats[0]! : mats };
       }
     }
     this.mergedCache.set(key, out);
     return out;
+  }
+
+  /** Dimensions d'origine d'un modèle (après sa rotation d'ASSETS), ou null. */
+  size(key: string): THREE.Vector3 | null {
+    const c = this.sizeCache.get(key);
+    if (c) return c;
+    const l = this.loaded.get(key);
+    if (!l) return null;
+    const root = l.scene.clone(true);
+    root.rotation.y = (ASSETS[key]!.rot * Math.PI) / 2;
+    root.updateMatrixWorld(true);
+    const v = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3());
+    this.sizeCache.set(key, v);
+    return v;
+  }
+  private readonly sizeCache = new Map<string, THREE.Vector3>();
+
+  /**
+   * InstancedMesh d'un modèle (géométrie fusionnée) pour `mats` positions ; chaque instance garde les proportions
+   * du modèle et tient dans la boîte w × h × d. Null si le modèle manque.
+   */
+  instances(key: string, at: THREE.Matrix4[], w: number, h: number, d: number): THREE.InstancedMesh | null {
+    const mg = this.merged(key), sz = this.size(key);
+    if (!mg || !sz || !at.length) return null;
+    const k = Math.min(w / sz.x, h / sz.y, d / sz.z);
+    const scale = new THREE.Matrix4().makeScale(sz.x * k, sz.y * k, sz.z * k);
+    const m = new THREE.InstancedMesh(mg.geo, mg.mat as THREE.Material, at.length);
+    at.forEach((a, i) => m.setMatrixAt(i, a.clone().multiply(scale)));
+    m.castShadow = false;
+    m.receiveShadow = true;
+    m.computeBoundingSphere();
+    return m;
   }
 
   /** Proportions d'origine (hauteur / largeur moyenne) d'un modèle, ou 0. */

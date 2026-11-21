@@ -24,6 +24,8 @@ import { $, askConfirm, button, chf, el } from './ui/dom';
 import { BigMap, MiniMap } from './ui/map';
 import { Panel } from './ui/panel';
 import { showRecap } from './ui/recap';
+import { sound } from './ui/sound';
+import { OBJECTIVES, rankOf } from './sim/objectives';
 import { companyView, shopView } from './ui/shop-panel';
 
 const SAVE_KEY = 'boutique-city.save.v2';
@@ -102,6 +104,7 @@ function start(game: Game): void {
   let agents: InteriorAgents | null = null;
   let layoutRev = -1;
   let snapCam = true;
+  let feedbackT = 0;
   let recapDue = false;
   let recapOpen: HTMLElement | null = null;
 
@@ -148,23 +151,23 @@ function start(game: Game): void {
   const itemsOf = (s: Shop): InteriorItem[] => s.items.map((it) => {
     const def = FURNITURE_BY_ID.get(it.def)!;
     let fill = 0;
-    const colors: string[] = [];
+    const colors: string[] = [], products: string[] = [];
     if (def.capacity) {
       let stock = 0, cap = 0;
       for (const p of productsOf(s.type)) {
-        if (p.store !== def.kind) continue;
+        if (p.store !== def.kind && !(def.kind === 'comptoir' && p.store === 'comptoir')) continue;
         stock += s.products[p.id]!.stock; cap += game.storageFor(s, p);
-        if (s.products[p.id]!.stock > 0 || !colors.length) colors.push(PRODUCT_COLORS[p.id] ?? '#cccccc');
+        if (s.products[p.id]!.stock > 0) { colors.push(PRODUCT_COLORS[p.id] ?? '#cccccc'); products.push(p.id); }
       }
       fill = cap > 0 ? stock / cap : 0;
     }
-    return { ...it, fill, colors: colors.length ? colors : ['#cccccc'] };
+    return { ...it, fill, colors: colors.length ? colors : ['#cccccc'], products };
   });
 
   const enterShop = (shopId: number): void => {
     const s = game.shop(shopId)!, p = game.premise(s.premiseId)!, t = SHOP_TYPE_BY_ID.get(s.type)!;
     const b = game.building(p.buildingId)!;
-    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: s.type === 'vetements' ? 'parquet' : 'carrelage', wall: s.type === 'cafe' ? '#efe2cf' : s.type === 'vetements' ? '#ece8f2' : '#eef1ea', accent: t.color, title: s.name, facade: facadeColor(b) });
+    const view = new InteriorView({ gridW: p.gridW, gridD: p.gridD, floor: s.type === 'vetements' || s.type === 'fleuriste' ? 'parquet' : 'carrelage', wall: s.type === 'cafe' ? '#efe2cf' : s.type === 'vetements' ? '#ece8f2' : s.type === 'fleuriste' ? '#f3e8ee' : '#eef1ea', accent: t.color, title: s.name, facade: facadeColor(b) });
     agents = new InteriorAgents(view, t.color);
     view.setItems(itemsOf(s));
     agents.refreshLayout();
@@ -174,6 +177,7 @@ function start(game: Game): void {
     const [ox, oz] = view.outside();
     ipos = { x: ox, z: oz - 2.4, heading: 0 };
     game.setPlace({ kind: 'commerce', shopId });
+    sound.chime();
     snapCam = true;
     const n = game.unloadable(shopId);
     if (n > 0) toast(`${n} unités de marchandise à décharger : bouton « Décharger ».`, 'info');
@@ -385,7 +389,28 @@ function start(game: Game): void {
     el('div', { cls: 'acts' },
       button('Carte (M)', () => bigmap.toggle(game.player.x, game.player.z, game.player.heading)),
       button('Entreprise', () => panel.open(companyView(ctx))),
-      button('Sauvegarder', () => { writeSave(game); toast('Partie sauvegardée', 'ok'); })));
+      button('Sauvegarder', () => { writeSave(game); toast('Partie sauvegardée', 'ok'); }),
+      (() => { const b = button(sound.muted ? '🔇' : '🔊', () => { b.textContent = sound.toggle() ? '🔇' : '🔊'; }, 'icon-x'); b.setAttribute('aria-label', 'Son'); return b; })()));
+  // Objectif en cours (carte repliable en haut à gauche).
+  const objCard = el('button', { cls: 'objective', attrs: { type: 'button', 'aria-label': 'Objectif en cours' } });
+  let objOpen = true, objSig = '';
+  objCard.addEventListener('click', () => { objOpen = !objOpen; objSig = ''; });
+  document.body.append(objCard);
+  const renderObjective = (): void => {
+    game.checkObjectives();
+    const cur = OBJECTIVES.find((o) => !game.achieved.includes(o.id));
+    const pr = cur?.progress(game);
+    const sig = `${cur?.id}|${pr?.text}|${objOpen}|${game.achieved.length}`;
+    if (sig === objSig) return;
+    objSig = sig;
+    if (!cur || !pr) { objCard.replaceChildren(el('b', { text: `${rankOf(game.achieved.length)} · tous les objectifs atteints !` })); return; }
+    objCard.replaceChildren(
+      el('div', { cls: 'obj-top' }, el('span', { cls: 'kicker', text: `Objectif ${game.achieved.length + 1} / ${OBJECTIVES.length} · ${rankOf(game.achieved.length)}` }), el('span', { cls: 'muted small', text: objOpen ? '▾' : '▸' })),
+      el('b', { text: cur.title }),
+      objOpen ? el('div', { cls: 'muted small', text: cur.hint }) : '',
+      el('div', { cls: 'obj-bar' }, el('i', { attrs: { style: `width:${Math.round(pr.p * 100)}%` } })),
+      el('span', { cls: 'small', text: pr.text }));
+  };
   const paint = (): void => {
     clock.textContent = formatClock(game.total);
     cash.textContent = chf(game.cash);
@@ -476,7 +501,16 @@ function start(game: Game): void {
   };
 
   let last = performance.now(), acc = 0;
+  /** Boucle protégée : une erreur est signalée une fois mais n'arrête jamais le jeu. */
+  let loopErrors = 0;
   const loop = (now: number): void => {
+    try { frameStep(now); } catch (e) {
+      debug.errors.push(String(e));
+      if (loopErrors++ === 0) { console.error(e); toast('Une erreur d’affichage est survenue ; le jeu continue.', 'error'); }
+    }
+    requestAnimationFrame(loop);
+  };
+  const frameStep = (now: number): void => {
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     const sleeping = game.player.sleeping;
@@ -545,10 +579,16 @@ function start(game: Game): void {
     if (inside) { scene.player.group.position.set(ipos.x, 0, ipos.z); scene.player.group.rotation.y = ipos.heading; }
     else { scene.player.group.position.set(game.player.x, 0.16, game.player.z); scene.player.group.rotation.y = game.player.heading; }
     scene.vehicles.sync(game.vehicles, car ?? undefined);
+    // Avis des clients (bulles) dans le commerce où l'on se trouve, au plus un toutes les 1,2 s.
+    const fb = game.feedback.splice(0);
+    if ((feedbackT -= dt) <= 0 && inside?.kind === 'shop' && agents) {
+      const f = fb.find((x) => x.shopId === (inside as { shopId: number }).shopId);
+      if (f) { agents.feedback(f.kind); feedbackT = 1.2; }
+    }
     const ev = game.events.splice(0);
     let street = 0;
     for (const e of ev) {
-      if (inside?.kind === 'shop' && e.shopId === inside.shopId) agents?.spawn(e.products);
+      if (inside?.kind === 'shop' && e.shopId === inside.shopId) { agents?.spawn(e.products); sound.ding(); }
       else if (!inside && street++ < 4) { const p = game.premise(e.premiseId); if (p) scene.people.addClient(p.doorX, p.doorZ); }
     }
     if (inside && agents) {
@@ -561,7 +601,11 @@ function start(game: Game): void {
     interiorT += dt;
     refreshInterior();
 
-    for (; noticeIdx < game.notices.length; noticeIdx++) { const nt = game.notices[noticeIdx]!; toast(nt.text, nt.level === 'warn' ? 'warn' : nt.level); }
+    for (; noticeIdx < game.notices.length; noticeIdx++) {
+      const nt = game.notices[noticeIdx]!;
+      toast(nt.text, nt.level === 'warn' ? 'warn' : nt.level);
+      if (nt.text.startsWith('Objectif atteint')) sound.success(); else if (nt.level === 'warn' || nt.level === 'error') sound.blip();
+    }
     if (noticeIdx > game.notices.length) noticeIdx = game.notices.length;
     if (game.day !== lastDay) { lastDay = game.day; writeSave(game); if (game.shops.length) recapDue = true; }
     // Récapitulatif de fin de journée : jeu en pause tant qu'il est affiché (après le réveil si l'on dort).
@@ -576,7 +620,7 @@ function start(game: Game): void {
     syncStreet();
     paint();
     panel.paint();
-    if ((refreshT += dt) > 0.5) { refreshT = 0; renderInteriorBar(); if (build.on) renderBuildBar(); }
+    if ((refreshT += dt) > 0.5) { refreshT = 0; renderInteriorBar(); renderObjective(); if (build.on) renderBuildBar(); }
     const a = currentAction();
     prompt.classList.toggle('hidden', !a || build.on);
     if (a) prompt.textContent = `E · ${a.label}`;
@@ -587,9 +631,9 @@ function start(game: Game): void {
     else if (inside) focus.set(ipos.x, 1.2, ipos.z);
     else if (car) focus.set(car.x, 1.6, car.z);
     else focus.set(game.player.x, 1.7, game.player.z);
+    scene.setTime(game.total % 1440);
     scene.frame(dt, focus, snapCam);
     snapCam = false;
-    requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
   window.addEventListener('beforeunload', () => writeSave(game));

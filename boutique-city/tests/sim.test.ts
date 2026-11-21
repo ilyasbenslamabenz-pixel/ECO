@@ -24,6 +24,7 @@ const LAYOUTS: Record<ShopType, string[]> = {
   epicerie: ['caisse', 'rayon', 'rayon', 'rayon', 'frigo', 'frigo', 'plante', 'plante'],
   cafe: ['caisse', 'machine', 'comptoir', 'vitrine', 'frigo', 'table', 'table', 'table', 'plante'],
   vetements: ['caisse', 'portant', 'portant', 'portant', 'portant', 'rayon', 'plante', 'lampe'],
+  fleuriste: ['caisse', 'frigo', 'frigo', 'rayon', 'plante', 'lampe', 'tapis'],
 };
 
 /** Achète au magasin de meubles puis pose chaque meuble à la première place qui garde tout accessible. */
@@ -263,7 +264,7 @@ test('sauvegarde : reprise identique, même suite', () => {
 });
 
 test('équilibrage : chaque type de commerce bien géré est rentable', () => {
-  for (const type of ['epicerie', 'cafe', 'vetements'] as ShopType[]) {
+  for (const type of ['epicerie', 'cafe', 'vetements', 'fleuriste'] as ShopType[]) {
     const g = new Game(7);
     const s = g.rent(bestFree(g), type);
     assert.ok(s.ok);
@@ -278,4 +279,36 @@ test('équilibrage : chaque type de commerce bien géré est rentable', () => {
     assert.ok(margin > 0, `${type} rentable (${margin.toFixed(0)})`);
     assert.ok(Number.isFinite(dayProfit(g.ledger.at(-1)!)));
   }
+});
+
+test('objectifs, avis clients et progression des employés', async () => {
+  const { OBJECTIVES, netWorth, rankOf } = await import('../src/sim/objectives');
+  const g = new Game(7);
+  assert.deepEqual(g.achieved, []);
+  g.setPlace({ kind: 'rue' });
+  const s = g.rent(bestFree(g), 'epicerie');
+  assert.ok(s.ok);
+  if (!s.ok) return;
+  g.checkObjectives();
+  assert.deepEqual(g.achieved, ['sortir', 'louer'], 'premiers objectifs dans l’ordre');
+  furnish(g, s.data.id, 'epicerie');
+  stockUp(g, s.data.id);
+  staff(g, s.data.id);
+  const skill0 = g.employees[0]!.skill;
+  // Prix très élevés : des clients reposent des articles, avis « trop cher ».
+  for (let d = 0; d < 3; d++) { keepAlive(g); g.advance(DAY); }
+  for (const pr of productsOf('epicerie')) g.setPrice(s.data.id, pr.id, pr.basePrice * 1.8);
+  g.feedback = [];
+  keepAlive(g);
+  g.advance(DAY / 2);
+  assert.ok(g.today.refusedPrice > 0 || g.ledger.at(-1)!.refusedPrice > 0, 'articles refusés pour le prix');
+  assert.ok(g.feedback.some((f) => f.kind === 'prix'), 'bulle « trop cher »');
+  assert.ok(g.employees[0]!.skill > skill0, `compétence ${skill0} → ${g.employees[0]!.skill}`);
+  for (const id of ['meubler', 'stock', 'servir10', 'embaucher']) assert.ok((g.achieved as string[]).includes(id), `objectif ${id}`);
+  assert.ok(Number.isFinite(netWorth(g)) && netWorth(g) > 0);
+  assert.equal(OBJECTIVES.length, 13);
+  assert.equal(rankOf(0), 'Débutant');
+  // Sauvegarde : objectifs conservés.
+  const h = new Game(g.seed, 'x', JSON.parse(JSON.stringify(g.save())));
+  assert.deepEqual(h.achieved, g.achieved);
 });

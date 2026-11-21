@@ -57,8 +57,8 @@ export function sph(parent: THREE.Object3D, sx: number, sy: number, sz: number, 
 /** Libère les matériaux propres d'un groupe (les matériaux du cache sont partagés et conservés). */
 export function disposeOwn(o: THREE.Object3D): void {
   o.traverse((c) => {
-    const m = (c as THREE.Mesh).material as THREE.Material | undefined;
-    if (m && m.userData['own']) { (m as THREE.MeshBasicMaterial).map?.dispose(); m.dispose(); }
+    const raw = (c as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+    for (const m of Array.isArray(raw) ? raw : raw ? [raw] : []) if (m?.userData?.['own']) { (m as THREE.MeshBasicMaterial).map?.dispose(); m.dispose(); }
   });
 }
 

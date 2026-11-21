@@ -15,6 +15,7 @@ import { MINUTES_PER_DAY, START_MINUTE, clockView } from './clock';
 import { FACE_N, SIDEWALK_W, competitorsNear, generateDistrict, type Building, type District, type Premise } from './district';
 import { canPlace, layoutStats, type LayoutStats, type PlacedItem, type Rot } from './layout';
 import { randomName } from './names';
+import { OBJECTIVES } from './objectives';
 import { Rng } from './rng';
 
 export const SAVE_VERSION = 2;
@@ -59,6 +60,8 @@ export interface DayStats {
   /** Clients perdus : rupture de stock, attente trop longue (caisses), personne à la caisse. */
   lostStock: number;
   lostCapacity: number;
+  /** Articles reposés par les clients parce que trop chers. */
+  refusedPrice: number;
   lostStaff: number;
   revenue: number;
   /** Coût d'achat des articles vendus (marge = revenue − costOfSales). */
@@ -95,18 +98,24 @@ export interface Shop {
   rate: number;
   capacity: number;
   servedThisHour: number;
+  /** Clients servis et perdus par heure aujourd'hui (affluence). */
+  hourServed?: number[];
+  hourLost?: number[];
   warned: string[];
 }
 
 export interface Notice { at: number; level: 'info' | 'ok' | 'warn' | 'error'; text: string }
 /** Événement visuel : un client a acheté dans un commerce du joueur. */
 export interface ClientEvent { shopId: number; premiseId: number; products: string[] }
+/** Avis visible d'un client (bulle dans le magasin) : raison d'un départ sans achat, ou client ravi. */
+export type FeedbackKind = 'prix' | 'rupture' | 'attente' | 'caisse' | 'content';
+export interface Feedback { shopId: number; kind: FeedbackKind }
 
 export type Result<T = undefined> = { ok: true; data: T } | { ok: false; message: string };
 const ok = <T>(data: T): Result<T> => ({ ok: true, data });
 const fail = (message: string): Result<never> => ({ ok: false, message });
 
-const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0, marketing: 0, finance: 0, living: 0 });
+const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, refusedPrice: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0, marketing: 0, finance: 0, living: 0 });
 const r2 = (v: number): number => Math.round(v * 100) / 100;
 const sumValues = (r: Record<string, number>): number => Object.values(r).reduce((a, b) => a + b, 0);
 
@@ -130,6 +139,7 @@ export interface GameSave {
   loans: Loan[];
   campaigns: Campaign[];
   ledger: DayStats[];
+  achieved?: string[];
   nextId: number;
   rng: number[];
 }
@@ -152,6 +162,9 @@ export class Game {
   today: DayStats;
   notices: Notice[] = [];
   events: ClientEvent[] = [];
+  feedback: Feedback[] = [];
+  /** Objectifs atteints (ids, dans l'ordre). */
+  achieved: string[] = [];
   private rng: Rng;
   private nextId = 1;
   /** Version de l'état (l'interface ne redessine que si elle change). */
@@ -747,7 +760,16 @@ export class Game {
     }
   }
 
+  /** Vérifie les objectifs (appelée chaque heure de jeu et par l'interface). */
+  checkObjectives(): void {
+    for (const o of OBJECTIVES) {
+      if (this.achieved.includes(o.id)) continue;
+      if (o.progress(this).p >= 1) { this.achieved.push(o.id); this.notify('ok', `Objectif atteint : ${o.title} !`); this.bump(); }
+    }
+  }
+
   private hour(h: number, weekday: number): void {
+    this.checkObjectives();
     const due = this.orders.filter((o) => o.deliverAt <= this.total);
     if (due.length) {
       this.orders = this.orders.filter((o) => o.deliverAt > this.total);
@@ -762,7 +784,13 @@ export class Game {
       s.servedThisHour = 0;
       const open = h >= s.open && h < s.close;
       if (!open) { s.rate = 0; s.capacity = 0; continue; }
-      for (const e of this.staffOf(s.id)) { s.today.wages += e.wage; this.today.wages += e.wage; this.cash -= e.wage; }
+      for (const e of this.staffOf(s.id)) {
+        s.today.wages += e.wage; this.today.wages += e.wage; this.cash -= e.wage;
+        // Expérience : la compétence progresse avec les heures travaillées (jusqu'à 100 %).
+        const before = Math.floor(e.skill * 10);
+        e.skill = Math.min(1, Math.round((e.skill + 0.0025) * 10000) / 10000);
+        if (Math.floor(e.skill * 10) > before) this.notify('ok', `${e.name} progresse : compétence ${Math.round(e.skill * 100)} % (${s.name}).`);
+      }
       const st = this.stats(s);
       const t = SHOP_TYPE_BY_ID.get(s.type)!;
       const p = this.premise(s.premiseId)!;
@@ -815,10 +843,11 @@ export class Game {
   private customer(s: Shop): void {
     const st = this.stats(s);
     const t = SHOP_TYPE_BY_ID.get(s.type)!;
-    if (s.capacity <= 0) { s.today.lostStaff++; this.today.lostStaff++; return; }
-    if (s.servedThisHour >= s.capacity) { s.today.lostCapacity++; this.today.lostCapacity++; return; }
+    if (s.capacity <= 0) { s.today.lostStaff++; this.today.lostStaff++; this.feel(s, 'caisse'); return; }
+    if (s.servedThisHour >= s.capacity) { s.today.lostCapacity++; this.today.lostCapacity++; this.feel(s, 'attente'); return; }
     const avail = productsOf(s.type).filter((pr) => this.sellable(s, pr, st));
-    if (!avail.length) { s.today.lostStock++; this.today.lostStock++; return; }
+    if (!avail.length) { s.today.lostStock++; this.today.lostStock++; this.feel(s, 'rupture'); return; }
+    let refused = 0, missing = 0;
     const items = Math.max(1, this.rng.poisson(t.basket - 1) + 1);
     const bought: string[] = [];
     for (let k = 0; k < items; k++) {
@@ -827,18 +856,27 @@ export class Game {
       const ps = s.products[want.id]!;
       if (!this.sellable(s, want, st)) {
         if (st.capacity[want.store] > 0 && ps.stock <= 0) this.warnOnce(s, want.id, `${s.name} : rupture de ${want.nameFr.toLowerCase()}.`);
+        missing++;
         continue;
       }
-      if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / want.basePrice - 1)))) continue;
+      if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / want.basePrice - 1)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
       ps.stock--;
       bought.push(want.id);
       s.today.revenue += ps.price; this.today.revenue += ps.price; this.cash += ps.price;
       s.today.costOfSales += want.cost; this.today.costOfSales += want.cost;
     }
-    if (bought.length === 0) { s.today.lostStock++; this.today.lostStock++; return; }
+    if (bought.length === 0) { s.today.lostStock++; this.today.lostStock++; this.feel(s, refused >= missing ? 'prix' : 'rupture'); return; }
+    if (refused > 0 && this.rng.next() < 0.5) this.feel(s, 'prix');
+    else if (missing === 0 && refused === 0 && this.rng.next() < 0.12) this.feel(s, 'content');
     s.servedThisHour++;
+    (s.hourServed ??= new Array(24).fill(0))[clockView(this.total).hour]++;
     s.today.customers++; this.today.customers++;
     if (this.events.length < 300) this.events.push({ shopId: s.id, premiseId: s.premiseId, products: bought });
+  }
+
+  private feel(s: Shop, kind: FeedbackKind): void {
+    if (kind !== 'content') { const h = clockView(this.total).hour; (s.hourLost ??= new Array(24).fill(0))[h]++; }
+    if (this.feedback.length < 100) this.feedback.push({ shopId: s.id, kind });
   }
 
   private updateReputation(s: Shop): void {
@@ -871,6 +909,8 @@ export class Game {
       if (s.history.length > 60) s.history.shift();
       s.today = emptyDay(this.day);
       s.warned = [];
+      s.hourServed = new Array(24).fill(0);
+      s.hourLost = new Array(24).fill(0);
     }
     // Logement, assurance des véhicules, prêts, campagnes.
     if (this.player.home) {
@@ -935,7 +975,7 @@ export class Game {
       v: SAVE_VERSION, seed: this.seed, companyName: this.companyName, total: this.total, cash: this.cash,
       player: structuredClone(this.player), shops: structuredClone(this.shops), employees: structuredClone(this.employees),
       candidates: structuredClone(this.candidates), orders: structuredClone(this.orders), vehicles: structuredClone(this.vehicles),
-      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]),
+      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved],
       nextId: this.nextId, rng: this.rng.state(),
     };
   }
@@ -952,5 +992,8 @@ export class Game {
     this.ledger = led;
     this.nextId = s.nextId;
     this.rng = new Rng(s.rng);
+    this.achieved = [...(s.achieved ?? [])];
+    // Sauvegardes antérieures : champs ajoutés depuis.
+    for (const d of [...this.ledger, this.today, ...this.shops.flatMap((x) => [x.today, ...x.history])]) d.refusedPrice ??= 0;
   }
 }

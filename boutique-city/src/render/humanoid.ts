@@ -110,11 +110,13 @@ export class KitPerson implements Person {
     c.obj.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
-      const src = m.material as THREE.MeshStandardMaterial;
-      const own = src.clone();
-      own.color = new THREE.Color(1, 1, 1).lerp(accent ? new THREE.Color(accent) : tint, k);
-      own.userData['own'] = true;
-      m.material = own;
+      const tintOf = (src: THREE.Material): THREE.Material => {
+        const own = (src as THREE.MeshStandardMaterial).clone();
+        own.color = new THREE.Color(1, 1, 1).lerp(accent ? new THREE.Color(accent) : tint, k);
+        own.userData['own'] = true;
+        return own;
+      };
+      m.material = Array.isArray(m.material) ? m.material.map(tintOf) : tintOf(m.material);
       m.castShadow = true;
       m.frustumCulled = false;
     });
@@ -160,7 +162,7 @@ export class KitPerson implements Person {
 }
 
 const FIT_CACHE = new Map<string, { s: number; p: THREE.Vector3 }>();
-const PERSONS = ['perso.f-a', 'perso.f-c', 'perso.h-a', 'perso.h-c'];
+const PERSONS = ['perso.f-a', 'perso.f-c', 'perso.h-a', 'perso.h-c', 'perso.f-d', 'perso.h-e'];
 
 /** Client ou employé : modèle animé si chargé, sinon personnage fait en code. */
 export function makePerson(seed: number, accent?: string, scale = 1): Person {

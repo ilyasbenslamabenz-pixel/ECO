@@ -11,6 +11,7 @@ import { findPath } from '../world/pathfind';
 import { makePerson, type Person } from './humanoid';
 import type { InteriorItem, InteriorView } from './interior-view';
 import { disposeOwn } from './kit';
+import type { FeedbackKind } from '../sim/game';
 
 const MAX_CUSTOMERS = 14;
 
@@ -19,7 +20,7 @@ type Step = { kind: 'browse'; cell: [number, number]; look: [number, number] } |
 interface Register { uid: number; front: [number, number][]; back: [number, number][]; dir: [number, number]; queue: Customer[]; tended: boolean }
 
 interface Mover { h: Person; x: number; z: number; heading: number; route: [number, number][]; speed: number }
-interface Customer extends Mover { arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
+interface Customer extends Mover { bubble?: THREE.Sprite; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
 interface Staff extends Mover { id: number; idle: number }
 
 const headingTo = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
@@ -107,6 +108,37 @@ export class InteriorAgents {
     this.group.add(h.group);
     const [dx, dz] = this.view.cellCenter(...this.door());
     this.customers.push({ h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, route: [[dx, dz]], speed: 1.25 + this.rand() * 0.35, arrive: null, plan, state: 'walk', timer: 0, reg: null, slot: 0, jx: (this.rand() - 0.5) * 0.3, jz: (this.rand() - 0.5) * 0.3 });
+  }
+
+  /**
+   * Avis d'un client, en bulle au-dessus de sa tête : « content » sur un client présent ; sinon un client entre,
+   * montre la raison de son départ (trop cher, rupture, attente, personne en caisse) et ressort.
+   */
+  feedback(kind: FeedbackKind): void {
+    if (kind === 'content') {
+      const c = this.customers.find((x) => !x.bubble && (x.state === 'pay' || x.state === 'queue' || x.state === 'browse'));
+      if (c) this.say(c, kind);
+      return;
+    }
+    if (this.customers.length >= MAX_CUSTOMERS) return;
+    const [ox, oz] = this.view.outside();
+    const [dx, dz] = this.view.cellCenter(...this.door());
+    const h = makePerson(Math.floor(this.rand() * 1e6), undefined, 0.94 + this.rand() * 0.1);
+    this.group.add(h.group);
+    const c: Customer = { h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, route: [[dx, dz - 1.2]], speed: 1.3, arrive: null, plan: [{ kind: 'exit' }], state: 'walk', timer: 0, reg: null, slot: 0, jx: 0, jz: 0 };
+    this.customers.push(c);
+    this.say(c, kind);
+  }
+
+  private say(c: Customer, kind: FeedbackKind): void {
+    if (c.bubble) c.h.group.remove(c.bubble);
+    const sp = new THREE.Sprite(bubbleMaterial(kind));
+    sp.scale.set(1.35, 0.5, 1);
+    sp.position.y = 2.1;
+    sp.renderOrder = 20;
+    c.h.group.add(sp);
+    c.bubble = sp;
+    c.bubbleT = 3.2;
   }
 
   private rand(): number { this.seed = (this.seed * 16807) % 2147483647; return this.seed / 2147483647; }
@@ -227,6 +259,7 @@ export class InteriorAgents {
     const keep: Customer[] = [];
     for (const c of this.customers) {
       const arrived = this.step(c, dt, ts);
+      if (c.bubble && (c.bubbleT! -= dt) <= 0) { c.h.group.remove(c.bubble); c.bubble = undefined; }
       const arrive = c.arrive;
       if (c.state === 'walk' && arrived) {
         if (arrive?.kind === 'browse') { c.state = 'browse'; c.timer = 1.6 + this.rand() * 2; c.heading = headingTo(arrive.look[0] - c.x, arrive.look[1] - c.z); }
@@ -302,4 +335,29 @@ function turn(a: number, b: number, k: number): number {
   while (d > Math.PI) d -= 2 * Math.PI;
   while (d < -Math.PI) d += 2 * Math.PI;
   return a + d * Math.min(1, k);
+}
+
+const BUBBLES: Record<FeedbackKind, [string, string]> = {
+  prix: ['Trop cher !', '#ef6b6b'], rupture: ['Rupture…', '#f0b84a'], attente: ['Trop d’attente', '#f0b84a'],
+  caisse: ['Personne en caisse ?', '#ef6b6b'], content: ['Super boutique ♥', '#5cc77a'],
+};
+const bubbleCache = new Map<FeedbackKind, THREE.SpriteMaterial>();
+/** Bulle d'avis (canevas → sprite), mise en cache par type. */
+function bubbleMaterial(kind: FeedbackKind): THREE.SpriteMaterial {
+  const c = bubbleCache.get(kind);
+  if (c) return c;
+  const [text, color] = BUBBLES[kind];
+  const cv = document.createElement('canvas');
+  cv.width = 300; cv.height = 110;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#ffffff'; g.strokeStyle = color; g.lineWidth = 8;
+  g.beginPath(); g.roundRect(6, 6, 288, 74, 30); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(130, 78); g.lineTo(150, 104); g.lineTo(168, 78); g.fill();
+  g.fillStyle = '#1d2733'; g.font = '700 34px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 150, 44, 270);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  bubbleCache.set(kind, m);
+  return m;
 }

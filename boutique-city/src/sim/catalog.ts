@@ -3,7 +3,7 @@
  * prêts, campagnes de publicité, repas et besoins du personnage. Prix en CHF. TypeScript pur.
  */
 
-export type ShopType = 'epicerie' | 'cafe' | 'vetements';
+export type ShopType = 'epicerie' | 'cafe' | 'vetements' | 'fleuriste';
 /** Meuble qui stocke et présente un produit. */
 export type StoreKind = 'rayon' | 'frigo' | 'comptoir' | 'vitrine' | 'portant';
 export type FurnitureKind = 'caisse' | StoreKind | 'machine' | 'table' | 'deco';
@@ -76,6 +76,10 @@ export const PRODUCTS: readonly ProductDef[] = [
   { id: 'jean', nameFr: 'Jean', shop: 'vetements', cost: 30, basePrice: 69, store: 'portant', share: 0.27 },
   { id: 'veste', nameFr: 'Veste', shop: 'vetements', cost: 52, basePrice: 119, store: 'portant', share: 0.15 },
   { id: 'chaussures', nameFr: 'Chaussures', shop: 'vetements', cost: 38, basePrice: 89, store: 'rayon', share: 0.2 },
+  { id: 'roses', nameFr: 'Roses à l’unité', shop: 'fleuriste', cost: 1.1, basePrice: 4, store: 'frigo', share: 0.34 },
+  { id: 'bouquet', nameFr: 'Bouquet composé', shop: 'fleuriste', cost: 9, basePrice: 29, store: 'frigo', share: 0.3 },
+  { id: 'plantes', nameFr: 'Plante en pot', shop: 'fleuriste', cost: 6.5, basePrice: 19, store: 'rayon', share: 0.24 },
+  { id: 'cartes', nameFr: 'Cartes et rubans', shop: 'fleuriste', cost: 0.7, basePrice: 3.5, store: 'rayon', share: 0.12 },
 ];
 
 export const PRODUCT_BY_ID: ReadonlyMap<string, ProductDef> = new Map(PRODUCTS.map((p) => [p.id, p]));
@@ -102,7 +106,7 @@ const H = (pairs: [number, number][]): number[] => { const a = new Array<number>
 
 export const SHOP_TYPES: readonly ShopTypeDef[] = [
   {
-    id: 'epicerie', nameFr: 'Épicerie', capture: 0.07, basket: 2.2, weekend: 1.15, open: 8, close: 20, color: '#4caf6a',
+    id: 'epicerie', nameFr: 'Épicerie', capture: 0.095, basket: 2.2, weekend: 1.15, open: 8, close: 20, color: '#4caf6a',
     hourly: H([[7, 0.35], [8, 0.6], [9, 0.55], [10, 0.5], [11, 0.65], [12, 0.85], [13, 0.7], [14, 0.5], [15, 0.5], [16, 0.65], [17, 0.95], [18, 1], [19, 0.8], [20, 0.45], [21, 0.25]]),
   },
   {
@@ -112,6 +116,10 @@ export const SHOP_TYPES: readonly ShopTypeDef[] = [
   {
     id: 'vetements', nameFr: 'Boutique de vêtements', capture: 0.008, basket: 1.15, weekend: 1.6, open: 10, close: 19, color: '#8a5ad0',
     hourly: H([[9, 0.2], [10, 0.4], [11, 0.55], [12, 0.6], [13, 0.65], [14, 0.75], [15, 0.85], [16, 0.95], [17, 1], [18, 0.85], [19, 0.4], [20, 0.15]]),
+  },
+  {
+    id: 'fleuriste', nameFr: 'Fleuriste', capture: 0.013, basket: 1.3, weekend: 1.5, open: 9, close: 19, color: '#d9578a',
+    hourly: H([[8, 0.2], [9, 0.4], [10, 0.55], [11, 0.75], [12, 0.8], [13, 0.6], [14, 0.55], [15, 0.6], [16, 0.8], [17, 1], [18, 0.9], [19, 0.4], [20, 0.15]]),
   },
 ];
 

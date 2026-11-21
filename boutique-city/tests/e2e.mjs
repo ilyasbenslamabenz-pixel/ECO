@@ -168,6 +168,12 @@ try {
   await shot('10-clients-dans-le-magasin');
   const cl = await ev(() => ({ visibles: window.__bc.state().customers, servis: window.__bc.game.shops[0].today.customers, caisse: window.__bc.game.player.tending }));
   check(cl.visibles >= 1 && cl.servis >= 1 && cl.caisse !== null, 'clients visibles et servis par le joueur', JSON.stringify(cl));
+  // Avis clients en bulles : un « trop cher » et un « content » injectés dans le flux de la simulation.
+  await ev(() => { const g = window.__bc.game; g.feedback.push({ shopId: g.shops[0].id, kind: 'prix' }); });
+  await page.waitForTimeout(1500);
+  await shot('10b-avis-client');
+  check(await ev(() => { let n = 0; window.__bc.scene.interior.view.scene.traverse((o) => { if (o.isSprite) n++; }); return n; }) >= 1, 'bulle d’avis client affichée');
+  check(/Objectif \d+ \/ 13/.test(await page.textContent('.objective') ?? ''), 'carte d’objectif affichée', await page.textContent('.objective'));
   await ev(() => window.__bc.setSpeed(1));
   await page.keyboard.press('e');
 

@@ -33,22 +33,24 @@ try {
   const shot = (n) => page.screenshot({ path: join(out, `${n}.png`) });
   const service = (kind) => ev((k) => window.__bc.game.district.buildings.find((b) => b.service === k).id, kind);
   /** Clic réel au centre de l'élément (comme un joueur). */
+  /** Clic réel (souris) au centre de l'élément, relu dans la page à chaque essai (le panneau peut être redessiné). */
   const tap = async (loc) => {
     const l = typeof loc === 'string' ? page.locator(loc).first() : loc.first();
     for (let k = 0; k < 40; k++) {
-      await l.waitFor({ state: 'visible' });
-      // Rectangle lu dans la page (boundingBox de Playwright rend parfois null sur cette page à faible cadence).
-      const b = await l.evaluate((e) => { const r = e.getBoundingClientRect(); return r.width ? { x: r.x, y: r.y, width: r.width, height: r.height } : null; }).catch((e) => { console.log('TAPERR', String(e).slice(0, 200)); return null; });
-      if (b) { await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await page.waitForTimeout(150); return; }
+      const handles = await l.elementHandles().catch(() => []);
+      for (const h of handles) {
+        const b = await h.evaluate((e) => { if (!e.isConnected) return null; const r = e.getBoundingClientRect(); return r.width ? { x: r.x, y: r.y, width: r.width, height: r.height } : null; }).catch(() => null);
+        if (b) { await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2); await page.waitForTimeout(150); return; }
+      }
       await page.waitForTimeout(200);
     }
-    throw new Error('élément introuvable');
+    throw new Error(`élément introuvable : ${typeof loc === 'string' ? loc : 'localisateur'}`);
   };
   const goIn = async (id) => { await ev((b) => window.__bc.toDoor(b), id); await page.waitForTimeout(250); await page.keyboard.press('e'); await page.waitForTimeout(400); };
 
   await page.goto(`${base}/index.html?seed=21&nouveau`);
   await page.waitForSelector('.menu-card', { timeout: 120000 });
-  check(await ev(() => window.__bc.assets?.loaded === 25 && window.__bc.assets.failed.length === 0), 'les 25 modèles 3D sont chargés', JSON.stringify(await ev(() => window.__bc.assets)));
+  check(await ev(() => window.__bc.assets?.loaded >= 50 && window.__bc.assets.failed.length === 0), 'tous les modèles 3D sont chargés', JSON.stringify(await ev(() => window.__bc.assets)));
   await page.fill('.menu-card input', 'Boucle SA');
   await tap('.menu-card button.primary');
   await page.waitForFunction(() => window.__bc?.ready);
@@ -141,6 +143,8 @@ try {
     if (visible) await tap('.recap button.primary');
     if (day === 2) { await ev(() => { window.__bc.cam.pitch = 0.75; window.__bc.cam.dist = 12; }); await ev(() => { for (let k = 0; k < 6; k++) { window.__bc.keepAlive(); window.__bc.advance(120); } }); await ev(() => window.__bc.setSpeed(2)); await page.waitForTimeout(4000); await shot('3-cafe-ouvert'); await ev(() => window.__bc.setSpeed(1)); }
   }
+  const obj = await ev(() => window.__bc.game.achieved);
+  check(['sortir', 'louer', 'meubler', 'stock', 'servir10', 'embaucher', 'jour500'].every((id) => obj.includes(id)), 'objectifs atteints au fil de la boucle', JSON.stringify(obj));
   check(recaps[1].clients > 20 && recaps[2].clients > 20 && recaps[2].ventes > 100, '5-6. ventes les jours 2 et 3 (stock livré, employés en caisse)', JSON.stringify(recaps));
 
   // 7. Sauvegarde, rechargement, reprise.

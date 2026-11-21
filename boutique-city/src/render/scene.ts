@@ -29,6 +29,34 @@ export class Scene3D {
   private readonly beacon: THREE.Mesh;
   private readonly raycaster = new THREE.Raycaster();
   interior: { view: InteriorView; agents: InteriorAgents | null } | null = null;
+  private readonly hemi = new THREE.HemisphereLight(0xdfeeff, 0x6c6a5a, 1.5);
+  /** Quatre lampes réelles, placées sur les lampadaires les plus proches du joueur la nuit. */
+  private readonly lamps: THREE.PointLight[] = [];
+  private night = 0;
+  private lampTimer = 0;
+  private readonly daySky = new THREE.Color(0xa9cbe6);
+  private readonly duskSky = new THREE.Color(0xe8a070);
+  private readonly nightSky = new THREE.Color(0x0e1626);
+
+  /**
+   * Heure du jour (minutes depuis minuit) : soleil, ciel, brouillard et lumière ambiante suivent le cycle ; la nuit,
+   * globes des lampadaires et portes vitrées s'allument et quatre vraies lampes éclairent les abords du joueur.
+   */
+  setTime(minute: number): void {
+    const h = minute / 60;
+    // 0 la nuit, 1 en plein jour ; aube 5 h 30 – 7 h 30, crépuscule 19 h – 21 h.
+    const day = h < 5.5 || h > 21 ? 0 : h < 7.5 ? (h - 5.5) / 2 : h > 19 ? (21 - h) / 2 : 1;
+    const dusk = Math.max(0, 1 - Math.abs(day - 0.45) * 2.2) * (day > 0 && day < 1 ? 1 : 0);
+    this.night = 1 - day;
+    this.sun.intensity = 0.15 + 2.45 * day;
+    this.sun.color.setRGB(1, 0.85 + 0.1 * day, 0.7 + 0.2 * day);
+    this.hemi.intensity = 0.35 + 1.15 * day;
+    const sky = this.nightSky.clone().lerp(this.daySky, day).lerp(this.duskSky, dusk * 0.6);
+    (this.street.background as THREE.Color).copy(sky);
+    (this.street.fog as THREE.Fog).color.copy(sky);
+    this.renderer.toneMappingExposure = 0.85 + 0.2 * day;
+    this.view.setNight(this.night);
+  }
   /** Caméra de rue mémorisée pendant la visite d'un intérieur. */
   private streetCam = { yaw: 0, pitch: 0, dist: 0 };
 
@@ -43,7 +71,8 @@ export class Scene3D {
     this.street.fog = new THREE.Fog(0xa9cbe6, 160, 620);
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1200);
 
-    this.street.add(new THREE.HemisphereLight(0xdfeeff, 0x6c6a5a, 1.5));
+    this.street.add(this.hemi);
+    for (let k = 0; k < 3; k++) { const l = new THREE.PointLight(0xffd9a0, 0, 22, 1.6); this.lamps.push(l); this.street.add(l); }
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -125,6 +154,11 @@ export class Scene3D {
     this.sun.target.position.set(focus.x, 0, focus.z);
     this.people.update(dt);
     this.view.updateLabels(this.camera, dt);
+    if ((this.lampTimer -= dt) <= 0) {
+      this.lampTimer = 0.5;
+      const near = this.view.lightPoints.map((p) => ({ p, d: p.distanceToSquared(focus) })).sort((a, b) => a.d - b.d).slice(0, this.lamps.length);
+      this.lamps.forEach((l, k) => { const n = near[k]; if (n) l.position.copy(n.p).setY(4.6); l.intensity = this.night > 0.3 ? 40 * this.night : 0; });
+    }
     this.renderer.render(this.street, this.camera);
   }
 }

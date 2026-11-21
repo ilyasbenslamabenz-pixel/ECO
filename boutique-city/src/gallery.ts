@@ -14,9 +14,9 @@ export function gallery(canvas: HTMLCanvasElement): void {
   scene.background = new THREE.Color(0x9fb8cc);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.2));
   const keys = Object.keys(ASSETS);
-  const cols = 7;
+  const cols = 10;
   keys.forEach((k, i) => {
-    const x = (i % cols) * 3 - 9, z = Math.floor(i / cols) * 3.4 - 5;
+    const x = (i % cols) * 3 - 13.5, z = Math.floor(i / cols) * 3.4 - 8;
     const o = assets.fitted(k, 2, 2, 2) ?? new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
     o.position.set(x, 0, z);
     scene.add(o);
@@ -28,10 +28,10 @@ export function gallery(canvas: HTMLCanvasElement): void {
   });
   // Personnages animés : immobile, marche, à côté d'une chaise (échelle).
   const people = [makePerson(1), makePerson(2), makePerson(3, '#c0773a')];
-  people.forEach((p, i) => { p.group.position.set(-3 + i * 1.2, 0, 7); scene.add(p.group); });
+  people.forEach((p, i) => { p.group.position.set(-3 + i * 1.2, 0, 11); scene.add(p.group); });
   for (let k = 0; k < 30; k++) { people[0]!.update(0.05, 0); people[1]!.update(0.05, 1.4); people[2]!.update(0.05, 3.5); }
   (window as unknown as { __people: unknown }).__people = people.map((p) => p.constructor.name);
   const cam = new THREE.PerspectiveCamera(40, canvas.clientWidth / canvas.clientHeight, 0.1, 200);
-  cam.position.set(0, 14, 18); cam.lookAt(0, 0, 2);
+  cam.position.set(0, 26, 22); cam.lookAt(0, 0, 0);
   r.render(scene, cam);
 }

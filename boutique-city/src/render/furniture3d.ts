@@ -13,6 +13,7 @@ export const PRODUCT_COLORS: Record<string, string> = {
   pain: '#d9a55a', lait: '#f4f4f4', fruits: '#e0533a', boissons: '#3a8fe0', conserves: '#c9b03a', snacks: '#e07a2a',
   cafe: '#5a3a26', the: '#4f9a4a', croissant: '#e3b05a', sandwich: '#e6d6a8', jus: '#f2a02a',
   tshirt: '#4a7fd0', jean: '#2f4a7a', veste: '#7a4a3a', chaussures: '#3a3a3a',
+  roses: '#d8344a', bouquet: '#e88ab0', plantes: '#3f8a45', cartes: '#f2d06b',
 };
 
 const WOOD = '#b98a5e', WOOD_D = '#7d5a3c', METAL = '#9aa3ad', DARK = '#3a3f46', WHITE = '#eef0f2';
@@ -36,7 +37,8 @@ export function furnitureSize(id: string): { w: number; d: number } {
  * Modèle d'un meuble. `fill` : remplissage 0..1 des meubles de présentation ; `colors` : couleurs des produits
  * présentés (alternées).
  */
-export function buildFurniture(id: string, fill = 0, colors: string[] = ['#cccccc'], seed = 1): THREE.Group {
+export function buildFurniture(id: string, fill = 0, colors: string[] = ['#cccccc'], seed = 1, products: string[] = []): THREE.Group {
+  PRODUCTS_NOW = products;
   const fromKit = kitFurniture(id, fill, colors, seed);
   if (fromKit) return fromKit;
   const g = new THREE.Group();
@@ -66,16 +68,13 @@ export function buildFurniture(id: string, fill = 0, colors: string[] = ['#ccccc
       box(g, w - 0.1, top, 0.03, 0, 0, z0 - depth / 2 + 0.02, mat('#d6dbe0'));
       const per = Math.round((w - 0.2) / 0.38);
       const slots = per * levels.length;
-      let n = count(slots), k = 0;
+      let n = count(slots);
+      const spots: Slot[] = [];
       for (const y of levels) {
         box(g, w - 0.1, 0.03, depth, 0, y - 0.03, z0, mat('#c7ccd2'));
-        for (let i = 0; i < per; i++, k++) {
-          if (n-- <= 0) continue;
-          const x = -w / 2 + 0.2 + (i + 0.5) * ((w - 0.4) / per);
-          const h = 0.18 + r() * 0.16;
-          box(g, 0.28, h, depth * 0.75, x, y, z0 + 0.02, col(k));
-        }
+        for (let i = 0; i < per; i++) if (n-- > 0) spots.push([-w / 2 + 0.2 + (i + 0.5) * ((w - 0.4) / per), y, z0 + 0.02]);
       }
+      goods(g, spots, [0.3, 0.28, depth * 0.7], (p, k) => box(g, 0.28, 0.18 + r() * 0.16, depth * 0.75, p[0], p[1], p[2], col(k)));
       break;
     }
     case 'frigo': {
@@ -91,30 +90,30 @@ export function buildFurniture(id: string, fill = 0, colors: string[] = ['#ccccc
       box(g, w - 0.14, 0.04, 0.62, 0, 1.86, z0, mat('#ffffff', { emissive: 0.8 }), false);
       const levels = [0.22, 0.62, 1.02, 1.42];
       const per = Math.round((w - 0.2) / 0.16);
-      let n = count(per * levels.length), k = 0;
+      let n = count(per * levels.length);
+      const slots: Slot[] = [];
       for (const y of levels) {
         box(g, w - 0.14, 0.02, 0.6, 0, y - 0.02, z0, mat('#dfe6ea'));
-        for (let i = 0; i < per; i++, k++) {
-          if (n-- <= 0) continue;
-          const x = -w / 2 + 0.14 + (i + 0.5) * ((w - 0.28) / per);
-          cyl(g, 0.09, 0.28, x, y, z0 + 0.12, col(k), false);
-        }
+        for (let i = 0; i < per; i++) if (n-- > 0) slots.push([-w / 2 + 0.14 + (i + 0.5) * ((w - 0.28) / per), y, z0 + 0.12]);
       }
+      goods(g, slots, [0.14, 0.3, 0.22], (p, k) => cyl(g, 0.09, 0.28, p[0], p[1], p[2], col(k), false));
       break;
     }
     case 'comptoir': {
       box(g, w, 1.0, 0.8, 0, 0, 0, mat(WOOD));
       box(g, w + 0.06, 0.06, 0.88, 0, 1.0, 0, mat('#3b3b3b', { rough: 0.3 }));
-      let n = count(10);
-      for (let i = 0; i < 10 && n > 0; i++, n--) cyl(g, 0.09, 0.11, -w / 2 + 0.2 + (i % 5) * 0.36, 1.06, -0.2 + Math.floor(i / 5) * 0.2, mat(i % 2 ? '#f4f4f4' : '#d8c8a8'), false);
+      const slots: Slot[] = [];
+      for (let i = 0, n = count(10); i < 10 && n > 0; i++, n--) slots.push([-w / 2 + 0.2 + (i % 5) * 0.36, 1.06, -0.2 + Math.floor(i / 5) * 0.2]);
+      goods(g, slots, [0.18, 0.16, 0.18], (p, i) => cyl(g, 0.09, 0.11, p[0], p[1], p[2], mat(i % 2 ? '#f4f4f4' : '#d8c8a8'), false));
       break;
     }
     case 'vitrine': {
       box(g, w, 0.85, 0.8, 0, 0, 0, mat(WOOD_D));
       box(g, w - 0.06, 0.45, 0.74, 0, 0.85, 0, mat('#d8f0ff', { opacity: 0.3, rough: 0.05 }), false);
       box(g, w - 0.1, 0.03, 0.7, 0, 0.86, 0, mat('#f6efe4'));
-      let n = count(12);
-      for (let i = 0; i < 12 && n > 0; i++, n--) sph(g, 0.16, 0.08, 0.1, -w / 2 + 0.22 + (i % 6) * 0.3, 0.94, -0.18 + Math.floor(i / 6) * 0.32, col(i), false);
+      const slots: Slot[] = [];
+      for (let i = 0, n = count(12); i < 12 && n > 0; i++, n--) slots.push([-w / 2 + 0.22 + (i % 6) * 0.3, 0.89, -0.18 + Math.floor(i / 6) * 0.32]);
+      goods(g, slots, [0.24, 0.14, 0.26], (p, i) => sph(g, 0.16, 0.08, 0.1, p[0], p[1] + 0.05, p[2], col(i), false));
       break;
     }
     case 'portant': {
@@ -261,18 +260,17 @@ function kitFurniture(id: string, fill: number, colors: string[], seed: number):
       // Planches du modèle : marchandise posée sur chacune, sauf le dessus.
       const levels = [0.035, 0.36, 0.68].map((f) => f * h + 0.02);
       const per = Math.round((w - 0.2) / 0.38);
-      let n = count(per * levels.length), k = 0;
-      for (const y of levels) for (let i = 0; i < per; i++, k++) {
-        if (n-- <= 0) continue;
-        const x = -w / 2 + 0.2 + (i + 0.5) * ((w - 0.4) / per);
-        box(g, 0.28, 0.16 + r() * 0.12, depth * 0.62, x, y, z0 + 0.02, col(k));
-      }
+      let n = count(per * levels.length);
+      const spots: Slot[] = [];
+      for (const y of levels) for (let i = 0; i < per; i++) if (n-- > 0) spots.push([-w / 2 + 0.2 + (i + 0.5) * ((w - 0.4) / per), y, z0 + 0.02]);
+      goods(g, spots, [0.3, 0.26, depth * 0.62], (p, k) => box(g, 0.28, 0.16 + r() * 0.12, depth * 0.62, p[0], p[1], p[2], col(k)));
       break;
     }
     case 'comptoir': {
       put(g, 'meuble.bar', w, 1.0, 0.8, 0, 0, 0);
-      let n = count(10);
-      for (let i = 0; i < 10 && n > 0; i++, n--) cyl(g, 0.09, 0.11, -w / 2 + 0.2 + (i % 5) * 0.36, 1.0, -0.2 + Math.floor(i / 5) * 0.2, mat(i % 2 ? '#f4f4f4' : '#d8c8a8'), false);
+      const slots: Slot[] = [];
+      for (let i = 0, n = count(10); i < 10 && n > 0; i++, n--) slots.push([-w / 2 + 0.2 + (i % 5) * 0.36, 1.0, -0.2 + Math.floor(i / 5) * 0.2]);
+      goods(g, slots, [0.18, 0.16, 0.18], (p, i) => cyl(g, 0.09, 0.11, p[0], p[1], p[2], mat(i % 2 ? '#f4f4f4' : '#d8c8a8'), false));
       break;
     }
     case 'machine':
@@ -308,4 +306,30 @@ function kitFurniture(id: string, fill: number, colors: string[], seed: number):
       return null;
   }
   return g;
+}
+
+/* ------------------------------ Marchandise (Food Kit) ------------------------------ */
+
+type Slot = [number, number, number];
+/** Produits présentés par le meuble en cours de construction (ordre d'affichage). */
+let PRODUCTS_NOW: string[] = [];
+
+/**
+ * Pose la marchandise sur des emplacements : modèles du Food Kit instanciés (un appel de dessin par produit), en
+ * alternant les produits présentés ; sinon formes simples (`fallback`) si un modèle manque ou pour les vêtements.
+ */
+function goods(g: THREE.Group, slots: Slot[], size: [number, number, number], fallback: (p: Slot, k: number) => void): void {
+  const ids = PRODUCTS_NOW;
+  if (!slots.length) return;
+  if (!ids.length) { slots.forEach(fallback); return; }
+  // Produit avec modèle : instances ; sans modèle (vêtements, fleurs coupées…) : forme simple à sa place.
+  const by = new Map<string, THREE.Matrix4[]>();
+  slots.forEach((p, k) => {
+    const id = ids[k % ids.length]!;
+    if (!assets.has(`produit.${id}`)) { fallback(p, k); return; }
+    const m = new THREE.Matrix4().makeRotationY(((k * 47) % 11 - 5) * 0.06).setPosition(p[0], p[1], p[2]);
+    if (!by.has(id)) by.set(id, []);
+    by.get(id)!.push(m);
+  });
+  for (const [id, ms] of by) { const im = assets.instances(`produit.${id}`, ms, size[0], size[1], size[2]); if (im) g.add(im); }
 }

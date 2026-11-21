@@ -7,9 +7,15 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { VEHICLE_BY_ID, type VehicleType } from '../sim/catalog';
 import { PITCH, type District } from '../sim/district';
 import type { Vehicle } from '../sim/game';
+import { assets } from '../assets';
 import { box, cyl, mat } from './kit';
 
 export function buildVehicle(type: VehicleType): THREE.Group {
+  if (type === 'camionnette') {
+    // Camionnette du Car Kit, à l'échelle (2,1 m de large), avant vers −z ; sinon modèle fait en code.
+    const sz = assets.size('auto.camionnette');
+    if (sz) { const k = 2.1 / sz.x; const o = assets.fitted('auto.camionnette', sz.x * k, sz.y * k, sz.z * k); if (o) { const g = new THREE.Group(); g.add(o); return g; } }
+  }
   const g = new THREE.Group();
   const paint = mat(VEHICLE_BY_ID.get(type)!.color, { rough: 0.35, metal: 0.2 });
   const dark = mat('#1d2126', { rough: 0.6 }), glass = mat('#2a3a4a', { rough: 0.1, metal: 0.4 }), tire = mat('#151515', { rough: 0.9 });
@@ -54,13 +60,17 @@ export class PlayerVehicles {
   }
 }
 
-interface Car { axis: 'x' | 'z'; line: number; dir: 1 | -1; s: number; v: number; color: THREE.Color }
+interface Car { axis: 'x' | 'z'; line: number; dir: 1 | -1; s: number; v: number; color: THREE.Color; variant: number; slot: number }
+
+const CAR_KEYS = ['auto.berline', 'auto.taxi', 'auto.suv', 'auto.livraison', 'auto.berline', 'auto.camionnette'];
 
 /** Circulation d'ambiance : voitures sur les voies de droite, en boucle d'un bout à l'autre du quartier. */
 export class Traffic {
   readonly group = new THREE.Group();
   private readonly body: THREE.InstancedMesh;
   private readonly top: THREE.InstancedMesh;
+  /** Modèles du Car Kit : un InstancedMesh par modèle, et l'échelle de chacun (largeur 1,9 m). */
+  private readonly kit: { mesh: THREE.InstancedMesh; scale: THREE.Vector3 }[] = [];
   private readonly cars: Car[] = [];
   private readonly half: { w: number; d: number };
   private readonly m = new THREE.Matrix4();
@@ -84,8 +94,24 @@ export class Traffic {
       const idx = Math.floor(rnd() * (count + 1));
       const line = (idx - count / 2) * PITCH;
       const len = axis === 'x' ? this.half.w : this.half.d;
-      this.cars.push({ axis, line, dir: rnd() < 0.5 ? 1 : -1, s: (rnd() * 2 - 1) * len, v: 8 + rnd() * 4, color: new THREE.Color(palette[Math.floor(rnd() * palette.length)]!) });
+      this.cars.push({ axis, line, dir: rnd() < 0.5 ? 1 : -1, s: (rnd() * 2 - 1) * len, v: 8 + rnd() * 4, color: new THREE.Color(palette[Math.floor(rnd() * palette.length)]!), variant: k % CAR_KEYS.length, slot: 0 });
       this.body.setColorAt(k, this.cars[k]!.color);
+    }
+    // Voitures du Car Kit si chargées (variées), sinon voitures faites en code.
+    const keys = [...new Set(CAR_KEYS)].filter((k) => assets.has(k));
+    if (keys.length) {
+      for (const key of keys) {
+        const mg = assets.merged(key)!, sz = assets.size(key)!;
+        const k = 1.9 / sz.x;
+        const count = this.cars.filter((c) => keys[c.variant % keys.length] === key).length;
+        const mesh = new THREE.InstancedMesh(mg.geo, mg.mat as THREE.Material, Math.max(1, count));
+        mesh.castShadow = true; mesh.frustumCulled = false; mesh.name = `voitures ${key}`;
+        this.kit.push({ mesh, scale: new THREE.Vector3(sz.x * k, sz.y * k, sz.z * k) });
+        this.group.add(mesh);
+      }
+      const used = new Array<number>(keys.length).fill(0);
+      for (const c of this.cars) { c.variant %= keys.length; c.slot = used[c.variant]!++; }
+      this.body.visible = this.top.visible = false;
     }
   }
 
@@ -110,10 +136,17 @@ export class Traffic {
       if (c.s > len) c.s = -len; else if (c.s < -len) c.s = len;
       const [nx, nz] = this.pos(c);
       this.q.setFromAxisAngle(this.up, Math.atan2(-fx, -fz));
+      if (this.kit.length) {
+        const kv = this.kit[c.variant]!;
+        this.m.compose(new THREE.Vector3(nx, 0.0, nz), this.q, kv.scale);
+        kv.mesh.setMatrixAt(c.slot, this.m);
+        return;
+      }
       this.m.compose(new THREE.Vector3(nx, 0.0, nz), this.q, new THREE.Vector3(1, 1, 1));
       this.body.setMatrixAt(k, this.m);
       this.top.setMatrixAt(k, this.m);
     });
+    for (const kv of this.kit) kv.mesh.instanceMatrix.needsUpdate = true;
     this.body.instanceMatrix.needsUpdate = true;
     this.top.instanceMatrix.needsUpdate = true;
     if (this.body.instanceColor) this.body.instanceColor.needsUpdate = true;

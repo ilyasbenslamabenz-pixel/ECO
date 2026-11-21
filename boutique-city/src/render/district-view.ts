@@ -158,9 +158,11 @@ export class DistrictView {
     ].map((g) => g.toNonIndexed()))!;
     this.group.add(instanced(fg, new THREE.MeshStandardMaterial({ color: 0x3a4048, roughness: 0.35, metalness: 0.6 }), frames, 'portes', true, true));
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x6b5a3a, emissive: 0xffd9a0, emissiveIntensity: 0.55, roughness: 0.15, metalness: 0.2 });
+    this.doorGlass.push(glassMat);
     this.group.add(instanced(new THREE.PlaneGeometry(1.84, 2.2).translate(0, 1.22, 0.02), glassMat, glass, 'portes-vitrees', false, false));
     this.group.add(this.rings);
     this.group.add(this.trees());
+    this.group.add(this.streetLights());
   }
 
   /**
@@ -170,17 +172,19 @@ export class DistrictView {
    * façade tournée vers la rue. Null si aucun modèle n'est chargé.
    */
   private kitBuildings(): THREE.Group | null {
-    const low = ['bat.a', 'bat.d', 'bat.h', 'bat.f', 'bat.l'].filter((k) => assets.has(k));
+    const low = ['bat.a', 'bat.d', 'bat.h', 'bat.b', 'bat.g', 'bat.e', 'bat.f', 'bat.l'].filter((k) => assets.has(k));
     const towers = ['bat.tour-a', 'bat.tour-b'].filter((k) => assets.has(k));
+    const houses = ['maison.a', 'maison.c', 'maison.g', 'maison.k'].filter((k) => assets.has(k));
     if (!low.length) return null;
-    const aspect = new Map([...low, ...towers].map((k) => [k, assets.aspect(k)]));
+    const aspect = new Map([...low, ...towers, ...houses].map((k) => [k, assets.aspect(k)]));
     const maxRent = Math.max(1, ...this.d.premises.map((p) => p.rent / p.area));
     const per = new Map<string, THREE.Matrix4[]>();
     for (const b of this.d.buildings) {
       const n = FACE_N[b.face]!;
       const front = b.face % 2 === 0 ? b.w : b.d, depth = b.face % 2 === 0 ? b.d : b.w, h = b.floors * FLOOR_H;
       const target = h / ((front + depth) / 2);
-      const pool = b.kind === 'bureaux' && b.floors >= 6 && towers.length ? towers : low;
+      const pool = b.kind === 'bureaux' && b.floors >= 6 && towers.length ? towers
+        : b.kind === 'logement' && b.floors <= 3 && houses.length && !b.home ? houses : low;
       // Loyer élevé : modèles plus riches (fin de liste).
       const lux = b.premise ? (b.premise.rent / b.premise.area) / maxRent : b.kind === 'bureaux' ? 0.7 : 0.3;
       let best = pool[0]!, bs = Infinity;
@@ -200,6 +204,50 @@ export class DistrictView {
       g.add(instanced(mg.geo, mg.mat as THREE.Material, ms, `immeuble ${k}`, true, true));
     }
     return g;
+  }
+
+  /** Matériau des globes des lampadaires (allumés la nuit, voir setNight). */
+  private readonly lampMat = new THREE.MeshBasicMaterial({ color: 0x8a8f96 });
+  private readonly doorGlass: THREE.MeshStandardMaterial[] = [];
+
+  /**
+   * Lampadaires (City Kit Roads, ou mât fait en code) au bord des trottoirs, tous les 26 m, jamais devant une porte ;
+   * globes lumineux la nuit.
+   */
+  private streetLights(): THREE.Group {
+    const d = this.d, g = new THREE.Group();
+    g.name = 'lampadaires';
+    const doors = d.buildings.filter((b) => b.premise || b.service || b.home).map((b) => [b.doorX, b.doorZ] as const);
+    const poles: THREE.Matrix4[] = [], bulbs: THREE.Matrix4[] = [];
+    // (rx, rz) : direction de la chaussée. La crosse du modèle est vers −z : rotation pour la tourner vers la rue.
+    const add = (x: number, z: number, rx: number, rz: number): void => {
+      if (doors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 4)) return;
+      poles.push(new THREE.Matrix4().makeRotationY(Math.atan2(-rx, -rz)).setPosition(x, 0.16, z));
+      bulbs.push(new THREE.Matrix4().makeTranslation(x + rx * 1.2, 4.42, z + rz * 1.2));
+    };
+    const off = STREET_W / 2 - 0.5;
+    for (let i = 0; i <= d.nx; i++) {
+      const x = (i - d.nx / 2) * PITCH;
+      for (let z = -d.size.d / 2 + 18; z < d.size.d / 2; z += 26) { add(x - off, z, 1, 0); add(x + off, z + 13, -1, 0); }
+    }
+    for (let j = 0; j <= d.nz; j++) {
+      const z = (j - d.nz / 2) * PITCH;
+      for (let x = -d.size.w / 2 + 22; x < d.size.w / 2; x += 26) { add(x, z - off, 0, 1); add(x + 13, z + off, 0, -1); }
+    }
+    const kit = assets.instances('rue.lampadaire', poles, 1.6, 5.4, 1.6);
+    if (kit) { kit.castShadow = true; kit.name = 'lampadaires-kit'; g.add(kit); }
+    else g.add(instanced(new THREE.CylinderGeometry(0.08, 0.12, 5.2, 8).translate(0, 2.6, 0), new THREE.MeshStandardMaterial({ color: 0x3a4048, metalness: 0.5, roughness: 0.4 }), poles, 'mâts', true, false));
+    g.add(instanced(new THREE.SphereGeometry(0.15, 10, 8), this.lampMat, bulbs, 'globes', false, false));
+    this.lightPoints = bulbs.map((m) => new THREE.Vector3().setFromMatrixPosition(m));
+    return g;
+  }
+  /** Positions des globes (pour éclairer les abords du joueur la nuit). */
+  lightPoints: THREE.Vector3[] = [];
+
+  /** Nuit (0 = jour, 1 = nuit noire) : globes et portes vitrées plus lumineux. */
+  setNight(k: number): void {
+    this.lampMat.color.setRGB(0.54 + 0.46 * k, 0.56 + 0.4 * k, 0.59 + 0.2 * k);
+    for (const m of this.doorGlass) m.emissiveIntensity = 0.55 + 1.4 * k;
   }
 
   /** Lignes blanches discontinues au milieu des rues. */

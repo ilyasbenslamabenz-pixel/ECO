@@ -14,7 +14,7 @@ import { box, disposeOwn, mat, textPlane } from './kit';
 
 export const WALL_H = 3.2;
 
-export interface InteriorItem extends PlacedItem { fill: number; colors: string[] }
+export interface InteriorItem extends PlacedItem { fill: number; colors: string[]; products?: string[] }
 export interface InteriorOpts { gridW: number; gridD: number; floor: 'carrelage' | 'parquet'; wall: string; accent: string; title: string; facade: string }
 
 interface WallGroup { g: THREE.Group; n: [number, number]; d: number }
@@ -125,12 +125,12 @@ export class InteriorView {
     this.items = items;
     const keep = new Set<number>();
     for (const it of items) {
-      const key = `${it.def}|${it.x}|${it.z}|${it.rot}|${Math.round(it.fill * 12)}|${it.colors.join(',')}`;
+      const key = `${it.def}|${it.x}|${it.z}|${it.rot}|${Math.round(it.fill * 12)}|${it.colors.join(',')}|${(it.products ?? []).join(',')}`;
       keep.add(it.uid);
       const cur = this.itemObjs.get(it.uid);
       if (cur && cur.key === key) continue;
       if (cur) { this.furniture.remove(cur.obj); disposeOwn(cur.obj); }
-      const obj = buildFurniture(it.def, it.fill, it.colors, it.uid);
+      const obj = buildFurniture(it.def, it.fill, it.colors, it.uid, it.products);
       this.placeObj(obj, it.def, it.x, it.z, it.rot);
       this.furniture.add(obj);
       this.itemObjs.set(it.uid, { obj, key });

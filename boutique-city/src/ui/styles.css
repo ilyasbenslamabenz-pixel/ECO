@@ -73,7 +73,7 @@ input[type="checkbox"] { width: 18px; height: 18px; }
 .chart { width: 100%; max-width: 340px; display: block; margin: 6px 0; }
 
 /* Notifications */
-#toasts { position: fixed; left: 10px; top: 78px; display: grid; gap: 6px; z-index: 30; width: min(440px, calc(100vw - 20px)); pointer-events: none; }
+#toasts { position: fixed; left: 10px; top: 168px; display: grid; gap: 6px; z-index: 30; width: min(440px, calc(100vw - 20px)); pointer-events: none; }
 .toast { background: rgba(17, 25, 36, 0.95); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 8px 12px; transition: opacity .3s; }
 .toast.ok { border-left-color: var(--ok); }
 .toast.warn { border-left-color: var(--warn); }
@@ -172,3 +172,11 @@ tr.dim { opacity: 0.55; }
 .recap-card { width: min(680px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow: auto; }
 .recap-card h2 { margin: 2px 0 10px; }
 .recap-card .kpi span.ok, .recap-card .kpi span.bad { font-size: 11px; }
+
+/* Objectif en cours */
+.objective { position: fixed; left: 10px; top: 78px; z-index: 11; width: min(320px, calc(100vw - 20px)); display: grid; gap: 3px; text-align: left;
+  padding: 8px 12px; background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); }
+.objective .obj-top { display: flex; justify-content: space-between; gap: 8px; }
+.obj-bar { height: 6px; border-radius: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; margin-top: 2px; }
+.obj-bar i { display: block; height: 100%; background: var(--ok); }
+.objlist li { padding: 3px 0; }
