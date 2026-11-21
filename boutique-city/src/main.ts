@@ -91,7 +91,6 @@ function start(game: Game): void {
   const canvas = $<HTMLCanvasElement>('scene');
   const scene = new Scene3D(canvas, game.district);
   const controls = new Controls();
-  if (matchMedia('(pointer: coarse)').matches) controls.mountJoystick(document.body);
   const panel = new Panel(game);
   let speed = params.has('vitesse') ? Math.max(0, Math.min(3, Number(params.get('vitesse')) | 0)) : 1;
   let lastDay = game.day;
