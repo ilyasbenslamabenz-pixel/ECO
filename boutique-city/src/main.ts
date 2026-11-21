@@ -736,7 +736,8 @@ function start(game: Game): void {
     if (game.layoutRev !== layoutRev) { layoutRev = game.layoutRev; agents?.refreshLayout(); }
     const c = clockView(game.total);
     const open = c.hour >= s.open && c.hour < s.close;
-    agents?.setStaff(open ? game.staffOf(s.id).map((e) => ({ id: e.id, look: e.look })) : []);
+    // Seuls les employés de service sont visibles, caissiers en premier (ils prennent la caisse).
+    agents?.setStaff(open ? [...game.onDuty(s.id)].sort((a, b) => Number(game.roleOf(b) === 'caisse') - Number(game.roleOf(a) === 'caisse')).map((e) => ({ id: e.id, look: e.look })) : []);
   };
 
   let last = performance.now(), acc = 0;
