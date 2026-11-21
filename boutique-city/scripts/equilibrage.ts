@@ -140,7 +140,7 @@ function logi(depot: boolean): { profit: number; buy: number } {
         if (r.ok && layoutStats(sh.items, p.gridW, p.gridD).blocked.length === 0) done = true; else if (r.ok) g.pickUp(id, r.data.uid);
       }
     }
-    for (const pr of productsOf('epicerie')) { g.order(id, pr.id, g.room(sh, pr.id)); g.setAuto(id, pr.id, !depot); }
+    for (const pr of productsOf('epicerie')) { g.order(id, pr.id, g.room(sh, pr.id)); g.setAuto(id, pr.id, true); }
     go('emploi'); g.hire(g.candidates[0]!.id, id); g.setPlace({ kind: 'rue' });
     if (depot) L.autoMins(g, id);
   }
@@ -150,9 +150,12 @@ function logi(depot: boolean): { profit: number; buy: number } {
     wid = w.data.id;
     L.buyRacks(g, wid, 99);
     L.setTransport(g, wid, 'service');
+    L.setMidday(g, wid, true);
   }
   let acc = 0, buy = 0;
   for (let d = 0; d < 21; d++) {
+    // Entrepôt : le grossiste assure les 3 premiers jours, le temps du premier arrivage et de la première tournée.
+    if (depot && d === 3) for (const id of ids) for (const pr of productsOf('epicerie')) g.setAuto(id, pr.id, false);
     if (depot) {
       // Commande à l'importateur : de quoi tenir environ 4 jours par produit (stock + arrivages).
       const w = L.warehouse(g, wid)!, lines: Record<string, number> = {};

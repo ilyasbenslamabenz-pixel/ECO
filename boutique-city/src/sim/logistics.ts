@@ -25,6 +25,8 @@ export interface Warehouse {
   mode: TransportMode;
   /** Véhicule assigné (mode « vehicule »). */
   vehicleId: number | null;
+  /** Seconde tournée en journée (LOGISTICS.middayHour) ; absent : non. */
+  midday?: boolean;
 }
 export interface ImportOrder { id: number; warehouseId: number; /** Produit → unités. */ lines: Record<string, number>; cost: number; arriveAt: number }
 export interface TourReport { day: number; warehouseId: number; units: number; stops: number; cost: number; capacity: number; missing: string[]; manual: boolean }
@@ -226,8 +228,8 @@ export function setMin(g: Game, shopId: number, productId: string, n: number): R
   return ok(v);
 }
 
-/** Minimums proposés : la moitié de la place en rayon de chaque produit (0 : tout effacer). */
-export function autoMins(g: Game, shopId: number, share = 0.5): Result<number> {
+/** Minimums proposés : une part (LOGISTICS.autoMinShare) de la place en rayon de chaque produit (0 : tout effacer). */
+export function autoMins(g: Game, shopId: number, share: number = LOGISTICS.autoMinShare): Result<number> {
   const s = g.shop(shopId);
   if (!s) return fail('Commerce introuvable');
   let n = 0;
@@ -253,6 +255,15 @@ export function setTransport(g: Game, warehouseId: number, mode: TransportMode, 
   w.mode = mode;
   g.version++;
   return ok(mode);
+}
+
+/** Active ou non la seconde tournée de la journée. */
+export function setMidday(g: Game, warehouseId: number, on: boolean): Result<boolean> {
+  const w = warehouse(g, warehouseId);
+  if (!w) return fail('Entrepôt introuvable');
+  if (on) w.midday = true; else delete w.midday;
+  g.version++;
+  return ok(on);
 }
 
 /** Dépose dans l'entrepôt la marchandise portée et celle des véhicules garés devant (sur place). */
@@ -302,7 +313,7 @@ export function takeOut(g: Game, warehouseId: number, productId: string, qty: nu
  * Tournée : chaque entrepôt équipé d'un transport livre les produits sous le minimum (les plus urgents d'abord),
  * jusqu'à remplir les rayons, dans la limite de la capacité du véhicule. Coût payé à la tournée.
  */
-export function runTours(g: Game, manual = false): TourReport[] {
+export function runTours(g: Game, manual = false, only?: (w: Warehouse) => boolean): TourReport[] {
   const out: TourReport[] = [];
   for (const w of g.logi.warehouses) {
     if (w.mode === 'vehicule' && (w.vehicleId === null || !g.vehicle(w.vehicleId))) {
@@ -310,7 +321,7 @@ export function runTours(g: Game, manual = false): TourReport[] {
       g.notify('warn', `${warehouseName(g, w.premiseId)} : le véhicule des tournées n’existe plus. Choisissez un transport.`);
     }
   }
-  const active = g.logi.warehouses.filter((w) => w.mode !== 'aucun');
+  const active = g.logi.warehouses.filter((w) => w.mode !== 'aucun' && (!only || only(w)));
   const pending = needs(g);
   if (!pending.length) return out;
   if (!active.length) {
@@ -344,7 +355,7 @@ export function runTours(g: Game, manual = false): TourReport[] {
     }
     const rep: TourReport = { day: g.day, warehouseId: w.id, units, stops, cost, capacity: cap, missing: [], manual };
     out.push(rep);
-    if (units > 0) g.notify('ok', `Tournée ${manual ? 'immédiate' : 'de nuit'} (${warehouseName(g, w.premiseId)}) : ${units} unités livrées dans ${stops} commerce(s), ${Math.round(cost)} CHF.${left <= 0 && needs(g).some((n) => (w.stock[n.productId] ?? 0) > 0) ? ` Véhicule plein (${cap} unités) : le reste partira à la prochaine tournée.` : ''}`);
+    if (units > 0) g.notify('ok', `Tournée ${manual ? 'immédiate' : only ? 'de mi-journée' : 'de nuit'} (${warehouseName(g, w.premiseId)}) : ${units} unités livrées dans ${stops} commerce(s), ${Math.round(cost)} CHF.${left <= 0 && needs(g).some((n) => (w.stock[n.productId] ?? 0) > 0) ? ` Véhicule plein (${cap} unités) : le reste partira à la prochaine tournée.` : ''}`);
   }
   // Produits encore sous le minimum alors qu'aucun entrepôt n'en a : alerte « entrepôt vide ».
   for (const nd of needs(g)) if (!g.logi.warehouses.some((w) => (w.stock[nd.productId] ?? 0) > 0)) missing.add(nd.productId);
@@ -382,6 +393,7 @@ export function logisticsHour(g: Game, h: number): void {
     g.version++;
   }
   if (h === LOGISTICS.tourHour) runTours(g);
+  else if (h === LOGISTICS.middayHour && L.warehouses.some((w) => w.midday && w.mode !== 'aucun')) runTours(g, false, (w) => !!w.midday);
 }
 
 /** Minuit : loyer des entrepôts (provision quotidienne, prélevé tous les 30 jours). */

@@ -534,6 +534,10 @@ export const LOGISTICS = {
   importHour: 14,
   /** Heure de la tournée de nuit (avant l'ouverture des commerces). */
   tourHour: 4,
+  /** Seconde tournée facultative, en journée (commerces ouverts). */
+  middayHour: 13,
+  /** Minimums proposés : part de la place en rayon. */
+  autoMinShare: 0.8,
   /** Transporteur : forfait par tournée, par commerce livré, par unité ; capacité de sa camionnette. */
   service: { base: 35, perStop: 8, perUnit: 0.03, cargo: 800 },
   /** Votre véhicule avec un chauffeur à la tournée : forfait, par commerce livré (capacité : soute du véhicule). */

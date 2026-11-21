@@ -6,7 +6,7 @@ import { ECONOMY, LOGISTICS, PRODUCT_BY_ID, TRANSPORT_FR, VEHICLE_BY_ID, product
 import type { Premise } from '../sim/district';
 import {
   atWarehouse, autoMins, buyRacks, capacityOf, incomingOf, maxRacks, minOf, releaseQuote, releaseWarehouse, rentWarehouse, runTours,
-  sellRack, setMin, setTransport, stockValue, stow, takeOut, tourPreview, usedOf, vehicleLabel, warehouseAt, warehouseName, warehousePremises,
+  sellRack, setMidday, setMin, setTransport, stockValue, stow, takeOut, tourPreview, usedOf, vehicleLabel, warehouseAt, warehouseName, warehousePremises,
   warehouseRent, type Warehouse,
 } from '../sim/logistics';
 import { importerView, kpi, type UiCtx } from './dialogs';
@@ -96,7 +96,7 @@ function rented(ctx: UiCtx, w: Warehouse, self: () => View): (Node | null)[] {
   else out.push(note('Sur place, vous pouvez aussi décharger votre véhicule ici ou y charger de la marchandise.'));
 
   // Tournées.
-  out.push(sec(`Tournées automatiques (chaque nuit à ${LOGISTICS.tourHour} h)`));
+  out.push(sec(`Tournées automatiques (chaque nuit à ${LOGISTICS.tourHour} h${w.midday ? ` et à ${LOGISTICS.middayHour} h` : ''})`));
   const mode = el('select', { attrs: { 'aria-label': 'Transport des tournées' } }, ...(Object.keys(TRANSPORT_FR) as TransportMode[]).map((m) => el('option', { text: TRANSPORT_FR[m], attrs: { value: m } })));
   mode.value = w.mode;
   const veh = el('select', { attrs: { 'aria-label': 'Véhicule des tournées' } }, ...g.vehicles.map((v) => el('option', { text: `${VEHICLE_BY_ID.get(v.type)!.nameFr} (${VEHICLE_BY_ID.get(v.type)!.cargo} u.)`, attrs: { value: String(v.id) } })));
@@ -105,6 +105,10 @@ function rented(ctx: UiCtx, w: Warehouse, self: () => View): (Node | null)[] {
   mode.addEventListener('change', apply);
   veh.addEventListener('change', apply);
   out.push(el('div', { cls: 'row' }, mode, w.mode === 'vehicule' || g.vehicles.length ? veh : null));
+  const mid = el('input', { attrs: { type: 'checkbox', 'aria-label': 'Seconde tournée' } });
+  mid.checked = !!w.midday;
+  mid.addEventListener('change', () => ctx.act(setMidday(g, w.id, mid.checked)));
+  out.push(el('label', { cls: 'row' }, mid, el('span', { text: `Seconde tournée à ${LOGISTICS.middayHour} h (rayons remplis en journée, coût d’une tournée en plus)` })));
   out.push(note(`Transporteur : ${chf(LOGISTICS.service.base)} par tournée + ${chf(LOGISTICS.service.perStop)} par commerce livré + ${LOGISTICS.service.perUnit.toFixed(2)} CHF par unité, ${LOGISTICS.service.cargo} unités au plus. Votre véhicule : chauffeur à la tournée ${chf(LOGISTICS.own.base)} + ${chf(LOGISTICS.own.perStop)} par commerce, capacité de la soute (assurance du véhicule en plus).`));
   const pv = tourPreview(g, w);
   out.push(el('div', { cls: 'kpis' },
@@ -133,7 +137,7 @@ function rented(ctx: UiCtx, w: Warehouse, self: () => View): (Node | null)[] {
       tbl.append(el('tr', {}, el('td', { text: pr.nameFr }), el('td', { cls: m > 0 && st < m ? 'warn' : '', text: `${num(st)} / ${num(room)}` }), el('td', {}, inp)));
     }
     out.push(el('div', { cls: 'logi-shop' }, el('div', { cls: 'row' }, el('b', { cls: 'grow', text: s.name }),
-      button('Proposer (moitié du rayon)', () => ctx.act(autoMins(g, s.id), (n) => `${n} minimum(s) fixé(s) pour ${s.name}.`), 'small'),
+      button(`Proposer (${Math.round(LOGISTICS.autoMinShare * 100)} % du rayon)`, () => ctx.act(autoMins(g, s.id), (n) => `${n} minimum(s) fixé(s) pour ${s.name}.`), 'small'),
       button('Effacer', () => ctx.act(autoMins(g, s.id, 0), 'Minimums effacés.'), 'small')), tbl));
   }
 

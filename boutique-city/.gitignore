@@ -13,3 +13,4 @@ scripts/.proprete-*
 scripts/.*.ts
 scripts/.*.mjs
 tests/.*
+/equilibrage.ts
