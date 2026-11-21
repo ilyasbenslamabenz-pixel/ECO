@@ -40,6 +40,21 @@ export const FURNITURE: readonly FurnitureDef[] = [
   { id: 'tapis', nameFr: 'Tapis', kind: 'deco', w: 2, d: 2, price: 300, decor: 2, color: '#c46a5a' },
   { id: 'etagere', nameFr: 'Étagère murale', kind: 'rayon', w: 2, d: 1, price: 420, capacity: 45, color: '#a7b8cc' },
   { id: 'tableau', nameFr: 'Tableau décoratif', kind: 'deco', w: 1, d: 1, price: 260, decor: 1.4, color: '#d2a24c' },
+  // Mobilier ajouté avec les modèles Mini Market et Furniture Kit.
+  { id: 'gondole', nameFr: 'Gondole de supermarché', kind: 'rayon', w: 3, d: 1, price: 950, capacity: 100, color: '#7f9ab8' },
+  { id: 'presentoir-pain', nameFr: 'Présentoir à pain', kind: 'rayon', w: 2, d: 1, price: 650, capacity: 40, color: '#d9a55a' },
+  { id: 'etal', nameFr: 'Étal de fruits', kind: 'rayon', w: 2, d: 1, price: 600, capacity: 45, color: '#e0533a' },
+  { id: 'congelateur', nameFr: 'Congélateur bahut', kind: 'frigo', w: 2, d: 1, price: 1600, capacity: 70, color: '#9fd8ec' },
+  { id: 'bar', nameFr: 'Bar et 3 tabourets', kind: 'table', w: 3, d: 2, price: 650, seats: 3, decor: 0.4, color: '#8a6a4a' },
+  { id: 'salon', nameFr: 'Coin salon', kind: 'table', w: 3, d: 2, price: 950, seats: 3, decor: 1.5, color: '#6f86a8' },
+  { id: 'bistrot', nameFr: 'Table bistrot et 2 chaises', kind: 'table', w: 2, d: 1, price: 220, seats: 2, decor: 0.3, color: '#b98a5e' },
+  { id: 'caddies', nameFr: 'Chariots et paniers', kind: 'deco', w: 1, d: 1, price: 180, decor: 0.6, color: '#9aa3ad' },
+  { id: 'consigne', nameFr: 'Machine à consigne', kind: 'deco', w: 1, d: 1, price: 900, decor: 0.8, color: '#4f9a6a' },
+  { id: 'portemanteau', nameFr: 'Portemanteau', kind: 'deco', w: 1, d: 1, price: 120, decor: 0.6, color: '#b98a5e' },
+  { id: 'enceintes', nameFr: 'Enceintes (musique)', kind: 'deco', w: 1, d: 1, price: 420, decor: 1.1, color: '#3a3f46' },
+  { id: 'ecran', nameFr: 'Écran publicitaire', kind: 'deco', w: 2, d: 1, price: 1200, decor: 1.8, color: '#2b3440' },
+  { id: 'fleurs', nameFr: 'Massif de fleurs', kind: 'deco', w: 1, d: 1, price: 140, decor: 0.9, color: '#d8344a' },
+  { id: 'bibliotheque', nameFr: 'Bibliothèque décorative', kind: 'deco', w: 2, d: 1, price: 380, decor: 1.3, color: '#a07a5a' },
 ];
 
 export const FURNITURE_BY_ID: ReadonlyMap<string, FurnitureDef> = new Map(FURNITURE.map((f) => [f.id, f]));
@@ -171,7 +186,7 @@ export const SERVICES: readonly ServiceDef[] = [
   { id: 'meubles', nameFr: 'Magasin de meubles', sign: 'Meubles & Agencement', color: '#3f8fd9', hint: 'Mobilier de magasin, livré dans la réserve du commerce choisi.' },
   { id: 'banque', nameFr: 'Banque', sign: 'Banque du Quartier', color: '#2e9e8f', hint: 'Prêts à rembourser chaque jour.' },
   { id: 'emploi', nameFr: "Agence pour l'emploi", sign: "Agence pour l'emploi", color: '#8c63d9', hint: 'Candidats à embaucher, nouveaux chaque lundi.' },
-  { id: 'garage', nameFr: 'Garage', sign: 'Garage Utilitaires', color: '#c94f4f', hint: 'Scooters et camionnettes pour transporter la marchandise.' },
+  { id: 'garage', nameFr: 'Garage', sign: 'Garage Utilitaires', color: '#c94f4f', hint: 'Scooters, citadines, camionnettes et camions pour transporter la marchandise.' },
   { id: 'pub', nameFr: 'Agence de publicité', sign: 'Agence Pub & Com', color: '#d94fa0', hint: 'Campagnes qui attirent plus de clients.' },
   { id: 'snack', nameFr: 'Snack', sign: 'Snack Express', color: '#e0b030', hint: 'Manger et boire un café : faim et énergie.' },
 ];
@@ -179,11 +194,13 @@ export const SERVICE_BY_ID: ReadonlyMap<ServiceKind, ServiceDef> = new Map(SERVI
 
 /* ------------------------------ Véhicules ------------------------------ */
 
-export type VehicleType = 'scooter' | 'camionnette';
+export type VehicleType = 'scooter' | 'citadine' | 'camionnette' | 'camion';
 export interface VehicleDef { id: VehicleType; nameFr: string; price: number; cargo: number; /** Vitesse maximale (m/s). */ speed: number; /** Assurance (CHF / jour). */ insurance: number; color: string }
 export const VEHICLES: readonly VehicleDef[] = [
   { id: 'scooter', nameFr: 'Scooter utilitaire', price: 2900, cargo: 60, speed: 13, insurance: 4, color: '#e2463a' },
+  { id: 'citadine', nameFr: 'Citadine', price: 9800, cargo: 140, speed: 16, insurance: 8, color: '#3f9a5a' },
   { id: 'camionnette', nameFr: 'Camionnette', price: 14500, cargo: 600, speed: 12, insurance: 14, color: '#f2f2ee' },
+  { id: 'camion', nameFr: 'Camion de livraison', price: 34000, cargo: 1600, speed: 10, insurance: 32, color: '#d8d8d8' },
 ];
 export const VEHICLE_BY_ID: ReadonlyMap<VehicleType, VehicleDef> = new Map(VEHICLES.map((v) => [v.id, v]));
 

@@ -11,16 +11,18 @@ import { assets } from '../assets';
 import { box, cyl, mat } from './kit';
 
 export function buildVehicle(type: VehicleType): THREE.Group {
-  if (type === 'camionnette') {
-    // Camionnette du Car Kit, à l'échelle (2,1 m de large), avant vers −z ; sinon modèle fait en code.
-    const sz = assets.size('auto.camionnette');
-    if (sz) { const k = 2.1 / sz.x; const o = assets.fitted('auto.camionnette', sz.x * k, sz.y * k, sz.z * k); if (o) { const g = new THREE.Group(); g.add(o); return g; } }
+  // Modèles du Car Kit à l'échelle (largeur réelle), avant vers −z ; sinon modèle fait en code.
+  const kit: Partial<Record<VehicleType, [string, number]>> = { citadine: ['auto.citadine', 1.8], camionnette: ['auto.camionnette', 2.1], camion: ['auto.camion', 2.4] };
+  const km = kit[type];
+  if (km) {
+    const sz = assets.size(km[0]);
+    if (sz) { const k = km[1] / sz.x; const o = assets.fitted(km[0], sz.x * k, sz.y * k, sz.z * k); if (o) { const g = new THREE.Group(); g.add(o); return g; } }
   }
   const g = new THREE.Group();
   const paint = mat(VEHICLE_BY_ID.get(type)!.color, { rough: 0.35, metal: 0.2 });
   const dark = mat('#1d2126', { rough: 0.6 }), glass = mat('#2a3a4a', { rough: 0.1, metal: 0.4 }), tire = mat('#151515', { rough: 0.9 });
   const wheel = (x: number, z: number, dia: number, wdt: number): void => { const w = cyl(g, dia, wdt, x, dia / 2, z, tire); w.rotation.z = Math.PI / 2; w.position.y = dia / 2; };
-  if (type === 'camionnette') {
+  if (type === 'camionnette' || type === 'camion' || type === 'citadine') {
     box(g, 2.0, 1.95, 3.4, 0, 0.45, 0.65, paint);
     box(g, 2.0, 1.25, 1.5, 0, 0.45, -1.7, paint);
     box(g, 1.9, 0.6, 0.05, 0, 1.1, -2.46, glass);
@@ -62,7 +64,12 @@ export class PlayerVehicles {
 
 interface Car { axis: 'x' | 'z'; line: number; dir: 1 | -1; s: number; v: number; color: THREE.Color; variant: number; slot: number }
 
-const CAR_KEYS = ['auto.berline', 'auto.taxi', 'auto.suv', 'auto.livraison', 'auto.berline', 'auto.camionnette'];
+/** Modèles de la circulation (fréquence = répétitions) ; largeur réelle de chacun (m). */
+const CAR_KEYS = ['auto.berline', 'auto.taxi', 'auto.suv', 'auto.citadine', 'auto.livraison', 'auto.berline', 'auto.sport', 'auto.suv-luxe',
+  'auto.camionnette', 'auto.taxi', 'auto.police', 'auto.camion', 'auto.citadine', 'auto.ambulance', 'auto.poubelles', 'auto.livraison-plateau',
+  'auto.berline', 'auto.camion-vert', 'auto.plateau', 'auto.pompiers', 'auto.suv', 'auto.camion-gris', 'auto.taxi'];
+const CAR_WIDTH: Record<string, number> = { 'auto.camion': 2.4, 'auto.pompiers': 2.5, 'auto.poubelles': 2.5, 'auto.plateau': 2.4, 'auto.camion-vert': 2.4,
+  'auto.camion-gris': 2.4, 'auto.ambulance': 2.2, 'auto.livraison-plateau': 2.1, 'auto.citadine': 1.8 };
 
 /** Circulation d'ambiance : voitures sur les voies de droite, en boucle d'un bout à l'autre du quartier. */
 export class Traffic {
@@ -102,7 +109,7 @@ export class Traffic {
     if (keys.length) {
       for (const key of keys) {
         const mg = assets.merged(key)!, sz = assets.size(key)!;
-        const k = 1.9 / sz.x;
+        const k = (CAR_WIDTH[key] ?? 1.9) / sz.x;
         const count = this.cars.filter((c) => keys[c.variant % keys.length] === key).length;
         const mesh = new THREE.InstancedMesh(mg.geo, mg.mat as THREE.Material, Math.max(1, count));
         mesh.castShadow = true; mesh.frustumCulled = false; mesh.name = `voitures ${key}`;

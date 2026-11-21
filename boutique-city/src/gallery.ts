@@ -13,10 +13,12 @@ export function gallery(canvas: HTMLCanvasElement): void {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x9fb8cc);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 2.2));
-  const keys = Object.keys(ASSETS);
-  const cols = 10;
+  // ?galerie=N : page N de 40 modèles (8 colonnes).
+  const page = Math.max(0, Number(new URLSearchParams(location.search).get('galerie')) || 0);
+  const keys = Object.keys(ASSETS).slice(page * 40, page * 40 + 40);
+  const cols = 8;
   keys.forEach((k, i) => {
-    const x = (i % cols) * 3 - 13.5, z = Math.floor(i / cols) * 3.4 - 8;
+    const x = (i % cols) * 3.4 - 11.9, z = Math.floor(i / cols) * 3.4 - 8;
     const o = assets.fitted(k, 2, 2, 2) ?? new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
     o.position.set(x, 0, z);
     scene.add(o);

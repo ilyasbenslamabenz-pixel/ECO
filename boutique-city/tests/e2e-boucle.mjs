@@ -93,9 +93,14 @@ try {
 
   // 3. Stock : grossiste (emporté à pied) puis commandes livrées avec réassort automatique.
   await goIn(await service('grossiste'));
-  const row = page.locator('#panel tr', { has: page.locator('td:text-is("Croissant")') });
-  await row.locator('input').fill('24');
-  await tap(row.locator('button:has-text("Emporter")'));
+  // Quantité et « Emporter » dans la même action DOM (le panneau peut être redessiné entre deux actions du pilote).
+  await page.waitForFunction(() => [...document.querySelectorAll('#panel tr')].some((r) => r.querySelector('td')?.textContent === 'Croissant'));
+  await ev(() => {
+    const tr = [...document.querySelectorAll('#panel tr')].find((r) => r.querySelector('td')?.textContent === 'Croissant');
+    const i = tr.querySelector('input');
+    i.value = '24'; i.dispatchEvent(new Event('input', { bubbles: true }));
+    [...tr.querySelectorAll('button')].find((b) => b.textContent.includes('Emporter')).click();
+  });
   await page.keyboard.press('Escape');
   await goIn(await ev(() => window.__bc.game.premise(window.__bc.game.shops[0].premiseId).buildingId));
   await page.waitForTimeout(700);

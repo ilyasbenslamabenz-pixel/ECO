@@ -34,67 +34,92 @@ export interface AssetDef {
   rot: number;
 }
 
-export const ASSETS: Record<string, AssetDef> = {
-  // City Kit (Commercial) : bâtiments du quartier, choisis selon la hauteur et le loyer.
-  'bat.a': { file: 'building-a.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'bat.d': { file: 'building-d.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'bat.f': { file: 'building-f.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'bat.h': { file: 'building-h.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'bat.l': { file: 'building-l.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'bat.b': { file: 'building-b.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'bat.e': { file: 'building-e.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'bat.g': { file: 'building-g.glb', kind: 'batiment', scale: 1, rot: 0 },
-  // City Kit Suburban : petits immeubles d'habitation.
-  'maison.a': { file: 'house-a.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'maison.c': { file: 'house-c.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'maison.g': { file: 'house-g.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'maison.k': { file: 'house-k.glb', kind: 'batiment', scale: 1, rot: 0 },
-  // City Kit Roads : lampadaire (rue, allumé la nuit).
-  'rue.lampadaire': { file: 'streetlight.glb', kind: 'meuble', scale: 1, rot: 0 },
-  // Car Kit : circulation et camionnette du joueur.
-  'auto.berline': { file: 'car-sedan.glb', kind: 'vehicule', scale: 1, rot: 2 },
-  'auto.taxi': { file: 'car-taxi.glb', kind: 'vehicule', scale: 1, rot: 2 },
-  'auto.camionnette': { file: 'car-van.glb', kind: 'vehicule', scale: 1, rot: 2 },
-  'auto.suv': { file: 'car-suv.glb', kind: 'vehicule', scale: 1, rot: 2 },
-  'auto.livraison': { file: 'car-delivery.glb', kind: 'vehicule', scale: 1, rot: 2 },
-  // Food Kit : marchandise visible sur les présentoirs.
-  'produit.pain': { file: 'food-loaf.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.lait': { file: 'food-carton.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.fruits': { file: 'food-apple.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.boissons': { file: 'food-soda.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.conserves': { file: 'food-can.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.snacks': { file: 'food-cheese.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.cafe': { file: 'food-cup.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.the': { file: 'food-mug.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.croissant': { file: 'food-croissant.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.sandwich': { file: 'food-sandwich.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.jus': { file: 'food-lemon.glb', kind: 'produit', scale: 1, rot: 0 },
-  'produit.plantes': { file: 'pottedPlant.glb', kind: 'produit', scale: 1, rot: 0 },
-  'bat.tour-a': { file: 'building-skyscraper-a.glb', kind: 'batiment', scale: 1, rot: 0 },
-  'bat.tour-b': { file: 'building-skyscraper-b.glb', kind: 'batiment', scale: 1, rot: 0 },
-  // Mini Characters : clients et employés animés.
-  'perso.f-a': { file: 'character-female-a.glb', kind: 'personnage', scale: 1, rot: 2 },
-  'perso.f-c': { file: 'character-female-c.glb', kind: 'personnage', scale: 1, rot: 2 },
-  'perso.h-a': { file: 'character-male-a.glb', kind: 'personnage', scale: 1, rot: 2 },
-  'perso.h-c': { file: 'character-male-c.glb', kind: 'personnage', scale: 1, rot: 2 },
-  'perso.f-d': { file: 'character-female-d.glb', kind: 'personnage', scale: 1, rot: 2 },
-  'perso.h-e': { file: 'character-male-e.glb', kind: 'personnage', scale: 1, rot: 2 },
+const def = (file: string, kind: AssetKind, rot = 0, scale = 1): AssetDef => ({ file, kind, scale, rot });
+/** Ajoute une série de modèles : `prefix + nom` → fichier `filePrefix + nom + .glb`. */
+function series(out: Record<string, AssetDef>, prefix: string, filePrefix: string, names: string[], kind: AssetKind, rot = 0): void {
+  for (const n of names) {
+    const [key, file] = n.includes('=') ? n.split('=') as [string, string] : [n, n];
+    out[prefix + key] = def(`${filePrefix}${file}.glb`, kind, rot);
+  }
+}
+
+export const ASSETS: Record<string, AssetDef> = {};
+{
+  const A = ASSETS;
+  // City Kit (Commercial) : immeubles du quartier (choisis selon la hauteur), tours, auvents et parasols.
+  series(A, 'bat.', 'building-', ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n'], 'batiment');
+  series(A, 'bat.tour-', 'building-skyscraper-', ['a', 'b', 'c', 'd', 'e'], 'batiment');
+  series(A, 'rue.', 'com-', ['auvent=detail-awning', 'auvent-large=detail-awning-wide', 'marquise=detail-overhang', 'parasol-a=detail-parasol-a', 'parasol-b=detail-parasol-b'], 'meuble');
+  // City Kit Suburban : petits immeubles d'habitation, arbres, jardinières, clôtures.
+  series(A, 'maison.', 'house-', ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'k', 'l', 'm', 'o'], 'batiment');
+  series(A, 'rue.', 'sub-', ['arbre-grand=tree-large', 'arbre-petit=tree-small', 'jardiniere=planter', 'cloture=fence-low'], 'meuble');
+  // City Kit Industrial : entrepôts (grossiste, garage) et citerne.
+  series(A, 'ind.', 'ind-', ['a=building-a', 'c=building-c', 'e=building-e', 'h=building-h', 'citerne=detail-tank'], 'batiment');
+  // Retro Urban Kit : mobilier urbain, arbres de parc, camions.
+  series(A, 'rue.', 'urb-', ['banc=detail-bench', 'benne=detail-dumpster-closed', 'feu=detail-light-traffic', 'arbre-parc=tree-park-large', 'buisson=tree-shrub', 'palette=pallet', 'barriere=detail-barrier-type-a'], 'meuble');
+  series(A, 'auto.', 'urb-', ['camion-vert=truck-green-cargo', 'camion-gris=truck-grey'], 'vehicule', 2);
+  // City Kit Roads : lampadaire, chantier.
+  A['rue.lampadaire'] = def('streetlight.glb', 'meuble');
+  series(A, 'rue.', 'road-', ['chantier-barriere=construction-barrier', 'chantier-cone=construction-cone', 'chantier-lampe=construction-light'], 'meuble');
+  // Car Kit : circulation, véhicules du joueur, cônes et cartons.
+  series(A, 'auto.', 'car-', ['berline=sedan', 'taxi', 'camionnette=van', 'suv', 'livraison=delivery', 'ambulance', 'police', 'pompiers=firetruck',
+    'poubelles=garbage-truck', 'citadine=hatchback-sports', 'sport=sedan-sports', 'suv-luxe=suv-luxury', 'camion=truck', 'plateau=truck-flat',
+    'livraison-plateau=delivery-flat'], 'vehicule', 2);
+  series(A, 'rue.', 'car-', ['cone', 'carton=box'], 'meuble');
+  // Mini Characters (+ employé du Mini Market) : clients et employés animés.
+  series(A, 'perso.', 'character-', ['f-a=female-a', 'f-b=female-b', 'f-c=female-c', 'f-d=female-d', 'f-e=female-e', 'f-f=female-f',
+    'h-a=male-a', 'h-b=male-b', 'h-c=male-c', 'h-d=male-d', 'h-e=male-e', 'h-f=male-f'], 'personnage', 2);
+  A['perso.employe'] = def('mm-character-employee.glb', 'personnage', 2);
+  // Mini Market : mobilier d'épicerie (les articles du modèle sont montrés selon le stock).
+  series(A, 'mm.', 'mm-', ['consigne=bottle-return', 'caisse=cash-register', 'presentoir-pain=display-bread', 'etal-fruits=display-fruit',
+    'congelateur=freezer', 'congelateurs=freezers-standing', 'rayon-sacs=shelf-bags', 'rayon-cartons=shelf-boxes', 'rayon-bout=shelf-end',
+    'panier=shopping-basket', 'caddie=shopping-cart', 'colonne=column'], 'meuble', 2);
   // Furniture Kit : mobilier des commerces et du logement.
-  'meuble.bureau': { file: 'desk.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.ecran': { file: 'computerScreen.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.bibliotheque': { file: 'bookcaseOpen.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.bar': { file: 'kitchenBar.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.placard': { file: 'kitchenCabinet.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.cafetiere': { file: 'kitchenCoffeeMachine.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.table-ronde': { file: 'tableRound.glb', kind: 'meuble', scale: 1, rot: 0 },
-  'meuble.chaise': { file: 'chair.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.plante': { file: 'pottedPlant.glb', kind: 'meuble', scale: 1, rot: 0 },
-  'meuble.lampe': { file: 'lampRoundFloor.glb', kind: 'meuble', scale: 1, rot: 0 },
-  'meuble.tapis': { file: 'rugRectangle.glb', kind: 'meuble', scale: 1, rot: 0 },
-  'meuble.lit': { file: 'bedDouble.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.canape': { file: 'loungeSofa.glb', kind: 'meuble', scale: 1, rot: 2 },
-  'meuble.frigo': { file: 'kitchenFridgeLarge.glb', kind: 'meuble', scale: 1, rot: 2 },
-};
+  series(A, 'meuble.', '', ['bureau=desk', 'ecran=computerScreen', 'bibliotheque=bookcaseOpen', 'bar=kitchenBar', 'placard=kitchenCabinet',
+    'cafetiere=kitchenCoffeeMachine', 'chaise=chair', 'lit=bedDouble', 'canape=loungeSofa', 'frigo=kitchenFridgeLarge',
+    'lit-simple=bedSingle', 'lavabo=bathroomSink', 'miroir=bathroomMirror', 'wc=toilet', 'douche=shower', 'baignoire=bathtub',
+    'cuisiniere=kitchenStove', 'evier=kitchenSink', 'frigo-petit=kitchenFridge', 'micro-ondes=kitchenMicrowave', 'placard-haut=kitchenCabinetUpper',
+    'tele=televisionModern', 'meuble-tele=cabinetTelevision', 'fauteuil=loungeChair', 'canape-design=loungeDesignSofa', 'table-basse=tableCoffee',
+    'chevet=sideTable', 'lampe-chevet=lampSquareTable', 'bibliotheque-fermee=bookcaseClosedWide', 'livres=books', 'portemanteau=coatRackStanding',
+    'tabouret=stoolBar', 'chaise-moderne=chairModernCushion', 'table=table', 'chaise-coussin=chairCushion', 'tapis-rond=rugRound',
+    'paillasson=rugDoormat', 'plante-1=plantSmall1', 'plante-2=plantSmall2', 'plante-3=plantSmall3', 'carton=cardboardBoxClosed',
+    'carton-ouvert=cardboardBoxOpen', 'poubelle=trashcan', 'portable=laptop', 'enceinte=speaker', 'radio', 'lave-linge=washer',
+    'applique=lampWall', 'chaise-bureau=chairDesk', 'mixeur=kitchenBlender', 'grille-pain=toaster', 'coussin=pillowBlue'], 'meuble', 2);
+  series(A, 'meuble.', '', ['table-ronde=tableRound', 'plante=pottedPlant', 'lampe=lampRoundFloor', 'tapis=rugRectangle'], 'meuble');
+  // Nature Kit : fleurs, plantes en pot, buissons et arbres.
+  series(A, 'nat.', 'nat-', ['fleur-rouge-a=flower_redA', 'fleur-rouge-b=flower_redB', 'fleur-rouge-c=flower_redC', 'fleur-jaune-a=flower_yellowA',
+    'fleur-jaune-b=flower_yellowB', 'fleur-violette-a=flower_purpleA', 'fleur-violette-b=flower_purpleB', 'buisson=plant_bush',
+    'buisson-grand=plant_bushLarge', 'buisson-fin=plant_bushDetailed', 'pot-grand=pot_large', 'pot-petit=pot_small', 'arbre=tree_default',
+    'chene=tree_oak', 'arbre-fin=tree_detailed'], 'meuble');
+  // Food Kit : marchandise visible (plusieurs modèles par produit : « produit.<id> », « produit.<id>.2 »…).
+  const goods: Record<string, string[]> = {
+    pain: ['food-loaf', 'food-loaf-baguette', 'food-loaf-round', 'food-bread'],
+    lait: ['food-carton', 'food-carton-small', 'food-egg'],
+    fruits: ['food-apple', 'food-banana', 'food-orange', 'food-pear', 'food-grapes', 'food-pineapple', 'food-watermelon', 'food-tomato',
+      'food-carrot', 'food-broccoli', 'food-cabbage', 'food-strawberry'],
+    boissons: ['food-soda', 'food-soda-bottle', 'food-soda-can', 'food-wine-red', 'food-wine-white'],
+    conserves: ['food-can', 'food-can-small', 'food-bottle-oil', 'food-bottle-ketchup', 'food-honey', 'food-peanut-butter'],
+    snacks: ['food-cheese', 'food-chocolate', 'food-candy-bar', 'food-cookie'],
+    cafe: ['food-cup', 'food-cup-coffee', 'food-cup-saucer', 'food-frappe'],
+    the: ['food-mug', 'food-cup-tea', 'food-glass'],
+    croissant: ['food-croissant', 'food-donut', 'food-donut-chocolate', 'food-muffin', 'food-cupcake', 'food-cake', 'food-pie', 'food-waffle'],
+    sandwich: ['food-sandwich', 'food-sub', 'food-burger', 'food-hot-dog', 'food-pizza'],
+    jus: ['food-lemon', 'food-orange'],
+    plantes: ['pottedPlant', 'plantSmall1', 'plantSmall2', 'plantSmall3', 'nat-pot-large'],
+    roses: ['nat-flower_redA', 'nat-flower_redB', 'nat-flower_redC'],
+    bouquet: ['nat-flower_purpleA', 'nat-flower_yellowA', 'nat-flower_purpleB', 'nat-flower_yellowB'],
+  };
+  for (const [id, files] of Object.entries(goods)) files.forEach((f, i) => { A[`produit.${id}${i ? '.' + (i + 1) : ''}`] = def(`${f.replace('nat-pot-large', 'nat-pot_large')}.glb`, 'produit'); });
+}
+
+/** Clés d'un produit : « produit.<id> » puis ses variantes « produit.<id>.2 »… (toutes, chargées ou non). */
+export function productKeys(id: string): string[] {
+  const out: string[] = [];
+  for (let i = 1; ASSETS[`produit.${id}${i > 1 ? '.' + i : ''}`]; i++) out.push(`produit.${id}${i > 1 ? '.' + i : ''}`);
+  return out;
+}
+/** Clés dont le nom commence par `prefix` (ex. « perso. », « auto. »). */
+export function keysWith(prefix: string): string[] { return Object.keys(ASSETS).filter((k) => k.startsWith(prefix)); }
 
 /* ------------------------------ Bibliothèque ------------------------------ */
 
@@ -102,6 +127,7 @@ interface Loaded { scene: THREE.Object3D; animations: THREE.AnimationClip[]; ski
 
 export class AssetLib {
   private readonly loaded = new Map<string, Loaded>();
+  private readonly parsedByFile = new Map<string, { scene: THREE.Object3D; animations: THREE.AnimationClip[] }>();
   readonly failed: string[] = [];
   private readonly mergedCache = new Map<string, { geo: THREE.BufferGeometry; mat: THREE.Material | THREE.Material[] } | null>();
   done = false;
@@ -116,21 +142,27 @@ export class AssetLib {
   async load(onProgress: (p: number, label: string) => void, disabled = false): Promise<void> {
     const keys = Object.keys(ASSETS);
     if (disabled) { this.failed.push(...keys); this.done = true; return; }
-    const pack = await fetchPack(CONFIG.modelsDir + 'pack.json', (p) => onProgress(p * 0.8, 'paquet de modèles'));
-    if (pack) {
+    const pack = await fetchPack(CONFIG.modelsDir + 'pack.json', (p) => onProgress(p * 0.7, 'paquet de modèles'));
+    const files = pack ? await unpack(pack) : null;
+    if (files) {
       const loader = new GLTFLoader();
       let n = 0;
       for (const key of keys) {
         const def = ASSETS[key]!;
-        const b64 = pack[def.file];
         try {
-          if (!b64) throw new Error('absent du paquet');
-          const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-          const gltf = await loader.parseAsync(bin.buffer, '');
-          this.register(key, gltf.scene, gltf.animations);
+          const bin = files(def.file);
+          if (!bin) throw new Error('absent du paquet');
+          // Un même fichier peut servir à plusieurs clés : analysé une fois.
+          let parsed = this.parsedByFile.get(def.file);
+          if (!parsed) { parsed = await loader.parseAsync(bin, ''); this.parsedByFile.set(def.file, parsed); }
+          this.register(key, parsed.scene, parsed.animations);
         } catch { this.failed.push(key); }
-        onProgress(0.8 + (0.2 * ++n) / keys.length, def.file);
+        if (++n % 8 === 0 || n === keys.length) {
+          onProgress(0.7 + (0.3 * n) / keys.length, def.file);
+          await new Promise((r) => setTimeout(r, 0));
+        }
       }
+      this.parsedByFile.clear();
       this.done = true;
       return;
     }
@@ -141,7 +173,13 @@ export class AssetLib {
     let skinned = false;
     scene.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; m.geometry.userData['shared'] = true; }
+      if (m.isMesh) {
+        m.castShadow = true; m.receiveShadow = true; m.geometry.userData['shared'] = true;
+        // Packs sans « metallicFactor » (Nature Kit) : métal par défaut du glTF, noir sans carte d'environnement.
+        for (const mt of (Array.isArray(m.material) ? m.material : [m.material]) as THREE.MeshStandardMaterial[]) {
+          if (mt.isMeshStandardMaterial && mt.metalness > 0.5 && !mt.metalnessMap) mt.metalness = 0;
+        }
+      }
       if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned = true;
     });
     this.loaded.set(key, { scene, animations, skinned });
@@ -188,6 +226,18 @@ export class AssetLib {
     const c = this.clone(key);
     if (!c) return null;
     return fitInto(c.obj, w, h, d, stretch, ASSETS[key]!.scale);
+  }
+
+  /**
+   * Comme `fitted`, et renvoie aussi les sous-objets dont le nom commence par l'un des préfixes (articles intégrés à
+   * un modèle : pains d'un présentoir, cartons d'un rayon…), que l'appelant montre ou cache selon le stock.
+   */
+  fittedParts(key: string, w: number, h: number | null, d: number, prefixes: string[], stretch = false): { obj: THREE.Object3D; parts: THREE.Object3D[] } | null {
+    const c = this.clone(key);
+    if (!c) return null;
+    const parts: THREE.Object3D[] = [];
+    c.obj.traverse((o) => { if (o !== c.obj && prefixes.some((p) => o.name.startsWith(p)) && !parts.some((q) => isAncestor(q, o))) parts.push(o); });
+    return { obj: fitInto(c.obj, w, h, d, stretch, ASSETS[key]!.scale), parts };
   }
 
   /**
@@ -268,8 +318,29 @@ export class AssetLib {
   }
 }
 
+type PackJson = Record<string, string> | { v: 3; index: Record<string, [number, number]>; gz: string };
+
+/**
+ * Accès aux fichiers du paquet. Format 3 : GLB bout à bout compressés (gzip, base64) avec index ; ancien format :
+ * un base64 par fichier. Null si le paquet est illisible (le jeu charge alors les fichiers .glb).
+ */
+async function unpack(pack: PackJson): Promise<((file: string) => ArrayBuffer | null) | null> {
+  const b64 = (t: string): Uint8Array<ArrayBuffer> => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
+  if ('v' in pack && (pack as { v: unknown }).v === 3) {
+    const p = pack as { index: Record<string, [number, number]>; gz: string };
+    if (typeof DecompressionStream === 'undefined') return null;
+    try {
+      const stream = new Blob([b64(p.gz)]).stream().pipeThrough(new DecompressionStream('gzip'));
+      const all = new Uint8Array(await new Response(stream).arrayBuffer());
+      return (file) => { const e = p.index[file]; return e ? all.slice(e[0], e[0] + e[1]).buffer : null; };
+    } catch { return null; }
+  }
+  const old = pack as Record<string, string>;
+  return (file) => (old[file] ? b64(old[file]!).buffer as ArrayBuffer : null);
+}
+
 /** Télécharge le paquet de modèles avec progression ; null s'il est absent ou illisible. */
-async function fetchPack(url: string, onProgress: (p: number) => void): Promise<Record<string, string> | null> {
+async function fetchPack(url: string, onProgress: (p: number) => void): Promise<PackJson | null> {
   try {
     const res = await fetch(url);
     if (!res.ok || !res.body) return null;
@@ -287,9 +358,11 @@ async function fetchPack(url: string, onProgress: (p: number) => void): Promise<
     const all = new Uint8Array(got);
     let o = 0;
     for (const c of chunks) { all.set(c, o); o += c.length; }
-    return JSON.parse(new TextDecoder().decode(all)) as Record<string, string>;
+    return JSON.parse(new TextDecoder().decode(all)) as PackJson;
   } catch { return null; }
 }
+
+function isAncestor(a: THREE.Object3D, o: THREE.Object3D): boolean { for (let p = o.parent; p; p = p.parent) if (p === a) return true; return false; }
 
 /** Ajuste un objet dans une boîte (voir AssetLib.fitted). */
 export function fitInto(obj: THREE.Object3D, w: number, h: number | null, d: number, stretch: boolean, extra = 1): THREE.Object3D {

@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCK, FACE_N, PITCH, SIDEWALK_W, STREET_W, blockCenter, type Building, type District } from '../sim/district';
-import { assets } from '../assets';
+import { assets, keysWith } from '../assets';
 import { disposeOwn, textPlane } from './kit';
 
 export const FLOOR_H = 3.2;
@@ -163,6 +163,7 @@ export class DistrictView {
     this.group.add(this.rings);
     this.group.add(this.trees());
     this.group.add(this.streetLights());
+    this.group.add(this.streetProps());
   }
 
   /**
@@ -172,18 +173,21 @@ export class DistrictView {
    * façade tournée vers la rue. Null si aucun modèle n'est chargé.
    */
   private kitBuildings(): THREE.Group | null {
-    const low = ['bat.a', 'bat.d', 'bat.h', 'bat.b', 'bat.g', 'bat.e', 'bat.f', 'bat.l'].filter((k) => assets.has(k));
-    const towers = ['bat.tour-a', 'bat.tour-b'].filter((k) => assets.has(k));
-    const houses = ['maison.a', 'maison.c', 'maison.g', 'maison.k'].filter((k) => assets.has(k));
+    const low = keysWith('bat.').filter((k) => !k.startsWith('bat.tour') && assets.has(k));
+    const towers = keysWith('bat.tour-').filter((k) => assets.has(k));
+    const houses = keysWith('maison.').filter((k) => assets.has(k));
+    // Entrepôts (City Kit Industrial) pour le grossiste et le garage.
+    const depots = ['ind.a', 'ind.c', 'ind.e', 'ind.h'].filter((k) => assets.has(k));
     if (!low.length) return null;
-    const aspect = new Map([...low, ...towers, ...houses].map((k) => [k, assets.aspect(k)]));
+    const aspect = new Map([...low, ...towers, ...houses, ...depots].map((k) => [k, assets.aspect(k)]));
     const maxRent = Math.max(1, ...this.d.premises.map((p) => p.rent / p.area));
     const per = new Map<string, THREE.Matrix4[]>();
     for (const b of this.d.buildings) {
       const n = FACE_N[b.face]!;
       const front = b.face % 2 === 0 ? b.w : b.d, depth = b.face % 2 === 0 ? b.d : b.w, h = b.floors * FLOOR_H;
       const target = h / ((front + depth) / 2);
-      const pool = b.kind === 'bureaux' && b.floors >= 6 && towers.length ? towers
+      const pool = (b.service === 'grossiste' || b.service === 'garage') && b.floors <= 3 && depots.length ? depots
+        : b.kind === 'bureaux' && b.floors >= 6 && towers.length ? towers
         : b.kind === 'logement' && b.floors <= 3 && houses.length && !b.home ? houses : low;
       // Loyer élevé : modèles plus riches (fin de liste).
       const lux = b.premise ? (b.premise.rent / b.premise.area) / maxRent : b.kind === 'bureaux' ? 0.7 : 0.3;
@@ -286,8 +290,117 @@ export class DistrictView {
       trunks.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0.16, z), new THREE.Quaternion(), new THREE.Vector3(s, s, s)));
       crowns.push(new THREE.Matrix4().compose(new THREE.Vector3(x, 0.16 + 3.2 * s, z), new THREE.Quaternion(), new THREE.Vector3(s, s * 1.1, s)));
     }
+    // Modèles d'arbres (City Kit Suburban, Nature Kit) répartis au hasard, un InstancedMesh par modèle.
+    const kinds = ['rue.arbre-grand', 'rue.arbre-petit', 'nat.arbre', 'nat.chene', 'nat.arbre-fin'].filter((k) => assets.has(k));
+    if (kinds.length) {
+      const per = new Map<string, THREE.Matrix4[]>();
+      trunks.forEach((m, i) => {
+        const k = kinds[(i * 7 + Math.floor(rnd() * 3)) % kinds.length]!;
+        if (!per.has(k)) per.set(k, []);
+        per.get(k)!.push(m.clone().multiply(new THREE.Matrix4().makeRotationY(rnd() * 6.28)));
+      });
+      for (const [k, ms] of per) { const im = assets.instances(k, ms, 4.2, 6.5, 4.2); if (im) { im.castShadow = true; im.name = `arbres ${k}`; g.add(im); } }
+      if (g.children.length) return g;
+    }
     g.add(instanced(new THREE.CylinderGeometry(0.18, 0.25, 2.4, 6).translate(0, 1.2, 0), new THREE.MeshStandardMaterial({ color: 0x6b4f3a }), trunks, 'troncs', true, false));
     g.add(instanced(new THREE.IcosahedronGeometry(1.7, 1), new THREE.MeshStandardMaterial({ color: 0x4f8a45, roughness: 0.9, flatShading: true }), crowns, 'feuillages', true, false));
+    return g;
+  }
+
+  /**
+   * Mobilier urbain et décor (modèles Kenney ; rien si un modèle manque) : feux aux carrefours, bancs, poubelles,
+   * jardinières, bennes, parc (bancs, parasols, massifs de fleurs), abords du grossiste (palettes,
+   * cartons, citerne), terrasses des snacks et un petit chantier. Jamais devant une porte.
+   */
+  private streetProps(): THREE.Group {
+    const d = this.d, g = new THREE.Group();
+    g.name = 'mobilier-urbain';
+    const doors = d.buildings.filter((b) => b.premise || b.service || b.home).map((b) => [b.doorX, b.doorZ] as const);
+    const free = (x: number, z: number, r = 3.2): boolean => !doors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < r);
+    const per = new Map<string, THREE.Matrix4[]>();
+    const put = (key: string, x: number, z: number, ry = 0, r = 3.2): void => {
+      if (!free(x, z, r)) return;
+      if (!per.has(key)) per.set(key, []);
+      per.get(key)!.push(new THREE.Matrix4().makeRotationY(ry).setPosition(x, 0.16, z));
+    };
+    let seed = d.seed * 7919 + 17;
+    const rnd = (): number => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+    const curb = STREET_W / 2 - 0.9, half = STREET_W / 2;
+    // Feux tricolores aux coins des carrefours, tournés vers la chaussée.
+    for (let i = 0; i <= d.nx; i++) for (let j = 0; j <= d.nz; j++) {
+      const x = (i - d.nx / 2) * PITCH, z = (j - d.nz / 2) * PITCH;
+      if ((i + j) % 2 === 0) { put('rue.feu', x - half - 0.6, z - half - 0.6, Math.PI / 4); put('rue.feu', x + half + 0.6, z + half + 0.6, -3 * Math.PI / 4); }
+    }
+    // Le long des trottoirs : bancs, poubelles, jardinières, en alternance, entre les arbres.
+    const along: [number, number, number][] = [];
+    for (let i = 0; i <= d.nx; i++) {
+      const x = (i - d.nx / 2) * PITCH;
+      for (let z = -d.size.d / 2 + 14; z < d.size.d / 2 - 8; z += 18) { along.push([x - curb, z + 2, Math.PI / 2]); along.push([x + curb, z + 11, -Math.PI / 2]); }
+    }
+    for (let j = 0; j <= d.nz; j++) {
+      const z = (j - d.nz / 2) * PITCH;
+      for (let x = -d.size.w / 2 + 16; x < d.size.w / 2 - 8; x += 18) { along.push([x + 2, z - curb, 0]); along.push([x + 11, z + curb, Math.PI]); }
+    }
+    along.forEach(([x, z, ry], k) => {
+      const r = rnd();
+      if (Math.abs(x) > d.size.w / 2 || Math.abs(z) > d.size.d / 2) return;
+      if (r < 0.28) put('rue.banc', x, z, ry);
+      else if (r < 0.48) put('meuble.poubelle', x, z, ry, 2.5);
+      else if (r < 0.62) put('rue.jardiniere', x, z, ry);
+      else if (r < 0.7 && k % 3 === 0) put('rue.benne', x, z, ry, 5);
+    });
+    // Parc : bancs autour, massifs de fleurs et buissons, parasols et tables, clôture basse.
+    const pc = blockCenter(d, d.parkBlock.i, d.parkBlock.j), ph = BLOCK / 2 - 3;
+    for (let k = -2; k <= 2; k++) {
+      put('rue.banc', pc.x + k * 9, pc.z - ph + 4, 0); put('rue.banc', pc.x + k * 9, pc.z + ph - 4, Math.PI);
+      put('rue.banc', pc.x - ph + 4, pc.z + k * 9, Math.PI / 2); put('rue.banc', pc.x + ph - 4, pc.z + k * 9, -Math.PI / 2);
+    }
+    const flowers = keysWith('nat.fleur-').concat('nat.buisson', 'nat.buisson-grand', 'nat.buisson-fin');
+    for (let k = 0; k < 70; k++) {
+      const a = rnd() * Math.PI * 2, rr = 6 + rnd() * (ph - 10);
+      put(flowers[k % flowers.length]!, pc.x + Math.cos(a) * rr, pc.z + Math.sin(a) * rr, rnd() * 6.28, 0);
+    }
+    for (let k = 0; k < 3; k++) {
+      const x = pc.x - 6 + k * 6, z = pc.z;
+      put(k % 2 ? 'rue.parasol-a' : 'rue.parasol-b', x, z, rnd(), 0);
+    }
+    // Abords des services : palettes et cartons devant le grossiste, parasols devant les snacks.
+    for (const b of d.buildings) {
+      if (!b.service) continue;
+      const n = FACE_N[b.face]!, t = [n[1], -n[0]] as const, depth = b.face % 2 === 0 ? b.d : b.w;
+      const at = (side: number, out: number): [number, number] => [b.x + n[0] * (depth / 2 + out) + t[0] * side, b.z + n[1] * (depth / 2 + out) + t[1] * side];
+      const ry = Math.atan2(n[0], n[1]);
+      if (b.service === 'grossiste') {
+        for (const s of [-5, -3.6, 4, 5.4]) { const [x, z] = at(s, 0.9); put('rue.palette', x, z, ry, 2.2); }
+        for (const s of [-4.3, 4.7]) { const [x, z] = at(s, 0.9); put('rue.carton', x, z, ry + 0.3, 2.2); }
+      } else if (b.service === 'snack') {
+        for (const s of [-4.5, 4.5]) { const [x, z] = at(s, 1.6); put(s < 0 ? 'rue.parasol-a' : 'rue.parasol-b', x, z, ry, 2.5); }
+      } else if (b.service === 'garage') {
+        for (const s of [-4, -3, 4.2]) { const [x, z] = at(s, 0.8); put('rue.cone', x, z, rnd(), 2.2); }
+      }
+    }
+    // Petit chantier sur un trottoir (barrières, cônes, lampe de chantier).
+    {
+      const x = (1 - d.nx / 2) * PITCH + curb - 0.4, z0 = -d.size.d / 2 + PITCH / 2 + 20;
+      if (free(x, z0, 7)) {
+        put('rue.chantier-barriere', x, z0 - 3, Math.PI / 2); put('rue.chantier-barriere', x, z0 + 3, Math.PI / 2);
+        put('rue.chantier-cone', x - 0.2, z0 - 1.5); put('rue.chantier-cone', x - 0.2, z0); put('rue.chantier-cone', x - 0.2, z0 + 1.5);
+        put('rue.chantier-lampe', x + 0.6, z0 + 4.2, Math.PI / 2);
+      }
+    }
+    // Tailles (largeur, hauteur, profondeur) maximales de chaque modèle dans la rue (m).
+    const size: Record<string, [number, number, number]> = {
+      'rue.feu': [1.2, 4.2, 1.2], 'rue.banc': [1.9, 1.0, 0.8], 'meuble.poubelle': [0.55, 0.95, 0.55], 'rue.jardiniere': [1.6, 1.3, 1.6],
+      'rue.benne': [2.2, 1.6, 1.4], 'rue.parasol-a': [3, 2.7, 3], 'rue.parasol-b': [3, 2.7, 3], 'rue.cloture': [4, 0.8, 0.4],
+      'rue.palette': [1.2, 0.3, 1.0], 'rue.carton': [0.8, 0.7, 0.8], 'rue.cone': [0.45, 0.6, 0.45], 'rue.chantier-barriere': [2.4, 1.1, 0.6],
+      'rue.chantier-cone': [0.5, 0.75, 0.5], 'rue.chantier-lampe': [1, 2.2, 1], 'nat.buisson': [1.1, 0.9, 1.1], 'nat.buisson-grand': [1.6, 1.3, 1.6],
+      'nat.buisson-fin': [1.2, 1, 1.2],
+    };
+    for (const [k, ms] of per) {
+      const [w, h, dd] = size[k] ?? [0.7, 0.6, 0.7];
+      const im = assets.instances(k, ms, w, h, dd);
+      if (im) { im.castShadow = h > 0.7; im.name = `décor ${k}`; g.add(im); }
+    }
     return g;
   }
 

@@ -6,6 +6,7 @@
 import * as esbuild from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,8 +36,17 @@ const head = `<title>Boutique City</title>
 writeFileSync(join(dist, 'index.html'), `<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${head}\n</head>\n<body>\n${body}\n</body>\n</html>\n`);
 writeFileSync(join(dist, 'artifact.html'), `${head}\n${body}\n`);
 cpSync(join(root, 'models'), join(dist, 'models'), { recursive: true });
-// Paquet unique des modèles (base64 dans du JSON) : servi là où les fichiers .glb ne le sont pas (page publiée).
-const pack = {};
-for (const f of readdirSync(join(root, 'models'))) if (f.endsWith('.glb')) pack[f] = readFileSync(join(root, 'models', f)).toString('base64');
-writeFileSync(join(dist, 'models', 'pack.json'), JSON.stringify(pack));
+// Paquet unique des modèles : tous les GLB bout à bout, compressés (gzip) puis en base64 dans du JSON, avec l'index
+// (fichier → [début, longueur]). Servi là où les fichiers .glb ne le sont pas (page publiée) ; décompressé dans le
+// navigateur par DecompressionStream.
+const index = {};
+const parts = [];
+let off = 0;
+for (const f of readdirSync(join(root, 'models')).sort()) if (f.endsWith('.glb')) {
+  const b = readFileSync(join(root, 'models', f));
+  index[f] = [off, b.length]; parts.push(b); off += b.length;
+}
+const gz = gzipSync(Buffer.concat(parts), { level: 9 });
+writeFileSync(join(dist, 'models', 'pack.json'), JSON.stringify({ v: 3, index, gz: gz.toString('base64') }));
+console.log(`paquet : ${Object.keys(index).length} modèles, ${(off / 1e6).toFixed(1)} Mo → ${(gz.length / 1e6).toFixed(1)} Mo compressés`);
 console.log('dist : game.js, index.html, artifact.html, models/');

@@ -78,7 +78,7 @@ export class InteriorAgents {
     this.staff = this.staff.filter((s) => ids.has(s.id));
     for (const e of list) {
       if (this.staff.some((s) => s.id === e.id)) continue;
-      const h = makePerson(e.look, this.accent);
+      const h = makePerson(e.look, this.accent, 1, true);
       const [x, z] = this.view.cellCenter(...this.door());
       this.group.add(h.group);
       this.staff.push({ id: e.id, h, x, z, heading: Math.PI, route: [], speed: 0, idle: 0 });
@@ -223,7 +223,10 @@ export class InteriorAgents {
     if (!t) { m.h.update(dt, 0); return true; }
     const dx = t[0] - m.x, dz = t[1] - m.z, d = Math.hypot(dx, dz);
     const v = m.speed * ts;
+    // Arrivée tolérante (0,3 m ; 0,45 m pour un point de passage) : deux clients qui visent la même case ne se
+    // bloquent plus mutuellement à cause de l'écart minimal.
     if (d <= v * dt) { m.x = t[0]; m.z = t[1]; m.route.shift(); }
+    else if (d < (m.route.length > 1 ? 0.45 : 0.3)) m.route.shift();
     else { m.x += (dx / d) * v * dt; m.z += (dz / d) * v * dt; m.heading = turn(m.heading, headingTo(dx, dz), dt * 10); }
     m.h.update(dt, Math.min(2.5, v));
     return m.route.length === 0;
@@ -308,7 +311,9 @@ export class InteriorAgents {
         const b = cs[j]!;
         const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
         if (d >= MIN_GAP) continue;
-        const k = (MIN_GAP - d) / 2, ux = d > 1e-4 ? dx / d : 1, uz = d > 1e-4 ? dz / d : 0;
+        // Deux clients en marche se frôlent (écart souple) pour se croiser dans les passages et l'entrée.
+        const soft = (a.state === 'walk' || a.state === 'leave') && (b.state === 'walk' || b.state === 'leave') ? 0.35 : 1;
+        const k = ((MIN_GAP - d) / 2) * soft, ux = d > 1e-4 ? dx / d : 1, uz = d > 1e-4 ? dz / d : 0;
         push(a, -ux * k, -uz * k); push(b, ux * k, uz * k);
       }
       // En marche, un client contourne au plus près (sans être bloqué par le joueur dans l'entrée).

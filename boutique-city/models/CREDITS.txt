@@ -40,5 +40,47 @@ La licence de chaque pack a été lue dans son fichier License.txt d'origine, pr
 7. City Kit Roads 2.0 — Kenney, CC0
    kenney-city-kit-roads/3D/city/Models/GLB format/light-square.glb  (renommé streetlight.glb)
 
-Modification : la texture de chaque pack (Textures/colormap.png, CC0, même source) a été intégrée dans
-chaque fichier GLB qui la référence (scripts/embed-textures.mjs) ; géométrie et animations inchangées.
+Ajouts de la version 4 (mêmes packs et nouveaux packs, tous CC0, même source) :
+
+1. City Kit (Commercial) 2.1 : building-c, -i, -j, -k, -m, -n, building-skyscraper-c, -d, -e ;
+   détails renommés com-<nom>.glb : detail-awning, detail-awning-wide, detail-overhang, detail-parasol-a, -b
+2. Mini Characters 1.0 : character-female-b, -e, -f, character-male-b, -d, -f
+3. Furniture Kit 2.1 (noms d'origine) : bedSingle, bathroomSink, bathroomMirror, toilet, shower, bathtub, kitchenStove,
+   kitchenSink, kitchenFridge, kitchenMicrowave, kitchenCabinetUpper, televisionModern, cabinetTelevision, loungeChair,
+   loungeDesignSofa, tableCoffee, sideTable, lampSquareTable, bookcaseClosedWide, books, coatRackStanding, stoolBar,
+   chairModernCushion, table, chairCushion, rugRound, rugDoormat, plantSmall1, plantSmall2, plantSmall3,
+   cardboardBoxClosed, cardboardBoxOpen, trashcan, laptop, speaker, radio, washer, lampWall, chairDesk, kitchenBlender,
+   toaster, pillowBlue
+4. Car Kit 3.1 (renommés car-<nom>.glb) : ambulance, police, firetruck, garbage-truck, hatchback-sports, sedan-sports,
+   suv-luxury, truck, truck-flat, delivery-flat, cone, box
+5. Food Kit 2.0 (renommés food-<nom>.glb) : loaf-baguette, loaf-round, bread, banana, orange, pear, grapes, strawberry,
+   watermelon, pineapple, tomato, carrot, broccoli, cabbage, egg, carton-small, bottle-oil, bottle-ketchup, honey,
+   peanut-butter, soda-bottle, soda-can, wine-red, wine-white, chocolate, candy-bar, cookie, donut, donut-chocolate,
+   cupcake, cake, muffin, pie, waffle, cup-coffee, cup-tea, cup-saucer, frappe, sub, burger, hot-dog, can-small,
+   glass, pizza
+6. City Kit Suburban 2.0 : building-type-b, -d, -e, -f, -h, -l, -m, -o (renommés house-<lettre>.glb) ;
+   tree-large, tree-small, planter, fence-low (renommés sub-<nom>.glb)
+7. City Kit Roads 2.0 (renommés road-<nom>.glb) : construction-barrier, construction-cone, construction-light
+8. Mini Market 1.0 — Kenney, 25-10-2024, CC0 (crédits additionnels : Fleur Keijsers, Guus Vermeulen)
+   kenney-mini-market/3D/city/Models/GLB format/  (renommés mm-<nom>.glb)
+   bottle-return, cash-register, character-employee, display-bread, display-fruit, freezer, freezers-standing,
+   shelf-bags, shelf-boxes, shelf-end, shopping-basket, shopping-cart, column
+9. City Kit Industrial 1.0 — Kenney, 25-06-2025, CC0
+   kenney-city-kit-industrial/3D/city/Models/GLB format/  (renommés ind-<nom>.glb)
+   building-a, building-c, building-e, building-h, detail-tank
+10. Retro Urban Kit 2.0 — Kenney, 29-01-2025, CC0
+   kenney-retro-urban-kit/3D/city/Models/GLB format/  (renommés urb-<nom>.glb)
+   detail-bench, detail-dumpster-closed, detail-light-traffic, tree-park-large, tree-shrub, pallet,
+   truck-green-cargo, truck-grey, detail-barrier-type-a
+11. Nature Kit 2.1 — Kenney, 29-04-2020, CC0
+   kenney-nature-kit/3D/nature/Models/GLTF format/  (renommés nat-<nom>.glb)
+   flower_redA, flower_redB, flower_redC, flower_yellowA, flower_yellowB, flower_purpleA, flower_purpleB, plant_bush,
+   plant_bushLarge, plant_bushDetailed, pot_large, pot_small, tree_default, tree_oak, tree_detailed
+
+Total : 226 modèles.
+
+Modification : les textures de chaque pack (Textures/colormap.png ; pour le Retro Urban Kit, les images de
+Models/FBX format/Textures/ : metal, planks, roof, signs, metal_wall, wall, treeA, tiles, dirt, truck, truck_alien —
+CC0, même source) ont été intégrées dans chaque fichier GLB qui les référence (scripts/embed-textures.mjs) ;
+géométrie et animations inchangées. Le jeu force à 0 la « métallicité » des matériaux qui la mettent à 1 sans carte
+(Nature Kit), sans modifier les fichiers.

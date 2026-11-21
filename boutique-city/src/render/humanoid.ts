@@ -4,7 +4,7 @@
  * Face avant vers −z : une rotation y = cap fait regarder vers (−sin cap, −cos cap). Dépend de three.
  */
 import * as THREE from 'three';
-import { ASSETS, CONFIG, assets, fitInto } from '../assets';
+import { ASSETS, CONFIG, assets, fitInto, keysWith } from '../assets';
 import { box, hashRand, mat, sph } from './kit';
 
 export interface Look { skin: string; shirt: string; pants: string; hair: string; shoes: string; hairLong: boolean; apron?: string }
@@ -162,13 +162,17 @@ export class KitPerson implements Person {
 }
 
 const FIT_CACHE = new Map<string, { s: number; p: THREE.Vector3 }>();
-const PERSONS = ['perso.f-a', 'perso.f-c', 'perso.h-a', 'perso.h-c', 'perso.f-d', 'perso.h-e'];
+const PERSONS = keysWith('perso.').filter((k) => k !== 'perso.employe');
 
-/** Client ou employé : modèle animé si chargé, sinon personnage fait en code. */
-export function makePerson(seed: number, accent?: string, scale = 1): Person {
+/**
+ * Client ou employé : modèle animé si chargé (douze clients différents ; employés en tenue du Mini Market), sinon
+ * personnage fait en code.
+ */
+export function makePerson(seed: number, accent?: string, scale = 1, employee = false): Person {
   const keys = PERSONS.filter((k) => assets.has(k));
   if (keys.length) {
-    const p = new KitPerson(keys[Math.abs(Math.floor(seed)) % keys.length]!, seed, accent);
+    const key = employee && assets.has('perso.employe') ? 'perso.employe' : keys[Math.abs(Math.floor(seed)) % keys.length]!;
+    const p = new KitPerson(key, seed, accent);
     p.group.scale.setScalar(scale);
     return p;
   }

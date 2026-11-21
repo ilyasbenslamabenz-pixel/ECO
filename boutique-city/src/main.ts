@@ -263,7 +263,7 @@ function start(game: Game): void {
     }
     if (car) return { label: 'Descendre du véhicule', run: leaveCar };
     const p = game.player;
-    for (const v of game.vehicles) if (Math.hypot(v.x - p.x, v.z - p.z) < (v.type === 'camionnette' ? 3.4 : 2.2)) return { label: `Conduire : ${VEHICLE_BY_ID.get(v.type)!.nameFr}`, run: () => enterCar(v.id) };
+    for (const v of game.vehicles) if (Math.hypot(v.x - p.x, v.z - p.z) < (v.type === 'scooter' ? 2.2 : v.type === 'camion' ? 4.2 : 3.4)) return { label: `Conduire : ${VEHICLE_BY_ID.get(v.type)!.nameFr}`, run: () => enterCar(v.id) };
     const b = nearestDoor(p.x, p.z, 2.6);
     return b ? doorAction(b) : null;
   };
@@ -273,13 +273,13 @@ function start(game: Game): void {
     car = { id, x: v.x, z: v.z, heading: v.heading, speed: 0 };
     game.setDriving(id);
     scene.player.group.visible = false;
-    Object.assign(scene.cam, { dist: v.type === 'camionnette' ? 13 : 8, pitch: 0.3 });
+    Object.assign(scene.cam, { dist: v.type === 'scooter' ? 8 : v.type === 'camion' ? 16 : v.type === 'citadine' ? 10 : 13, pitch: 0.3 });
   };
   const leaveCar = (): void => {
     if (!car) return;
     const v = game.vehicle(car.id);
     game.setVehiclePose(car.id, car.x, car.z, car.heading);
-    const side = v?.type === 'camionnette' ? 1.9 : 1.1;
+    const side = !v || v.type === 'scooter' ? 1.1 : v.type === 'camion' ? 2.1 : 1.9;
     const r = scene.collider.resolve(car.x + Math.cos(car.heading) * side, car.z - Math.sin(car.heading) * side, 0.35);
     game.setPlayerPose(r.x, r.z, car.heading);
     car = null;
@@ -557,7 +557,7 @@ function start(game: Game): void {
       if (!v) { car = null; scene.player.group.visible = true; }
       else {
         const def = VEHICLE_BY_ID.get(v.type)!;
-        drive(car, { throttle: ax.y, steer: -ax.x, brake: controls.brake }, dt, def.speed, scene.collider, v.type === 'camionnette' ? 1.25 : 0.6);
+        drive(car, { throttle: ax.y, steer: -ax.x, brake: controls.brake }, dt, def.speed, scene.collider, v.type === 'scooter' ? 0.6 : v.type === 'camion' ? 1.45 : v.type === 'citadine' ? 1.0 : 1.25);
         game.setVehiclePose(car.id, car.x, car.z, car.heading);
         game.setPlayerPose(car.x, car.z, car.heading);
         if (Math.abs(car.speed) > 1.5) scene.cam.yaw = turnTo(scene.cam.yaw, car.heading + (car.speed < 0 ? Math.PI : 0), dt * 1.8);
@@ -666,6 +666,7 @@ function start(game: Game): void {
     },
     recap: () => !!recapOpen,
     keepAlive: () => { game.player.energy = 100; game.player.hunger = 100; },
+    agents: () => agents,
   });
   debug.ready = true;
 }
@@ -695,7 +696,8 @@ function canPlaceUi(s: Shop, gw: number, gd: number, def: string, x: number, z: 
 
 /** Mobilier fixe du logement. */
 function homeItems(W: number, D: number): InteriorItem[] {
-  const list: [string, number, number, Rot][] = [['lit', 0, 0, 0], ['armoire', 2, 0, 0], ['cuisine', W - 3, 0, 0], ['canape', W - 1, D - 4, 3], ['plante', 0, D - 2, 0], ['table', W - 4, 2, 0]];
+  const list: [string, number, number, Rot][] = [['lit', 0, 0, 0], ['armoire', 2, 0, 0], ['cuisine', W - 3, 0, 0], ['canape', W - 1, D - 4, 3], ['plante', 0, D - 2, 0], ['table', W - 4, 2, 0],
+    ['bureau-perso', 0, D - 1, 2], ['tele', W - 2, D - 1, 2]];
   return list.map(([def, x, z, rot], k) => ({ uid: 100 + k, def, x, z, rot, fill: 0, colors: ['#cccccc'] }));
 }
 

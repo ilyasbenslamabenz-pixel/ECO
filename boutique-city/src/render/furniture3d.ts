@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three';
 import { FURNITURE_BY_ID } from '../sim/catalog';
-import { assets } from '../assets';
+import { assets, productKeys } from '../assets';
 import { box, cyl, hashRand, mat, sph } from './kit';
 
 /** Couleur d'emballage de chaque produit. */
@@ -25,6 +25,15 @@ export const HOME_FURNITURE: Record<string, { w: number; d: number; nameFr: stri
   cuisine: { w: 3, d: 1, nameFr: 'Cuisine' },
   armoire: { w: 2, d: 1, nameFr: 'Armoire' },
   tablebasse: { w: 2, d: 1, nameFr: 'Table basse' },
+  'bureau-perso': { w: 2, d: 1, nameFr: 'Bureau' },
+  tele: { w: 2, d: 1, nameFr: 'Télévision' },
+};
+
+/** Meubles faits en code utilisés à la place d'un meuble à modèles quand un modèle manque. */
+const CODE_ALIAS: Record<string, string> = {
+  gondole: 'rayon', 'presentoir-pain': 'etagere', etal: 'etagere', congelateur: 'frigo', bar: 'table', salon: 'table', bistrot: 'table',
+  caddies: 'plante', consigne: 'plante', portemanteau: 'lampe', enceintes: 'lampe', ecran: 'tableau', fleurs: 'plante', bibliotheque: 'armoire',
+  'bureau-perso': 'tablebasse', tele: 'tablebasse',
 };
 
 export function furnitureSize(id: string): { w: number; d: number } {
@@ -47,7 +56,7 @@ export function buildFurniture(id: string, fill = 0, colors: string[] = ['#ccccc
   const r = hashRand(seed);
   const col = (k: number): THREE.Material => mat(colors[k % colors.length]!, { rough: 0.6 });
   const count = (slots: number): number => Math.round(Math.max(0, Math.min(1, fill)) * slots);
-  switch (id) {
+  switch (CODE_ALIAS[id] ?? id) {
     case 'caisse': {
       box(g, w, 0.95, 0.75, 0, 0, 0.05, mat('#e4dccd'));
       box(g, w + 0.04, 0.05, 0.8, 0, 0.95, 0.05, mat(WOOD_D));
@@ -234,7 +243,12 @@ const faceTo = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
  */
 function kitFurniture(id: string, fill: number, colors: string[], seed: number): THREE.Group | null {
   const need: Record<string, string[]> = {
-    caisse: ['meuble.bureau', 'meuble.ecran'], rayon: ['meuble.bibliotheque'], etagere: ['meuble.bibliotheque'], comptoir: ['meuble.bar'],
+    caisse: ['meuble.bureau'], rayon: ['meuble.bibliotheque'], etagere: ['meuble.bibliotheque'], comptoir: ['meuble.bar'],
+    gondole: ['mm.rayon-cartons'], 'presentoir-pain': ['mm.presentoir-pain'], etal: ['mm.etal-fruits'], congelateur: ['mm.congelateur'],
+    bar: ['meuble.bar', 'meuble.tabouret'], salon: ['meuble.canape-design', 'meuble.fauteuil', 'meuble.table-basse'],
+    bistrot: ['meuble.table', 'meuble.chaise-moderne'], caddies: ['mm.caddie'], consigne: ['mm.consigne'], portemanteau: ['meuble.portemanteau'],
+    enceintes: ['meuble.enceinte'], ecran: ['meuble.meuble-tele', 'meuble.tele'], fleurs: ['nat.fleur-rouge-a'],
+    bibliotheque: ['meuble.bibliotheque-fermee'], 'bureau-perso': ['meuble.bureau', 'meuble.chaise-bureau'], tele: ['meuble.meuble-tele', 'meuble.tele'],
     machine: ['meuble.placard', 'meuble.cafetiere'], table: ['meuble.table-ronde', 'meuble.chaise'], plante: ['meuble.plante'], lampe: ['meuble.lampe'],
     tapis: ['meuble.tapis'], lit: ['meuble.lit'], canape: ['meuble.canape'], cuisine: ['meuble.placard', 'meuble.frigo'],
   };
@@ -249,8 +263,10 @@ function kitFurniture(id: string, fill: number, colors: string[], seed: number):
   switch (id) {
     case 'caisse':
       put(g, 'meuble.bureau', w - 0.1, 0.95, 0.75, 0, 0, 0.05);
-      put(g, 'meuble.ecran', 0.5, 0.42, 0.18, -0.45, 0.95, -0.15, false);
-      box(g, 0.18, 0.05, 0.26, 0.4, 0.95, 0.05, mat('#2b2f36'));
+      // Caisse enregistreuse du Mini Market (sinon écran d'ordinateur) et tapis de caisse.
+      if (!put(g, 'mm.caisse', 0.62, 0.45, 0.6, -0.45, 0.95, -0.05, false, Math.PI)) put(g, 'meuble.ecran', 0.5, 0.42, 0.18, -0.45, 0.95, -0.15, false);
+      box(g, 0.7, 0.03, 0.5, 0.38, 0.95, 0.05, mat('#2b2f36'));
+      put(g, 'mm.panier', 0.34, 0.25, 0.36, w / 2 - 0.25, 0, 0.6, false);
       box(g, w - 0.1, 0.06, 0.04, 0, 0.55, 0.43, mat('#d8a03a'), false);
       break;
     case 'rayon':
@@ -297,10 +313,126 @@ function kitFurniture(id: string, fill: number, colors: string[], seed: number):
       put(g, 'meuble.canape', w - 0.1, 0.9, 0.9, 0, 0, 0);
       break;
     case 'cuisine':
-      put(g, 'meuble.placard', 0.98, 0.92, 0.65, -1, 0, -0.15);
-      put(g, 'meuble.placard', 0.98, 0.92, 0.65, 0, 0, -0.15);
+      if (!put(g, 'meuble.cuisiniere', 0.98, 0.92, 0.65, -1, 0, -0.15)) put(g, 'meuble.placard', 0.98, 0.92, 0.65, -1, 0, -0.15);
+      if (!put(g, 'meuble.evier', 0.98, 0.92, 0.65, 0, 0, -0.15)) put(g, 'meuble.placard', 0.98, 0.92, 0.65, 0, 0, -0.15);
       put(g, 'meuble.frigo', 0.95, 2.0, 0.7, 1, 0, -0.12, false);
-      box(g, 2, 0.6, 0.35, -0.5, 1.55, -0.3, mat('#e8e2d8'));
+      if (!put(g, 'meuble.placard-haut', 0.98, 0.6, 0.35, -1, 1.5, -0.3) || !put(g, 'meuble.placard-haut', 0.98, 0.6, 0.35, 0, 1.5, -0.3)) box(g, 2, 0.6, 0.35, -0.5, 1.55, -0.3, mat('#e8e2d8'));
+      put(g, 'meuble.micro-ondes', 0.45, 0.3, 0.35, 0.2, 0.92, -0.25, false);
+      put(g, 'meuble.grille-pain', 0.25, 0.2, 0.18, -0.7, 0.92, -0.2, false);
+      break;
+    case 'bureau-perso':
+      put(g, 'meuble.bureau', w - 0.2, 0.78, 0.7, 0, 0, -0.1);
+      put(g, 'meuble.portable', 0.38, 0.25, 0.3, -0.2, 0.78, -0.15, false);
+      put(g, 'meuble.lampe-chevet', 0.25, 0.45, 0.25, 0.6, 0.78, -0.25, false);
+      put(g, 'meuble.chaise-bureau', 0.55, 1.0, 0.55, 0, 0, 0.35, false, Math.PI);
+      break;
+    case 'tele':
+    case 'ecran':
+      put(g, 'meuble.meuble-tele', w - 0.3, 0.55, 0.5, 0, 0, -0.15);
+      put(g, 'meuble.tele', 1.3, 0.85, 0.15, 0, 0.55, -0.2, false);
+      if (id === 'tele') { put(g, 'meuble.radio', 0.3, 0.2, 0.18, 0.75, 0.55, -0.2, false); put(g, 'meuble.plante-2', 0.3, 0.5, 0.3, -0.8, 0.55, -0.2, false); }
+      break;
+    case 'gondole': {
+      // Gondole du Mini Market : un module par mètre ; ses cartons servent d'emplacements à la marchandise.
+      const slots: Slot[] = [], sizes: [number, number, number][] = [];
+      const n = Math.max(1, Math.round(w));
+      for (let i = 0; i < n; i++) {
+        const fp = assets.fittedParts('mm.rayon-cartons', w / n - 0.02, 1.55, d - 0.1, ['carton', 'box'], true);
+        if (!fp) break;
+        fp.obj.position.x = -w / 2 + (i + 0.5) * (w / n);
+        g.add(fp.obj);
+        g.updateMatrixWorld(true);
+        for (const part of fp.parts) {
+          const b = new THREE.Box3().setFromObject(part), c = b.getCenter(new THREE.Vector3()), sz = b.getSize(new THREE.Vector3());
+          part.visible = false;
+          // Deux articles côte à côte par emplacement.
+          for (const dx of [-0.25, 0.25]) { slots.push([c.x + dx * sz.x, b.min.y, c.z]); sizes.push([sz.x * 0.48, sz.y * 0.95, sz.z * 0.9]); }
+        }
+      }
+      const k = count(slots.length);
+      slots.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+      const sz = sizes[0] ?? [0.2, 0.25, 0.3];
+      goods(g, slots.slice(0, k), sz, (p, i) => box(g, sz[0], sz[1], sz[2], p[0], p[1], p[2], col(i)));
+      break;
+    }
+    case 'presentoir-pain':
+    case 'etal': {
+      const key = id === 'etal' ? 'mm.etal-fruits' : 'mm.presentoir-pain';
+      const slots: Slot[] = [];
+      for (let i = 0; i < 2; i++) {
+        const fp = assets.fittedParts(key, w / 2 - 0.05, 0.95, d - 0.1, ['bread'], true);
+        if (!fp) break;
+        const x0 = -w / 2 + (i + 0.5) * (w / 2);
+        fp.obj.position.x = x0;
+        g.add(fp.obj);
+        g.updateMatrixWorld(true);
+        // Étal : les fruits du modèle seulement s'il reste du stock ; présentoir : pains remplacés par la marchandise.
+        if (id === 'etal') {
+          // Fruits intégrés au modèle : étal vide (cagettes) quand le stock est épuisé.
+          if (fill <= 0.02) { g.remove(fp.obj); box(g, w / 2 - 0.15, 0.7, d - 0.25, x0, 0, 0, mat(WOOD)); box(g, w / 2 - 0.25, 0.04, d - 0.35, x0, 0.7, 0, mat(WOOD_D), false); }
+        } else {
+          const top = fp.parts.length ? new THREE.Box3().setFromObject(fp.parts[0]!).min.y : 0.45;
+          for (const part of fp.parts) part.visible = false;
+          for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) slots.push([x0 - 0.33 + c * 0.22, top, -0.12 + r * 0.26]);
+        }
+      }
+      if (id === 'etal') {
+        const tops: Slot[] = [];
+        for (let i = 0; i < 6; i++) tops.push([-w / 2 + 0.25 + i * ((w - 0.5) / 5), 0.97, 0.18]);
+        goods(g, tops.slice(0, count(6)), [0.16, 0.16, 0.16], () => undefined);
+      } else goods(g, slots.slice(0, count(slots.length)), [0.2, 0.14, 0.22], (p, i) => box(g, 0.18, 0.1, 0.2, p[0], p[1], p[2], col(i)));
+      break;
+    }
+    case 'congelateur': {
+      put(g, 'mm.congelateur', w - 0.1, 0.9, d - 0.15, 0, 0, 0);
+      const slots: Slot[] = [];
+      for (let r = 0; r < 2; r++) for (let c = 0; c < 7; c++) slots.push([-w / 2 + 0.25 + c * ((w - 0.5) / 6), 0.62, -0.18 + r * 0.32]);
+      goods(g, slots.slice(0, count(slots.length)), [0.2, 0.2, 0.22], (p, i) => box(g, 0.18, 0.12, 0.22, p[0], p[1], p[2], col(i)));
+      break;
+    }
+    case 'bar':
+      for (let i = 0; i < 3; i++) put(g, 'meuble.bar', w / 3, 1.05, 0.6, -w / 2 + (i + 0.5) * (w / 3), 0, -d / 2 + 0.35);
+      for (let i = 0; i < 3; i++) put(g, 'meuble.tabouret', 0.42, 0.8, 0.42, -w / 2 + (i + 0.5) * (w / 3), 0, 0.25, false);
+      put(g, 'meuble.cafetiere', 0.35, 0.35, 0.3, w / 2 - 0.4, 1.05, -d / 2 + 0.35, false);
+      break;
+    case 'salon':
+      put(g, 'meuble.tapis-rond', 2.2, null, 1.8, 0, 0.005, 0.1);
+      put(g, 'meuble.canape-design', 2.0, 0.85, 0.8, -0.3, 0, -d / 2 + 0.45);
+      put(g, 'meuble.fauteuil', 0.85, 0.95, 0.8, w / 2 - 0.5, 0, 0.2, false, -Math.PI / 2);
+      put(g, 'meuble.table-basse', 1.0, 0.42, 0.6, -0.3, 0, 0.35, false);
+      put(g, 'meuble.lampe', 0.4, 1.6, 0.4, -w / 2 + 0.25, 0, -d / 2 + 0.3, false);
+      break;
+    case 'bistrot':
+      put(g, 'meuble.table', 0.8, 0.75, 0.8, 0, 0, 0, false);
+      put(g, 'meuble.chaise-moderne', 0.45, 0.9, 0.45, -0.7, 0, 0, false, faceTo(1, 0));
+      put(g, 'meuble.chaise-moderne', 0.45, 0.9, 0.45, 0.7, 0, 0, false, faceTo(-1, 0));
+      break;
+    case 'caddies':
+      put(g, 'mm.caddie', 0.55, 0.95, 0.85, 0, 0, 0, false);
+      put(g, 'mm.panier', 0.36, 0.26, 0.38, 0.3, 0, 0.3, false);
+      put(g, 'mm.panier', 0.36, 0.26, 0.38, 0.3, 0.2, 0.3, false);
+      break;
+    case 'consigne':
+      put(g, 'mm.consigne', 0.75, 1.7, 0.75, 0, 0, -0.1, false);
+      break;
+    case 'portemanteau':
+      put(g, 'meuble.portemanteau', 0.6, 1.8, 0.6, 0, 0, 0, false);
+      break;
+    case 'enceintes':
+      put(g, 'meuble.enceinte', 0.32, 1.2, 0.32, -0.22, 0, -0.1, false);
+      put(g, 'meuble.enceinte', 0.32, 1.2, 0.32, 0.22, 0, -0.1, false);
+      break;
+    case 'fleurs': {
+      box(g, 0.85, 0.35, 0.85, 0, 0, 0, mat('#8a5a3a'));
+      box(g, 0.75, 0.02, 0.75, 0, 0.35, 0, mat('#5a3d2a'), false);
+      const fl = ['nat.fleur-rouge-a', 'nat.fleur-jaune-a', 'nat.fleur-violette-a', 'nat.fleur-rouge-b', 'nat.buisson-fin'];
+      [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2], [0, 0]].forEach(([x, z], i) => put(g, fl[(i + seed) % fl.length]!, 0.4, 0.5, 0.4, x!, 0.36, z!, false, r() * 6));
+      break;
+    }
+    case 'bibliotheque':
+      put(g, 'meuble.bibliotheque-fermee', w - 0.1, 1.6, 0.5, 0, 0, -0.2);
+      put(g, 'meuble.livres', 0.35, 0.25, 0.22, -0.4, 1.6, -0.2, false);
+      put(g, 'meuble.plante-1', 0.3, 0.45, 0.3, 0.5, 1.6, -0.2, false);
       break;
     default:
       return null;
@@ -326,10 +458,13 @@ function goods(g: THREE.Group, slots: Slot[], size: [number, number, number], fa
   const by = new Map<string, THREE.Matrix4[]>();
   slots.forEach((p, k) => {
     const id = ids[k % ids.length]!;
-    if (!assets.has(`produit.${id}`)) { fallback(p, k); return; }
+    // Plusieurs modèles par produit (pains, fruits, boissons…) : variante choisie selon l'emplacement.
+    const keys = productKeys(id).filter((key) => assets.has(key));
+    if (!keys.length) { fallback(p, k); return; }
+    const key = keys[(k * 7 + Math.floor(k / ids.length)) % keys.length]!;
     const m = new THREE.Matrix4().makeRotationY(((k * 47) % 11 - 5) * 0.06).setPosition(p[0], p[1], p[2]);
-    if (!by.has(id)) by.set(id, []);
-    by.get(id)!.push(m);
+    if (!by.has(key)) by.set(key, []);
+    by.get(key)!.push(m);
   });
-  for (const [id, ms] of by) { const im = assets.instances(`produit.${id}`, ms, size[0], size[1], size[2]); if (im) g.add(im); }
+  for (const [key, ms] of by) { const im = assets.instances(key, ms, size[0], size[1], size[2]); if (im) g.add(im); }
 }

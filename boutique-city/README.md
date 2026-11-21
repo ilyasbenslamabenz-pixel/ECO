@@ -22,7 +22,7 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
 2. **Meubles** : au magasin de meubles, livrés dans la réserve du commerce choisi.
 3. **Aménager** (B) : poser les meubles de la réserve en 3D sur la grille (R pour tourner, clic sur un meuble posé
    pour le déplacer). Chaque meuble doit rester accessible depuis l'entrée.
-4. **Marchandise** : au grossiste, à emporter (24 unités à pied, 60 en scooter, 600 en camionnette garée devant) puis
+4. **Marchandise** : au grossiste, à emporter (24 unités à pied, 60 en scooter, 140 en citadine, 600 en camionnette, 1 600 en camion garé devant) puis
    « Décharger » dans le commerce ; ou livrée le lendemain à 7 h avec des frais ; ou réassort automatique.
 5. **Caisse** : tenez-la vous-même (E derrière la caisse) ou embauchez à l'agence pour l'emploi.
 6. **Clients** : chaque vente fait entrer un client qui va aux rayons, fait la queue et paie.
@@ -32,21 +32,37 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
 9. **Objectifs** (13, du premier pas à 100 000 CHF de valeur nette) et rang d'entrepreneur ; **récapitulatif** chaque
    soir ; **affluence** par heure (servis / perdus) ; **avis clients** en bulles (trop cher, rupture, attente) ;
    employés qui progressent avec l'expérience ; **cycle jour/nuit** (lampadaires, vitrines éclairées) ; sons.
-10. Quatre types de commerce : épicerie, café, boutique de vêtements, fleuriste.
+10. Quatre types de commerce : épicerie, café, boutique de vêtements, fleuriste ; 28 meubles (gondoles,
+    congélateurs, bar, coin salon, tables bistrot, écran publicitaire…) ; 4 véhicules (scooter, citadine, camionnette,
+    camion).
 
 Sauvegarde automatique chaque jour de jeu (dans le navigateur) et bouton Sauvegarder.
 
 ## Modèles 3D
-51 modèles **Kenney, licence CC0** (domaine public), dans `models/` (5 Mo) : 10 bâtiments du City Kit Commercial,
-4 maisons du City Kit Suburban, 6 personnages animés des Mini Characters, 14 meubles du Furniture Kit, 5 voitures du
-Car Kit (circulation, camionnette du joueur), 11 produits du Food Kit (marchandise visible en rayon), 1 lampadaire du
-City Kit Roads. Sources et licences : `models/CREDITS.txt`. Page publiée : tous les GLB dans `models/pack.json`.
+226 modèles **Kenney, licence CC0** (domaine public), dans `models/` (16 Mo, 3,4 Mo une fois compressés), tirés de
+11 packs :
+- **Quartier** : 19 immeubles et tours (City Kit Commercial), 12 maisons (City Kit Suburban), 4 entrepôts et une
+  citerne (City Kit Industrial) ;
+- **Rue** : lampadaires, feux tricolores, bancs, poubelles, bennes, jardinières, palettes, cartons, cônes et un
+  chantier, parasols, arbres et massifs de fleurs (Commercial, Suburban, Roads, Retro Urban, Car Kit, Nature Kit) ;
+- **Circulation** : 17 véhicules (berlines, taxis, citadines, SUV, police, ambulance, pompiers, camion-poubelle,
+  camions, utilitaires) ;
+- **Personnages animés** : 12 clients (Mini Characters) et l'employé en tenue (Mini Market) ;
+- **Mobilier** : 56 meubles (Furniture Kit) et 12 meubles d'épicerie (Mini Market : gondoles, présentoir à pain,
+  étal de fruits, congélateurs, caisse enregistreuse, chariots, consigne) ;
+- **Marchandise** : 63 produits (Food Kit, plantes, fleurs), plusieurs modèles par produit (pains, fruits, boissons,
+  pâtisseries…).
+
+Sources et licences : `models/CREDITS.txt`. Page publiée : tous les GLB dans `models/pack.json` (bout à bout,
+compressés en gzip, décompressés dans le navigateur).
 - `src/assets.ts` : section CONFIG puis ASSETS (clé → fichier, échelle, rotation), chargement unique (GLTFLoader +
   LoadingManager, écran de chargement avec barre de progression), clones (SkeletonUtils.clone pour les personnages),
   ajustement automatique par boîte englobante.
 - Repli obligatoire : un modèle absent ou en erreur laisse la forme faite en code (`?sansmodeles` pour l'essayer).
-- `?galerie` : galerie de contrôle (orientation, échelle) de tous les modèles.
-- `node scripts/embed-textures.mjs <texture.png> <modèle.glb>…` : intègre la texture d'un pack dans ses GLB.
+- `?galerie` : galerie de contrôle (orientation, échelle) des modèles.
+- `node scripts/embed-textures.mjs <texture.png> <modèle.glb>…` (ou `--dir <dossier>`) : intègre les textures d'un
+  pack dans ses GLB.
+- `?galerie=N` : page N (40 modèles par page).
 
 ## Développement
 ```
