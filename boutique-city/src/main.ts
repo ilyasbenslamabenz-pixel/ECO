@@ -14,28 +14,35 @@ import { Game, dayProfit, type GameSave, type Result, type Shop } from './sim/ga
 import { canPlace, type Rot } from './sim/layout';
 import { Controls } from './input/controls';
 import { PRODUCT_COLORS } from './render/furniture3d';
-import { InteriorAgents } from './render/interior-agents';
+import { InteriorAgents, moneyText } from './render/interior-agents';
 import { InteriorView, type InteriorItem } from './render/interior-view';
 import { Scene3D } from './render/scene';
 import type { BuildingState } from './render/district-view';
 import { drive, type DriveState } from './world/vehicle';
 import { competitorView, homeView, premiseView, rescueView, serviceView, subletView, type UiCtx } from './ui/dialogs';
-import { $, askConfirm, button, chf, el, icon, signed, type IconName } from './ui/dom';
-import { BigMap, MiniMap } from './ui/map';
+import { $, askConfirm, button, chf, el, icon, num, signed, type IconName } from './ui/dom';
+import { BigMap, MiniMap, type Poi } from './ui/map';
 import { Panel } from './ui/panel';
 import { showBankruptcy, showRecap } from './ui/recap';
-import { sound } from './ui/sound';
+import { sound, type NotifyLevel } from './ui/sound';
 import { ObjectiveCard, showVictory } from './ui/objectives-ui';
 import { companyView, shopView, surfaceView } from './ui/shop-panel';
 import { Phone } from './ui/phone';
 import { warehouseView } from './ui/warehouse-panel';
 import { warehouseAt, warehouseName } from './sim/logistics';
+import { ECONOMY, HOME_MEAL, NEEDS } from './sim/catalog';
+import { unloadInto } from './ui/dialogs';
 
 const SAVE_KEY = 'boutique-city.save.v2';
 /** Minutes de jeu par seconde réelle (0 = pause). */
 const SPEEDS = [0, 1, 4, 15];
 const SLEEP_SPEED = 90;
 const WALK = 4.2, RUN = 7.2, IN_WALK = 2.6, IN_RUN = 4;
+/** Taxi depuis la grande carte : course à prix fixe ; le trajet prend quelques minutes de jeu selon la distance. */
+const TAXI_FARE = 15;
+const taxiMinutes = (meters: number): number => Math.max(3, Math.round(3 + meters / 350));
+/** Touches de déplacement (position physique) : elles ferment la grande carte au lieu d'être sans effet. */
+const MOVE_CODES = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 const params = new URLSearchParams(location.search);
 
 interface Debug {
@@ -207,6 +214,9 @@ function showHelp(): void {
       el('div', { cls: 'help-head' }, el('div', {}, el('div', { cls: 'kicker', text: 'Aide · touche H' }), el('h2', { text: 'Comment jouer' })), button('×', close, 'icon-x')),
       el('ol', { cls: 'help-steps' }, ...steps.map((t, k) => el('li', {}, el('b', { text: String(k + 1) }), el('span', { text: t })))),
       el('p', { cls: 'help-goal', text: 'Ensuite, développez votre empire : plusieurs commerces, sous-locations, publicité, véhicules. Suivez la carte d’objectifs en haut à gauche : trois objectifs à la fois, en quatre paliers, jusqu’à devenir la légende du quartier.' }),
+      // Besoins du personnage : jauges du HUD, où manger, où dormir, ce qui arrive à zéro.
+      el('div', { cls: 'sec', text: 'Faim et énergie' }),
+      el('p', { cls: 'help-goal', text: `Deux jauges en haut à droite. La faim se vide en ${Math.round(100 / NEEDS.hungerPerMin / 60)} h, l’énergie en ${Math.round(100 / NEEDS.energyPerMin / 60)} h, et deux fois plus vite le ventre vide. Manger : au snack (café, sandwich, menu du jour) ou chez vous, « Manger (cuisine) » pour ${HOME_MEAL.price} CHF. Dormir : dans votre lit (touche E) ; un logement plus confortable repose plus vite. Alertes à ${NEEDS.tired} puis ${NEEDS.exhausted} d’énergie ; à zéro, vous vous effondrez (taxi ${ECONOMY.faintCost} CHF et longue nuit), sauf le premier jour où vous tenez debout, au ralenti.` }),
       el('div', { cls: 'help-cols' }, ...groups.map(([title, keys]) => el('div', { cls: 'help-col' },
         el('div', { cls: 'sec', text: title }),
         el('div', { cls: 'help-grid' }, ...keys.flatMap(([ks, t]) => [el('span', { cls: 'help-keys' }, ...ks.map((k) => el('kbd', { text: k }))), el('span', { text: t })]))))),
@@ -233,7 +243,8 @@ function start(game: Game): void {
   const panel = new Panel(game);
   let speed = params.has('vitesse') ? Math.max(0, Math.min(3, Number(params.get('vitesse')) | 0)) : 1;
   let lastDay = game.day;
-  let noticeIdx = game.notices.length;
+  /** Numéro (Notice.seq) de la dernière notification affichée en toast : l'historique est plafonné, les numéros non. */
+  let toastSeq = game.lastNoticeSeq;
   let inside: Inside | null = null;
   let ipos = { x: 0, z: 0, heading: 0 };
   let car: (DriveState & { id: number }) | null = null;
@@ -251,7 +262,9 @@ function start(game: Game): void {
 
   const act = <T,>(r: Result<T>, okText?: string | ((d: T) => string)): boolean => {
     if (!r.ok) { toast(r.message, 'error'); return false; }
-    if (okText) toast(typeof okText === 'function' ? okText(r.data) : okText, 'ok');
+    // L'action a déjà son message (notification de la partie, en toast à l'image suivante) : pas de second toast.
+    const own = game.notices.some((n) => n.seq > toastSeq && !n.sim);
+    if (okText && !own) toast(typeof okText === 'function' ? okText(r.data) : okText, 'ok');
     panel.paint(true);
     return true;
   };
@@ -259,11 +272,39 @@ function start(game: Game): void {
     game, panel, act, toast,
     enterShop: (id) => { panel.close(); enterShop(id); },
     openShop: (id) => panel.open(shopView(ctx, id)),
-    waypoint: (x, z, label) => { waypoint = { x, z, label }; scene.setBeacon({ x, z }); toast(`Destination : ${label}`, 'info'); },
+    waypoint: (x, z, label) => { waypoint = { x, z, label }; scene.setBeacon({ x, z }); toast(`Destination : ${label} (balise bleue)`, 'info'); },
     leave: () => { if (!inside) game.setPlace({ kind: 'rue' }); },
   };
+  const clearWaypoint = (): void => { waypoint = null; scene.setBeacon(null); };
   const minimap = new MiniMap(game, document.body);
-  const bigmap = new BigMap(game, (p) => ctx.waypoint(p.b.doorX, p.b.doorZ, p.label));
+  /**
+   * Taxi jusqu'à la porte d'un lieu de la carte (Game.taxi) : prix fixe, quelques minutes de jeu de trajet ; déposé
+   * sur le trottoir face à la porte, caméra dans le dos.
+   */
+  const takeTaxi = (p: Poi): void => {
+    if (car) { toast('Garez d’abord votre véhicule (E pour descendre).', 'error'); return; }
+    if (game.cash < TAXI_FARE) { toast(`Trésorerie insuffisante pour le taxi (${TAXI_FARE} CHF).`, 'error'); return; }
+    const b = p.b, n = FACE_N[b.face]!;
+    const minutes = taxiMinutes(Math.hypot(b.doorX - game.player.x, b.doorZ - game.player.z));
+    if (inside) exitInterior();
+    panel.close();
+    const at = scene.collider.resolve(b.doorX + n[0] * 1.3, b.doorZ + n[1] * 1.3, 0.35);
+    const heading = Math.atan2(n[0], n[1]);
+    const r = game.taxi(at.x, at.z, heading, TAXI_FARE, minutes);
+    if (!r.ok) { toast(r.message, 'error'); return; }
+    scene.cam.yaw = heading;
+    snapCam = true;
+    sound.taxi();
+    toast(`Taxi : vous voici devant ${p.label} (${TAXI_FARE} CHF, ${minutes} min de trajet).`, 'ok');
+    if (waypoint && Math.hypot(waypoint.x - b.doorX, waypoint.z - b.doorZ) < 4) clearWaypoint();
+  };
+  const bigmap = new BigMap(game, (p) => ctx.waypoint(p.b.doorX, p.b.doorZ, p.label), {
+    taxi: {
+      fare: TAXI_FARE, minutes: taxiMinutes, go: takeTaxi,
+      unavailable: () => (car ? 'Garez d’abord votre véhicule (E pour descendre).' : game.cash < TAXI_FARE ? `Trésorerie insuffisante (${TAXI_FARE} CHF).` : null),
+    },
+    clearDest: clearWaypoint,
+  });
 
   /* ------------------------------ Rue : états des bâtiments ------------------------------ */
 
@@ -324,8 +365,9 @@ function start(game: Game): void {
     game.setPlace({ kind: 'commerce', shopId });
     sound.chime();
     snapCam = true;
-    const n = game.unloadable(shopId);
-    if (n > 0) toast(`${n} unités de marchandise à décharger : bouton « Décharger ».`, 'info');
+    // Marchandise apportée : rangeable (bouton « Décharger »), ou pourquoi pas (place réservée, rayon plein, aucun meuble).
+    const up = game.unloadPlan(shopId);
+    if (up.carried > 0) toast(up.now + up.reducing > 0 ? `${up.carried} unités de marchandise à décharger : bouton « Décharger ».` : up.reason ?? '', 'info');
     renderInteriorBar();
   };
 
@@ -354,9 +396,14 @@ function start(game: Game): void {
     agents = null;
     inside = null;
     if (b) {
-      const n = FACE_N[b.face]!;
-      game.setPlayerPose(b.doorX + n[0] * 0.3, b.doorZ + n[1] * 0.3, Math.atan2(-n[0], -n[1]));
-      scene.cam.yaw = Math.atan2(-n[0], -n[1]) + Math.PI;
+      // Caméra dans le dos du personnage, le long du trottoir (du côté de la destination s'il y en a une) : face à la
+      // façade, « avancer » le pousserait dans la porte qu'il vient de franchir.
+      const n = FACE_N[b.face]!, t = [n[1], -n[0]] as const;
+      const side = waypoint && (waypoint.x - b.doorX) * t[0] + (waypoint.z - b.doorZ) * t[1] < 0 ? -1 : 1;
+      const fx = side * t[0] - 0.3 * n[0], fz = side * t[1] - 0.3 * n[1];
+      game.setPlayerPose(b.doorX + n[0] * 0.3, b.doorZ + n[1] * 0.3, Math.atan2(-fx, -fz));
+      scene.cam.yaw = Math.atan2(-fx, -fz);
+      scene.cam.pitch = Math.max(scene.cam.pitch, 0.4);
     }
     game.setPlace({ kind: 'rue' });
     snapCam = true;
@@ -528,6 +575,9 @@ function start(game: Game): void {
   const dayLabel = el('span', { cls: 'day' });
   const cash = el('b', { cls: 'cash' });
   const delta = el('span', { cls: 'delta' });
+  // Porte-monnaie : trésorerie (compteur qui défile), ventes du jour, montants « +2,90 CHF » qui s'en échappent.
+  const walletPops = el('div', { cls: 'wallet-pops', attrs: { 'aria-hidden': 'true' } });
+  const wallet = el('div', { cls: 'wallet' }, cash, delta, walletPops);
   const energy = el('i'), hunger = el('i');
   const energyVal = el('b'), hungerVal = el('b');
   const weatherBox = el('span', { cls: 'weather' });
@@ -557,14 +607,14 @@ function start(game: Game): void {
       if (open) { speedBeforePhone = speed; speed = 0; } else if (speed === 0) speed = speedBeforePhone || 1;
       paint();
     },
+    // « Voir sur la carte » : destination posée (balise, flèche à l'écran) et grande carte ouverte dessus. La caméra
+    // reste sur le personnage ; une touche de déplacement ferme la carte et le fait marcher aussitôt.
     showOnMap: (x, z, label) => {
       ctx.waypoint(x, z, label);
-      lookAt = { x, z, t: 6 };
+      bigmap.open(game.player.x, game.player.z, game.player.heading, waypoint);
     },
   });
   let speedBeforePhone = 1;
-  /** Caméra temporairement centrée sur un lieu (« Voir sur la carte »). */
-  let lookAt: { x: number; z: number; t: number } | null = null;
   const phoneBadge = el('i', { cls: 'badge hidden' });
   const phoneBtn = el('button', { cls: 'round phone-btn', attrs: { type: 'button', 'aria-label': 'Téléphone (T)', title: 'Téléphone (T)' }, on: { click: () => phone.toggle() } }, icon('phone'), el('kbd', { text: 'T' }), phoneBadge);
   const mapBtn = el('button', { cls: 'round map-btn', attrs: { type: 'button', 'aria-label': 'Carte (M)', title: 'Carte (M)' }, on: { click: () => bigmap.toggle(game.player.x, game.player.z, game.player.heading, waypoint) } }, icon('map'), el('kbd', { text: 'M' }));
@@ -575,9 +625,9 @@ function start(game: Game): void {
       el('div', { cls: 'when' }, clock, el('div', { cls: 'when-sub' }, dayLabel, weatherBox)),
       el('div', { cls: 'speeds', attrs: { role: 'group', 'aria-label': 'Vitesse du temps' } }, ...speedBtns)),
     el('div', { cls: 'hud-right' },
-      el('div', { cls: 'needs' }, need('e', 'Énergie : dormez chez vous ou buvez un café au snack', 'bolt', energy, energyVal), need('h', 'Faim : mangez au snack', 'food', hunger, hungerVal)),
+      el('div', { cls: 'needs' }, need('e', 'Énergie : dormez chez vous ou buvez un café au snack', 'bolt', energy, energyVal), need('h', 'Faim : mangez au snack ou chez vous (cuisine)', 'food', hunger, hungerVal)),
       carry,
-      el('div', { cls: 'wallet', attrs: { title: 'Trésorerie · résultat du jour' } }, cash, delta),
+      wallet,
       phoneBtn,
       mapBtn));
   // Objectifs : carte des trois objectifs actifs (en haut à gauche), bannière de palier franchi, écran de victoire.
@@ -595,12 +645,12 @@ function start(game: Game): void {
       weatherBox.replaceChildren(icon(wi), el('span', { text: wl }));
       weatherBox.className = `weather ${game.weather}`;
     }
-    cash.textContent = chf(game.cash);
+    cash.textContent = chf(shownCash);
     cash.classList.toggle('neg', game.cash < 0);
-    const today = dayProfit(game.today);
-    delta.textContent = `${signed(today)} aujourd’hui`;
-    delta.classList.toggle('neg', today < 0);
-    hud.querySelector('.wallet')?.classList.toggle('neg', game.cash < 0);
+    delta.textContent = `Ventes du jour : ${chf(game.today.revenue)}`;
+    const tip = `Trésorerie : ${chf(game.cash)} · résultat du jour : ${signed(dayProfit(game.today))}`;
+    if (wallet.title !== tip) wallet.title = tip;
+    wallet.classList.toggle('neg', game.cash < 0);
     energy.style.width = `${game.player.energy}%`;
     hunger.style.width = `${game.player.hunger}%`;
     energyVal.textContent = String(Math.round(game.player.energy));
@@ -614,6 +664,74 @@ function start(game: Game): void {
     const u = phone.unread;
     phoneBadge.textContent = String(Math.min(99, u));
     phoneBadge.classList.toggle('hidden', u === 0 || phone.isOpen);
+  };
+
+  /*
+   * Argent visible : la trésorerie affichée rattrape la vraie en défilant (≈ 0,5 s), le porte-monnaie pulse en doré à
+   * chaque vente (rouge pour une grosse dépense) et laisse s'échapper le montant (« +2,90 CHF », ventes cumulées par
+   * tranches de 0,35 s). Palier de ventes du jour franchi (tous les 100 CHF ; 500 puis 1 000 CHF pour les grosses
+   * journées, pour ne pas en jouer un par seconde) : « ka-ching » et bandeau doré.
+   */
+  let shownCash = game.cash, lastCash = game.cash;
+  let seenRevenue = game.today.revenue, seenDay = game.day, popAcc = 0, popT = 0, pulseAt = 0, kachingAt = 0;
+  const palier = (r: number): { k: number; at: number } => {
+    if (r < 2000) return { k: Math.floor(r / 100), at: Math.floor(r / 100) * 100 };
+    if (r < 10000) { const k = Math.floor((r - 2000) / 500); return { k: 20 + k, at: 2000 + k * 500 }; }
+    const k = Math.floor((r - 10000) / 1000);
+    return { k: 36 + k, at: 10000 + k * 1000 };
+  };
+  let lastPalier = palier(seenRevenue).k;
+  const pulse = (kind: 'gain' | 'spend' | 'palier'): void => {
+    const now = performance.now();
+    if (kind !== 'palier' && now - pulseAt < 140) return;
+    pulseAt = now;
+    wallet.classList.remove('gain', 'spend', 'palier');
+    void wallet.offsetWidth;
+    wallet.classList.add(kind);
+  };
+  const walletPop = (text: string, cls = ''): void => {
+    const p = el('span', { cls: `wpop ${cls}`.trim(), text });
+    walletPops.append(p);
+    while (walletPops.children.length > 4) walletPops.firstElementChild!.remove();
+    setTimeout(() => p.remove(), cls ? 2600 : 1300);
+  };
+  const walletStep = (dt: number): void => {
+    if (game.day !== seenDay) { seenDay = game.day; seenRevenue = game.today.revenue; lastPalier = palier(seenRevenue).k; popAcc = 0; }
+    const rev = game.today.revenue;
+    if (rev > seenRevenue + 1e-6) {
+      popAcc += rev - seenRevenue;
+      seenRevenue = rev;
+      pulse('gain');
+      const p = palier(rev);
+      if (p.k > lastPalier) {
+        lastPalier = p.k;
+        const now = performance.now();
+        if (now - kachingAt > 1200) { kachingAt = now; sound.kaching(); }
+        pulse('palier');
+        walletPop(`${chf(p.at)} de ventes aujourd’hui !`, 'big');
+      }
+    } else if (rev < seenRevenue) seenRevenue = rev;
+    if (popAcc > 0 && (popT += dt) >= 0.35) { walletPop(moneyText(popAcc)); popAcc = 0; popT = 0; }
+    // Compteur : rattrapage exponentiel, plus un pas minimal pour finir net.
+    const target = game.cash, diff = target - shownCash;
+    if (target < lastCash - 20) pulse('spend');
+    lastCash = target;
+    shownCash = Math.abs(diff) < 0.5 ? target : shownCash + diff * (1 - Math.exp(-dt * 9)) + Math.sign(diff) * Math.min(Math.abs(diff), dt * 4);
+  };
+
+  /*
+   * Sons des notifications : un par seconde au plus ; celles arrivées entre-temps sont regroupées et la plus grave
+   * donne le son (objectif atteint, erreur, avertissement, ok, info : sons distincts, voir sound.notify).
+   */
+  type NoteLevel = NotifyLevel | 'success';
+  const NOTE_RANK: Record<NoteLevel, number> = { info: 0, ok: 1, warn: 2, error: 3, success: 4 };
+  let notePending: NoteLevel | null = null, noteAt = -Infinity;
+  const noteSound = (l: NoteLevel): void => { if (!notePending || NOTE_RANK[l] > NOTE_RANK[notePending]) notePending = l; };
+  const noteSoundStep = (): void => {
+    if (!notePending || performance.now() - noteAt < 1000) return;
+    noteAt = performance.now();
+    if (notePending === 'success') sound.success(); else sound.notify(notePending);
+    notePending = null;
   };
 
   // Qualité graphique : auto (selon les images par seconde), basse ou haute.
@@ -645,21 +763,28 @@ function start(game: Game): void {
     if (!inside) { ibar.classList.add('hidden'); ibarSig = ''; return; }
     ibar.classList.remove('hidden');
     if (inside.kind === 'home') {
-      if (ibarSig === 'home') return;
-      ibarSig = 'home';
+      // Cuisine du logement : repas maison bon marché (mis en avant quand on a faim).
+      const kitchen = inside.homeId === game.player.home && game.hasKitchen(), hungry = game.player.hunger < 50;
+      const hsig = `home|${kitchen}|${hungry}`;
+      if (ibarSig === hsig) return;
+      ibarSig = hsig;
       ibar.replaceChildren(
-        el('div', { cls: 'ib-id' }, el('span', { cls: 'ib-sign home' }, icon('home')), el('div', {}, el('b', { text: 'Chez moi' }), el('div', { cls: 'ib-sub', text: 'Approchez-vous du lit et appuyez sur E pour dormir.' }))),
-        el('div', { cls: 'ib-actions' }, ibtn('Sortir', exitInterior, '', 'Échap')));
+        el('div', { cls: 'ib-id' }, el('span', { cls: 'ib-sign home' }, icon('home')), el('div', {}, el('b', { text: 'Chez moi' }), el('div', { cls: 'ib-sub', text: kitchen ? `Lit : E pour dormir. Cuisine : repas maison (${HOME_MEAL.price} CHF, ${HOME_MEAL.minutes} min).` : 'Approchez-vous du lit et appuyez sur E pour dormir.' }))),
+        el('div', { cls: 'ib-actions' },
+          kitchen ? ibtn(`Manger (cuisine) · ${HOME_MEAL.price} CHF`, () => { act(game.cook(), `Repas maison : faim +${HOME_MEAL.hunger}.`); ibarSig = ''; renderInteriorBar(); }, hungry ? 'primary' : '') : null,
+          ibtn('Sortir', exitInterior, '', 'Échap')));
       return;
     }
     const s = game.shop(inside.shopId);
     if (!s) { exitInterior(); return; }
     const c = clockView(game.total);
     const open = c.hour >= s.open && c.hour < s.close;
-    const n = game.unloadable(s.id);
+    // Marchandise apportée (portée, véhicules garés devant) et ce qui est rangeable : le bouton n'est mis en avant que si
+    // quelque chose peut aller en rayon ; sinon, son infobulle dit pourquoi (place réservée, rayon plein, aucun meuble).
+    const up = game.unloadPlan(s.id), n = up.carried, storable = up.now + up.reducing;
     const id = s.id;
     const clean = Math.round(game.cleanliness(s));
-    const sig = `${id}|${open}|${s.today.customers}|${Math.round(s.today.revenue)}|${n}|${build.on}|${clean}`;
+    const sig = `${id}|${open}|${s.today.customers}|${Math.round(s.today.revenue)}|${n}|${storable}|${build.on}|${clean}`;
     if (sig === ibarSig) return;
     ibarSig = sig;
     const t = SHOP_TYPE_BY_ID.get(s.type)!;
@@ -672,7 +797,7 @@ function start(game: Game): void {
         el('div', {}, el('span', { text: 'Clients' }), el('b', { text: String(s.today.customers) })),
         el('div', {}, el('span', { text: 'Ventes' }), el('b', { text: chf(s.today.revenue) }))),
       el('div', { cls: 'ib-actions' },
-        n > 0 ? ibtn(`Décharger (${n})`, () => { act(game.unload(id)); refreshInterior(true); renderInteriorBar(); }, 'primary') : null,
+        n > 0 ? Object.assign(ibtn(`Décharger (${n})`, () => unloadInto(ctx, id, () => { refreshInterior(true); renderInteriorBar(); }), storable > 0 ? 'primary' : ''), { title: storable > 0 ? '' : up.reason ?? '' }) : null,
         ibtn(build.on ? 'Terminer' : 'Aménager', () => setBuild(!build.on), build.on ? 'primary' : '', 'B'),
         ibtn(`Nettoyer (${clean} %)`, () => { act(game.cleanShop(id), (v) => `Magasin nettoyé : propreté ${v} %.`); refreshInterior(true); renderInteriorBar(); }, clean < 50 ? 'warn' : ''),
         ibtn('Gestion', () => ctx.openShop(id)),
@@ -688,10 +813,92 @@ function start(game: Game): void {
   const sleepCover = el('div', { cls: 'sleep hidden' }, el('div', { cls: 'sleep-z', text: 'Zzz…' }), el('p', {}, 'Vous dormez, le temps file. ', el('kbd', { text: 'Échap' }), ' pour vous réveiller.'));
   document.body.append(sleepCover);
 
+  /*
+   * Destination à l'écran (dans la rue) : étiquette au-dessus de la balise quand elle est dans le champ (nom,
+   * distance), sinon flèche au bord de l'écran qui pointe vers elle ; « × » efface la destination.
+   */
+  const destArrow = el('i', { cls: 'dp-arrow' });
+  const destText = el('span', { cls: 'dp-text' });
+  const destBox = el('div', { cls: 'dest-pointer hidden' }, destArrow, destText, button('×', () => clearWaypoint(), 'dp-x'));
+  destBox.querySelector('.dp-x')?.setAttribute('aria-label', 'Effacer la destination');
+  document.body.append(destBox);
+  const destV = new THREE.Vector3();
+  const destPointer = (): void => {
+    const show = !!waypoint && !inside && !bigmap.isOpen && !recapOpen && !game.player.sleeping && !phone.isOpen;
+    destBox.classList.toggle('hidden', !show);
+    if (!show || !waypoint) return;
+    const txt = `${waypoint.label} · ${num(Math.hypot(waypoint.x - game.player.x, waypoint.z - game.player.z))} m`;
+    if (destText.textContent !== txt) destText.textContent = txt;
+    const w = canvas.clientWidth || window.innerWidth, h = canvas.clientHeight || window.innerHeight;
+    // Repère de la caméra : devant elle (z < 0), projection à l'écran ; derrière, flèche vers le bas de l'écran.
+    const cs = destV.set(waypoint.x, 3, waypoint.z).applyMatrix4(scene.camera.matrixWorldInverse);
+    const ahead = cs.z < -0.5;
+    let sx = 0, sy = 0, dx = cs.x, dy = Math.abs(cs.z) * 0.6 + Math.abs(cs.y);
+    if (ahead) {
+      const p = cs.clone().applyMatrix4(scene.camera.projectionMatrix);
+      sx = ((p.x + 1) / 2) * w; sy = ((1 - p.y) / 2) * h; dx = sx - w / 2; dy = sy - h / 2;
+    }
+    const mx = 130, top = 112, bottom = 132;
+    if (ahead && sx > mx && sx < w - mx && sy > top && sy < h - bottom) {
+      destBox.classList.remove('edge');
+      destBox.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy)}px) translate(-50%, -100%)`;
+      destArrow.style.transform = 'rotate(90deg)';
+    } else {
+      // Bord de l'écran, dans la direction de la destination vue du centre.
+      const a = Math.atan2(dy, dx), cx = w / 2, cy = (top + h - bottom) / 2;
+      const k = Math.min((w / 2 - mx) / Math.max(1e-6, Math.abs(Math.cos(a))), ((h - top - bottom) / 2) / Math.max(1e-6, Math.abs(Math.sin(a))));
+      destBox.classList.add('edge');
+      destBox.style.transform = `translate(${Math.round(cx + Math.cos(a) * k)}px, ${Math.round(cy + Math.sin(a) * k)}px) translate(-50%, -50%)`;
+      destArrow.style.transform = `rotate(${a}rad)`;
+    }
+  };
+
+  /*
+   * Indice contextuel (bandeau en bas) quand il n'y a rien à faire en attendant une livraison (rayons vides, rien à
+   * décharger) : accélérer le temps, ou aller manger / dormir. Après quelques secondes sans bouger ; disparaît dès
+   * que ça ne s'applique plus ; « × » le fait taire jusqu'à la livraison suivante.
+   */
+  const hintText = el('span', { cls: 'hint-txt' });
+  const hintGo = button('', () => { speed = speed < 2 ? 2 : 3; paint(); }, 'small primary hint-go');
+  const hintBox = el('div', { cls: 'hint-bar hidden', attrs: { role: 'status' } }, el('span', { cls: 'hint-ico' }, icon('info')), hintText, hintGo);
+  const hintX = button('×', () => { hintMuted = hintNow?.key ?? ''; hintBox.classList.add('hidden'); }, 'hint-x');
+  hintX.setAttribute('aria-label', 'Masquer l’indice');
+  hintBox.append(hintX);
+  document.body.append(hintBox);
+  let hintNow: { key: string; text: string; go: string | null } | null = null, hintMuted = '', hintCheck = 0, idleT = 0;
+  const waitingHint = (): typeof hintNow => {
+    if (!game.shops.length) return null;
+    const next = Math.min(...game.orders.filter((o) => o.deliverAt > game.total).map((o) => o.deliverAt));
+    if (!Number.isFinite(next)) return null;
+    // Rien à vendre ni à décharger.
+    if (Object.values(game.player.carry).some((q) => q > 0) || game.shops.some((s) => Object.values(s.products).some((p) => p.stock > 0) || game.unloadable(s.id) > 0)) return null;
+    const c = clockView(next), sameDay = Math.floor(next / 1440) === Math.floor(game.total / 1440);
+    const when = `${sameDay ? '' : 'demain '}${c.hour} h${c.minute ? String(c.minute).padStart(2, '0') : ''}`;
+    const fast = speed < 2 ? 'touche 3 pour accélérer le temps' : speed < 3 ? 'touche 4 pour l’accélérer encore' : null;
+    const care = game.player.hunger < 70 ? 'allez manger au snack' : game.player.energy < 45 ? 'allez dormir chez vous' : null;
+    const what = [fast, care].filter(Boolean).join(', ou ');
+    if (!what) return null;
+    return { key: `livraison-${next}`, text: `En attendant la livraison de ${when} : ${what}.`, go: speed < 2 ? 'Accélérer (3)' : speed < 3 ? 'Plus vite (4)' : null };
+  };
+  const hintStep = (dt: number): void => {
+    const ax = controls.axis();
+    idleT = Math.hypot(ax.x, ax.y) > 0.05 ? 0 : idleT + dt;
+    if ((hintCheck -= dt) <= 0) { hintCheck = 0.5; hintNow = waitingHint(); }
+    const busy = !!recapOpen || !!bankruptOpen || !!victoryOpen || bigmap.isOpen || phone.isOpen || panel.isOpen || build.on || game.player.sleeping;
+    const show = !!hintNow && !busy && idleT > 4 && hintNow.key !== hintMuted;
+    hintBox.classList.toggle('hidden', !show);
+    if (!show || !hintNow) return;
+    if (hintText.textContent !== hintNow.text) hintText.textContent = hintNow.text;
+    hintGo.classList.toggle('hidden', !hintNow.go);
+    if (hintNow.go && hintGo.textContent !== hintNow.go) hintGo.textContent = hintNow.go;
+  };
+
   /* ------------------------------ Clavier ------------------------------ */
 
-  controls.onKey = (k) => {
+  controls.onKey = (k, e) => {
     if (recapOpen || bankruptOpen || victoryOpen) return;
+    // Grande carte ouverte : une touche de déplacement la ferme, et le personnage part aussitôt (touche maintenue).
+    if (bigmap.isOpen && MOVE_CODES.has(e.code)) { bigmap.close(); return; }
     if (k === 'Escape') {
       if (game.player.sleeping) { game.wake(); return; }
       if (phone.isOpen) { phone.back(); return; }
@@ -830,7 +1037,14 @@ function start(game: Game): void {
     const ev = game.events.splice(0);
     let street = 0;
     for (const e of ev) {
-      if (inside?.kind === 'shop' && e.shopId === inside.shopId) { const sh = game.shop(e.shopId); agents?.spawn(e.products, e.products.reduce((a, id) => a + (sh?.products[id]?.price ?? 0), 0)); sound.ding(); }
+      if (inside?.kind === 'shop' && e.shopId === inside.shopId) {
+        // Vente dans le commerce où l'on se trouve : montant doré au-dessus de la caisse dès l'encaissement (qu'un
+        // client soit dessiné ou non), client qui entre, tintement.
+        const sh = game.shop(e.shopId);
+        agents?.sale(e.products.reduce((a, id) => a + (sh?.products[id]?.price ?? 0), 0));
+        agents?.spawn(e.products);
+        sound.ding();
+      }
       else if (!inside && street++ < 4) { const p = game.premise(e.premiseId); if (p) scene.people.addClient(p.doorX, p.doorZ); }
     }
     if (inside && agents) {
@@ -843,12 +1057,13 @@ function start(game: Game): void {
     interiorT += dt;
     refreshInterior();
 
-    for (; noticeIdx < game.notices.length; noticeIdx++) {
-      const nt = game.notices[noticeIdx]!;
+    for (const nt of game.notices) {
+      if (nt.seq <= toastSeq) continue;
+      toastSeq = nt.seq;
       toast(nt.text, nt.level === 'warn' ? 'warn' : nt.level);
-      if (/^Objectifs? atteints?/.test(nt.text)) sound.success(); else if (nt.level === 'warn' || nt.level === 'error') sound.blip();
+      noteSound(/^Objectifs? atteints?/.test(nt.text) ? 'success' : nt.level);
     }
-    if (noticeIdx > game.notices.length) noticeIdx = game.notices.length;
+    noteSoundStep();
     if (game.day !== lastDay) { lastDay = game.day; writeSave(game); if (game.shops.length) recapDue = true; }
     // Récapitulatif de fin de journée : jeu en pause tant qu'il est affiché (après le réveil si l'on dort).
     if (recapDue && !game.player.sleeping && !recapOpen && !game.rescue.bankrupt) {
@@ -879,6 +1094,7 @@ function start(game: Game): void {
     }
 
     syncStreet();
+    walletStep(dt);
     paint();
     panel.paint();
     phone.paint();
@@ -893,12 +1109,13 @@ function start(game: Game): void {
     if (inside && build.on) focus.set(0, 0, 0.6);
     else if (inside) focus.set(ipos.x, 1.2, ipos.z);
     else if (car) focus.set(car.x, 1.6, car.z);
-    else if (lookAt && lookAt.t > 0) { lookAt.t -= dt; focus.set(lookAt.x, 1.7, lookAt.z); if (lookAt.t <= 0) { lookAt = null; snapCam = true; } }
     else focus.set(game.player.x, 1.7, game.player.z);
     scene.setTime(game.total % 1440);
     if (game.weather !== shownWeather) { shownWeather = game.weather; scene.setWeather(game.weather); }
     scene.frame(dt, focus, snapCam);
     snapCam = false;
+    destPointer();
+    hintStep(dt);
   };
   requestAnimationFrame(loop);
   window.addEventListener('beforeunload', () => writeSave(game));

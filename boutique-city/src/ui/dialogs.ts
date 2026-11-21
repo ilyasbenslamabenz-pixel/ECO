@@ -10,7 +10,8 @@ import {
 import { SHIFTS, SHIFT_BY_ID, STAFF, STAFF_ROLES, STAFF_ROLE_BY_ID, type ShiftKind, type StaffRole } from '../sim/catalog';
 import { RIVALS } from '../sim/catalog';
 import type { Building, Home, Premise } from '../sim/district';
-import type { Game } from '../sim/game';
+import type { Game, Shop } from '../sim/game';
+import { FURNITURE_FITS, HOME_MEAL, fitsType, isFestive, productsHosted, type FurnitureDef } from '../sim/catalog';
 import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
 import type { Act, Panel, View } from './panel';
 import { LOGISTICS } from '../sim/catalog';
@@ -46,6 +47,49 @@ function remember<T extends HTMLSelectElement | HTMLInputElement>(key: string, e
   if (v !== undefined && (e.tagName !== 'SELECT' || [...(e as HTMLSelectElement).options].some((o) => o.value === v))) e.value = v;
   e.addEventListener('change', () => memo.set(key, e.value));
   return e;
+}
+
+/**
+ * Commerce visé par défaut : le dernier loué parmi ceux à qui il manque encore quelque chose pour ce service (meubles :
+ * pas de caisse, un produit sans présentoir, un café sans machine ; emploi : personne en caisse), sinon le dernier loué.
+ */
+export function defaultShopId(g: Game, need: 'meubles' | 'emploi' | 'pub'): number | null {
+  const last = [...g.shops].reverse();
+  const lacks = (s: Shop): boolean => {
+    if (need === 'emploi') return !g.staffOf(s.id).some((e) => g.roleOf(e) === 'caisse');
+    if (need !== 'meubles') return false;
+    const st = g.stats(s);
+    return st.registers === 0 || productsOf(s.type).some((p) => st.capacity[p.store] <= 0 || (!!p.needsMachine && st.machines === 0));
+  };
+  return (last.find(lacks) ?? last[0])?.id ?? null;
+}
+/** Liste des commerces au moment d'un choix (un commerce loué ou rendu depuis : le choix par défaut reprend la main). */
+const memoShops = new Map<string, string>();
+/** Menu des commerces : choix du joueur gardé tant que la liste ne change pas, sinon le commerce par défaut (defaultShopId). */
+function rememberShop(g: Game, key: string, need: 'meubles' | 'emploi' | 'pub'): HTMLSelectElement {
+  const e = shopSelect(g), sig = g.shops.map((s) => s.id).join(','), v = memo.get(key), def = defaultShopId(g, need);
+  if (v !== undefined && memoShops.get(key) === sig && [...e.options].some((o) => o.value === v)) e.value = v;
+  else if (def !== null) e.value = String(def);
+  e.addEventListener('change', () => { memo.set(key, e.value); memoShops.set(key, sig); });
+  return e;
+}
+
+/**
+ * « Décharger » dans un commerce : la marchandise portée et celle des véhicules garés devant. La place libre sert
+ * d'abord ; si une commande en cours réserve le reste, le joueur choisit de ranger quand même (commande réduite
+ * d'autant, remboursée au prorata) ou de garder la marchandise. `done` : après coup (rafraîchir l'affichage).
+ */
+export function unloadInto(ctx: UiCtx, shopId: number, done?: () => void): void {
+  const g = ctx.game;
+  let plan = g.unloadPlan(shopId);
+  if (plan.now > 0 || plan.reducing <= 0) { ctx.act(g.unload(shopId, false)); plan = g.unloadPlan(shopId); }
+  if (plan.reducing <= 0) { done?.(); return; }
+  const lines = plan.lines.filter((l) => l.free > l.room && l.carried > l.room).map((l) => {
+    const pr = PRODUCTS.find((p) => p.id === l.productId)!, o = g.orders.filter((x) => x.shopId === shopId && x.productId === l.productId).sort((a, b) => a.deliverAt - b.deliverAt)[0];
+    return `${l.pending} ${pr.nameFr.toLowerCase()} commandés (livraison prévue ${o ? g.deliveryLabel(o.deliverAt) : 'bientôt'})`;
+  });
+  void askConfirm(`Place réservée par une livraison en cours : ${lines.join(', ')}. Ranger quand même ${plan.reducing} unité${plan.reducing > 1 ? 's' : ''} maintenant ? La commande sera réduite d’autant, remboursée au prorata (environ ${chf(plan.refund)}).`, 'Ranger quand même')
+    .then((y) => { if (y) ctx.act(g.unload(shopId, true)); done?.(); });
 }
 
 export function serviceView(ctx: UiCtx, b: Building): View {
@@ -122,39 +166,64 @@ let meubleTab = 'utiles';
 function meubles(ctx: UiCtx): (Node | null)[] {
   const g = ctx.game;
   if (!g.shops.length) return [note('Louez d’abord un local : les meubles sont livrés dans sa réserve.')];
-  const dest = remember('mdest', shopSelect(g));
+  // Par défaut : le commerce qu'il reste à meubler (le dernier loué en premier), pas le premier de la liste.
+  const dest = rememberShop(g, 'mdest', 'meubles');
   const out: (Node | null)[] = [el('label', { cls: 'field' }, el('span', { text: `Livrer dans la réserve de (livraison ${ECONOMY.furnitureDelivery} CHF par achat)` }), dest)];
   const shop = g.shop(Number(dest.value));
-  const useful = (id: string): boolean => {
-    if (!shop) return true;
-    const f = FURNITURE.find((x) => x.id === id)!;
-    if (f.kind === 'caisse' || f.kind === 'deco') return true;
+  /** Utile dans le commerce choisi : caisse, présentoir qui accueille ses produits, machine du café, sièges, décoration générale ou de son thème. */
+  const useful = (f: FurnitureDef): boolean => {
+    if (!shop) return !isFestive(f);
+    if (f.kind === 'caisse') return true;
+    if (f.kind === 'deco') return !isFestive(f) && fitsType(f, shop.type);
     if (f.kind === 'machine') return shop.type === 'cafe';
     if (f.kind === 'table') return shop.type === 'cafe' || shop.type === 'fastfood' || shop.type === 'boulangerie';
-    return PRODUCTS.some((p) => p.shop === shop.type && p.store === f.kind);
+    return productsHosted(f, shop.type).length > 0;
   };
-  // Catégories : « Utiles » (adaptés au commerce choisi), présentoirs, caisses et machines, tables, décoration.
-  const cats: [string, string, (f: typeof FURNITURE[number]) => boolean][] = [
-    ['utiles', 'Utiles ici', (f) => useful(f.id)],
+  // Catégories : « Utiles » (adaptés au commerce choisi), présentoirs, caisses et machines, tables, décoration, fêtes.
+  const cats: [string, string, (f: FurnitureDef) => boolean][] = [
+    ['utiles', 'Utiles ici', (f) => useful(f)],
     ['presentoirs', 'Présentoirs', (f) => ['rayon', 'frigo', 'comptoir', 'vitrine', 'portant'].includes(f.kind)],
     ['caisses', 'Caisses et machines', (f) => f.kind === 'caisse' || f.kind === 'machine'],
     ['tables', 'Tables et sièges', (f) => f.kind === 'table'],
-    ['deco', 'Décoration', (f) => f.kind === 'deco'],
+    ['deco', 'Décoration', (f) => f.kind === 'deco' && !isFestive(f)],
+    ['fetes', 'Fêtes', (f) => isFestive(f)],
   ];
   const cat = cats.find((c) => c[0] === meubleTab) ?? cats[0]!;
   out.push(el('div', { cls: 'tabs' }, ...cats.map(([id, label, pick]) => button(`${label} (${FURNITURE.filter(pick).length})`, () => { meubleTab = id; ctx.panel.paint(true); }, id === cat[0] ? 'on' : ''))));
   const tbl = el('table', { cls: 'tbl' }, el('tr', {}, el('th', { text: 'Meuble' }), el('th', { text: 'Taille' }), el('th', { text: 'Prix' }), el('th', { text: 'Qté' }), el('th', { text: '' })));
-  for (const f of FURNITURE.filter(cat[2]).sort((a, b) => Number(useful(b.id)) - Number(useful(a.id)))) {
+  for (const f of FURNITURE.filter(cat[2]).sort((a, b) => Number(useful(b)) - Number(useful(a)))) {
     const q = qtyInput(1, 20);
-    const detail = f.capacity ? `${f.capacity} articles` : f.seats ? `${f.seats} places` : f.decor ? `déco +${f.decor}` : f.kind === 'caisse' ? 'encaisser' : f.kind === 'machine' ? 'café, thé' : '';
-    tbl.append(el('tr', { cls: useful(f.id) ? '' : 'dim' },
-      el('td', {}, el('b', { text: f.nameFr }), el('div', { cls: 'muted small', text: detail })),
+    tbl.append(el('tr', { cls: useful(f) ? '' : 'dim' },
+      el('td', {}, el('b', { text: f.nameFr }), el('div', { cls: 'muted small', text: furnitureDetail(f, shop) })),
       el('td', { text: `${f.w}×${f.d} m` }), el('td', { text: chf(f.price) }), el('td', {}, q),
-      el('td', {}, button('Acheter', () => ctx.act(g.buyFurniture(f.id, Number(q.value), Number(dest.value)), (c) => `Achat de ${chf(c)} : à poser depuis la réserve (Aménager).`), 'small primary'))));
+      // Un seul message : celui de la partie (quoi, où, combien, « à poser avec Aménager »).
+      el('td', {}, button('Acheter', () => ctx.act(g.buyFurniture(f.id, Number(q.value), Number(dest.value))), 'small primary'))));
   }
+  if (cat[0] === 'fetes') out.push(note('Décorations de fin d’année : elles décorent comme les autres, mais sortent du thème le reste de l’année.'));
+  if (cat[0] === 'utiles' && shop) out.push(note(`« Utiles ici » : ce qui sert à ${shop.name} (présentoirs de ses produits, caisse, décoration de son style). Le reste est dans les autres onglets.`));
   out.push(tbl);
   if (shop && Object.keys(shop.storage).length) out.push(note(`Réserve de ${shop.name} : ${Object.entries(shop.storage).map(([k, n]) => `${n} × ${FURNITURE.find((f) => f.id === k)!.nameFr}`).join(', ')}.`));
   return out;
+}
+
+/**
+ * Détail d'un meuble pour le commerce choisi : places et produits qu'il accueille (« accueille : pain, viennoiseries »),
+ * produits qui ont besoin de la machine, places assises, points de décoration et thème.
+ */
+function furnitureDetail(f: FurnitureDef, shop: Shop | undefined): string {
+  const hosts = shop ? productsHosted(f, shop.type) : [], names = hosts.map((p) => p.nameFr.toLowerCase()).join(', ');
+  if (f.capacity) {
+    const what = !shop ? '' : hosts.length ? ` · accueille : ${names}${hosts.length > 1 ? ` (${Math.floor(f.capacity / hosts.length)} chacun)` : ''}` : ` · n’accueille aucun produit de ${shop.name}`;
+    return `${f.capacity} articles${what}`;
+  }
+  if (f.kind === 'machine') return hosts.length ? `indispensable pour : ${names}` : 'café, thé (pour un café)';
+  if (f.seats) return `${f.seats} places`;
+  if (f.kind === 'caisse') return 'encaisser les clients (une par caissier)';
+  if (f.decor) {
+    const fits = FURNITURE_FITS[f.id];
+    return `déco +${f.decor}${isFestive(f) ? ' · fêtes de fin d’année' : fits && shop && !fits.includes(shop.type) ? ' · hors du style de ce commerce' : ''}`;
+  }
+  return '';
 }
 
 /* ------------------------------ Banque ------------------------------ */
@@ -168,7 +237,12 @@ function banque(ctx: UiCtx): (Node | null)[] {
   LOAN_OFFERS.forEach((o, k) => {
     const total = loanTotal(o);
     out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: chf(o.amount) }), el('div', { cls: 'muted small', text: `${o.days} jours · taux ${pct(o.rate)} par an · ${chf2(total / o.days)} par jour · total ${chf(total)}` })),
-      button('Emprunter', () => ctx.act(g.takeLoan(k)), 'small primary')));
+      button('Emprunter', () => {
+        // Au-delà du plafond, la banque refuse tout de suite (son message) ; sinon, le joueur confirme l'engagement.
+        if (g.debt + total > g.creditLimit().limit) { ctx.act(g.takeLoan(k)); return; }
+        void askConfirm(`Emprunter ${chf(o.amount)} ? La banque prélèvera ${chf2(total / o.days)} chaque nuit pendant ${o.days} jours : ${chf(total)} au total, dont ${chf(total - o.amount)} d’intérêts.`, 'Emprunter')
+          .then((y) => { if (y) ctx.act(g.takeLoan(k)); });
+      }, 'small primary')));
   });
   if (g.loans.length) {
     out.push(sec('Vos prêts'));
@@ -186,7 +260,8 @@ function emploi(ctx: UiCtx): (Node | null)[] {
   if (!g.shops.length) out.push(note('Louez d’abord un local pour pouvoir embaucher.'));
   out.push(sec('Candidats de la semaine'));
   for (const c of g.candidates) {
-    const s = g.shops.length ? remember(`hire-${c.id}`, shopSelect(g)) : null;
+    // Par défaut : le commerce sans caissier (le dernier loué en premier), pas le premier de la liste.
+    const s = g.shops.length ? rememberShop(g, `hire-${c.id}`, 'emploi') : null;
     const want = c.wantShift ?? 'journee';
     const role = remember(`hire-role-${c.id}`, roleSelect('caisse'));
     // Équipe proposée : celle que souhaite le candidat, sauf pour un premier caissier (la journée complète évite un
@@ -273,7 +348,7 @@ function pub(ctx: UiCtx): (Node | null)[] {
   const out: (Node | null)[] = [];
   if (!g.shops.length) return [note('Louez d’abord un local.')];
   for (const c of CAMPAIGNS) {
-    const s = c.scope === 'shop' ? remember(`pub-${c.id}`, shopSelect(g)) : null;
+    const s = c.scope === 'shop' ? rememberShop(g, `pub-${c.id}`, 'pub') : null;
     const days = remember(`pubd-${c.id}`, el('select', { attrs: { 'aria-label': 'Durée' } }, ...[3, 7, 14].map((d) => el('option', { text: `${d} jours (${chf(d * c.perDay)})`, attrs: { value: String(d) } }))));
     out.push(el('div', { cls: 'item col' }, el('div', {}, el('b', { text: c.nameFr }), el('div', { cls: 'muted small', text: `${c.desc} ${c.perDay} CHF / jour.` })),
       el('div', { cls: 'row tight' }, s, days, button('Lancer', () => ctx.act(g.startCampaign(c.id, s ? Number(s.value) : null, Number(days.value))), 'small primary'))));
@@ -291,7 +366,8 @@ function snack(ctx: UiCtx): (Node | null)[] {
   const g = ctx.game;
   return [el('div', { cls: 'kpis' }, kpi('Faim', `${Math.round(g.player.hunger)} %`), kpi('Énergie', `${Math.round(g.player.energy)} %`), kpi('Argent', chf(g.cash))),
     ...FOODS.map((f) => el('div', { cls: 'item' }, el('div', {}, el('b', { text: f.nameFr }), el('div', { cls: 'muted small', text: `${f.hunger ? `faim +${f.hunger}` : ''}${f.hunger && f.energy ? ' · ' : ''}${f.energy ? `énergie +${f.energy}` : ''}` })),
-      button(`${chf(f.price)}`, () => ctx.act(g.eat(f.id), 'Miam !'), 'small primary')))];
+      button(`${chf(f.price)}`, () => ctx.act(g.eat(f.id), 'Miam !'), 'small primary'))),
+    g.hasKitchen() ? note(`Moins cher chez vous : « Manger (cuisine) » dans votre logement, ${chf(HOME_MEAL.price)} de courses, faim +${HOME_MEAL.hunger} (${HOME_MEAL.minutes} minutes).`) : null];
 }
 
 /* ------------------------------ Local, concurrent, logement ------------------------------ */
@@ -502,7 +578,8 @@ export function rescueView(ctx: UiCtx): View {
       const em = g.emergencyOffer();
       out.push(sec('4. Prêt d’urgence'), el('div', { cls: 'item' }, el('div', {}, el('b', { text: `${chf(em.offer.amount)} tout de suite` }),
         el('div', { cls: 'muted small', text: `${em.offer.days} jours · taux ${pct(em.offer.rate)} par an · ${chf2(em.daily)} par jour · total ${chf(em.total)}. Hors plafond de crédit, un seul à la fois.` })),
-        em.available ? button('Emprunter', () => ctx.act(g.takeEmergencyLoan(), (l) => `Prêt d’urgence : ${chf(l.amount)} versés.`), 'small primary') : el('span', { cls: 'muted small', text: em.why ?? '' })));
+        em.available ? button('Emprunter', () => void askConfirm(`Prêt d’urgence de ${chf(em.offer.amount)} ? ${chf2(em.daily)} prélevés chaque nuit pendant ${em.offer.days} jours : ${chf(em.total)} au total, dont ${chf(em.total - em.offer.amount)} d’intérêts.`, 'Emprunter')
+          .then((y) => { if (y) ctx.act(g.takeEmergencyLoan()); }), 'small primary') : el('span', { cls: 'muted small', text: em.why ?? '' })));
       out.push(note(`Faillite si la valeur nette reste sous ${signed(RESCUE.bankruptWorth)} avec une trésorerie négative pendant ${RESCUE.bankruptDays} jours d’affilée.`));
       return out;
     },

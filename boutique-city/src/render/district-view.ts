@@ -237,8 +237,14 @@ export class DistrictView {
     return tiled(ms, build, (-this.d.nx / 2) * PITCH, (-this.d.nz / 2) * PITCH);
   }
 
-  /** Matériau des globes des lampadaires (allumés la nuit, voir setNight). */
-  private readonly lampMat = new THREE.MeshBasicMaterial({ color: 0x8a8f96 });
+  /**
+   * Matériau des globes des lampadaires (allumés la nuit, voir setNight) : estompés dans la couleur du brouillard
+   * entre GLOBE_FADE m et GLOBE_GONE m (au-delà, un globe de 30 cm ne fait plus qu'un point qui scintille : sans ce
+   * fondu, les rues lointaines forment des nuées de points), puis masqués (voir updateLabels).
+   */
+  private readonly lampMat = globeMaterial();
+  /** Maillages des globes (tuiles d'îlot) et centre de chacun, pour les masquer au loin. */
+  private readonly globeTiles: { m: THREE.InstancedMesh; c: THREE.Vector3; r: number }[] = [];
   private readonly doorGlass: THREE.MeshStandardMaterial[] = [];
 
   /**
@@ -251,10 +257,13 @@ export class DistrictView {
     const doors = d.buildings.filter((b) => b.premise || b.service || b.home).map((b) => [b.doorX, b.doorZ] as const);
     const poles: THREE.Matrix4[] = [], bulbs: THREE.Matrix4[] = [];
     // (rx, rz) : direction de la chaussée. La crosse du modèle est vers −z : rotation pour la tourner vers la rue.
+    // Globe accroché sous l'extrémité de la crosse du modèle (mesurée sur sa géométrie) ; mât fait en code : au bout.
+    const head = lampHead('rue.lampadaire', 1.6, 5.4, 1.6) ?? new THREE.Vector3(0, 5.3, 0);
     const add = (x: number, z: number, rx: number, rz: number): void => {
       if (doors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 4)) return;
-      poles.push(new THREE.Matrix4().makeRotationY(Math.atan2(-rx, -rz)).setPosition(x, 0.16, z));
-      bulbs.push(new THREE.Matrix4().makeTranslation(x + rx * 1.2, 4.42, z + rz * 1.2));
+      const pole = new THREE.Matrix4().makeRotationY(Math.atan2(-rx, -rz)).setPosition(x, 0.16, z);
+      poles.push(pole);
+      bulbs.push(new THREE.Matrix4().setPosition(head.clone().applyMatrix4(pole)));
     };
     const off = STREET_W / 2 - 0.5;
     for (let i = 0; i <= d.nx; i++) {
@@ -269,7 +278,11 @@ export class DistrictView {
     for (const im of kit) { im.castShadow = true; im.name = 'lampadaires-kit'; g.add(im); }
     if (!kit.length) g.add(instanced(new THREE.CylinderGeometry(0.08, 0.12, 5.2, 8).translate(0, 2.6, 0), new THREE.MeshStandardMaterial({ color: 0x3a4048, metalness: 0.5, roughness: 0.4 }), poles, 'mâts', true, false));
     const bulb = new THREE.SphereGeometry(0.15, 10, 8);
-    for (const im of this.tiles(bulbs, (part) => instanced(bulb, this.lampMat, part, 'globes', false, false))) g.add(im);
+    for (const im of this.tiles(bulbs, (part) => instanced(bulb, this.lampMat, part, 'globes', false, false))) {
+      g.add(im);
+      const s = im.boundingSphere!;
+      this.globeTiles.push({ m: im, c: s.center.clone(), r: s.radius });
+    }
     this.lightPoints = bulbs.map((m) => new THREE.Vector3().setFromMatrixPosition(m));
     return g;
   }
@@ -663,7 +676,13 @@ export class DistrictView {
     // Repères et auvents ne dépendent que de la position de la caméra : rien à faire si elle n'a pas bougé.
     if (cp.distanceToSquared(this.lastCam) < 0.0025) return;
     this.lastCam.copy(cp);
-    for (const pin of this.pins.values()) pin.visible = cp.distanceTo(pin.position) > PIN_MIN_DIST;
+    // Repères : seulement les PIN_MAX locaux libres les plus proches parmi ceux qu'on ne voit pas déjà de près (pas
+    // de nuée de repères sur tout l'horizon).
+    const near = [...this.pins.values()].map((pin) => ({ pin, d: cp.distanceTo(pin.position) })).filter((p) => p.d > PIN_MIN_DIST && p.d < PIN_MAX_DIST).sort((a, b) => a.d - b.d).slice(0, PIN_MAX);
+    for (const pin of this.pins.values()) pin.visible = false;
+    for (const p of near) p.pin.visible = true;
+    // Globes trop loin (entièrement fondus dans le brouillard propre aux globes) : tuiles masquées.
+    for (const t of this.globeTiles) t.m.visible = cp.distanceTo(t.c) - t.r < GLOBE_GONE;
     let dirty = false;
     const zero = DistrictView.ZERO;
     this.awningInfo.forEach((a, k) => {
@@ -744,6 +763,45 @@ function tiled(ms: THREE.Matrix4[], build: (part: THREE.Matrix4[]) => THREE.Inst
   return out;
 }
 
+/** Globes : fondu propre (GLOBE_FADE → GLOBE_GONE m) ajouté au brouillard de la scène, masqués au-delà. */
+const GLOBE_FADE = 50, GLOBE_GONE = 120;
+function globeMaterial(): THREE.MeshBasicMaterial {
+  const m = new THREE.MeshBasicMaterial({ color: 0x8a8f96 });
+  m.onBeforeCompile = (sh): void => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <fog_fragment>', `#ifdef USE_FOG
+  float gFog = max(smoothstep(fogNear, fogFar, vFogDepth), smoothstep(${GLOBE_FADE.toFixed(1)}, ${GLOBE_GONE.toFixed(1)}, vFogDepth));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, gFog);
+#endif`);
+  };
+  return m;
+}
+
+/**
+ * Point d'accroche du globe dans le repère d'un lampadaire du kit (une fois mis à l'échelle comme par
+ * assets.instances) : sous l'extrémité de la crosse (côté −z, en haut du modèle), à mi-largeur. Null sans modèle.
+ */
+function lampHead(key: string, w: number, h: number, d: number): THREE.Vector3 | null {
+  const mg = assets.merged(key), sz = assets.size(key);
+  if (!mg || !sz) return null;
+  const k = Math.min(w / sz.x, h / sz.y, d / sz.z), sx = sz.x * k, sy = sz.y * k, sdz = sz.z * k;
+  // Géométrie fusionnée normalisée : x et z dans [−0,5 ; 0,5], y dans [0 ; 1].
+  const pos = mg.geo.getAttribute('position');
+  let minZ = Infinity;
+  for (let i = 0; i < pos.count; i++) if (pos.getY(i) > 0.8) minZ = Math.min(minZ, pos.getZ(i));
+  if (!Number.isFinite(minZ)) return null;
+  let minY = Infinity, ax = 0, n = 0;
+  for (let i = 0; i < pos.count; i++) {
+    if (pos.getY(i) <= 0.8 || pos.getZ(i) > minZ + 0.12) continue;
+    minY = Math.min(minY, pos.getY(i)); ax += pos.getX(i); n++;
+  }
+  if (!n) return null;
+  // Globe (rayon 0,15 m) juste sous la tête, un peu en retrait de l'extrémité.
+  return new THREE.Vector3((ax / n) * sx, minY * sy - 0.1, (minZ + 0.07) * sdz);
+}
+
+/** Repères des locaux libres : au plus PIN_MAX à la fois (les plus proches), entre PIN_MIN_DIST et PIN_MAX_DIST m. */
+const PIN_MAX = 6, PIN_MAX_DIST = 170;
+
 /** Repère rond (local à louer, vue éloignée) : matériau partagé. */
 let pinMat: THREE.SpriteMaterial | null = null;
 function pinMaterial(): THREE.SpriteMaterial {
@@ -756,7 +814,8 @@ function pinMaterial(): THREE.SpriteMaterial {
   g.fillStyle = '#ffd166'; g.beginPath(); g.arc(24, 24, 7, 0, Math.PI * 2); g.fill();
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  pinMat = new THREE.SpriteMaterial({ map: tex, depthTest: false, sizeAttenuation: false });
+  // Caché par les immeubles qui le masquent (sinon il flotte devant tout, comme un point dans le ciel).
+  pinMat = new THREE.SpriteMaterial({ map: tex, depthTest: true, sizeAttenuation: false });
   return pinMat;
 }
 

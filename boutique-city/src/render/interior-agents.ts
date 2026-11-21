@@ -38,11 +38,17 @@ interface Label {
 }
 
 interface Mover { h: Person; x: number; z: number; heading: number; route: [number, number][]; speed: number; face: number | null }
-interface Customer extends Mover { amount?: number; bubble?: Label; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'done' | 'react' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
+interface Customer extends Mover { bubble?: Label; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'done' | 'react' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number; spot?: number }
 interface Staff extends Mover { id: number; idle: number }
+/** Montant flottant d'une ou plusieurs ventes rapprochées à une caisse (uid), et âge depuis son dernier ajout (s). */
+interface Float { l: Label; t: number; x: number; z: number; reg: number; amount: number; pop: number }
 
-/** Longueur maximale d'une file d'attente dessinée (au-delà, les clients se rangent au plus près). */
-const MAX_LINE = 10;
+/** Longueur maximale d'une file d'attente dessinée : une place par client possible. */
+const MAX_LINE = MAX_CUSTOMERS;
+/** Au plus 3 clients mécontents (entrés pour montrer leur avis) à la fois. */
+const MAX_REACT = 3;
+/** Durée de vie (s) d'un montant de vente ; ventes cumulées dans le même montant pendant MERGE_T s. */
+const FLOAT_LIFE = 1.9, MERGE_T = 0.45;
 /** Au plus 3 bulles d'avis (voir `bubble` : la moins importante cède sa place) et 3 humeurs affichées à la fois. */
 const MAX_BUBBLES = 3, MAX_ICONS = 3;
 /** Écart (m) entre deux étiquettes voisines à l'écran. */
@@ -121,8 +127,11 @@ export class InteriorAgents {
 
   private door(): [number, number] { return doorCells(this.view.W, this.view.D)[0]!; }
 
-  /** Un client entre pour acheter `products`. */
-  spawn(products: string[], amount = 0): void {
+  /**
+   * Un client entre pour acheter `products` (figuration de la vente : le montant, lui, s'affiche dès la vente, voir
+   * `sale`).
+   */
+  spawn(products: string[]): void {
     if (this.customers.length >= MAX_CUSTOMERS || !this.registers.length) return;
     const plan: Step[] = [];
     const seen = new Set<string>();
@@ -141,8 +150,38 @@ export class InteriorAgents {
     const h = makePerson(Math.floor(this.rand() * 1e6), undefined, 0.94 + this.rand() * 0.1);
     this.group.add(h.group);
     const [dx, dz] = this.view.cellCenter(...this.door());
-    this.customers.push({ h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, face: null, route: [[dx, dz]], speed: 1.25 + this.rand() * 0.35, arrive: null, plan, amount, state: 'walk', timer: 0, reg: null, slot: 0, jx: (this.rand() - 0.5) * 0.3, jz: (this.rand() - 0.5) * 0.3 });
+    this.customers.push({ h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, face: null, route: [[dx, dz]], speed: 1.25 + this.rand() * 0.35, arrive: null, plan, state: 'walk', timer: 0, reg: null, slot: 0, jx: (this.rand() - 0.5) * 0.3, jz: (this.rand() - 0.5) * 0.3 });
   }
+
+  /**
+   * Vente encaissée (au moment où la simulation l'enregistre) : « +2,90 CHF » doré au-dessus d'une caisse, celle du
+   * joueur s'il la tient, sinon les caisses tenues à tour de rôle. Des ventes rapprochées (moins de MERGE_T s) à la
+   * même caisse s'additionnent dans le même montant, qui rebondit : lisible même en temps accéléré.
+   */
+  sale(amount: number): void {
+    if (!(amount > 0) || !this.registers.length) return;
+    const mine = this.registers.find((r) => r.uid === this.playerRegister);
+    const tended = this.registers.filter((r) => r.tended && r.back.length);
+    const r = mine ?? (tended.length ? tended[this.turn++ % tended.length]! : this.registers[0]!);
+    const last = this.floats.filter((f) => f.reg === r.uid && f.t < MERGE_T).at(-1);
+    if (last) {
+      last.amount += amount; last.pop = 0;
+      drawMoney(last.l.sp.material as THREE.SpriteMaterial, last.amount);
+      return;
+    }
+    // Au-dessus de la caisse enregistreuse, côté caissier, plus haut qu'une tête.
+    const x = r.center[0] - r.dir[0] * 0.25, z = r.center[1] - r.dir[1] * 0.25;
+    const l = this.label(moneyMaterial(amount), 1.5, 0.47, 3, 22);
+    l.at.set(x, 2.05, z);
+    // Ventes rapprochées à la même caisse : le montant prend le plus bas créneau libre de la pile. Tous montent à la
+    // même vitesse : deux créneaux espacés d'une hauteur ne se recouvrent jamais, et la pile ne grimpe pas sans fin.
+    const step = l.h + LABEL_GAP;
+    const near = this.floats.filter((f) => Math.hypot(f.x - x, f.z - z) < 1.2).map((f) => f.l.rise);
+    l.rise = [0, ...near.map((v) => v + step)].sort((a, b) => a - b).find((v) => near.every((o) => Math.abs(o - v) >= step - 1e-6)) ?? 0;
+    this.floats.push({ l, t: 0, x, z, reg: r.uid, amount, pop: 0 });
+  }
+  /** Tour de rôle des caisses tenues pour les montants (ventes des employés). */
+  private turn = 0;
 
   /**
    * Avis d'un client, en bulle au-dessus de sa tête : « content » sur un client présent ; sinon un client entre,
@@ -155,29 +194,49 @@ export class InteriorAgents {
       if (c) this.say(c, kind);
       return;
     }
-    if (this.customers.length >= MAX_CUSTOMERS) return;
+    // Au plus MAX_REACT mécontents à la fois (la plainte reste comptée dans le bilan), chacun sur sa case, en
+    // retrait de l'entrée : pas d'attroupement devant la porte.
+    if (this.customers.length >= MAX_CUSTOMERS || this.customers.filter((x) => x.spot !== undefined).length >= MAX_REACT) return;
+    const spot = this.reactSpot();
     const [ox, oz] = this.view.outside();
     const [dx, dz] = this.view.cellCenter(...this.door());
     const h = makePerson(Math.floor(this.rand() * 1e6), undefined, 0.94 + this.rand() * 0.1);
     this.group.add(h.group);
-    const c: Customer = { h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, face: null, route: [[dx + (this.rand() - 0.5) * 0.8, dz - 1.2]], speed: 1.3, arrive: null, plan: [{ kind: 'react', t: 1.8 }, { kind: 'exit' }], state: 'walk', timer: 0, reg: null, slot: 0, jx: 0, jz: 0 };
+    const c: Customer = { h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, face: null, route: [[dx + (this.rand() - 0.5) * 0.8, dz - 1.2]], speed: 1.3, arrive: null, plan: [{ kind: 'react', t: 1.8 }, { kind: 'exit' }], state: 'walk', timer: 0, reg: null, slot: 0, jx: 0, jz: 0, spot: spot ?? -1 };
     this.customers.push(c);
     this.say(c, kind);
     this.next(c);
+    // Entrée par la porte, puis la case choisie par le plus court chemin (sans traverser de meuble).
+    if (spot !== null && this.routeTo(c, [spot % this.view.W, Math.floor(spot / this.view.W)])) c.route.unshift([dx, dz]);
   }
 
-  /** Montants des ventes : montent vers le haut de l'écran et s'effacent en 1,6 s. */
-  private floats: { l: Label; t: number; x: number; z: number }[] = [];
-  private floatText(text: string, x: number, z: number): void {
-    const l = this.label(moneyMaterial(text), 1.25, 0.4, 3, 22);
-    l.at.set(x, 1.55, z);
-    // Ventes rapprochées à la même caisse : le montant prend le plus bas créneau libre de la pile. Tous montent à la
-    // même vitesse : deux créneaux espacés d'une hauteur ne se recouvrent jamais, et la pile ne grimpe pas sans fin.
-    const step = l.h + LABEL_GAP;
-    const near = this.floats.filter((f) => Math.hypot(f.x - x, f.z - z) < 1.2).map((f) => f.l.rise);
-    l.rise = [0, ...near.map((r) => r + step)].sort((a, b) => a - b).find((r) => near.every((o) => Math.abs(o - r) >= step - 1e-6)) ?? 0;
-    this.floats.push({ l, t: 0, x, z });
+  /**
+   * Case libre où un client mécontent s'arrête : à deux ou trois rangées de la porte, hors de l'entrée et des files
+   * d'attente, loin des autres mécontents. Null si aucune.
+   */
+  private reactSpot(): number | null {
+    const v = this.view, W = v.W, D = v.D;
+    const door = doorCells(W, D);
+    const dcx = door.reduce((a, c) => a + c[0], 0) / door.length;
+    const taken = new Set(this.customers.flatMap((c) => (c.spot !== undefined && c.spot >= 0 ? [c.spot] : [])));
+    const lines = new Set(this.registers.flatMap((r) => (r.line ?? []).slice(0, 4).map(([x, z]) => z * W + x)));
+    let best: number | null = null, bestCost = Infinity;
+    for (let z = D - 4; z <= D - 2; z++) {
+      for (let x = Math.floor(dcx) - 3; x <= Math.ceil(dcx) + 3; x++) {
+        const k = z * W + x;
+        if (!v.inside(x, z) || v.walkBlocked(x, z) || taken.has(k) || lines.has(k)) continue;
+        if (door.some(([a, b]) => a === x && (b === z || b - 1 === z))) continue;
+        // Proche de la porte, mais à distance des autres mécontents.
+        let cost = Math.abs(x - dcx) * 0.6 + Math.abs(z - (D - 3)) + this.rand() * 0.8;
+        for (const t of taken) cost += 2 * Math.max(0, 2.2 - Math.hypot((t % W) - x, Math.floor(t / W) - z));
+        if (cost < bestCost) { bestCost = cost; best = k; }
+      }
+    }
+    return best;
   }
+
+  /** Montants des ventes : montent vers le haut de l'écran et s'effacent en FLOAT_LIFE s. */
+  private floats: Float[] = [];
 
   /** Horloge (s) des étiquettes, et caméra du dernier rendu, relevée par les étiquettes elles-mêmes (voir `label`). */
   private clock = 0;
@@ -333,25 +392,46 @@ export class InteriorAgents {
   }
 
   /**
-   * Case de la k-ième place de la file d'une caisse : en ligne droite devant la caisse enregistreuse, dans l'axe de
-   * la caisse (une case par client, donc 1 m d'écart) ; si un meuble ou un mur coupe la ligne, la file tourne vers
-   * les cases libres les plus proches (recherche en largeur). Jamais sur les cases de la porte.
+   * Case de la k-ième place de la file d'une caisse (une case par client, donc 1 m d'écart), voir `queueLine`.
    */
   private slotCell(r: Register, k: number): [number, number] {
     if (!r.line) r.line = this.queueLine(r);
     return r.line[Math.min(k, r.line.length - 1)] ?? r.front[0]!;
   }
 
+  /**
+   * File d'attente lisible, case après case : droit devant la caisse enregistreuse ; quand un meuble, un mur ou
+   * l'entrée (cases de la porte et celles juste devant) l'arrête, elle tourne du côté qui l'éloigne de la porte (puis
+   * le plus dégagé) et repart en ligne droite : file en ligne, en L ou en serpentin le long des murs, jamais en tas.
+   * Une file coincée avant MAX_LINE cases se prolonge par les cases libres les plus proches de la dernière.
+   */
   private queueLine(r: Register): [number, number][] {
-    const W = this.view.W;
-    const door = new Set(doorCells(this.view.W, this.view.D).map(([x, z]) => z * W + x));
+    const v = this.view, W = v.W, D = v.D;
+    const doors = doorCells(W, D);
+    const lane = new Set(doors.flatMap(([x, z]) => [z * W + x, (z - 1) * W + x]));
+    const dcx = doors.reduce((a, c) => a + c[0], 0) / doors.length, dcz = D - 1;
     const used = new Set<number>();
-    const free = (x: number, z: number): boolean => this.view.inside(x, z) && !this.view.walkBlocked(x, z) && !door.has(z * W + x) && !used.has(z * W + x);
+    const free = (x: number, z: number): boolean => v.inside(x, z) && !v.walkBlocked(x, z) && !lane.has(z * W + x) && !used.has(z * W + x);
+    /** Cases libres en ligne droite depuis (x, z) dans une direction (au plus 6). */
+    const run = (x: number, z: number, dx: number, dz: number): number => { let n = 0; while (n < 6 && free(x + dx * (n + 1), z + dz * (n + 1))) n++; return n; };
+    /** Case collée à l'entrée (les clients qui entrent y passent). */
+    const byLane = (x: number, z: number): boolean => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => lane.has((z + b!) * W + x + a!));
     const out: [number, number][] = [];
     let [x, z] = r.front[0]!;
+    let [dx, dz] = r.dir;
     out.push([x, z]); used.add(z * W + x);
-    while (out.length < MAX_LINE && free(x + r.dir[0], z + r.dir[1])) { x += r.dir[0]; z += r.dir[1]; out.push([x, z]); used.add(z * W + x); }
-    // Suite : cases libres les plus proches de la dernière, en privilégiant les côtés de la ligne.
+    while (out.length < MAX_LINE) {
+      if (!free(x + dx, z + dz)) {
+        // Virage : côté qui éloigne de la porte, puis le plus dégagé ; jamais collé à l'entrée si on peut l'éviter.
+        const opts = ([[dz, dx], [-dz, -dx]] as [number, number][]).filter(([a, b]) => free(x + a, z + b));
+        if (!opts.length) break;
+        const score = ([a, b]: [number, number]): number => 2 * Math.hypot(x + a - dcx, z + b - dcz) + run(x, z, a, b) - (byLane(x + a, z + b) ? 6 : 0);
+        [dx, dz] = opts.sort((p, q) => score(q) - score(p))[0]!;
+      }
+      x += dx; z += dz;
+      out.push([x, z]); used.add(z * W + x);
+    }
+    // Suite (file coincée) : cases libres les plus proches de la dernière, en privilégiant les côtés de la ligne.
     const q: [number, number][] = [[x, z]];
     const seen = new Set<number>([z * W + x]);
     for (let h = 0; h < q.length && out.length < MAX_LINE; h++) {
@@ -440,17 +520,19 @@ export class InteriorAgents {
         if (c.timer <= 0) { c.h.gesture(null); this.next(c); }
       } else if (c.state === 'queue' && c.reg) {
         const k = c.reg.queue.indexOf(c);
-        if (k !== c.slot) { c.slot = k; this.routeTo(c, this.slotCell(c.reg, k)); }
+        // Nouvelle place dans la file : y aller d'abord (l'arrivée de l'image précédente ne compte plus, sinon le client
+        // paierait là où il se trouve, au rayon ou dans l'entrée, et bloquerait les suivants).
+        let here = arrived;
+        if (k !== c.slot) { c.slot = k; this.routeTo(c, this.slotCell(c.reg, k)); here = c.route.length === 0; }
         // Dans la file : regarde la caisse (le client devant lui).
-        if (arrived) c.face = headingTo(c.reg.center[0] - c.x, c.reg.center[1] - c.z);
-        if (arrived && k === 0) { c.state = 'pay'; c.timer = 2.2; c.face = headingTo(-c.reg.dir[0], -c.reg.dir[1]); c.h.gesture('interact-right'); }
+        if (here) c.face = headingTo(c.reg.center[0] - c.x, c.reg.center[1] - c.z);
+        if (here && k === 0) { c.state = 'pay'; c.timer = 2.2; c.face = headingTo(-c.reg.dir[0], -c.reg.dir[1]); c.h.gesture('interact-right'); }
       } else if (c.state === 'pay') {
         // Paiement seulement si quelqu'un tient la caisse (employé ou joueur) ; sinon le client patiente.
         const served = !c.reg || c.reg.tended || c.reg.uid === this.playerRegister || !this.registers.some((r) => r.tended);
         if (served) c.timer -= dt * ts;
         if (c.timer <= 0) {
-          // Vente : « +X CHF » au-dessus de la caisse (côté caissier), puis client satisfait (visage souriant).
-          if (c.reg && c.amount) this.floatText(`+${c.amount.toFixed(c.amount < 10 ? 2 : 0)} CHF`, c.reg.center[0] - c.reg.dir[0] * 0.25, c.reg.center[1] - c.reg.dir[1] * 0.25);
+          // Payé (le montant s'est affiché à la vente, voir `sale`) : client satisfait (visage souriant).
           c.reg?.queue.shift(); c.reg = null;
           c.state = 'done'; c.timer = 0.8;
           c.h.gesture('emote-yes');
@@ -468,9 +550,17 @@ export class InteriorAgents {
       keep.push(c);
     }
     this.customers = keep;
-    for (const f of this.floats) { f.t += dt; f.l.rise += dt * 0.55; (f.l.sp.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, (1.6 - f.t) / 0.5)); }
-    for (const f of this.floats.filter((x) => x.t >= 1.6)) this.dropFloat(f.l);
-    this.floats = this.floats.filter((x) => x.t < 1.6);
+    // Montants : montent, rebondissent à chaque vente ajoutée, s'effacent en fin de vie.
+    for (const f of this.floats) {
+      f.t += dt; f.pop += dt; f.l.rise += dt * 0.5;
+      (f.l.sp.material as THREE.SpriteMaterial).opacity = Math.max(0, Math.min(1, (FLOAT_LIFE - f.t) / 0.5));
+      // Apparition : rebond d'échelle ; vente ajoutée à un montant affiché : petite pulsation.
+      const a = Math.min(1, f.pop / 0.3), e = a - 1;
+      const s = f.t === f.pop ? 0.55 + 0.45 * (1 + 2.70158 * e * e * e + 1.70158 * e * e) : 1 + 0.3 * e * e;
+      f.l.sp.scale.set(f.l.w * s, f.l.h * s, 1);
+    }
+    for (const f of this.floats.filter((x) => x.t >= FLOAT_LIFE)) this.dropFloat(f.l);
+    this.floats = this.floats.filter((x) => x.t < FLOAT_LIFE);
     this.separate();
     this.separate();
     for (const c of this.customers) { c.h.group.position.set(c.x, 0, c.z); c.h.group.rotation.y = c.heading; }
@@ -478,8 +568,10 @@ export class InteriorAgents {
   }
 
   /**
-   * Séparation minimale : deux personnes à moins de MIN_GAP m s'écartent l'une de l'autre (jamais dans un meuble).
-   * Les employés et le joueur comptent comme obstacles fixes.
+   * Séparation minimale : deux clients arrêtés à moins de MIN_GAP m s'écartent l'un de l'autre (jamais dans un
+   * meuble) ; les employés et le joueur comptent pour eux comme obstacles fixes. Un client en marche passe sans
+   * pousser ni être poussé : sinon ceux qui entrent ensemble se bloquent à la porte (chacun visant le même point) et
+   * ceux qui rejoignent le bout de la file restent coincés derrière un client arrêté dans un couloir.
    */
   private separate(): void {
     const MIN_GAP = 0.75;
@@ -496,15 +588,14 @@ export class InteriorAgents {
       const a = cs[i]!;
       for (let j = i + 1; j < cs.length; j++) {
         const b = cs[j]!;
+        if (a.route.length || b.route.length) continue;
         const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
         if (d >= MIN_GAP) continue;
-        // Deux clients en marche se frôlent (écart souple) pour se croiser dans les passages et l'entrée.
-        const soft = (a.state === 'walk' || a.state === 'leave') && (b.state === 'walk' || b.state === 'leave') ? 0.35 : 1;
-        const k = ((MIN_GAP - d) / 2) * soft, ux = d > 1e-4 ? dx / d : 1, uz = d > 1e-4 ? dz / d : 0;
+        const k = (MIN_GAP - d) / 2, ux = d > 1e-4 ? dx / d : 1, uz = d > 1e-4 ? dz / d : 0;
         push(a, -ux * k, -uz * k); push(b, ux * k, uz * k);
       }
-      // En marche, un client contourne au plus près (sans être bloqué par le joueur dans l'entrée).
-      if (a.state === 'walk' || a.state === 'leave') continue;
+      // En marche, un client passe au plus près (sans être bloqué par le joueur dans l'entrée).
+      if (a.route.length) continue;
       for (const [fx, fz] of fixed) {
         const dx = a.x - fx, dz = a.z - fz, d = Math.hypot(dx, dz);
         if (d < MIN_GAP && d > 1e-4) push(a, (dx / d) * (MIN_GAP - d), (dz / d) * (MIN_GAP - d));
@@ -589,18 +680,43 @@ function bubbleMaterial(kind: FeedbackKind): THREE.SpriteMaterial {
   return m;
 }
 
-/** Montant d'une vente (texte vert vif bordé, sur fond sombre), un matériau par texte (libéré après l'animation). */
-function moneyMaterial(text: string): THREE.SpriteMaterial {
+const MONEY_2 = new Intl.NumberFormat('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const MONEY_0 = new Intl.NumberFormat('fr-CH', { maximumFractionDigits: 0 });
+/** « +2,90 CHF » (centimes sous 100 CHF, francs ronds au-delà). */
+export function moneyText(amount: number): string { return `+${(amount < 100 ? MONEY_2 : MONEY_0).format(amount)} CHF`; }
+
+/** Montant d'une vente : pastille sombre bordée d'or, pièce, texte doré. Un matériau par montant (libéré ensuite). */
+function moneyMaterial(amount: number): THREE.SpriteMaterial {
   const cv = document.createElement('canvas');
-  cv.width = 320; cv.height = 104;
-  const g = cv.getContext('2d')!;
-  g.fillStyle = 'rgba(16, 22, 32, 0.9)'; g.strokeStyle = '#7dffa8'; g.lineWidth = 5;
-  g.beginPath(); g.roundRect(5, 5, 310, 94, 46); g.fill(); g.stroke();
-  g.fillStyle = '#7dffa8'; g.font = '800 54px Rubik, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, 160, 55, 286);
+  cv.width = 384; cv.height = 120;
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  tex.anisotropy = 4;
+  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  drawMoney(m, amount);
+  return m;
+}
+
+/** (Re)dessine le montant d'un matériau de `moneyMaterial` (ventes cumulées). */
+function drawMoney(m: THREE.SpriteMaterial, amount: number): void {
+  const tex = m.map as THREE.CanvasTexture, cv = tex.image as HTMLCanvasElement, g = cv.getContext('2d')!;
+  g.clearRect(0, 0, cv.width, cv.height);
+  const gold = g.createLinearGradient(0, 8, 0, 112);
+  gold.addColorStop(0, '#fff3b0'); gold.addColorStop(0.5, '#ffcc4d'); gold.addColorStop(1, '#e09a1a');
+  g.fillStyle = 'rgba(30, 20, 4, 0.93)'; g.strokeStyle = gold; g.lineWidth = 6;
+  g.beginPath(); g.roundRect(6, 6, 372, 108, 54); g.fill(); g.stroke();
+  // Pièce.
+  g.fillStyle = gold; g.beginPath(); g.arc(62, 60, 33, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#a86d0c'; g.lineWidth = 4; g.beginPath(); g.arc(62, 60, 24, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#8a5806'; g.font = '800 26px Rubik, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('F', 62, 62);
+  // Montant : texte doré cerné de brun (lisible sur tous les sols).
+  g.font = '800 54px Rubik, system-ui, sans-serif';
+  g.lineJoin = 'round'; g.lineWidth = 8; g.strokeStyle = '#3a2600';
+  const text = moneyText(amount);
+  g.strokeText(text, 236, 63, 262);
+  g.fillStyle = gold; g.fillText(text, 236, 63, 262);
+  tex.needsUpdate = true;
 }
 const iconCache = new Map<Mood, THREE.SpriteMaterial>();
 /** Icône d'humeur (visage dessiné sur pastille blanche) au-dessus d'un client. */

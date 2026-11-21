@@ -4,7 +4,8 @@
  *
  * Code couleur commun aux deux cartes : vert = mes commerces, jaune = locaux libres, couleur propre à chaque
  * service, bleu clair = logements à louer, blanc = chez moi, mauve éteint = concurrents indépendants, couleur de
- * l'enseigne = commerces d'une entreprise rivale ; flèche jaune = joueur.
+ * l'enseigne = commerces d'une entreprise rivale ; flèche magenta = joueur (« Vous »), bleu ciel = destination.
+ * Taxi depuis la grande carte : bouton à côté de chaque lieu de la légende et sur la destination (voir MapHooks).
  */
 import { SERVICES, SERVICE_BY_ID, SHOP_TYPE_BY_ID } from '../sim/catalog';
 import { BLOCK, SIDEWALK_W, blockCenter, type Building } from '../sim/district';
@@ -14,8 +15,32 @@ import { $, button, el, icon, num } from './dom';
 
 export interface Poi { b: Building; color: string; label: string; kind: 'service' | 'shop' | 'free' | 'rival' | 'home' | 'myhome' }
 
-/** Couleurs de la carte (légende comprise). */
-const COL = { shop: '#5cc77a', free: '#ffd166', rival: '#7d6a8c', home: '#9ec9ff', myhome: '#ffffff', player: '#ffcc4d', dest: '#5fc3ff' };
+/**
+ * Services de la grande carte fournis par le jeu : taxi payant jusqu'à la porte d'un lieu (prix, durée du trajet
+ * selon la distance, raison d'une indisponibilité), effacement de la destination.
+ */
+export interface MapHooks {
+  taxi?: { fare: number; minutes: (meters: number) => number; unavailable: () => string | null; go: (p: Poi) => void };
+  clearDest?: () => void;
+}
+
+/** Couleurs de la carte (légende comprise). Joueur en magenta : rien d'autre sur la carte n'a cette couleur. */
+const COL = { shop: '#5cc77a', free: '#ffd166', rival: '#7d6a8c', home: '#9ec9ff', myhome: '#ffffff', player: '#ff4fd8', dest: '#5fc3ff' };
+/** En deçà (m), pas de taxi proposé : c'est à deux pas. */
+const TAXI_MIN_DIST = 45;
+
+/** Pictogramme de taxi (voiture et enseigne lumineuse), au trait comme ceux de dom.ts. */
+function taxiIcon(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('class', 'ico'); svg.setAttribute('aria-hidden', 'true');
+  for (const d of ['M9.5 4.5h5v2.5h-5z', 'M3.5 16.5V12l2.4-5h12.2l2.4 5v4.5z', 'M3.5 12h17', 'M5.6 17.5a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0', 'M14.6 17.5a1.9 1.9 0 1 0 3.8 0a1.9 1.9 0 1 0 -3.8 0']) {
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', d);
+    svg.append(p);
+  }
+  return svg;
+}
 
 export function pois(g: Game): Poi[] {
   const out: Poi[] = [];
@@ -63,9 +88,9 @@ function drawCity(ctx: CanvasRenderingContext2D, g: Game, tx: (x: number) => num
 function arrow(ctx: CanvasRenderingContext2D, x: number, y: number, heading: number, size: number, color: string): void {
   ctx.save();
   ctx.translate(x, y);
-  // Halo pour retrouver le joueur d'un coup d'œil.
-  ctx.fillStyle = 'rgba(255, 204, 77, 0.22)';
-  ctx.beginPath(); ctx.arc(0, 0, size * 1.9, 0, Math.PI * 2); ctx.fill();
+  // Halo pour retrouver le joueur d'un coup d'œil (couleur du joueur, cerclée de blanc).
+  ctx.fillStyle = 'rgba(255, 79, 216, 0.24)'; ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, size * 1.9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.rotate(-heading);
   ctx.fillStyle = color; ctx.strokeStyle = '#0b1119'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
   ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size * 0.72, size * 0.8); ctx.lineTo(0, size * 0.35); ctx.lineTo(-size * 0.72, size * 0.8); ctx.closePath();
@@ -143,7 +168,7 @@ export class BigMap {
   private readonly root = $('map');
   isOpen = false;
 
-  constructor(private readonly game: Game, private readonly onPick: (p: Poi) => void) {}
+  constructor(private readonly game: Game, private readonly onPick: (p: Poi) => void, private readonly hooks: MapHooks = {}) {}
 
   toggle(px: number, pz: number, heading: number, dest: { x: number; z: number; label?: string } | null = null): void {
     if (this.isOpen) this.close(); else this.open(px, pz, heading, dest);
@@ -208,18 +233,46 @@ export class BigMap {
       b.append(el('i', { attrs: { style: `background:${p.color}` } }), el('span', { text: label }), el('small', { text: `${num(dist(p))} m` }));
       return b;
     };
+    // Taxi : prix fixe, trajet de quelques minutes de jeu selon la distance ; indisponible en véhicule.
+    const taxi = this.hooks.taxi;
+    const why = taxi?.unavailable() ?? null;
+    const taxiBtn = (p: Poi, label: string, wide = false): HTMLButtonElement | null => {
+      if (!taxi || dist(p) < TAXI_MIN_DIST) return null;
+      const min = taxi.minutes(dist(p));
+      const b = button('', () => { this.close(); taxi.go(p); }, wide ? 'small primary has-ico map-taxi-go' : 'legend-taxi');
+      b.append(taxiIcon(), el('span', { text: wide ? `Taxi · ${taxi.fare} CHF` : `${taxi.fare}` }));
+      if (wide) b.append(el('small', { text: `≈ ${min} min` }));
+      b.title = why ?? `Taxi jusqu’à ${label} : ${taxi.fare} CHF, environ ${min} min de trajet (le temps passe).`;
+      b.setAttribute('aria-label', b.title);
+      if (why) b.disabled = true;
+      return b;
+    };
+    const placeRow = (p: Poi, label = p.label): HTMLElement => {
+      const t = taxiBtn(p, label);
+      return t ? el('div', { cls: 'legend-row' }, placeBtn(p, label), t) : placeBtn(p, label);
+    };
+    // Destination en cours (« Voir sur la carte », clic précédent) : distance, à pied (balise) ou en taxi.
+    const destPoi = dest ? list.find((p) => Math.hypot(p.b.doorX - dest.x, p.b.doorZ - dest.z) < 1.5) ?? null : null;
+    const destCard = dest ? el('div', { cls: 'map-dest' },
+      el('div', { cls: 'md-top' }, el('i'), el('span', { text: 'Destination' }), el('small', { text: `${num(Math.hypot(dest.x - px, dest.z - pz))} m` })),
+      el('b', { cls: 'md-name', text: dest.label ?? destPoi?.label ?? 'Lieu choisi' }),
+      el('div', { cls: 'md-actions' },
+        button('Y aller à pied', () => this.close(), 'small'),
+        destPoi ? taxiBtn(destPoi, dest.label ?? destPoi.label, true) : null,
+        this.hooks.clearDest ? button('Effacer', () => { this.hooks.clearDest!(); this.close(); }, 'small md-clear') : null)) : null;
     const nearest = (f: (p: Poi) => boolean): Poi | undefined => list.filter(f).sort((a, b) => dist(a) - dist(b))[0];
     const mine = list.filter((p) => p.kind === 'myhome' || p.kind === 'shop');
     const free = list.filter((p) => p.kind === 'free');
     const freeNear = nearest((p) => p.kind === 'free');
     const count = (k: Poi['kind']): number => list.filter((p) => p.kind === k).length;
     const legend = el('div', { cls: 'map-legend' },
+      destCard,
       el('div', { cls: 'sec', text: 'Services' }),
-      ...SERVICES.filter((sv, k, a) => a.findIndex((x) => x.id === sv.id) === k).map((sv) => { const p = nearest((x) => x.b.service === sv.id); return p ? placeBtn(p, sv.nameFr) : null; }),
+      ...SERVICES.filter((sv, k, a) => a.findIndex((x) => x.id === sv.id) === k).map((sv) => { const p = nearest((x) => x.b.service === sv.id); return p ? placeRow(p, sv.nameFr) : null; }),
       el('div', { cls: 'sec', text: 'Mes lieux' }),
-      ...(mine.length ? mine.map((p) => placeBtn(p)) : [el('p', { cls: 'muted small', text: 'Aucun pour l’instant.' })]),
+      ...(mine.length ? mine.map((p) => placeRow(p)) : [el('p', { cls: 'muted small', text: 'Aucun pour l’instant.' })]),
       el('div', { cls: 'sec', text: `Locaux libres · ${free.length}` }),
-      freeNear ? placeBtn(freeNear, 'Le plus proche') : el('p', { cls: 'muted small', text: 'Aucun local libre.' }),
+      freeNear ? placeRow(freeNear, 'Le plus proche') : el('p', { cls: 'muted small', text: 'Aucun local libre.' }),
       el('div', { cls: 'sec', text: 'Légende' }),
       el('div', { cls: 'leg-grid' },
         ...([[COL.shop, 'Mes commerces', count('shop')], [COL.free, 'Locaux libres', count('free')], [COL.rival, 'Concurrents indépendants', list.filter((p) => p.kind === 'rival' && p.color === COL.rival).length],
@@ -227,7 +280,7 @@ export class BigMap {
           .map(([c, t, n]) => el('div', { cls: 'leg' }, el('i', { attrs: { style: `background:${c}` } }), el('span', { text: t }), n !== null ? el('b', { text: String(n) }) : null))));
     const head = el('div', { cls: 'map-head' },
       el('div', {}, el('div', { cls: 'kicker', text: 'Plan du quartier' }), el('h3', { text: dest?.label ? `Destination : ${dest.label}` : 'Où aller ?' })),
-      el('span', { cls: 'map-hint' }, icon('pin'), 'Cliquez un bâtiment pour y placer une destination'),
+      el('span', { cls: 'map-hint' }, icon('pin'), this.hooks.taxi ? 'Cliquez un bâtiment pour y placer une destination · taxi depuis la liste' : 'Cliquez un bâtiment pour y placer une destination'),
       button('×', () => this.close(), 'icon-x'));
     head.querySelector('.icon-x')?.setAttribute('aria-label', 'Fermer la carte (M)');
     this.root.replaceChildren(el('div', { cls: 'map-box' }, head, el('div', { cls: 'map-main' }, el('div', { cls: 'map-canvas' }, cv, tip), legend)));

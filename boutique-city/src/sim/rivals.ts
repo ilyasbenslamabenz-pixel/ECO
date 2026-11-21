@@ -102,8 +102,8 @@ export class Rivalry {
 
   /** Début de partie (ou sauvegarde sans rivaux) : entreprises tirées de la graine, reprise des commerces existants. */
   init(save?: RivalSave): void {
-    // Sauvegarde d'avant le premier coup scénarisé, déjà au-delà de ses jours : il n'aura pas lieu.
-    this.strike = save?.strike !== undefined ? structuredClone(save.strike) : this.game.day > RIVALS.strikeDays[1] ? null : undefined;
+    // Premier coup scénarisé : joué, abandonné (null) ou à venir (absent ; au-delà de RIVALS.strikeLastDay, abandonné).
+    this.strike = save?.strike !== undefined ? structuredClone(save.strike) : undefined;
     if (save) {
       this.cos = structuredClone(save.cos);
       this.shops = structuredClone(save.shops);
@@ -275,7 +275,8 @@ export class Rivalry {
     }
     for (const co of this.active) co.cash = Math.round(co.cash - RIVALS.overhead - RIVALS.overheadPerShop * this.shopsOf(co.id).length);
     if (day < RIVALS.startDay) return;
-    let opened = false;
+    // Premier coup marquant (scénarisé) : il remplace l'ouverture ordinaire de la nuit.
+    let opened = this.firstStrike(day, new Rng(((g.seed ^ 0x3c6ef372) + day * 0x85ebca6b) >>> 0));
     for (const co of this.active) {
       const mine = this.shopsOf(co.id);
       // Réputation et prix : la réputation tend vers celle de l'enseigne (un peu plus haut avec des prix bas) ;
@@ -319,6 +320,72 @@ export class Rivalry {
       }
     }
     this.host.bump();
+  }
+
+  /** Jour (indice, 0 = premier jour) du premier coup marquant : tiré de la graine dans RIVALS.strikeDays (jours 11 à 13). */
+  get strikeDay(): number {
+    const [a, b] = RIVALS.strikeDays;
+    return a + new Rng((this.game.seed ^ 0x1b873593) >>> 0).int(0, b - a);
+  }
+
+  /**
+   * Premier coup marquant, une seule fois : dès le jour du coup, quand le joueur a un commerce ouvert depuis au moins
+   * RIVALS.strikeMinAge jours, l'enseigne la plus riche qui tient ce type ouvre un commerce du même type à environ
+   * RIVALS.strikeDist m de son commerce le plus rentable (local libre ; sinon elle reprend un indépendant voisin), avec
+   * une offre d'ouverture (promotion de RIVALS.strikePromo jours). Alerte chiffrée ; impact suivi par le récapitulatif.
+   */
+  private firstStrike(day: number, rng: Rng): boolean {
+    if (this.strike !== undefined || day < this.strikeDay) return false;
+    // Aucun commerce prêt à temps (ou ancienne sauvegarde déjà plus loin) : le coup n'a pas lieu.
+    if (day > RIVALS.strikeLastDay) { this.strike = null; return false; }
+    const g = this.game;
+    // Le plus rentable : résultat moyen des trois derniers jours (marge − salaires − loyer).
+    const ranked = g.shops.filter((s) => s.history.length >= RIVALS.strikeMinAge && s.history.some((d) => d.customers > 0))
+      .map((s) => ({ s, v: avg(s.history.slice(-3).map((d) => d.revenue - d.costOfSales - d.wages - d.rent)) }))
+      .sort((a, b) => b.v - a.v || a.s.id - b.s.id);
+    const target = ranked[0]?.s;
+    if (!target) return false;
+    if (!this.active.length) { this.strike = null; return false; }
+    const co = [...this.active].sort((a, b) => Number(b.types.includes(target.type)) - Number(a.types.includes(target.type)) || b.cash - a.cash || a.id.localeCompare(b.id))[0]!;
+    const tp = g.premise(target.premiseId)!, spot = this.strikeSpot(tp, rng);
+    if (!spot) { this.strike = null; return false; }
+    const name = `${typeName(target.type)} ${co.brand}`;
+    let rs = spot.takeover;
+    if (rs) Object.assign(rs, { co: co.id, type: target.type, name, reputation: co.reputation, price: 1, opened: day, loss: 0, revenue: [], profit: [] });
+    else { rs = { premiseId: spot.premise.id, co: co.id, type: target.type, name, reputation: co.reputation, price: 1, promo: 0, opened: day, loss: 0, customers: 0, revenue: [], profit: [] }; this.shops.push(rs); }
+    rs.promo = RIVALS.strikePromo;
+    rs.target = target.id;
+    if (!co.types.includes(target.type)) co.types.push(target.type);
+    // Ses investisseurs suivent : l'enseigne paie l'ouverture sans tomber sous RIVALS.strikeCashFloor.
+    co.cash = Math.max(RIVALS.strikeCashFloor, co.cash - RIVALS.openCost);
+    this.apply();
+    rs.customers = this.estimate(rs).customers;
+    this.strike = { day, premiseId: rs.premiseId, shopId: target.id, co: co.id };
+    const d = Math.round(dist(spot.premise, tp)), im = this.impact(target, rs);
+    const loss = im.customers >= 1 ? `environ ${im.customers} client${im.customers > 1 ? 's' : ''} de moins par jour (−${Math.round(im.share * 100)} %)` : `environ ${Math.round(im.share * 100)} % de clients en moins`;
+    g.notify('warn', `Coup dur : ${co.name} ${spot.takeover ? 'reprend le commerce voisin et ouvre' : 'ouvre'} ${rs.name} à ${d} m de ${target.name}, votre commerce le plus rentable, avec −${Math.round(RIVALS.promoDiscount * 100)} % pendant ${RIVALS.strikePromo} jours. Attendez-vous à ${loss}. Ripostez : prix, stock, propreté, publicité… ou rachetez-le (téléphone › Concurrence).`);
+    return true;
+  }
+
+  /**
+   * Local du premier coup : un local libre à moins de RIVALS.nearRadius m du commerce visé, le plus proche de
+   * RIVALS.strikeDist m (petit écart tiré au sort), en laissant assez de locaux libres au joueur ; sinon un commerce
+   * indépendant voisin (repris par l'enseigne) ; sinon null.
+   */
+  private strikeSpot(tp: Premise, rng: Rng): { premise: Premise; takeover: RivalShop | null } | null {
+    const g = this.game, here = g.player.place;
+    const pick = <T>(list: { item: T; d: number }[]): T | null => {
+      const scored = list.map((x) => ({ item: x.item, score: Math.abs(x.d - RIVALS.strikeDist) + rng.next() * 25 }));
+      return scored.sort((a, b) => a.score - b.score)[0]?.item ?? null;
+    };
+    const free = g.district.premises.filter((p) => g.isFree(p) && !(here.kind === 'local' && here.premiseId === p.id));
+    if (free.length > RIVALS.minFreeLeft + 1) {
+      const p = pick(free.map((item) => ({ item, d: dist(item, tp) })).filter((x) => x.d > 0 && x.d < RIVALS.nearRadius));
+      if (p) return { premise: p, takeover: null };
+    }
+    const ind = pick(this.shops.filter((rs) => !rs.co).map((item) => ({ item, d: dist(g.premise(item.premiseId) ?? tp, tp) })).filter((x) => x.d > 0 && x.d < RIVALS.nearRadius));
+    const p = ind ? g.premise(ind.premiseId) : undefined;
+    return ind && p ? { premise: p, takeover: ind } : null;
   }
 
   /** Commerce du joueur du même type le plus proche (dans RIVALS.nearRadius), ou null. */

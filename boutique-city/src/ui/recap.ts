@@ -5,14 +5,58 @@
  */
 import { WEEKDAYS_FR } from '../sim/clock';
 import { FINANCE, RESCUE, taxBracketsText } from '../sim/catalog';
-import { STOP_FR, dayProfit, type DayStats, type Game } from '../sim/game';
+import { STOP_FR, dayProfit, operatingResult, type DayStats, type Game } from '../sim/game';
+import { recapTips } from './recap-tips';
 import { netWorth } from '../sim/objectives';
-import { button, chf, el, num, signed } from './dom';
+import { button, chf, el, icon, num, signed } from './dom';
+import { sound } from './sound';
 
 type Tone = 'ok' | 'bad' | 'warn' | '';
 
 function kpi(label: string, value: string, tone: Tone = '', sub: HTMLElement | string | null = null): HTMLElement {
   return el('div', { cls: 'kpi rc-kpi' }, el('span', { text: label }), el('b', { cls: tone, text: value }), typeof sub === 'string' ? el('small', { text: sub }) : sub);
+}
+
+/* ------------------------------ Présentation animée du récapitulatif ------------------------------ */
+
+const REDUCED = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Compteur qui défile de 0 à `to` (format `fmt`) en `ms` après `delay` ms, ralentissant à la fin. La valeur finale
+ * est gardée dans data-final et affichée d'emblée si les animations sont réduites.
+ */
+function roll(e: HTMLElement, to: number, fmt: (v: number) => string, delay = 0, ms = 950): HTMLElement {
+  e.dataset['final'] = fmt(to);
+  if (REDUCED || Math.abs(to) < 1) { e.textContent = fmt(to); return e; }
+  e.textContent = fmt(0);
+  const t0 = performance.now() + delay;
+  const step = (now: number): void => {
+    if (!e.isConnected && now > t0 + 50) return;
+    const a = Math.min(1, Math.max(0, (now - t0) / ms));
+    e.textContent = a >= 1 ? fmt(to) : fmt(to * (1 - (1 - a) ** 3));
+    if (a < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  return e;
+}
+
+/** Dépôts de garantie versés le jour `day` (locaux et entrepôts loués ce jour-là) : investis, rendus en fin de bail. */
+function depositsOn(g: Game, day: number): number {
+  const shops = g.shops.filter((s) => s.leaseDay === day).reduce((a, s) => a + (s.deposit ?? 0), 0);
+  const stores = (g.logi?.warehouses ?? []).filter((w) => w.leaseDay === day).reduce((a, w) => a + (w.deposit ?? 0), 0);
+  return shops + stores;
+}
+
+/** Bandeaux de célébration du soir : premier jour rentable, record de ventes, progression sur la veille. */
+function cheers(g: Game, y: DayStats, prev: DayStats | undefined): { title: string; sub: string }[] {
+  const out: { title: string; sub: string }[] = [];
+  const before = g.ledger.slice(0, -1);
+  const op = operatingResult(y);
+  if (op > 0 && y.revenue > 0 && g.ledger.length < 120 && !before.some((d) => operatingResult(d) > 0)) out.push({ title: 'Premier jour rentable !', sub: `Votre activité a rapporté ${signed(op)} aujourd’hui.` });
+  const best = Math.max(0, ...before.map((d) => d.revenue));
+  if (y.revenue > 0 && best > 0 && y.revenue > best) out.push({ title: 'Record de ventes', sub: `${chf(y.revenue)} vendus, contre ${chf(best)} au mieux jusqu’ici.` });
+  if (prev && prev.revenue > 0 && y.revenue >= prev.revenue * 1.01) out.push({ title: `+${Math.round((y.revenue / prev.revenue - 1) * 100)} % par rapport à hier`, sub: `Ventes : ${chf(y.revenue)}, hier ${chf(prev.revenue)}.` });
+  return out;
 }
 
 /**
@@ -57,18 +101,7 @@ export function showRecap(g: Game, onClose: () => void, onRescue?: () => void): 
   const profit = dayProfit(y);
   const margin = y.revenue - y.costOfSales;
   const lost = y.lostStaff + y.lostStock + y.lostCapacity;
-  const tips: string[] = [];
-  if (y.lostStaff > 0) tips.push(`${y.lostStaff} clients repartis faute de caissier : embauchez ou tenez la caisse.`);
-  if (y.lostStock > 0) tips.push(`${y.lostStock} clients sans les produits voulus : réassortez (réassort automatique conseillé).`);
-  if (y.refusedPrice > 0) tips.push(`${y.refusedPrice} articles reposés car trop chers : rapprochez vos prix de ceux du quartier.`);
-  if (y.lostCapacity > 0) tips.push(`${y.lostCapacity} clients lassés d’attendre : une caisse et un caissier de plus aux heures d’affluence.`);
-  // Prix restés au-dessus du quartier (les concurrents ont baissé les leurs) : conseil « Aligner ».
-  for (const t of [...new Set(g.shops.map((s) => s.type))]) {
-    const gap = g.priceGap(t);
-    if (gap >= 0.03) tips.push(`Vos prix (${g.shops.find((s) => s.type === t)!.name}${g.batchShops(t).length > 1 ? ' et les autres du même type' : ''}) sont ${Math.round(gap * 100)} % au-dessus du quartier : « Aligner » dans le téléphone (Commerces) les ramène au prix du quartier.`);
-  }
-  if (!tips.length && y.customers > 0) tips.push('Aucun client perdu : la journée s’est bien passée. Pensez à agrandir ou à ouvrir un deuxième commerce.');
-  if (!tips.length && !g.shops.length) tips.push('Pas encore de commerce : louez un local (anneau jaune devant les locaux libres, carte : touche M).');
+  const tips = recapTips(g, y);
   const trend = prev ? y.revenue - prev.revenue : null;
   // Impôt : prélevé ce soir (semaine écoulée) ou provision de la semaine en cours (barème progressif, pertes reportées).
   const taxRec = (y.tax ?? 0) > 0 ? g.taxes.at(-1) : undefined;
@@ -85,12 +118,27 @@ export function showRecap(g: Game, onClose: () => void, onRescue?: () => void): 
       el('div', { cls: 'rc-losslist' }, ...causes.map(([label, n, c]) => el('div', { cls: n ? '' : 'zero' }, el('i', { attrs: { style: `background:${c}` } }), el('span', { text: label }), el('b', { text: num(n) })))))
     : el('p', { cls: 'rc-none', text: 'Aucun client perdu.' });
 
-  const pnl = ([
+  // Exploitation (ce que rapporte l'activité) séparée des investissements (mobilier, revêtements, véhicules, dépôts de
+  // garantie, marchandise mise en stock) : le premier jour, tout l'équipement acheté ne passe plus pour une perte.
+  const op = operatingResult(y);
+  const deposits = depositsOn(g, y.day);
+  const invest = y.equipment + deposits;
+  const stocked = y.purchases - y.costOfSales;
+  const solde = profit - deposits;
+  const interest = y.finance - (y.principal ?? 0);
+  const pnlOp = ([
     ['Ventes', y.revenue, 1], ['Loyers encaissés (sous-locations)', y.rentalIncome ?? 0, 1],
-    ['Achats de marchandise', y.purchases, -1], ['Salaires', y.wages, -1], ['Loyer (provision du jour)', y.rent, -1],
-    ['Équipement et mobilier', y.equipment, -1], ['Publicité', y.marketing, -1], ['Prêts et intérêts du découvert', y.finance, -1],
-    ['Vie courante (logement, repas, assurances)', y.living, -1], [`Frais de siège (au-delà de ${FINANCE.hqFreeShops} commerces)`, y.overhead ?? 0, -1], ['Impôt sur le bénéfice (semaine)', y.tax ?? 0, -1],
-  ] as [string, number, number][]).filter(([label, v]) => v > 0 || label === 'Ventes');
+    ['Coût des marchandises vendues', y.costOfSales, -1], ['Salaires', y.wages, -1], ['Loyer (provision du jour)', y.rent, -1],
+    ['Publicité', y.marketing, -1], ['Intérêts (prêts, découvert)', interest, -1],
+    ['Vie courante (logement, repas, assurances)', y.living, -1], [`Frais de siège (au-delà de ${FINANCE.hqFreeShops} commerces)`, y.overhead ?? 0, -1],
+  ] as [string, number, number][]).filter(([label, v]) => v > 0.004 || label === 'Ventes');
+  const pnlInv = ([
+    ['Équipement : mobilier, revêtements, véhicules', y.equipment, -1], ['Dépôts de garantie (rendus en fin de bail)', deposits, -1],
+    stocked >= 0 ? ['Marchandise mise en stock (pas encore vendue)', stocked, -1] : ['Stock acheté avant et vendu ce jour', -stocked, 1],
+    ['Capital des prêts remboursé', y.principal ?? 0, -1], ['Impôt sur le bénéfice (semaine)', y.tax ?? 0, -1],
+  ] as [string, number, number][]).filter(([, v]) => v > 0.004);
+  const line = ([label, v, k]: [string, number, number]): HTMLElement => el('tr', {}, el('td', { text: label }), el('td', { cls: k > 0 ? 'num ok' : 'num bad', text: `${k > 0 ? '+' : '−'} ${chf(v)}` }));
+  const party = cheers(g, y, prev);
 
   let closed = false;
   // Plan de redressement dû ce soir : il s'ouvre à la fermeture du récapitulatif.
@@ -100,12 +148,18 @@ export function showRecap(g: Game, onClose: () => void, onRescue?: () => void): 
     el('div', { cls: 'confirm-card recap-card' },
       el('div', { cls: 'rc-head' },
         el('div', {}, el('div', { cls: 'kicker', text: `Fin de journée · ${WEEKDAYS_FR[y.day % 7]}` }), el('h2', { text: `Récapitulatif du jour ${y.day + 1}` })),
-        el('div', { cls: `rc-result ${profit >= 0 ? 'ok' : 'bad'}` }, el('span', { text: 'Résultat du jour' }), el('b', { text: signed(profit) }))),
+        // Résultat d'exploitation en grand (compteur qui défile) ; investissements du jour à part, en neutre.
+        el('div', { cls: `rc-result ${op >= 0 ? 'ok' : 'bad'}`, attrs: { title: 'Ventes moins coût des articles vendus et charges du jour (hors investissements)' } },
+          el('span', { text: 'Résultat d’exploitation' }), roll(el('b'), op, signed, 150, 1100),
+          invest >= 1 ? el('small', { cls: 'rc-invest', attrs: { title: 'Mobilier, revêtements, véhicules et dépôts de garantie : ils servent plusieurs jours.' } }, 'Investissements : ', roll(el('em'), -invest, signed, 350)) : null)),
+      party.length ? el('div', { cls: 'rc-cheers' }, ...party.map((c, k) => el('div', { cls: 'rc-cheer', attrs: { style: `--d:${(REDUCED ? 0 : 1.05 + k * 0.2).toFixed(2)}s` } },
+        el('span', { cls: 'rc-cheer-ico' }, icon(c.title.startsWith('Premier') ? 'coin' : c.title.startsWith('Record') ? 'trophy' : 'chart')),
+        el('div', {}, el('b', { text: c.title }), el('span', { text: c.sub }))))) : null,
       el('div', { cls: 'kpis rc-kpis' },
-        kpi('Clients servis', num(y.customers), '', lost ? `${num(lost)} perdu(s)` : 'aucun perdu'),
-        kpi('Ventes', chf(y.revenue), '', trend !== null ? el('small', { cls: trend >= 0 ? 'ok' : 'bad', text: `${trend >= 0 ? '▲' : '▼'} ${signed(trend)} vs veille` }) : 'premier jour'),
-        kpi('Marge brute', chf(margin), '', y.revenue > 0 ? `${Math.round((margin / y.revenue) * 100)} % des ventes` : null),
-        kpi('Trésorerie', chf(g.cash), g.cash >= 0 ? '' : 'bad', g.debt > 0 ? `dette ${chf(g.debt)}` : 'sans dette')),
+        rollKpi(kpi('Clients servis', num(y.customers), '', lost ? `${num(lost)} perdu(s)` : 'aucun perdu'), y.customers, num, 250),
+        rollKpi(kpi('Ventes', chf(y.revenue), '', trend !== null ? el('small', { cls: trend >= 0 ? 'ok' : 'bad', text: `${trend >= 0 ? '▲' : '▼'} ${signed(trend)} vs veille` }) : 'premier jour'), y.revenue, chf, 350),
+        rollKpi(kpi('Marge brute', chf(margin), '', y.revenue > 0 ? `${Math.round((margin / y.revenue) * 100)} % des ventes` : null), margin, chf, 450),
+        rollKpi(kpi('Trésorerie', chf(g.cash), g.cash >= 0 ? '' : 'bad', g.debt > 0 ? `dette ${chf(g.debt)}` : 'sans dette'), g.cash, chf, 550)),
       rescueBlock(g, onRescue ? () => { close(); if (!planDue) onRescue(); } : undefined),
       rows.length ? el('div', { cls: 'sec', text: 'Par commerce' }) : null,
       rows.length ? el('table', { cls: 'tbl rc-shops' },
@@ -114,8 +168,14 @@ export function showRecap(g: Game, onClose: () => void, onRescue?: () => void): 
       el('div', { cls: 'rc-cols' },
         el('div', { cls: 'rc-col' },
           el('div', { cls: 'sec', text: 'Compte de résultat du jour' }),
-          el('table', { cls: 'tbl pnl' }, ...pnl.map(([label, v, k]) => el('tr', {}, el('td', { text: label }), el('td', { cls: k > 0 ? 'num ok' : 'num bad', text: `${k > 0 ? '+' : '−'} ${chf(v)}` }))),
-            el('tr', { cls: 'total' }, el('td', { text: 'Résultat' }), el('td', { cls: profit >= 0 ? 'num ok' : 'num bad', text: signed(profit) }))),
+          el('table', { cls: 'tbl pnl' },
+            el('tr', { cls: 'grp' }, el('td', { attrs: { colspan: '2' }, text: 'Exploitation' })),
+            ...pnlOp.map(line),
+            el('tr', { cls: 'total sub' }, el('td', { text: 'Résultat d’exploitation' }), el('td', { cls: op >= 0 ? 'num ok' : 'num bad', text: signed(op) })),
+            pnlInv.length ? el('tr', { cls: 'grp' }, el('td', { attrs: { colspan: '2' }, text: 'Investissements et autres sorties' })) : null,
+            ...pnlInv.map(line),
+            el('tr', { cls: 'total' }, el('td', { text: 'Solde du jour' }), el('td', { cls: solde >= 0 ? 'num ok' : 'num bad', text: signed(solde) }))),
+          el('p', { cls: 'rc-foot', text: 'Exploitation : ce que rapporte l’activité du jour. Investissements : ce qui sert plusieurs jours (meubles, revêtements, véhicules, dépôts, stock d’avance).' }),
           el('p', { cls: 'rc-foot', text: 'Le loyer des locaux est provisionné chaque jour et prélevé une fois par mois (30 jours après la signature).' }),
           g.shops.length ? el('p', { cls: 'rc-foot', text: taxNote }) : null),
         el('div', { cls: 'rc-col' },
@@ -130,7 +190,16 @@ export function showRecap(g: Game, onClose: () => void, onRescue?: () => void): 
   wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); close(); } });
   document.body.append(wrap);
   wrap.querySelector<HTMLButtonElement>('.rc-actions button.primary')?.focus();
+  // Fanfare quand les bandeaux de célébration apparaissent ; simple note joyeuse pour une journée rentable.
+  if (party.length) setTimeout(() => { if (!closed) sound.celebrate(); }, REDUCED ? 0 : 1000);
+  else if (op > 0) setTimeout(() => { if (!closed) sound.notify('ok'); }, REDUCED ? 0 : 800);
   return wrap;
+}
+
+/** KPI du récapitulatif dont la valeur défile (voir roll). */
+function rollKpi(k: HTMLElement, to: number, fmt: (v: number) => string, delay: number): HTMLElement {
+  roll(k.querySelector('b')!, to, fmt, delay);
+  return k;
 }
 
 /**

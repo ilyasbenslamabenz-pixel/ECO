@@ -714,10 +714,14 @@ export const RIVALS = {
    * Premier coup marquant (scénarisé) : un jour tiré de la graine dans `strikeDays` (jours 11 à 13), une enseigne ouvre
    * un commerce du même type à environ `strikeDist` m du commerce le plus rentable du joueur (ouvert depuis au moins
    * `strikeMinAge` jours), avec une offre d'ouverture de `strikePromo` jours ; l'enseigne garde au moins
-   * `strikeCashFloor` CHF de trésorerie (ses investisseurs suivent).
+   * `strikeCashFloor` CHF de trésorerie (ses investisseurs suivent). Sans commerce prêt avant le jour
+   * `strikeLastDay` + 1, il n'a pas lieu.
    */
   strikeDays: [10, 12] as const,
-  strikeDist: 120,
+  strikeLastDay: 30,
+  // Distance calibrée : assez près pour se sentir (−4 à −8 % de clients), sans fausser l'équilibre des types (plus près,
+  // les types à faible marge, primeur et fleuriste, y perdent la moitié de leur bénéfice).
+  strikeDist: 200,
   strikeMinAge: 3,
   strikePromo: 3,
   strikeCashFloor: 2_000,

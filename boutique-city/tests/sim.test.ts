@@ -206,8 +206,17 @@ test('personnage : faim, fatigue, repas, sommeil, évanouissement', () => {
   g.advance(5 * 60 - 6);
   assert.equal(g.player.sleeping, false, 'réveillé une fois reposé');
   assert.ok(g.player.energy > 99, `énergie ${g.player.energy}`);
-  // Évanouissement : énergie à zéro, retour au logement payé.
+  // Premier jour : à zéro d'énergie, pas d'évanouissement (le personnage tient debout, au ralenti).
   g.setPlace({ kind: 'rue' });
+  g.player.energy = 0.01;
+  const cash0 = g.cash;
+  g.advance(1);
+  assert.ok(!g.player.sleeping && !g.player.teleportHome && g.player.energy === 0, 'pas d’évanouissement le premier jour');
+  assert.equal(g.cash, cash0);
+  // Ensuite, évanouissement : énergie à zéro, retour au logement payé.
+  g.advance(1440 - (g.total % 1440) + 60);
+  assert.ok(g.day >= 1);
+  g.player.sleeping = false; g.player.teleportHome = false; g.setPlace({ kind: 'rue' });
   g.player.energy = 0.01;
   const cash = g.cash;
   g.advance(1);

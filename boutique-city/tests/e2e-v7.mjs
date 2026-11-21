@@ -468,6 +468,7 @@ try {
   const bank0 = await ev(() => { const g = window.__bc.game; return { limit: g.creditLimit().limit, chf: window.__qa.chf(g.creditLimit().limit), base: g.taxEstimate().base, debt: g.debt }; });
   check(await kpiPlafond() === bank0.chf, 'banque : plafond de crédit affiché au guichet', `${await kpiPlafond()} (partie : ${bank0.chf})`);
   await tap('#panel .item button', 'Emprunter'); // 1re offre affichée : 10 000 CHF
+  await tap('.confirm button', 'Emprunter'); // le prêt demande une confirmation (échéances, intérêts)
   await page.waitForTimeout(300);
   const offers = await ev(() => [...document.querySelectorAll('#panel .item')].filter((i) => i.querySelector('button')?.textContent === 'Emprunter').map((i) => i.querySelector('b').textContent));
   const loan1 = await ev(() => { const g = window.__bc.game; return { n: g.loans.length, debt: g.debt, limit: g.creditLimit().limit, base: g.taxEstimate().base }; });
@@ -478,6 +479,9 @@ try {
   let refused = null;
   for (let k = 0; k < 4 && !refused; k++) {
     await ev(() => { const it = [...document.querySelectorAll('#panel .item')].filter((i) => i.querySelector('button')?.textContent === 'Emprunter').at(-1); it.querySelector('button').click(); });
+    // Sous le plafond, le prêt demande une confirmation ; au-delà, la banque refuse tout de suite (pas de boîte).
+    await page.waitForTimeout(150);
+    await ev(() => [...document.querySelectorAll('.confirm button')].find((b) => b.textContent === 'Emprunter')?.click());
     await page.waitForTimeout(300);
     refused = (await ev((m) => window.__qa.toasts(m, 'La banque refuse'), tm))[0] ?? null;
   }

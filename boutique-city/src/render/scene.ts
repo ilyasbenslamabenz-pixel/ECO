@@ -28,7 +28,9 @@ export class Scene3D {
   readonly player = new Humanoid(PLAYER_LOOK);
   readonly collider: Collider;
   private readonly sun: THREE.DirectionalLight;
-  private readonly beacon: THREE.Mesh;
+  /** Balise de destination : colonne lumineuse, doublée d'une colonne pâle dessinée par-dessus les murs. */
+  private readonly beacon = new THREE.Group();
+  private beaconT = 0;
   private readonly raycaster = new THREE.Raycaster();
   interior: { view: InteriorView; agents: InteriorAgents | null } | null = null;
   private readonly hemi = new THREE.HemisphereLight(0xdfeeff, 0x6c6a5a, 1.5);
@@ -154,7 +156,14 @@ export class Scene3D {
     // Auvents et parasols au-dessus du trottoir : la caméra les évite (on marche dessous).
     for (const r of this.view.overheads) this.collider.add(r);
 
-    this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 20, 1, true).translate(0, 30, 0), new THREE.MeshBasicMaterial({ color: 0x5fc3ff, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }));
+    // Balise : colonne normale (cachée par les immeubles) et même colonne en « rayons X » (sans test de profondeur,
+    // plus pâle) : derrière un immeuble, on la voit encore à travers lui. Anneau au sol à la porte.
+    const col = new THREE.CylinderGeometry(1.2, 1.2, 60, 20, 1, true).translate(0, 30, 0);
+    const solid = new THREE.Mesh(col, new THREE.MeshBasicMaterial({ color: 0x5fc3ff, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    const xray = new THREE.Mesh(col, new THREE.MeshBasicMaterial({ color: 0x5fc3ff, transparent: true, opacity: 0.14, depthWrite: false, depthTest: false, side: THREE.DoubleSide, fog: false }));
+    xray.renderOrder = 8;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.25, 1.6, 40).rotateX(-Math.PI / 2).translate(0, 0.22, 0), new THREE.MeshBasicMaterial({ color: 0x5fc3ff, transparent: true, opacity: 0.85, depthWrite: false }));
+    this.beacon.add(solid, xray, ring);
     this.beacon.visible = false;
     this.street.add(this.beacon);
 
@@ -198,8 +207,13 @@ export class Scene3D {
 
   setBeacon(p: { x: number; z: number; color?: string } | null): void {
     this.beacon.visible = !!p;
-    if (p) { this.beacon.position.set(p.x, 0, p.z); (this.beacon.material as THREE.MeshBasicMaterial).color.set(p.color ?? '#5fc3ff'); }
+    if (p) {
+      this.beacon.position.set(p.x, 0, p.z);
+      for (const m of this.beacon.children) ((m as THREE.Mesh).material as THREE.MeshBasicMaterial).color.set(p.color ?? '#5fc3ff');
+    }
   }
+  /** Position de la balise de destination (null : aucune). */
+  get beaconAt(): THREE.Vector3 | null { return this.beacon.visible ? this.beacon.position : null; }
 
   enterInterior(view: InteriorView, agents: InteriorAgents | null): void {
     this.exitInterior();
@@ -295,6 +309,15 @@ export class Scene3D {
     this.people.update(dt);
     this.life.update(dt, focus);
     this.view.updateLabels(this.camera, dt);
+    if (this.beacon.visible) {
+      // Balise qui respire (colonne et anneau au sol).
+      this.beaconT += dt;
+      const k = 0.5 + 0.5 * Math.sin(this.beaconT * 3.2);
+      const [solid, xray, ring] = this.beacon.children as THREE.Mesh[];
+      (solid!.material as THREE.MeshBasicMaterial).opacity = 0.22 + 0.12 * k;
+      (xray!.material as THREE.MeshBasicMaterial).opacity = 0.1 + 0.08 * k;
+      ring!.scale.setScalar(1 + 0.3 * k);
+    }
     if ((this.lampTimer -= dt) <= 0) {
       this.lampTimer = 0.5;
       const near = this.view.lightPoints.map((p) => ({ p, d: p.distanceToSquared(focus) })).sort((a, b) => a.d - b.d).slice(0, this.lamps.length);

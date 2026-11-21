@@ -998,6 +998,23 @@ export class Game {
     if (v) { v.x = x; v.z = z; v.heading = heading; }
   }
   setDriving(id: number | null): void { this.player.driving = id; this.bump(); }
+  /**
+   * Taxi jusqu'à un point de la rue (porte d'un lieu, choisi sur la carte) : course payée comme le taxi de retour
+   * (vie courante), le personnage est déposé à pied et `minutes` de jeu passent pendant le trajet.
+   */
+  taxi(x: number, z: number, heading: number, fare: number, minutes: number): Result<number> {
+    if (this.player.sleeping) return fail('Vous dormez.');
+    if (this.player.driving !== null) return fail('Garez d’abord votre véhicule.');
+    if (this.cash < fare) return fail(`Trésorerie insuffisante (${fare} CHF)`);
+    this.cash -= fare;
+    this.today.living += fare;
+    if (this.player.tending !== null) this.tend(null);
+    this.setPlace({ kind: 'rue' });
+    this.setPlayerPose(x, z, heading);
+    this.advance(Math.max(0, Math.round(minutes)));
+    this.bump();
+    return ok(fare);
+  }
 
   /* ------------------------------ Locaux et aménagement ------------------------------ */
 

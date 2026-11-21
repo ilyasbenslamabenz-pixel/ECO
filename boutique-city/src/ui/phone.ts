@@ -18,7 +18,7 @@ import { OBJECTIVES, TIERS, TIER_BY_ID, activeObjectives, currentTier, netWorth,
 import { askConfirm, button, chf, chf2, el, icon, iconButton, num, pct, signed, type IconName } from './dom';
 import { rescueView, rivalBuyView, rivalPriceText, subletView, type UiCtx } from './dialogs';
 import { RESCUE, taxBracketsText, type ShopType } from '../sim/catalog';
-import { STOP_FR, type NoticeAction } from '../sim/game';
+import { STOP_FR, isAlert, type NoticeAction } from '../sim/game';
 import { RIVALS } from '../sim/catalog';
 import { batchView } from './shop-panel';
 import { logisticsView } from './warehouse-panel';
@@ -104,9 +104,9 @@ export class Phone {
   private readonly veil = el('div', { cls: 'ph-veil hidden' });
   private lastVersion = -1;
   private lastPaint = 0;
-  /** Nombre de messages déjà lus. */
+  /** Numéro (Notice.seq) du dernier message lu : l'historique est plafonné, les numéros, eux, ne reviennent jamais. */
   private seen = 0;
-  /** Messages non lus au moment d'ouvrir l'appli Messages (marqués « nouveau »). */
+  /** Messages plus récents que ce numéro, à l'ouverture de l'appli Messages : marqués « nouveau ». */
   private fresh = 0;
 
   constructor(private readonly ctx: UiCtx, private readonly hooks: PhoneHooks) {
@@ -114,12 +114,12 @@ export class Phone {
     this.root.append(el('div', { cls: 'ph-frame' }, el('div', { cls: 'ph-notch' }), this.status, this.screen, home));
     this.veil.addEventListener('click', () => this.close());
     document.body.append(this.veil, this.root);
-    this.seen = ctx.game.notices.length;
+    this.seen = ctx.game.lastNoticeSeq;
   }
 
   get isOpen(): boolean { return !this.root.classList.contains('hidden'); }
-  /** Messages non lus (pastille sur le bouton du téléphone). */
-  get unread(): number { return Math.max(0, this.ctx.game.notices.length - this.seen); }
+  /** Alertes non lues (avertissements et erreurs, pas les simples informations) : pastille rouge du téléphone. */
+  get unread(): number { return this.ctx.game.notices.filter((n) => n.seq > this.seen && isAlert(n)).length; }
 
   toggle(): void { if (this.isOpen) this.close(); else this.open(); }
   open(app: AppId | null = null): void {
@@ -141,7 +141,7 @@ export class Phone {
     if (app === 'entreprise') { this.close(); this.hooks.openCompany(); return; }
     if (app === 'logistique') { this.close(); this.ctx.panel.open(logisticsView(this.ctx)); return; }
     this.app = app;
-    if (app === 'messages') { this.fresh = this.unread; this.seen = this.ctx.game.notices.length; }
+    if (app === 'messages') { this.fresh = this.seen; this.seen = this.ctx.game.lastNoticeSeq; }
     this.paint(true);
   }
 
@@ -156,7 +156,8 @@ export class Phone {
       if (this.root.querySelector('button:hover, input:hover')) return;
     }
     this.lastVersion = g.version; this.lastPaint = now;
-    if (this.app === 'messages') { this.fresh += this.unread; this.seen = g.notices.length; }
+    // Appli Messages ouverte : tout ce qui arrive est lu (et reste marqué « nouveau » jusqu'à la prochaine ouverture).
+    if (this.app === 'messages') this.seen = g.lastNoticeSeq;
     const c = clockView(g.total);
     this.status.replaceChildren(el('b', { text: hhmm(c.hour, c.minute) }), el('span', { cls: g.cash < 0 ? 'bad' : '', text: chf(g.cash) }));
     const scroll = this.screen.querySelector('.ph-body')?.scrollTop ?? 0;
@@ -577,12 +578,15 @@ export class Phone {
     out.push(sec('Menaces près de vos commerces', threats.length ? `${threats.length}` : undefined));
     if (!threats.length) out.push(empty('flag', 'Aucune menace', g.shops.length ? `Aucun concurrent du même type à moins de ${RIVALS.nearRadius} m de vos commerces.` : 'Ouvrez un commerce : les concurrents du même type à proximité apparaîtront ici.'));
     for (const t of threats.slice(0, 8)) {
-      const q = g.premise(t.rival.premiseId)!, co = rv.co(t.rival.co), loss = rv.promoLoss(t.shop);
+      const q = g.premise(t.rival.premiseId)!, co = rv.co(t.rival.co);
+      // Clients que ce rival vous prend chaque jour (présence et promotion), rapportés aux clients d'hier.
+      const im = rv.impact(t.shop, t.rival), share = Math.round(im.share * 100);
+      const took = im.customers >= 1 ? `−${num(im.customers)} / j` : share >= 1 ? `−${share} %` : 'aucun';
       out.push(card({
-        accent: co?.color ?? '#7d6a8c', title: t.rival.name, sub: `à ${t.dist} m de ${t.shop.name}`,
+        accent: co?.color ?? '#7d6a8c', title: t.rival.name, sub: `à ${t.dist} m de ${t.shop.name}${share >= 1 ? ` · vous prend ${share} % de vos clients` : ''}`,
         right: t.rival.promo > 0 ? pill(`promo ${t.rival.promo} j`, 'bad') : t.rival.opened > 0 && g.day - t.rival.opened < 7 ? pill('nouveau', 'warn') : pill(co ? co.brand : 'indépendant', 'info'),
         body: [el('div', { cls: 'ph-kvs' }, kv('Clients/j', `≈ ${num(t.rival.customers || rv.estimate(t.rival).customers)}`), kv('Prix', rivalPriceText(t.rival.price), t.rival.price < 0.97 ? 'bad' : ''),
-          kv('Vos clients', loss > 0.005 && t.rival.promo > 0 ? `−${Math.round(loss * 100)} %` : '—', loss > 0.005 && t.rival.promo > 0 ? 'bad' : ''))],
+          kv('Vos clients', took, share >= 5 ? 'bad' : share >= 1 ? 'warn' : ''))],
         actions: [this.onMap(q.doorX, q.doorZ, t.rival.name), button('Racheter…', () => { this.close(); this.ctx.panel.open(rivalBuyView(this.ctx, q.id)); }, 'small')],
       }));
     }
@@ -639,7 +643,7 @@ export class Phone {
   private messages(): (Node | null)[] {
     const g = this.ctx.game;
     const all = [...g.notices].reverse();
-    const alerts = all.filter((n) => n.level === 'warn' || n.level === 'error');
+    const alerts = all.filter(isAlert);
     const seg = el('div', { cls: 'ph-seg' }, ...([['tout', 'Tous', all.length], ['alertes', 'Alertes', alerts.length]] as const)
       .map(([id, l, n]) => { const b = button('', () => { this.msgFilter = id; this.paint(true); }, this.msgFilter === id ? 'on' : ''); b.append(el('span', { text: l }), el('i', { text: String(n) })); return b; }));
     const list = (this.msgFilter === 'alertes' ? alerts : all).slice(0, 60);
@@ -651,7 +655,7 @@ export class Phone {
     list.forEach((n) => {
       const d = Math.floor(n.at / 1440);
       if (d !== lastDay) { lastDay = d; out.push(sec(d === today ? 'Aujourd’hui' : d === today - 1 ? 'Hier' : `${cap(WEEKDAYS_FR[d % 7]!)} · jour ${d + 1}`)); }
-      const isNew = all.indexOf(n) < this.fresh;
+      const isNew = n.seq > this.fresh;
       const c = clockView(n.at);
       out.push(el('div', { cls: `ph-msg ${n.level}${isNew ? ' new' : ''}` },
         el('span', { cls: 'ph-msg-ico' }, icon(ic[n.level])),

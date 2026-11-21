@@ -198,6 +198,9 @@ try {
   await page.keyboard.press('Escape');
   await goIn(await service('banque'));
   await panelButton('Emprunter');
+  // Le prêt demande une confirmation (échéances, intérêts) : bouton « Emprunter » de la boîte de dialogue.
+  await page.waitForFunction(() => [...document.querySelectorAll('.confirm button')].some((b) => b.textContent === 'Emprunter'), null, { timeout: 30000 });
+  await ev(() => [...document.querySelectorAll('.confirm button')].find((b) => b.textContent === 'Emprunter').click());
   await page.waitForTimeout(200);
   check(await ev(() => window.__bc.game.loans.length === 1), 'prêt accordé');
   await shot('11-banque');
