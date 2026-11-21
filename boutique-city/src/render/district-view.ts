@@ -723,13 +723,15 @@ function trisOf(m: THREE.InstancedMesh): number {
  * (PITCH m, bords sur l'axe des rues) avec un InstancedMesh par tuile. three écarte alors les tuiles hors du champ
  * de la caméra et de la caméra d'ombre, au lieu de dessiner tout le quartier (et ses ombres) à chaque image : un
  * seul InstancedMesh couvrant le quartier n'est jamais découpé. Les familles légères restent en un seul maillage
- * (un appel de dessin coûte plus que quelques milliers de triangles).
+ * (un appel de dessin par matériau coûte plus que quelques milliers de triangles).
  */
 const TILE_MIN_TRIS = 6000;
 function tiled(ms: THREE.Matrix4[], build: (part: THREE.Matrix4[]) => THREE.InstancedMesh | null, ox: number, oz: number): THREE.InstancedMesh[] {
   const whole = build(ms);
   if (!whole) return [];
-  if (trisOf(whole) < TILE_MIN_TRIS || ms.length < 2) return [whole];
+  // Seuil proportionnel au nombre de matériaux : chaque tuile coûte un appel de dessin par matériau.
+  const groups = Array.isArray(whole.material) ? Math.max(1, whole.geometry.groups.length) : 1;
+  if (trisOf(whole) < TILE_MIN_TRIS * groups || ms.length < 2) return [whole];
   whole.dispose();
   const per = new Map<number, THREE.Matrix4[]>();
   for (const m of ms) {

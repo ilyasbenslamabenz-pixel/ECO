@@ -113,7 +113,8 @@ export class Traffic {
         const k = (CAR_WIDTH[key] ?? 1.9) / sz.x;
         const count = this.cars.filter((c) => keys[c.variant % keys.length] === key).length;
         const mesh = new THREE.InstancedMesh(mg.geo, mg.mat as THREE.Material, Math.max(1, count));
-        mesh.castShadow = true; mesh.frustumCulled = false; mesh.name = `voitures ${key}`;
+        // Découpé hors champ : sphère englobante recalculée à chaque image (quelques voitures par modèle).
+        mesh.castShadow = true; mesh.name = `voitures ${key}`;
         this.kit.push({ mesh, scale: new THREE.Vector3(sz.x * k, sz.y * k, sz.z * k) });
         this.group.add(mesh);
       }
@@ -154,7 +155,7 @@ export class Traffic {
       this.body.setMatrixAt(k, this.m);
       this.top.setMatrixAt(k, this.m);
     });
-    for (const kv of this.kit) kv.mesh.instanceMatrix.needsUpdate = true;
+    for (const kv of this.kit) { kv.mesh.instanceMatrix.needsUpdate = true; kv.mesh.computeBoundingSphere(); }
     this.body.instanceMatrix.needsUpdate = true;
     this.top.instanceMatrix.needsUpdate = true;
     if (this.body.instanceColor) this.body.instanceColor.needsUpdate = true;

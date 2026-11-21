@@ -294,7 +294,13 @@ export class AssetLib {
         geos.push(g.index ? g.toNonIndexed() : g);
         mats.push(Array.isArray(m.material) ? m.material[0]! : m.material);
       });
-      const geo = geos.length === 1 ? geos[0]! : mergeGeometries(geos, true);
+      // Parties partageant le même matériau (souvent toutes : un seul « colormap » par modèle Kenney) fusionnées
+      // en un seul groupe : un appel de dessin par matériau au lieu d'un par partie (carrosserie, roues…).
+      const uniq = [...new Set(mats)];
+      const byMat = uniq.map((mt) => geos.filter((_, i) => mats[i] === mt));
+      const parts = byMat.map((gs) => (gs.length === 1 ? gs[0]! : mergeGeometries(gs, false)));
+      const geo = parts.some((g) => !g) ? null : parts.length === 1 ? parts[0]! : mergeGeometries(parts as THREE.BufferGeometry[], true);
+      mats.splice(0, mats.length, ...uniq);
       if (geo) {
         geo.computeBoundingBox();
         const b = geo.boundingBox!, size = b.getSize(new THREE.Vector3());

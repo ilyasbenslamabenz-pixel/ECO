@@ -36,6 +36,8 @@ export class Scene3D {
   private readonly lamps: THREE.PointLight[] = [];
   private night = 0;
   private lampTimer = 0;
+  /** Shaders « lampes allumées » déjà compilés ? */
+  private lampsWarm = false;
   private readonly daySky = new THREE.Color(0xa9cbe6);
   private readonly duskSky = new THREE.Color(0xe8a070);
   private readonly nightSky = new THREE.Color(0x0e1626);
@@ -93,7 +95,9 @@ export class Scene3D {
   private streetCam = { yaw: 0, pitch: 0, dist: 0 };
 
   constructor(readonly canvas: HTMLCanvasElement, district: District) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    // Anticrénelage multi-échantillon seulement sur les écrans de densité normale : sur un écran haute densité
+    // (pixel ratio ≥ 1,5) le crénelage se voit à peine et le MSAA coûte cher (≈ 25 % de l'image en rendu logiciel).
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: (window.devicePixelRatio || 1) < 1.5, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -107,8 +111,10 @@ export class Scene3D {
       vertexShader: 'varying vec3 vP; void main() { vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main() { float h = clamp(vP.y * 1.6, 0.0, 1.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.7)), 1.0); }',
     });
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1500, 24, 12), this.skyMat);
-    this.sky.renderOrder = -10;
+    // Rayon sous le plan lointain de la caméra (1200 m), sinon le dôme est entièrement découpé. Dessiné après les
+    // objets opaques (test de profondeur) : seuls les pixels de ciel encore libres sont calculés.
+    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), this.skyMat);
+    this.sky.renderOrder = 10;
     this.sky.frustumCulled = false;
     this.street.add(this.sky);
     this.street.fog = new THREE.Fog(0xa9cbe6, 160, 620);
@@ -119,7 +125,7 @@ export class Scene3D {
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    const s = 70;
+    const s = Scene3D.SHADOW_EXTENT;
     Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 10, far: 400 });
     this.sun.shadow.bias = -0.0005; this.sun.shadow.normalBias = 0.4;
     this.street.add(this.sun, this.sun.target);
@@ -137,6 +143,8 @@ export class Scene3D {
     this.street.add(this.player.group);
     this.collider = Collider.fromDistrict(district);
     for (const r of this.view.parkedRects) this.collider.add(r);
+    // Auvents et parasols au-dessus du trottoir : la caméra les évite (on marche dessous).
+    for (const r of this.view.overheads) this.collider.add(r);
 
     this.beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 60, 20, 1, true).translate(0, 30, 0), new THREE.MeshBasicMaterial({ color: 0x5fc3ff, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide }));
     this.beacon.visible = false;
@@ -146,6 +154,18 @@ export class Scene3D {
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
+
+  /** Demi-côté (m) de la zone couverte par la carte d'ombre du soleil, autour du joueur. */
+  private static readonly SHADOW_EXTENT = 70;
+  /** Direction du soleil (vers le sol) et axes de sa carte d'ombre (droite, haut). */
+  private static readonly SUN_DIR = new THREE.Vector3(90, -160, -60);
+  private static readonly SUN_RIGHT = new THREE.Vector3();
+  private static readonly SUN_UP = new THREE.Vector3();
+  static {
+    const m = new THREE.Matrix4().lookAt(new THREE.Vector3(), Scene3D.SUN_DIR, new THREE.Vector3(0, 1, 0));
+    m.extractBasis(Scene3D.SUN_RIGHT, Scene3D.SUN_UP, new THREE.Vector3());
+  }
+  private readonly shadowCenter = new THREE.Vector3();
 
   /** Niveau de qualité : 0 = basse (résolution 1, pas d'ombres), 1 = moyenne, 2 = haute. */
   quality = 2;
@@ -209,16 +229,32 @@ export class Scene3D {
       return;
     }
     this.cam.apply(this.camera, focus, dt, (a, b) => this.collider.clearFraction(a.x, a.y, a.z, b.x, b.y, b.z), snap);
-    this.sun.position.set(focus.x - 90, 160, focus.z + 60);
+    // Carte d'ombre centrée sur le joueur, recalée sur sa grille de texels dans le repère de la lumière (les bords
+    // d'ombre ne scintillent pas quand on marche).
+    const texel = (2 * Scene3D.SHADOW_EXTENT) / this.sun.shadow.mapSize.x;
+    const c = this.shadowCenter.copy(focus).setY(0);
+    const r = c.dot(Scene3D.SUN_RIGHT), u = c.dot(Scene3D.SUN_UP);
+    c.addScaledVector(Scene3D.SUN_RIGHT, Math.round(r / texel) * texel - r)
+      .addScaledVector(Scene3D.SUN_UP, Math.round(u / texel) * texel - u);
+    this.sun.target.position.copy(c);
+    this.sun.position.copy(c).sub(Scene3D.SUN_DIR);
     this.sky.position.set(focus.x, 0, focus.z);
-    this.sun.target.position.set(focus.x, 0, focus.z);
     this.people.update(dt);
     this.life.update(dt, focus);
     this.view.updateLabels(this.camera, dt);
     if ((this.lampTimer -= dt) <= 0) {
       this.lampTimer = 0.5;
       const near = this.view.lightPoints.map((p) => ({ p, d: p.distanceToSquared(focus) })).sort((a, b) => a.d - b.d).slice(0, this.lamps.length);
-      this.lamps.forEach((l, k) => { const n = near[k]; if (n) l.position.copy(n.p).setY(4.6); l.intensity = this.night > 0.3 ? 40 * this.night : 0; });
+      // Lampes éteintes : retirées du rendu (sinon chaque pixel calcule encore trois lumières ponctuelles, ≈ 10 %
+      // de l'image en rendu logiciel). Les deux variantes des shaders sont compilées dès la première image.
+      this.lamps.forEach((l, k) => { const n = near[k]; if (n) l.position.copy(n.p).setY(4.6); l.intensity = 40 * this.night; l.visible = this.night > 0.3; });
+    }
+    if (!this.lampsWarm) {
+      this.lampsWarm = true;
+      const vis = this.lamps.map((l) => l.visible);
+      this.lamps.forEach((l) => { l.visible = true; });
+      this.renderer.compileAsync(this.street, this.camera).catch(() => { /* compilé au premier usage */ });
+      this.lamps.forEach((l, k) => { l.visible = vis[k]!; });
     }
     if (this.rain && this.rainOn) {
       this.rain.position.set(focus.x, 0, focus.z);
