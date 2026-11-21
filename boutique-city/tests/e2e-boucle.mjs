@@ -116,8 +116,9 @@ try {
     await r.locator('input[type=checkbox]').check();
     await page.waitForTimeout(100);
   }
-  const stock = await ev(() => ({ croissants: window.__bc.game.shops[0].products.croissant.stock, commandes: window.__bc.game.orders.length }));
-  check(stock.croissants === 24 && stock.commandes >= 5, '3. stock : 24 croissants en vitrine, commandes livrées demain', JSON.stringify(stock));
+  // Les commandes sont plafonnées à la place libre en rayon : un produit déjà plein (les croissants) n'est pas recommandé.
+  const stock = await ev(() => ({ croissants: window.__bc.game.shops[0].products.croissant.stock, commandes: window.__bc.game.orders.length, croissantsCommandes: window.__bc.game.pendingQty(window.__bc.game.shops[0].id, 'croissant') }));
+  check(stock.croissants === 24 && stock.commandes >= 4, '3. stock : 24 croissants en vitrine, commandes livrées demain', JSON.stringify(stock));
   await page.keyboard.press('Escape');
 
   // 4. Embaucher.
