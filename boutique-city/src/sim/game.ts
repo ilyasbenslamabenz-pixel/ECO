@@ -85,6 +85,9 @@ export interface DayStats {
  * Sous-location : un appartement ou un local pris à bail par le joueur pour le relouer. Le joueur paie `cost` par
  * jour au propriétaire et encaisse `ask` par jour quand un locataire est en place.
  */
+export type Weather = 'soleil' | 'nuages' | 'pluie';
+export const WEATHER_FR: Record<Weather, string> = { soleil: 'Ensoleillé', nuages: 'Nuageux', pluie: 'Pluie' };
+
 export interface Sublet {
   id: number;
   kind: 'logement' | 'local';
@@ -164,6 +167,7 @@ export interface GameSave {
   sublets?: Sublet[];
   market?: Record<string, number>;
   rivals?: Record<string, number>;
+  weather?: Weather;
   nextId: number;
   rng: number[];
 }
@@ -195,6 +199,8 @@ export class Game {
   market: Record<string, number> = {};
   /** Prix pratiqués par les concurrents, par type de commerce (1 = prix habituel ; baisse quand vous leur prenez des clients). */
   rivals: Record<string, number> = {};
+  /** Météo du jour (tirée à minuit). */
+  weather: Weather = 'soleil';
   private rng: Rng;
   private nextId = 1;
   /** Version de l'état (l'interface ne redessine que si elle change). */
@@ -247,6 +253,12 @@ export class Game {
 
   /** Prix de vente de référence d'un produit dans le quartier (prix habituel × prix des concurrents). */
   refPrice(pr: ProductDef): number { return r2(pr.basePrice * (this.rivals[pr.shop] ?? 1)); }
+  /** Effet de la météo sur la fréquentation selon le type de commerce. */
+  weatherFactor(type: ShopType): number {
+    if (this.weather === 'pluie') return type === 'cafe' || type === 'fastfood' ? 1.05 : type === 'fleuriste' || type === 'primeur' ? 0.7 : 0.82;
+    if (this.weather === 'nuages') return 0.96;
+    return type === 'fleuriste' || type === 'primeur' ? 1.08 : 1;
+  }
   /** Indice du grossiste pour un produit (1 = prix catalogue). */
   marketIndex(productId: string): number { return this.market[productId] ?? 1; }
 
@@ -896,7 +908,7 @@ export class Game {
       const t = SHOP_TYPE_BY_ID.get(s.type)!;
       const p = this.premise(s.premiseId)!;
       const weekend = weekday >= 5 ? t.weekend : 1;
-      s.rate = p.footfall * t.hourly[h]! * weekend * t.capture * this.attractiveness(s, st) * (1 + this.marketingBoost(s.id));
+      s.rate = p.footfall * t.hourly[h]! * weekend * this.weatherFactor(s.type) * t.capture * this.attractiveness(s, st) * (1 + this.marketingBoost(s.id));
       s.capacity = this.capacityNow(s);
       if (s.capacity <= 0 && s.rate > 0) {
         if (st.registers === 0) this.warnOnce(s, '__caisse', `${s.name} n'a pas de caisse : aucun client ne peut payer (Aménager).`);
@@ -1034,6 +1046,10 @@ export class Game {
       }
     }
     this.updateMarket();
+    // Météo du lendemain : pluie un jour sur cinq environ, nuages un sur trois.
+    const w = this.rng.next();
+    this.weather = w < 0.2 ? 'pluie' : w < 0.52 ? 'nuages' : 'soleil';
+    if (this.weather === 'pluie') this.notify('info', 'Pluie annoncée aujourd’hui : moins de passants, mais cafés et fast-foods attirent les gens à l’abri.');
     for (const l of this.loans) {
       const pay = Math.min(l.daily, l.remaining);
       this.cash -= pay; this.today.finance += pay;
@@ -1110,7 +1126,7 @@ export class Game {
       v: SAVE_VERSION, seed: this.seed, companyName: this.companyName, total: this.total, cash: this.cash,
       player: structuredClone(this.player), shops: structuredClone(this.shops), employees: structuredClone(this.employees),
       candidates: structuredClone(this.candidates), orders: structuredClone(this.orders), vehicles: structuredClone(this.vehicles),
-      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals },
+      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals }, weather: this.weather,
       nextId: this.nextId, rng: this.rng.state(),
     };
   }
@@ -1131,6 +1147,7 @@ export class Game {
     this.sublets = structuredClone(s.sublets ?? []);
     this.market = { ...(s.market ?? {}) };
     this.rivals = { ...(s.rivals ?? {}) };
+    this.weather = s.weather ?? 'soleil';
     // Sauvegardes antérieures : champs ajoutés depuis.
     for (const d of [...this.ledger, this.today, ...this.shops.flatMap((x) => [x.today, ...x.history])]) { d.refusedPrice ??= 0; d.rentalIncome ??= 0; }
   }

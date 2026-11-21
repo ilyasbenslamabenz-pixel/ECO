@@ -39,6 +39,30 @@ export class Scene3D {
   private readonly daySky = new THREE.Color(0xa9cbe6);
   private readonly duskSky = new THREE.Color(0xe8a070);
   private readonly nightSky = new THREE.Color(0x0e1626);
+  private readonly greySky = new THREE.Color(0x8d98a3);
+  /** Couverture nuageuse 0..1 (1 = pluie) et averse : gouttes autour de la caméra. */
+  private cloud = 0;
+  private rain: THREE.LineSegments | null = null;
+  private rainOn = false;
+
+  /** Météo du jour : soleil, nuages ou pluie (ciel, lumière, brouillard, pluie). */
+  setWeather(w: 'soleil' | 'nuages' | 'pluie'): void {
+    this.cloud = w === 'pluie' ? 1 : w === 'nuages' ? 0.45 : 0;
+    this.rainOn = w === 'pluie';
+    if (this.rainOn && !this.rain) {
+      const n = 2600, pos = new Float32Array(n * 6);
+      for (let i = 0; i < n; i++) {
+        const x = (Math.random() - 0.5) * 70, y = Math.random() * 40, z = (Math.random() - 0.5) * 70;
+        pos.set([x, y, z, x + 0.05, y - 0.7, z], i * 6);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      this.rain = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xc8d6e6, transparent: true, opacity: 0.45 }));
+      this.rain.frustumCulled = false;
+      this.street.add(this.rain);
+    }
+    if (this.rain) this.rain.visible = this.rainOn;
+  }
 
   /**
    * Heure du jour (minutes depuis minuit) : soleil, ciel, brouillard et lumière ambiante suivent le cycle ; la nuit,
@@ -50,10 +74,12 @@ export class Scene3D {
     const day = h < 5.5 || h > 21 ? 0 : h < 7.5 ? (h - 5.5) / 2 : h > 19 ? (21 - h) / 2 : 1;
     const dusk = Math.max(0, 1 - Math.abs(day - 0.45) * 2.2) * (day > 0 && day < 1 ? 1 : 0);
     this.night = 1 - day;
-    this.sun.intensity = 0.15 + 2.45 * day;
+    const wet = this.cloud;
+    this.sun.intensity = (0.15 + 2.45 * day) * (1 - 0.55 * wet);
     this.sun.color.setRGB(1, 0.85 + 0.1 * day, 0.7 + 0.2 * day);
     this.hemi.intensity = 0.35 + 1.15 * day;
-    const sky = this.nightSky.clone().lerp(this.daySky, day).lerp(this.duskSky, dusk * 0.6);
+    const sky = this.nightSky.clone().lerp(this.daySky, day).lerp(this.duskSky, dusk * 0.6).lerp(this.greySky.clone().multiplyScalar(0.25 + 0.75 * day), wet * 0.75);
+    (this.street.fog as THREE.Fog).near = 160 - 110 * wet; (this.street.fog as THREE.Fog).far = 620 - 330 * wet;
     (this.street.background as THREE.Color).copy(sky);
     (this.street.fog as THREE.Fog).color.copy(sky);
     this.renderer.toneMappingExposure = 0.85 + 0.2 * day;
@@ -177,6 +203,13 @@ export class Scene3D {
       this.lampTimer = 0.5;
       const near = this.view.lightPoints.map((p) => ({ p, d: p.distanceToSquared(focus) })).sort((a, b) => a.d - b.d).slice(0, this.lamps.length);
       this.lamps.forEach((l, k) => { const n = near[k]; if (n) l.position.copy(n.p).setY(4.6); l.intensity = this.night > 0.3 ? 40 * this.night : 0; });
+    }
+    if (this.rain && this.rainOn) {
+      this.rain.position.set(focus.x, 0, focus.z);
+      const a = this.rain.geometry.getAttribute('position') as THREE.BufferAttribute, arr = a.array as Float32Array;
+      const fall = 26 * dt;
+      for (let i = 1; i < arr.length; i += 6) { arr[i]! -= fall; arr[i + 3]! -= fall; if (arr[i]! < 0) { arr[i]! += 40; arr[i + 3]! += 40; } }
+      a.needsUpdate = true;
     }
     this.renderer.render(this.street, this.camera);
   }

@@ -434,7 +434,7 @@ function start(game: Game): void {
   const paint = (): void => {
     const c = clockView(game.total);
     clock.textContent = `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}`;
-    dayLabel.textContent = formatClock(game.total).split('·').slice(0, 2).join('·').trim();
+    dayLabel.textContent = `${formatClock(game.total).split('·').slice(0, 2).join('·').trim()} · ${{ soleil: '☀️', nuages: '⛅', pluie: '🌧️' }[game.weather]}`;
     cash.textContent = chf(game.cash);
     cash.classList.toggle('neg', game.cash < 0);
     const today = dayProfit(game.today);
@@ -453,6 +453,7 @@ function start(game: Game): void {
   };
 
   // Qualité graphique : auto (selon les images par seconde), basse ou haute.
+  let shownWeather = '';
   let qualityPref = 'auto';
   try { qualityPref = localStorage.getItem('bc-qualite') ?? 'auto'; } catch { /* stockage indisponible */ }
   const applyQuality = (): void => { scene.setQuality(qualityPref === 'basse' ? 0 : qualityPref === 'haute' ? 2 : scene.quality); };
@@ -683,6 +684,7 @@ function start(game: Game): void {
     else if (car) focus.set(car.x, 1.6, car.z);
     else focus.set(game.player.x, 1.7, game.player.z);
     scene.setTime(game.total % 1440);
+    if (game.weather !== shownWeather) { shownWeather = game.weather; scene.setWeather(game.weather); }
     scene.frame(dt, focus, snapCam);
     snapCam = false;
   };

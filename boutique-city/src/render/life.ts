@@ -30,8 +30,8 @@ export function parkZones(d: District): { zoo: { x0: number; z0: number; x1: num
 
 /** Taille (m, plus grande dimension) de chaque animal. */
 const ANIMAL_SIZE: Record<string, number> = {
-  elephant: 2.6, giraffe: 3.2, cow: 1.6, deer: 1.4, hog: 1.1, pig: 1.0, lion: 1.3, tiger: 1.3, polar: 1.5, panda: 1.2,
-  koala: 0.7, monkey: 0.8, penguin: 0.7, beaver: 0.7, fox: 0.7, dog: 0.75, cat: 0.55, bunny: 0.5, chick: 0.35,
+  elephant: 1.8, giraffe: 2.2, cow: 1.1, deer: 1.0, hog: 0.8, pig: 0.75, lion: 0.95, tiger: 0.95, polar: 1.0, panda: 0.9,
+  koala: 0.55, monkey: 0.6, penguin: 0.55, beaver: 0.55, fox: 0.7, dog: 0.75, cat: 0.55, bunny: 0.5, chick: 0.35,
   parrot: 0.45, bee: 0.4, caterpillar: 0.5, crab: 0.45, fish: 0.5,
 };
 

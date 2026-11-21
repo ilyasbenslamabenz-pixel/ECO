@@ -365,8 +365,8 @@ export class DistrictView {
     // Massifs : toutes les fleurs, plantes, herbes, champignons, pierres, souches et rondins du Nature Kit.
     const zones = parkZones(d);
     const inZone = (x: number, z: number): boolean => [zones.zoo, zones.skate].some((q) => x > q.x0 - 1.5 && x < q.x1 + 1.5 && z > q.z0 - 1.5 && z < q.z1 + 1.5);
-    const flowers = filesMatching(/^nat-(flower_|plant_|grass|mushroom_|crop_|stone_small|rock_small|stump_|log|hanging_moss)/).filter((k) => assets.has(k));
-    for (let k = 0; k < 260 && flowers.length; k++) {
+    const flowers = filesMatching(/^nat-(flower_|plant_bush|grass_large|grass_leafsLarge|mushroom_redGroup|mushroom_tanGroup)/).filter((k) => assets.has(k));
+    for (let k = 0; k < 130 && flowers.length; k++) {
       const a = rnd() * Math.PI * 2, rr = 6 + rnd() * (ph - 8);
       const x = pc.x + Math.cos(a) * rr, z = pc.z + Math.sin(a) * rr;
       if (!inZone(x, z)) put(flowers[k % flowers.length]!, x, z, rnd() * 6.28, 0);
@@ -374,8 +374,8 @@ export class DistrictView {
     // Statues et gros rochers au centre et aux entrées du parc.
     const statues = filesMatching(/^nat-statue_/).filter((k) => assets.has(k));
     statues.forEach((k, i) => { const a = (i / Math.max(1, statues.length)) * Math.PI * 2; put(k, pc.x + Math.cos(a) * 5, pc.z - 12 + Math.sin(a) * 3, -a, 0); });
-    filesMatching(/^nat-(rock_large|rock_tall|stone_large|stone_tall)/).filter((k) => assets.has(k)).forEach((k, i) => {
-      const x = pc.x - ph + 3 + (i % 8) * 7, z = pc.z - 18 + Math.floor(i / 8) * 4;
+    filesMatching(/^nat-(rock_large|stump_old|log_stack)/).filter((k) => assets.has(k)).forEach((k, i) => {
+      const x = pc.x - ph + 4 + (i % 4) * 12, z = pc.z - 20 + Math.floor(i / 4) * 9;
       if (!inZone(x, z)) put(k, x, z, rnd() * 6, 0);
     });
     for (let k = 0; k < 3; k++) {
