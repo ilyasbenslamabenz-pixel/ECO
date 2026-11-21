@@ -172,11 +172,12 @@ try {
   check(await ev(() => window.__bc.action()) === 'Tenir la caisse', 'invite « Tenir la caisse » derrière la caisse');
   await page.keyboard.press('e');
   await ev(() => window.__bc.setSpeed(2));
-  await page.waitForFunction(() => window.__bc.state().customers >= 2, null, { timeout: 60000 }).catch(() => {});
+  // Attendre une vraie vente (≈ 21 clients / h : quelques minutes de jeu, longues en rendu logiciel).
+  await page.waitForFunction(() => window.__bc.state().customers >= 2 && window.__bc.game.shops[0].today.customers >= 1, null, { timeout: 120000 }).catch(() => {});
   await ev(() => { window.__bc.cam.pitch = 0.7; window.__bc.cam.dist = 11; });
   await page.waitForTimeout(1500);
   await shot('10-clients-dans-le-magasin');
-  const cl = await ev(() => ({ visibles: window.__bc.state().customers, servis: window.__bc.game.shops[0].today.customers, caisse: window.__bc.game.player.tending }));
+  const cl = await ev(() => { const g = window.__bc.game, s = g.shops[0], t = s.today; return { visibles: window.__bc.state().customers, servis: t.customers, caisse: g.player.tending, perdus: { personnel: t.lostStaff, attente: t.lostCapacity, rupture: t.lostStock, prix: t.refusedPrice }, capacite: s.capacity, frequentation: s.rate, total: g.total }; });
   check(cl.visibles >= 1 && cl.servis >= 1 && cl.caisse !== null, 'clients visibles et servis par le joueur', JSON.stringify(cl));
   // Avis clients en bulles : un « trop cher » et un « content » injectés dans le flux de la simulation.
   await ev(() => { const g = window.__bc.game; g.feedback.push({ shopId: g.shops[0].id, kind: 'prix' }); });
