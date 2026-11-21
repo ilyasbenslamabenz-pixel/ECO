@@ -91,6 +91,7 @@ function grossiste(ctx: UiCtx, b: Building): (Node | null)[] {
 
 /* ------------------------------ Meubles ------------------------------ */
 
+let meubleTab = 'utiles';
 function meubles(ctx: UiCtx): (Node | null)[] {
   const g = ctx.game;
   if (!g.shops.length) return [note('Louez d’abord un local : les meubles sont livrés dans sa réserve.')];
@@ -105,8 +106,18 @@ function meubles(ctx: UiCtx): (Node | null)[] {
     if (f.kind === 'table') return shop.type === 'cafe' || shop.type === 'fastfood' || shop.type === 'boulangerie';
     return PRODUCTS.some((p) => p.shop === shop.type && p.store === f.kind);
   };
+  // Catégories : « Utiles » (adaptés au commerce choisi), présentoirs, caisses et machines, tables, décoration.
+  const cats: [string, string, (f: typeof FURNITURE[number]) => boolean][] = [
+    ['utiles', 'Utiles ici', (f) => useful(f.id)],
+    ['presentoirs', 'Présentoirs', (f) => ['rayon', 'frigo', 'comptoir', 'vitrine', 'portant'].includes(f.kind)],
+    ['caisses', 'Caisses et machines', (f) => f.kind === 'caisse' || f.kind === 'machine'],
+    ['tables', 'Tables et sièges', (f) => f.kind === 'table'],
+    ['deco', 'Décoration', (f) => f.kind === 'deco'],
+  ];
+  const cat = cats.find((c) => c[0] === meubleTab) ?? cats[0]!;
+  out.push(el('div', { cls: 'tabs' }, ...cats.map(([id, label, pick]) => button(`${label} (${FURNITURE.filter(pick).length})`, () => { meubleTab = id; ctx.panel.paint(true); }, id === cat[0] ? 'on' : ''))));
   const tbl = el('table', { cls: 'tbl' }, el('tr', {}, el('th', { text: 'Meuble' }), el('th', { text: 'Taille' }), el('th', { text: 'Prix' }), el('th', { text: 'Qté' }), el('th', { text: '' })));
-  for (const f of [...FURNITURE].sort((a, b) => Number(useful(b.id)) - Number(useful(a.id)))) {
+  for (const f of FURNITURE.filter(cat[2]).sort((a, b) => Number(useful(b.id)) - Number(useful(a.id)))) {
     const q = qtyInput(1, 20);
     const detail = f.capacity ? `${f.capacity} articles` : f.seats ? `${f.seats} places` : f.decor ? `déco +${f.decor}` : f.kind === 'caisse' ? 'encaisser' : f.kind === 'machine' ? 'café, thé' : '';
     tbl.append(el('tr', { cls: useful(f.id) ? '' : 'dim' },

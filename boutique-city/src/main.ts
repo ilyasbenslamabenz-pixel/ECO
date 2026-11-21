@@ -79,12 +79,33 @@ function menu(): void {
     }, save ? 'wide' : 'primary wide'),
     el('div', { cls: 'keys' },
       el('div', { cls: 'sec', text: 'Commandes' }),
-      el('p', { cls: 'small', text: 'Z Q S D ou flèches : marcher (Maj : courir) · souris : tourner la caméra, molette : zoom · E : entrer, conduire, tenir la caisse · B : aménager · M : carte · P : pause · Échap : fermer.' })),
+      el('p', { cls: 'small', text: 'Z Q S D ou flèches : marcher (Maj : courir) · souris : caméra · E : interagir · T : téléphone · M : carte · B : aménager · P : pause · H : aide · Échap : fermer.' })),
   ));
   box.classList.remove('hidden');
 }
 
 type Inside = { kind: 'shop'; shopId: number } | { kind: 'home'; homeId: number };
+
+/** Fiche d'aide : raccourcis et boucle de jeu (touche H, et au premier lancement). */
+function showHelp(): void {
+  if (document.querySelector('.help-card')) return;
+  const keys: [string, string][] = [
+    ['Z Q S D', 'marcher (Maj : courir) — ou les flèches'], ['Souris', 'glisser : tourner la caméra · molette : zoom'], ['E', 'entrer, interagir, conduire, tenir la caisse, dormir'],
+    ['T', 'téléphone : commerces, immobilier, banque, marché, messages…'], ['M', 'carte du quartier (cliquer un lieu = destination)'], ['B', 'aménager le commerce (R : tourner un meuble)'],
+    ['P', 'pause'], ['H', 'cette aide'], ['Échap', 'fermer / revenir'],
+  ];
+  const close = (): void => wrap.remove();
+  const wrap = el('div', { cls: 'confirm', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Aide' } },
+    el('div', { cls: 'confirm-card help-card' },
+      el('div', { cls: 'kicker', text: 'Aide' }), el('h2', { text: 'Comment jouer' }),
+      el('p', { cls: 'small', text: 'Louez un local (anneau jaune), achetez des meubles au magasin de meubles, aménagez (B), achetez la marchandise au grossiste, tenez la caisse ou embauchez, puis développez votre empire : plusieurs commerces, sous-locations, publicité, véhicules.' }),
+      el('div', { cls: 'help-grid' }, ...keys.flatMap(([k, t]) => [el('kbd', { text: k }), el('span', { cls: 'small', text: t })])),
+      el('div', { cls: 'row end' }, button("C'est parti !", close, 'primary'))));
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+  wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape' || e.key === 'Enter') close(); });
+  document.body.append(wrap);
+  wrap.querySelector<HTMLButtonElement>('button.primary')?.focus();
+}
 
 /** Sol et murs de chaque type de commerce. */
 const INTERIOR_STYLE: Record<Shop['type'], { floor: 'carrelage' | 'parquet'; wall: string }> = {
@@ -403,7 +424,19 @@ function start(game: Game): void {
     muted: () => sound.muted,
     quality: () => qualityPref,
     setQuality: (q) => { qualityPref = q; try { localStorage.setItem('bc-qualite', q); } catch { /* stockage indisponible */ } applyQuality(); },
+    onToggle: (open) => {
+      // Pause pendant que le téléphone est ouvert, reprise à la vitesse d'avant.
+      if (open) { speedBeforePhone = speed; speed = 0; } else if (speed === 0) speed = speedBeforePhone || 1;
+      paint();
+    },
+    showOnMap: (x, z, label) => {
+      ctx.waypoint(x, z, label);
+      lookAt = { x, z, t: 6 };
+    },
   });
+  let speedBeforePhone = 1;
+  /** Caméra temporairement centrée sur un lieu (« Voir sur la carte »). */
+  let lookAt: { x: number; z: number; t: number } | null = null;
   const phoneBadge = el('i', { cls: 'badge hidden' });
   const phoneBtn = el('button', { cls: 'round phone-btn', attrs: { type: 'button', 'aria-label': 'Téléphone (T)', title: 'Téléphone (T)' }, on: { click: () => phone.toggle() } }, el('span', { text: '📱' }), phoneBadge);
   hud.replaceChildren(
@@ -524,7 +557,8 @@ function start(game: Game): void {
       if (panel.isOpen) { panel.close(); return; }
       return;
     }
-    if (k === 't') phone.toggle();
+    if (k === 'h') showHelp();
+    else if (k === 't') phone.toggle();
     else if (k === 'm') bigmap.toggle(game.player.x, game.player.z, game.player.heading);
     else if (k === 'e') interact();
     else if (k === 'b') setBuild(!build.on);
@@ -645,7 +679,7 @@ function start(game: Game): void {
     const ev = game.events.splice(0);
     let street = 0;
     for (const e of ev) {
-      if (inside?.kind === 'shop' && e.shopId === inside.shopId) { agents?.spawn(e.products); sound.ding(); }
+      if (inside?.kind === 'shop' && e.shopId === inside.shopId) { const sh = game.shop(e.shopId); agents?.spawn(e.products, e.products.reduce((a, id) => a + (sh?.products[id]?.price ?? 0), 0)); sound.ding(); }
       else if (!inside && street++ < 4) { const p = game.premise(e.premiseId); if (p) scene.people.addClient(p.doorX, p.doorZ); }
     }
     if (inside && agents) {
@@ -689,6 +723,7 @@ function start(game: Game): void {
     if (inside && build.on) focus.set(0, 0, 0.6);
     else if (inside) focus.set(ipos.x, 1.2, ipos.z);
     else if (car) focus.set(car.x, 1.6, car.z);
+    else if (lookAt && lookAt.t > 0) { lookAt.t -= dt; focus.set(lookAt.x, 1.7, lookAt.z); if (lookAt.t <= 0) { lookAt = null; snapCam = true; } }
     else focus.set(game.player.x, 1.7, game.player.z);
     scene.setTime(game.total % 1440);
     if (game.weather !== shownWeather) { shownWeather = game.weather; scene.setWeather(game.weather); }
@@ -698,6 +733,10 @@ function start(game: Game): void {
   requestAnimationFrame(loop);
   window.addEventListener('beforeunload', () => writeSave(game));
 
+  // Aide au premier lancement.
+  let helpSeen = false;
+  try { helpSeen = localStorage.getItem('bc-aide') === '1'; } catch { /* stockage indisponible */ }
+  if (!helpSeen && !params.has('auto') && !navigator.webdriver) { showHelp(); try { localStorage.setItem('bc-aide', '1'); } catch { /* stockage indisponible */ } }
   if (game.shops.length === 0 && game.total < 8 * 60) {
     toast('Bienvenue ! Sortez de chez vous (E près de la porte), puis cherchez un anneau jaune : un local à louer. La carte (M) montre tout le quartier.', 'info');
   }

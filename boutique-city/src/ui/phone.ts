@@ -36,6 +36,10 @@ export interface PhoneHooks {
   muted: () => boolean;
   quality: () => string;
   setQuality: (q: string) => void;
+  /** Ouverture / fermeture (le jeu se met en pause pendant que le téléphone est ouvert). */
+  onToggle: (open: boolean) => void;
+  /** Centre la caméra sur un point de la rue avec une balise lumineuse. */
+  showOnMap: (x: number, z: number, label: string) => void;
 }
 
 export class Phone {
@@ -44,6 +48,9 @@ export class Phone {
   private readonly status = el('div', { cls: 'ph-status' });
   private app: AppId | null = null;
   private immoTab: 'locaux' | 'apparts' | 'baux' = 'locaux';
+  private immoSort: 'passants' | 'loyer' | 'surface' = 'passants';
+  /** Voile assombri et flouté derrière le téléphone (un clic dessus le ferme). */
+  private readonly veil = el('div', { cls: 'ph-veil hidden' });
   private lastVersion = -1;
   private lastPaint = 0;
   /** Nombre de messages déjà lus. */
@@ -52,7 +59,8 @@ export class Phone {
   constructor(private readonly ctx: UiCtx, private readonly hooks: PhoneHooks) {
     const home = el('button', { cls: 'ph-home', attrs: { type: 'button', 'aria-label': 'Accueil du téléphone' }, on: { click: () => { this.app ? this.go(null) : this.close(); } } });
     this.root.append(el('div', { cls: 'ph-frame' }, el('div', { cls: 'ph-notch' }), this.status, this.screen, home));
-    document.body.append(this.root);
+    this.veil.addEventListener('click', () => this.close());
+    document.body.append(this.veil, this.root);
     this.seen = ctx.game.notices.length;
   }
 
@@ -61,8 +69,17 @@ export class Phone {
   get unread(): number { return Math.max(0, this.ctx.game.notices.length - this.seen); }
 
   toggle(): void { if (this.isOpen) this.close(); else this.open(); }
-  open(app: AppId | null = null): void { this.root.classList.remove('hidden'); this.go(app); }
-  close(): void { this.root.classList.add('hidden'); }
+  open(app: AppId | null = null): void {
+    const was = this.isOpen;
+    this.root.classList.remove('hidden'); this.veil.classList.remove('hidden');
+    if (!was) this.hooks.onToggle(true);
+    this.go(app);
+  }
+  close(): void {
+    if (!this.isOpen) return;
+    this.root.classList.add('hidden'); this.veil.classList.add('hidden');
+    this.hooks.onToggle(false);
+  }
   /** Retour : appli → accueil → fermé. */
   back(): void { if (this.app) this.go(null); else this.close(); }
 
@@ -128,7 +145,10 @@ export class Phone {
   }
 
   private gps(x: number, z: number, label: string): HTMLButtonElement {
-    return button('📍 GPS', () => { this.ctx.waypoint(x, z, label); this.close(); }, 'small');
+    return button('📍 Itinéraire', () => { this.ctx.waypoint(x, z, label); this.close(); }, 'small');
+  }
+  private onMap(x: number, z: number, label: string): HTMLButtonElement {
+    return button('👁 Voir sur la carte', () => { this.close(); this.hooks.showOnMap(x, z, label); }, 'small');
   }
 
   private commerces(): (Node | null)[] {
@@ -156,24 +176,26 @@ export class Phone {
     const tabs = el('div', { cls: 'ph-tabs' }, ...([['locaux', 'Locaux'], ['apparts', 'Appartements'], ['baux', 'Mes baux']] as const).map(([id, l]) => button(l, () => { this.immoTab = id; this.paint(true); }, this.immoTab === id ? 'on' : '')));
     const out: (Node | null)[] = [tabs];
     if (this.immoTab === 'locaux') {
-      const free = g.district.premises.filter((p) => g.isFree(p)).sort((a, b) => b.footfall - a.footfall);
+      const key = { passants: (p: { footfall: number }) => -p.footfall, loyer: (p: { rent: number }) => p.rent, surface: (p: { area: number }) => -p.area }[this.immoSort] as (p: typeof g.district.premises[number]) => number;
+      const free = g.district.premises.filter((p) => g.isFree(p)).sort((a, b) => key(a) - key(b));
+      out.push(el('div', { cls: 'ph-sort' }, el('span', { text: 'Trier :' }), ...([['passants', 'Passants/h'], ['loyer', 'Loyer'], ['surface', 'Surface']] as const).map(([id, l]) => button(l, () => { this.immoSort = id; this.paint(true); }, this.immoSort === id ? 'on' : ''))));
       out.push(el('p', { cls: 'ph-hint', text: `${free.length} locaux libres. Signez le bail sur place (pour votre commerce ou pour sous-louer).` }));
       for (const p of free.slice(0, 30)) {
         const best = [...SHOP_TYPES].sort((a, b) => g.estimatePeak(p, b.id) - g.estimatePeak(p, a.id))[0]!;
         out.push(el('div', { cls: 'ph-card' },
           el('div', { cls: 'ph-card-top' }, el('b', { text: `${p.area} m² · ${chf(p.rent)}/mois` }), el('span', { cls: 'pill', text: `${num(p.footfall)} passants/h` })),
           el('div', { cls: 'ph-stats' }, el('span', { text: `Idéal : ${best.nameFr}` }), el('span', { text: `≈ ${num(g.estimatePeak(p, best.id))} clients/h` }), el('span', { text: `grille ${p.gridW}×${p.gridD}` })),
-          el('div', { cls: 'row' }, this.gps(p.doorX, p.doorZ, `Local ${p.area} m²`))));
+          el('div', { cls: 'row' }, this.onMap(p.doorX, p.doorZ, `Local ${p.area} m²`), this.gps(p.doorX, p.doorZ, `Local ${p.area} m²`))));
       }
     } else if (this.immoTab === 'apparts') {
-      const homes = g.district.homes.filter((h) => g.homeFree(h.id));
+      const homes = g.district.homes.filter((h) => g.homeFree(h.id)).sort((a, b) => this.immoSort === 'loyer' ? HOME_BY_ID.get(a.def)!.rentDay - HOME_BY_ID.get(b.def)!.rentDay : HOME_BY_ID.get(b.def)!.gridW * HOME_BY_ID.get(b.def)!.gridD - HOME_BY_ID.get(a.def)!.gridW * HOME_BY_ID.get(a.def)!.gridD);
       out.push(el('p', { cls: 'ph-hint', text: 'Louez pour y habiter (confort du sommeil) ou pour sous-louer à un locataire.' }));
       for (const h of homes.slice(0, 30)) {
         const d = HOME_BY_ID.get(h.def)!;
         out.push(el('div', { cls: 'ph-card' },
           el('div', { cls: 'ph-card-top' }, el('b', { text: `${d.nameFr} · ${d.gridW * d.gridD} m²` }), el('span', { cls: 'pill', text: `${d.rentDay} CHF/jour` })),
           el('div', { cls: 'ph-stats' }, el('span', { text: `Confort ×${d.comfort}` }), el('span', { text: `Sous-location ≈ ${chf(d.rentDay * 1.25)}/j` })),
-          el('div', { cls: 'row' }, this.gps(h.doorX, h.doorZ, d.nameFr))));
+          el('div', { cls: 'row' }, this.onMap(h.doorX, h.doorZ, d.nameFr), this.gps(h.doorX, h.doorZ, d.nameFr))));
       }
     } else {
       const home = g.district.homes.find((h) => h.id === g.player.home);

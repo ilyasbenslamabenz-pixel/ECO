@@ -20,7 +20,7 @@ type Step = { kind: 'browse'; cell: [number, number]; look: [number, number] } |
 interface Register { uid: number; front: [number, number][]; back: [number, number][]; dir: [number, number]; queue: Customer[]; tended: boolean }
 
 interface Mover { h: Person; x: number; z: number; heading: number; route: [number, number][]; speed: number }
-interface Customer extends Mover { bubble?: THREE.Sprite; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
+interface Customer extends Mover { amount?: number; bubble?: THREE.Sprite; bubbleT?: number; arrive: Step | null; plan: Step[]; state: 'walk' | 'browse' | 'queue' | 'pay' | 'leave'; timer: number; reg: Register | null; slot: number; jx: number; jz: number }
 interface Staff extends Mover { id: number; idle: number }
 
 const headingTo = (dx: number, dz: number): number => Math.atan2(-dx, -dz);
@@ -88,7 +88,7 @@ export class InteriorAgents {
   private door(): [number, number] { return doorCells(this.view.W, this.view.D)[0]!; }
 
   /** Un client entre pour acheter `products`. */
-  spawn(products: string[]): void {
+  spawn(products: string[], amount = 0): void {
     if (this.customers.length >= MAX_CUSTOMERS || !this.registers.length) return;
     const plan: Step[] = [];
     const seen = new Set<string>();
@@ -107,7 +107,7 @@ export class InteriorAgents {
     const h = makePerson(Math.floor(this.rand() * 1e6), undefined, 0.94 + this.rand() * 0.1);
     this.group.add(h.group);
     const [dx, dz] = this.view.cellCenter(...this.door());
-    this.customers.push({ h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, route: [[dx, dz]], speed: 1.25 + this.rand() * 0.35, arrive: null, plan, state: 'walk', timer: 0, reg: null, slot: 0, jx: (this.rand() - 0.5) * 0.3, jz: (this.rand() - 0.5) * 0.3 });
+    this.customers.push({ h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, route: [[dx, dz]], speed: 1.25 + this.rand() * 0.35, arrive: null, plan, amount, state: 'walk', timer: 0, reg: null, slot: 0, jx: (this.rand() - 0.5) * 0.3, jz: (this.rand() - 0.5) * 0.3 });
   }
 
   /**
@@ -128,6 +128,26 @@ export class InteriorAgents {
     const c: Customer = { h, x: ox + (this.rand() - 0.5) * 2, z: oz + 1, heading: 0, route: [[dx, dz - 1.2]], speed: 1.3, arrive: null, plan: [{ kind: 'exit' }], state: 'walk', timer: 0, reg: null, slot: 0, jx: 0, jz: 0 };
     this.customers.push(c);
     this.say(c, kind);
+  }
+
+  /** Textes flottants (montants des ventes) : montent et s'effacent en 1,4 s. */
+  private floats: { sp: THREE.Sprite; t: number }[] = [];
+  private floatText(text: string, x: number, z: number): void {
+    const sp = new THREE.Sprite(moneyMaterial(text));
+    sp.scale.set(1.3, 0.42, 1);
+    sp.position.set(x, 1.8, z);
+    sp.renderOrder = 21;
+    this.group.add(sp);
+    this.floats.push({ sp, t: 0 });
+  }
+  private sayIcon(c: Customer, icon: string): void {
+    if (c.bubble) c.h.group.remove(c.bubble);
+    const sp = new THREE.Sprite(iconMaterial(icon));
+    sp.scale.set(0.55, 0.55, 1);
+    sp.position.y = 2.0;
+    sp.renderOrder = 20;
+    c.h.group.add(sp);
+    c.bubble = sp; c.bubbleT = 1.8;
   }
 
   private say(c: Customer, kind: FeedbackKind): void {
@@ -276,7 +296,12 @@ export class InteriorAgents {
         if (arrived && k === 0) { c.state = 'pay'; c.timer = 2.2; c.heading = headingTo(-c.reg.dir[0], -c.reg.dir[1]); }
       } else if (c.state === 'pay') {
         c.timer -= dt * ts;
-        if (c.timer <= 0) { c.reg?.queue.shift(); c.reg = null; this.next(c); }
+        if (c.timer <= 0) {
+          // Vente : « +X CHF » au-dessus de la caisse, client satisfait (😊).
+          if (c.reg && c.amount) { const it = this.view.items.find((i) => i.uid === c.reg!.uid); if (it) { const [wx, wz] = this.itemCenter(it); this.floatText(`+${c.amount.toFixed(c.amount < 10 ? 2 : 0)} CHF`, wx, wz); } }
+          this.sayIcon(c, '😊');
+          c.reg?.queue.shift(); c.reg = null; this.next(c);
+        }
       } else if (c.state === 'leave' && arrived) {
         this.group.remove(c.h.group);
         disposeOwn(c.h.group);
@@ -285,6 +310,9 @@ export class InteriorAgents {
       keep.push(c);
     }
     this.customers = keep;
+    for (const f of this.floats) { f.t += dt; f.sp.position.y += dt * 0.7; (f.sp.material as THREE.SpriteMaterial).opacity = Math.max(0, 1 - f.t / 1.4); }
+    for (const f of this.floats.filter((x) => x.t >= 1.4)) { this.group.remove(f.sp); (f.sp.material as THREE.SpriteMaterial).map?.dispose(); (f.sp.material as THREE.SpriteMaterial).dispose(); }
+    this.floats = this.floats.filter((x) => x.t < 1.4);
     this.separate();
     this.separate();
     for (const c of this.customers) { c.h.group.position.set(c.x, 0, c.z); c.h.group.rotation.y = c.heading; }
@@ -343,8 +371,8 @@ function turn(a: number, b: number, k: number): number {
 }
 
 const BUBBLES: Record<FeedbackKind, [string, string]> = {
-  prix: ['Trop cher !', '#ef6b6b'], rupture: ['Rupture…', '#f0b84a'], attente: ['Trop d’attente', '#f0b84a'],
-  caisse: ['Personne en caisse ?', '#ef6b6b'], content: ['Super boutique ♥', '#5cc77a'],
+  prix: ['😠 Trop cher !', '#ef6b6b'], rupture: ['😠 Rupture…', '#f0b84a'], attente: ['😠 Trop d’attente', '#f0b84a'],
+  caisse: ['😠 Personne en caisse ?', '#ef6b6b'], content: ['😊 Super boutique !', '#5cc77a'],
 };
 const bubbleCache = new Map<FeedbackKind, THREE.SpriteMaterial>();
 /** Bulle d'avis (canevas → sprite), mise en cache par type. */
@@ -364,5 +392,35 @@ function bubbleMaterial(kind: FeedbackKind): THREE.SpriteMaterial {
   tex.colorSpace = THREE.SRGBColorSpace;
   const m = new THREE.SpriteMaterial({ map: tex, depthTest: false });
   bubbleCache.set(kind, m);
+  return m;
+}
+
+/** Montant d'une vente (texte vert sur fond sombre), un matériau par texte (libéré après l'animation). */
+function moneyMaterial(text: string): THREE.SpriteMaterial {
+  const cv = document.createElement('canvas');
+  cv.width = 260; cv.height = 84;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = 'rgba(20, 27, 38, 0.88)'; g.beginPath(); g.roundRect(4, 4, 252, 76, 30); g.fill();
+  g.fillStyle = '#7dffa8'; g.font = '800 44px Rubik, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 130, 44, 240);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+}
+const iconCache = new Map<string, THREE.SpriteMaterial>();
+/** Icône d'humeur (émoji) au-dessus d'un client. */
+function iconMaterial(icon: string): THREE.SpriteMaterial {
+  const c = iconCache.get(icon);
+  if (c) return c;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 96;
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#ffffff'; g.beginPath(); g.arc(48, 48, 44, 0, Math.PI * 2); g.fill();
+  g.font = '60px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(icon, 48, 52);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  iconCache.set(icon, m);
   return m;
 }
