@@ -65,23 +65,93 @@ function menu(): void {
   const name = el('input', { attrs: { type: 'text', maxlength: '30', value: 'Mon entreprise', 'aria-label': 'Nom de votre entreprise' } });
   const box = $('menu');
   const begin = (g: Game): void => start(g);
-  box.replaceChildren(el('div', { cls: 'menu-card' },
-    el('h1', { text: 'Boutique City' }),
-    el('p', { cls: 'tag', text: 'Partez de rien dans un quartier animé : louez un local, achetez vos meubles et votre marchandise, aménagez, servez vos premiers clients, embauchez… et bâtissez votre empire de commerces.' }),
-    save && !params.has('nouveau') ? button(`Continuer : ${save.companyName} (jour ${Math.floor(save.total / 1440) + 1})`, () => begin(new Game(save.seed, save.companyName, save)), 'primary wide') : null,
+  const resume = save && !params.has('nouveau') ? save : null;
+  const keys: [string, string][] = [['Z Q S D', 'marcher'], ['Maj', 'courir'], ['E', 'interagir'], ['T', 'téléphone'], ['M', 'carte'], ['B', 'aménager'], ['P', 'pause'], ['H', 'aide']];
+  const steps = ['Louer un local', 'Aménager', 'Approvisionner', 'Embaucher'];
+  box.replaceChildren(skyline('menu-sky'), el('div', { cls: 'menu-card' },
+    el('div', { cls: 'menu-hero' },
+      brandMark(),
+      el('div', {}, el('h1', { text: 'Boutique City' }), el('p', { cls: 'tag', text: 'Partez de rien dans un quartier animé et bâtissez votre empire de commerces.' }))),
+    resume ? el('div', { cls: 'menu-save' },
+      el('div', { cls: 'menu-save-info' }, el('span', { cls: 'kicker', text: 'Partie en cours' }), el('b', { text: resume.companyName }),
+        el('span', { cls: 'muted small', text: `Jour ${Math.floor(resume.total / 1440) + 1} · ${chf(resume.cash)} · ${resume.shops.length} commerce(s)` })),
+      button(`Continuer : ${resume.companyName} (jour ${Math.floor(resume.total / 1440) + 1})`, () => begin(new Game(resume.seed, resume.companyName, resume)), 'primary wide')) : null,
     el('div', { cls: 'sec', text: 'Nouvelle partie' }),
     el('label', { cls: 'field' }, el('span', { text: 'Nom de l’entreprise' }), name),
+    el('ol', { cls: 'menu-steps' }, ...steps.map((s, k) => el('li', {}, el('b', { text: String(k + 1) }), el('span', { text: s })))),
     button(`Nouvelle partie — ${chf(CONFIG.startCash)} en poche`, () => {
       // Nouvelle partie : la sauvegarde précédente est effacée.
       const go = (): void => { try { localStorage.removeItem(SAVE_KEY); } catch { /* stockage indisponible */ } begin(new Game(params.has('seed') ? Number(params.get('seed')) | 0 : (Math.random() * 1e9) | 0, name.value.trim() || 'Mon entreprise')); };
-      if (save && !params.has('nouveau')) void askConfirm(`Effacer la partie sauvegardée (${save.companyName}) et recommencer ?`, 'Nouvelle partie', true).then((y) => { if (y) go(); });
+      if (resume) void askConfirm(`Effacer la partie sauvegardée (${resume.companyName}) et recommencer ?`, 'Nouvelle partie', true).then((y) => { if (y) go(); });
       else go();
-    }, save ? 'wide' : 'primary wide'),
+    }, resume ? 'wide' : 'primary wide'),
     el('div', { cls: 'keys' },
       el('div', { cls: 'sec', text: 'Commandes' }),
-      el('p', { cls: 'small', text: 'Z Q S D ou flèches : marcher (Maj : courir) · souris : caméra · E : interagir · T : téléphone · M : carte · B : aménager · P : pause · H : aide · Échap : fermer.' })),
+      el('div', { cls: 'menu-keys' }, ...keys.map(([k, t]) => el('span', {}, el('kbd', { text: k }), t))),
+      el('p', { cls: 'small', text: 'Souris : caméra · Échap : fermer.' })),
   ));
   box.classList.remove('hidden');
+}
+
+/** Enseigne du jeu : petite devanture à store rayé (SVG). */
+function brandMark(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 64 64'); svg.setAttribute('class', 'brand-mark'); svg.setAttribute('aria-hidden', 'true');
+  const add = (tag: string, a: Record<string, string>): void => { const e = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); svg.append(e); };
+  add('rect', { x: '8', y: '24', width: '48', height: '34', rx: '3', fill: '#1c2635', stroke: '#2a3647', 'stroke-width': '3' });
+  for (let k = 0; k < 6; k++) add('path', { d: `M${6 + k * 9} 14h9v10a4.5 4.5 0 0 1-9 0z`, fill: k % 2 ? '#fff4d6' : '#ffcc4d' });
+  add('rect', { x: '4', y: '9', width: '56', height: '6', rx: '2', fill: '#e0a92a' });
+  add('rect', { x: '15', y: '36', width: '14', height: '22', rx: '1.5', fill: '#0f151e' });
+  add('rect', { x: '34', y: '35', width: '15', height: '12', rx: '1.5', fill: '#5fc3ff', opacity: '.85' });
+  add('circle', { cx: '26', cy: '48', r: '1.5', fill: '#ffcc4d' });
+  return svg;
+}
+
+/** Silhouette de quartier (fenêtres allumées), décor du menu et du chargement. Déterministe. */
+function skyline(cls: string): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg', W = 1600, H = 260;
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('preserveAspectRatio', 'xMidYMax slice');
+  svg.setAttribute('class', `skyline ${cls}`); svg.setAttribute('aria-hidden', 'true');
+  let seed = 11;
+  const rnd = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const rect = (x: number, y: number, w: number, h: number, fill: string): void => {
+    const r = document.createElementNS(ns, 'rect');
+    r.setAttribute('x', String(x)); r.setAttribute('y', String(y)); r.setAttribute('width', String(w)); r.setAttribute('height', String(h)); r.setAttribute('fill', fill);
+    svg.append(r);
+  };
+  // Deux rangs : immeubles du fond (plus clairs), puis devantures du premier plan.
+  for (const [base, minH, maxH, col, win] of [[0, 90, 200, '#16263a', 0.10], [0, 50, 120, '#0e1824', 0.22]] as const) {
+    for (let x = -10; x < W;) {
+      const w = 60 + Math.floor(rnd() * 90), h = minH + Math.floor(rnd() * (maxH - minH));
+      rect(x, H - h - base, w, h + base, col);
+      for (let wy = H - h + 14; wy < H - 22; wy += 20) for (let wx = x + 10; wx < x + w - 14; wx += 18) if (rnd() < win) rect(wx, wy, 8, 10, rnd() < 0.7 ? '#ffcc4d' : '#5fc3ff');
+      x += w + 4;
+    }
+  }
+  rect(0, H - 8, W, 8, '#0a121b');
+  return svg;
+}
+
+const LOADING_TIPS = [
+  'Un prix proche de celui du quartier fait revenir les clients.',
+  'Le réassort automatique évite les ruptures pendant la nuit.',
+  'Ouvrez sur les heures d’affluence : les salaires se paient à l’heure.',
+  'Le grossiste est moins cher que la livraison, si vous transportez vous-même.',
+  'Une caisse de plus aux heures de pointe, c’est moins de clients lassés d’attendre.',
+];
+
+/** Habille l'écran de chargement (titre, silhouette, astuce) en gardant .bar-fill et .load-label. */
+function loadingScreen(box: HTMLElement): void {
+  const tip = LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)]!;
+  box.replaceChildren(skyline('load-sky'), el('div', { cls: 'load-card' },
+    brandMark(),
+    el('h1', { text: 'Boutique City' }),
+    el('p', { cls: 'load-sub', text: 'Le quartier s’éveille…' }),
+    el('div', { cls: 'bar-track' }, el('div', { cls: 'bar-fill' })),
+    el('p', { cls: 'load-label', text: 'Chargement…' }),
+    el('p', { cls: 'load-tip' }, el('b', { text: 'Astuce' }), tip)));
 }
 
 type Inside = { kind: 'shop'; shopId: number } | { kind: 'home'; homeId: number };
@@ -810,7 +880,8 @@ function homeItems(W: number, D: number): InteriorItem[] {
 /** Écran de chargement : modèles 3D puis menu (ou partie de test). */
 async function boot(): Promise<void> {
   const box = $('loading');
-  const bar = box.querySelector<HTMLElement>('.bar-fill')!, label = box.querySelector<HTMLElement>('.load-label')!;
+  loadingScreen(box);
+  const bar =box.querySelector<HTMLElement>('.bar-fill')!, label = box.querySelector<HTMLElement>('.load-label')!;
   box.classList.remove('hidden');
   await assets.load((p, l) => { bar.style.width = `${Math.round(p * 100)}%`; label.textContent = `Chargement des modèles 3D… ${Math.round(p * 100)} % (${l})`; }, params.has('sansmodeles'));
   box.classList.add('hidden');

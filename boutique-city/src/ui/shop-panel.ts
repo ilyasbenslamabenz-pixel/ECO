@@ -1,14 +1,14 @@
 /**
- * Gestion d'un commerce (depuis l'intérieur ou à distance) : aperçu et liste de contrôle, prix et stock (commande
- * livrée, réassort automatique), employés, horaires, résultats. Et le panneau Entreprise : trésorerie, journal,
- * commerces, véhicules, prêts, campagnes.
+ * Gestion d'un commerce (depuis l'intérieur ou à distance) : en-tête (type, statut, réputation), chiffres du jour,
+ * puis onglets — aperçu et liste de contrôle, prix et stock (commande livrée, réassort automatique), employés,
+ * horaires, résultats. Et le panneau Entreprise : trésorerie, journal, commerces, véhicules, prêts, objectifs.
  */
 import { FURNITURE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf, PRODUCT_BY_ID } from '../sim/catalog';
 import { clockView } from '../sim/clock';
-import { dayProfit, type DayStats } from '../sim/game';
+import { dayProfit, type DayStats, type Game, type Shop } from '../sim/game';
 import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
 import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
-import { employeeRow, kpi, type UiCtx } from './dialogs';
+import { employeeRow, type UiCtx } from './dialogs';
 import type { View } from './panel';
 
 type Tab = 'apercu' | 'stock' | 'equipe' | 'horaires' | 'resultats';
@@ -16,129 +16,253 @@ const TABS: [Tab, string][] = [['apercu', 'Aperçu'], ['stock', 'Prix et stock']
 let tab: Tab = 'apercu';
 let lastShop = -1;
 
+/* ------------------------------ Petits éléments ------------------------------ */
+
+type Tone = 'ok' | 'warn' | 'bad' | 'muted' | '';
+
+/** Jauge horizontale (0..1). */
+function meter(frac: number, tone: Tone = 'ok', cls = ''): HTMLElement {
+  const w = Math.round(Math.max(0, Math.min(1, frac)) * 100);
+  return el('div', { cls: `gauge ${tone} ${cls}`.trim() }, el('i', { attrs: { style: `width:${w}%` } }));
+}
+
+/** Chiffre clé : libellé, valeur, ligne de détail facultative. */
+function stat(label: string, value: string, sub?: string | null, tone: Tone = ''): HTMLElement {
+  return el('div', { cls: 'sp-stat' }, el('span', { cls: 'sp-stat-l', text: label }), el('b', { cls: tone, text: value }), sub ? el('small', { text: sub }) : null);
+}
+
+/** Pastille de statut. */
+function badge(text: string, tone: Tone): HTMLElement { return el('span', { cls: `tag-badge ${tone}`, text }); }
+
+/** Titre de section avec complément à droite. */
+function section(title: string, aside?: Node | string | null): HTMLElement {
+  return el('div', { cls: 'sec sp-sec' }, el('span', { text: title }), aside ? (typeof aside === 'string' ? el('em', { text: aside }) : aside) : null);
+}
+
+function legend(items: [string, string][]): HTMLElement {
+  return el('div', { cls: 'sp-legend' }, ...items.map(([color, label]) => el('span', {}, el('i', { attrs: { style: `background:${color}` } }), label)));
+}
+
+const isOpen = (g: Game, s: Shop): boolean => { const h = clockView(g.total).hour; return h >= s.open && h < s.close; };
+const shopResult = (d: DayStats): number => d.revenue - d.costOfSales - d.wages - d.rent;
+
+/** Éléments de la liste « Pour ouvrir ». */
+function readiness(g: Game, id: number): [boolean, string][] {
+  const s = g.shop(id)!, st = g.stats(s);
+  return [
+    [st.registers > 0, 'Une caisse posée'],
+    [productsOf(s.type).some((p) => st.capacity[p.store] > 0), 'Des meubles de présentation adaptés'],
+    ...(s.type === 'cafe' ? [[st.machines > 0, 'Machine à café (café, thé)'] as [boolean, string]] : []),
+    [productsOf(s.type).some((p) => s.products[p.id]!.stock > 0), 'De la marchandise en rayon'],
+    [g.staffOf(id).length > 0 || g.player.tending === id, 'Quelqu’un à la caisse (employé, ou vous)'],
+    [st.blocked.length === 0, 'Tous les meubles accessibles'],
+  ];
+}
+
+/* ------------------------------ Vue commerce ------------------------------ */
+
 export function shopView(ctx: UiCtx, shopId: number): View {
   const g = ctx.game;
   if (lastShop !== shopId) { tab = 'apercu'; lastShop = shopId; }
+  const s0 = g.shop(shopId);
   return {
-    kicker: 'Mon commerce', title: g.shop(shopId)?.name ?? '', wide: true,
+    kicker: `Mon commerce${s0 ? ` · ${SHOP_TYPE_BY_ID.get(s0.type)!.nameFr}` : ''}`, title: s0?.name ?? '', wide: true,
     render: () => {
       const s = g.shop(shopId);
       if (!s) return [el('p', { text: 'Ce commerce n’existe plus.' })];
-      const tabs = el('div', { cls: 'tabs' }, ...TABS.map(([id, label]) => button(label, () => { tab = id; ctx.panel.paint(true); }, tab === id ? 'on' : '')));
-      return [tabs, ...({ apercu, stock, equipe, horaires, resultats }[tab])(ctx, shopId)];
+      const empties = productsOf(s.type).filter((p) => s.products[p.id]!.stock === 0 && g.storageFor(s, p) > 0).length;
+      const alerts: Partial<Record<Tab, boolean>> = { apercu: readiness(g, shopId).some(([ok]) => !ok), stock: empties > 0 };
+      const tabs = el('div', { cls: 'tabs sp-tabs', attrs: { role: 'tablist' } }, ...TABS.map(([id, label]) => {
+        const b = button(label, () => { tab = id; ctx.panel.paint(true); }, `${tab === id ? 'on' : ''}${alerts[id] ? ' alert' : ''}`.trim());
+        b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(tab === id));
+        return b;
+      }));
+      return [header(g, s), tabs, el('div', { cls: 'sp-pane' }, ...({ apercu, stock, equipe, horaires, resultats }[tab])(ctx, shopId))];
     },
   };
 }
 
+/** En-tête : enseigne, statut, horaires, réputation et chiffres du jour. */
+function header(g: Game, s: Shop): HTMLElement {
+  const t = SHOP_TYPE_BY_ID.get(s.type)!, d = s.today, open = isOpen(g, s);
+  const tending = g.player.tending === s.id;
+  const status = open
+    ? (s.capacity > 0 ? badge(tending ? 'Ouvert · vous tenez la caisse' : 'Ouvert', 'ok') : badge('Ouvert · personne en caisse', 'warn'))
+    : badge(`Fermé · ouvre à ${s.open} h`, 'muted');
+  const lost = d.lostStaff + d.lostStock + d.lostCapacity;
+  const margin = d.revenue - d.costOfSales, res = shopResult(d);
+  const repTone: Tone = s.reputation >= 0.6 ? 'ok' : s.reputation >= 0.35 ? 'warn' : 'bad';
+  return el('div', { cls: 'sp-head', attrs: { style: `--shop:${t.color}` } },
+    el('div', { cls: 'sp-id' },
+      el('div', { cls: 'sp-sign', text: t.nameFr.slice(0, 1).toUpperCase() }),
+      el('div', { cls: 'sp-idtxt' },
+        el('div', { cls: 'sp-line' }, status, el('span', { cls: 'sp-hours', text: `${s.open} h – ${s.close} h` })),
+        el('div', { cls: 'sp-rep' }, el('span', { text: 'Réputation' }), meter(s.reputation, repTone), el('b', { text: pct(s.reputation) })))),
+    el('div', { cls: 'sp-stats' },
+      stat('Clients', num(d.customers), lost ? `${num(lost)} perdu(s)` : 'aucun perdu', ''),
+      stat('Ventes', chf(d.revenue)),
+      stat('Marge brute', chf(margin), d.revenue > 0 ? `${Math.round((margin / d.revenue) * 100)} % des ventes` : null),
+      stat('Résultat', signed(res), 'après salaires et loyer', res >= 0 ? 'ok' : 'bad')));
+}
+
 function apercu(ctx: UiCtx, id: number): (Node | null)[] {
-  const g = ctx.game, s = g.shop(id)!, st = g.stats(s), t = SHOP_TYPE_BY_ID.get(s.type)!;
-  const c = clockView(g.total);
-  const open = c.hour >= s.open && c.hour < s.close;
-  const staff = g.staffOf(id);
-  const anyStock = productsOf(s.type).some((p) => s.products[p.id]!.stock > 0);
-  const anyShelf = productsOf(s.type).some((p) => st.capacity[p.store] > 0);
-  const checks: [boolean, string][] = [
-    [st.registers > 0, 'Une caisse posée'],
-    [anyShelf, 'Des meubles de présentation adaptés'],
-    [s.type !== 'cafe' || st.machines > 0, 'Machine à café (café, thé)'],
-    [anyStock, 'De la marchandise en rayon'],
-    [staff.length > 0 || g.player.tending === id, 'Quelqu’un à la caisse (employé, ou vous)'],
-    [st.blocked.length === 0, 'Tous les meubles accessibles'],
+  const g = ctx.game, s = g.shop(id)!, t = SHOP_TYPE_BY_ID.get(s.type)!, d = s.today;
+  const checks = readiness(g, id), done = checks.filter(([ok]) => ok).length;
+  const open = isOpen(g, s);
+  const ready = done === checks.length;
+  const causes: [string, number, string][] = [
+    ['Sans caissier', d.lostStaff, 'embauchez ou tenez la caisse'],
+    ['Rupture ou trop cher', d.lostStock, 'réassort, prix'],
+    ['Attente trop longue', d.lostCapacity, 'caisse ou caissier de plus'],
+    ['Articles reposés (prix)', d.refusedPrice, 'rapprochez-vous du quartier'],
   ];
-  const lost = s.today.lostStaff + s.today.lostStock + s.today.lostCapacity;
+  const boost = g.marketingBoost(id);
   return [
-    el('div', { cls: 'kpis' },
-      kpi('État', open ? (s.capacity > 0 ? 'Ouvert' : 'Ouvert, sans caissier') : `Fermé (${s.open} h – ${s.close} h)`),
-      kpi('Clients aujourd’hui', num(s.today.customers)), kpi('Ventes', chf(s.today.revenue))),
-    el('div', { cls: 'kpis' }, kpi('Clients perdus', num(lost)), kpi('Réputation', pct(s.reputation)), kpi('Attrait', s.rate > 0 || open ? g.attractiveness(s).toFixed(2) : '—')),
-    el('div', { cls: 'sec', text: `Pour ouvrir (${t.nameFr})` }),
-    el('ul', { cls: 'checks' }, ...checks.map(([ok, label]) => el('li', { cls: ok ? 'ok' : 'todo', text: `${ok ? '✓' : '•'} ${label}` }))),
-    lost || s.today.refusedPrice ? el('p', { cls: 'muted small', text: `Avis du jour : ${s.today.lostStaff} sans caissier, ${s.today.lostStock} rupture ou trop cher, ${s.today.lostCapacity} attente trop longue, ${s.today.refusedPrice} article(s) reposé(s) pour le prix.` }) : null,
-    Object.keys(s.storage).length ? el('p', { cls: 'small', text: `Réserve : ${Object.entries(s.storage).map(([k, n]) => `${n} × ${FURNITURE_BY_ID.get(k)!.nameFr}`).join(', ')} — posez-les avec « Aménager ».` }) : null,
-    el('div', { cls: 'sec', text: 'Affluence aujourd’hui (servis / perdus par heure)' }),
+    section(`Pour ouvrir · ${t.nameFr}`, badge(ready ? 'Prêt' : `${done} / ${checks.length}`, ready ? 'ok' : 'warn')),
+    el('ul', { cls: 'sp-checks' }, ...checks.map(([ok, label]) => el('li', { cls: ok ? 'ok' : 'todo' }, el('i', { attrs: { 'aria-hidden': 'true' } }), el('span', { text: label })))),
+    Object.keys(s.storage).length ? el('p', { cls: 'sp-note', text: `Réserve : ${Object.entries(s.storage).map(([k, n]) => `${n} × ${FURNITURE_BY_ID.get(k)!.nameFr}`).join(', ')} — posez-les avec « Aménager » (B).` }) : null,
+    section('Clients perdus aujourd’hui', el('em', { text: `attrait ${s.rate > 0 || open ? g.attractiveness(s).toFixed(2) : '—'}` })),
+    el('div', { cls: 'sp-losses' }, ...causes.map(([label, n, hint]) => el('div', { cls: `sp-loss${n > 0 ? ' on' : ''}` }, el('b', { text: num(n) }), el('span', { text: label }), el('small', { text: hint })))),
+    section('Affluence aujourd’hui', legend([['#5cc77a', 'servis'], ['#ef6b6b', 'perdus'], ['#2a3647', 'fermé']])),
     hourChart(s.hourServed ?? [], s.hourLost ?? [], s.open, s.close),
-    g.marketingBoost(id) > 0 ? el('p', { cls: 'small ok', text: `Publicité en cours : +${pct(g.marketingBoost(id))} de clients.` }) : null,
+    boost > 0 ? el('p', { cls: 'sp-note ok', text: `Publicité en cours : +${pct(boost)} de clients.` }) : null,
   ];
 }
 
 function stock(ctx: UiCtx, id: number): (Node | null)[] {
   const g = ctx.game, s = g.shop(id)!;
-  const tbl = el('table', { cls: 'tbl stock' }, el('tr', {}, el('th', { text: 'Produit' }), el('th', { text: 'Stock' }), el('th', { text: 'Prix (réf.)' }), el('th', { text: 'Auto' }), el('th', { text: 'Commander' })));
-  for (const p of productsOf(s.type)) {
+  const prods = productsOf(s.type);
+  const head = el('tr', {}, ...['Produit', 'Stock', 'Prix de vente', 'Marge / u.', 'Auto', 'Commander'].map((h, k) => el('th', { cls: k >= 3 ? 'c' : '', text: h })));
+  const tbl = el('table', { cls: 'tbl stock sp-stock' }, head);
+  let empty = 0, pendingAll = 0, value = 0;
+  for (const p of prods) {
     const ps = s.products[p.id]!, cap = g.storageFor(s, p), pend = g.pendingQty(id, p.id);
+    const unitCost = p.cost * g.marketIndex(p.id), ref = g.refPrice(p);
+    value += ps.stock * unitCost; pendingAll += pend;
+    if (ps.stock === 0 && cap > 0) empty++;
     const price = el('input', { cls: 'price', attrs: { type: 'number', step: '0.1', min: '0', value: String(ps.price), 'aria-label': `Prix ${p.nameFr}` } });
     price.addEventListener('change', () => ctx.act(g.setPrice(id, p.id, Number(price.value))));
     const auto = el('input', { attrs: { type: 'checkbox', 'aria-label': `Réassort automatique ${p.nameFr}` } });
     auto.checked = ps.auto;
     auto.addEventListener('change', () => ctx.act(g.setAuto(id, p.id, auto.checked)));
     const room = g.room(s, p.id);
-    tbl.append(el('tr', {},
-      el('td', {}, el('b', { text: p.nameFr }), el('div', { cls: 'muted small', text: `achat ${chf2(p.cost * g.marketIndex(p.id))}${p.needsMachine ? ' · machine' : ''}` })),
-      el('td', { text: `${ps.stock} / ${cap}${pend ? ` (+${pend})` : ''}`, cls: ps.stock === 0 && cap > 0 ? 'bad' : '' }),
-      el('td', {}, price, el('div', { cls: 'muted small', text: `quartier ${chf2(g.refPrice(p))}` })),
-      el('td', {}, auto),
-      el('td', {}, button(room > 0 ? `+${room}` : 'Plein', () => ctx.act(g.order(id, p.id, room), (o) => `Livraison demain 7 h : ${o.qty} ${p.nameFr.toLowerCase()} (${chf2(o.cost)}).`), 'small'))));
+    // Écart au prix du quartier.
+    const gap = ref > 0 ? ps.price / ref - 1 : 0;
+    const gapTone: Tone = gap > 0.3 ? 'bad' : gap > 0.1 ? 'warn' : gap < -0.1 ? 'muted' : 'ok';
+    const gapText = Math.abs(gap) < 0.005 ? 'au prix' : `${gap > 0 ? '+' : '−'}${Math.round(Math.abs(gap) * 100)} %`;
+    // Stock : jauge colorée selon le remplissage.
+    const frac = cap > 0 ? ps.stock / cap : 0;
+    const stTone: Tone = cap === 0 ? 'muted' : ps.stock === 0 ? 'bad' : frac < 0.25 ? 'warn' : 'ok';
+    const marginU = ps.price - unitCost, marginP = ps.price > 0 ? marginU / ps.price : 0;
+    const est = room > 0 ? g.orderCost(p.id, room) : 0;
+    const orderBtn = button(room > 0 ? `+${room}` : 'Plein', () => ctx.act(g.order(id, p.id, room), (o) => `Livraison demain 7 h : ${o.qty} ${p.nameFr.toLowerCase()} (${chf2(o.cost)}).`), room > 0 ? 'small order' : 'small');
+    if (room > 0) orderBtn.title = `Commander ${room} unités (environ ${chf(est + g.deliveryFee(est, id))} livraison comprise)`;
+    tbl.append(el('tr', { cls: stTone === 'bad' ? 'row-bad' : '' },
+      el('td', {}, el('b', { text: p.nameFr }), el('div', { cls: 'sub', text: `achat ${chf2(unitCost)}${p.needsMachine ? ' · machine' : ''}` })),
+      el('td', { cls: `sp-st ${ps.stock === 0 && cap > 0 ? 'bad' : ''}`.trim() },
+        el('div', { cls: 'sp-stnum' }, el('b', { text: String(ps.stock) }), el('span', { text: ` / ${cap}` }), pend ? el('em', { text: `+${pend} demain` }) : null),
+        cap > 0 ? meter(frac, stTone, 'thin') : el('div', { cls: 'sub', text: 'aucun meuble adapté' })),
+      el('td', {}, el('div', { cls: 'sp-price' }, price, el('span', { cls: `gap ${gapTone}`, text: gapText })), el('div', { cls: 'sub', text: `quartier ${chf2(ref)}` })),
+      el('td', { cls: 'c' }, el('b', { cls: marginU >= 0 ? '' : 'bad', text: chf2(marginU) }), el('div', { cls: 'sub', text: `${Math.round(marginP * 100)} %` })),
+      el('td', { cls: 'c' }, auto),
+      el('td', { cls: 'c' }, orderBtn)));
   }
-  return [tbl, el('p', { cls: 'muted small', text: 'Commander d’ici = livraison (frais). Moins cher : acheter chez le grossiste et transporter vous-même. Auto : commande livrée chaque soir à 21 h quand le rayon est à moitié vide.' })];
+  return [
+    el('div', { cls: 'sp-strip' },
+      stat('Ruptures', String(empty), null, empty ? 'bad' : 'ok'),
+      stat('En commande', `${num(pendingAll)} u.`, 'livrées à 7 h'),
+      stat('Valeur du stock', chf(value), 'au prix d’achat')),
+    tbl,
+    el('p', { cls: 'sp-note', text: 'Commander = livraison le lendemain à 7 h (frais de livraison). Moins cher : acheter chez le grossiste et transporter vous-même. Auto : commande livrée chaque soir à 21 h quand le rayon est à moitié vide. Écart : votre prix comparé à celui du quartier ; au-delà de +10 %, des clients reposent l’article.' }),
+  ];
 }
 
 function equipe(ctx: UiCtx, id: number): (Node | null)[] {
   const g = ctx.game, staff = g.staffOf(id), st = g.stats(g.shop(id)!);
+  const wages = staff.reduce((a, e) => a + e.wage, 0);
+  const avgSkill = staff.length ? staff.reduce((a, e) => a + e.skill, 0) / staff.length : 0;
   return [
-    el('p', { cls: 'small', text: `${staff.length} employé(s) · ${st.registers} caisse(s). Chaque caissier sert jusqu’à 28 clients par heure selon sa compétence ; les autres réassortent.` }),
-    ...staff.map((e) => employeeRow(ctx, e.id)),
-    el('p', { cls: 'muted small', text: 'Pour embaucher, rendez-vous à l’agence pour l’emploi. Vous pouvez aussi tenir la caisse vous-même (E derrière la caisse).' }),
+    el('div', { cls: 'sp-strip' },
+      stat('Employés', String(staff.length), staff.length ? `compétence moy. ${pct(avgSkill)}` : 'personne', staff.length ? '' : 'warn'),
+      stat('Caisses', String(st.registers), st.registers ? `jusqu’à ${st.registers * 28} clients / h` : 'aucune', st.registers ? '' : 'bad'),
+      stat('Salaires', `${chf(wages)} / h`, 'payés aux heures d’ouverture')),
+    section('Équipe'),
+    ...(staff.length ? staff.map((e) => employeeRow(ctx, e.id)) : [el('div', { cls: 'sp-empty', text: 'Aucun employé affecté à ce commerce.' })]),
+    el('p', { cls: 'sp-note', text: 'Chaque caissier sert jusqu’à 28 clients par heure selon sa compétence ; les autres réassortent. Pour embaucher : agence pour l’emploi. Vous pouvez aussi tenir la caisse vous-même (E derrière la caisse).' }),
   ];
 }
 
 function horaires(ctx: UiCtx, id: number): (Node | null)[] {
   const g = ctx.game, s = g.shop(id)!;
-  const sel = (v: number, from: number, to: number): HTMLSelectElement => {
-    const e = el('select', {}, ...Array.from({ length: to - from + 1 }, (_, k) => el('option', { text: `${from + k} h`, attrs: { value: String(from + k) } })));
+  const sel = (v: number, from: number, to: number, label: string): HTMLSelectElement => {
+    const e = el('select', { attrs: { 'aria-label': label } }, ...Array.from({ length: to - from + 1 }, (_, k) => el('option', { text: `${from + k} h`, attrs: { value: String(from + k) } })));
     e.value = String(v);
     return e;
   };
-  const o = sel(s.open, 5, 19), c = sel(s.close, 9, 23);
+  const o = sel(s.open, 5, 19, 'Ouverture'), c = sel(s.close, 9, 23, 'Fermeture');
   const save = (): void => { ctx.act(g.setHours(id, Number(o.value), Number(c.value)), 'Horaires enregistrés.'); };
   o.addEventListener('change', save); c.addEventListener('change', save);
   const t = SHOP_TYPE_BY_ID.get(s.type)!;
   const peak = t.hourly.map((v, h) => [h, v] as const).filter(([, v]) => v >= 0.8).map(([h]) => `${h} h`).join(', ');
-  return [el('div', { cls: 'row' }, el('label', { cls: 'field' }, el('span', { text: 'Ouverture' }), o), el('label', { cls: 'field' }, el('span', { text: 'Fermeture' }), c)),
-    el('p', { cls: 'muted small', text: `Heures d’affluence pour ce type : ${peak}. Les salaires sont payés à chaque heure d’ouverture.` })];
+  const maxH = Math.max(...t.hourly, 0.01);
+  // Bandeau 5 h – 23 h : demande relative par heure, heures d'ouverture surlignées.
+  const strip = el('div', { cls: 'sp-hstrip' }, ...Array.from({ length: 19 }, (_, k) => {
+    const h = 5 + k, v = t.hourly[h] ?? 0, on = h >= s.open && h < s.close;
+    return el('div', { cls: `hcol${on ? ' on' : ''}${v >= 0.8 ? ' peak' : ''}`, attrs: { title: `${h} h` } },
+      el('i', { attrs: { style: `height:${Math.round((v / maxH) * 100)}%` } }), el('span', { text: h % 2 === 1 ? String(h) : '' }));
+  }));
+  return [
+    el('div', { cls: 'sp-hours-row' }, el('label', { cls: 'field' }, el('span', { text: 'Ouverture' }), o), el('span', { cls: 'sp-dash', text: '→' }), el('label', { cls: 'field' }, el('span', { text: 'Fermeture' }), c),
+      el('div', { cls: 'sp-hours-sum' }, el('b', { text: `${s.close - s.open} h` }), el('span', { text: 'par jour' }))),
+    section('Demande des clients par heure', legend([['#ffcc4d', 'ouvert'], ['#3a4a60', 'fermé']])),
+    strip,
+    el('p', { cls: 'sp-note', text: `Heures d’affluence pour ce type : ${peak || '—'}. Les salaires sont payés à chaque heure d’ouverture : ouvrez sur les pointes, fermez les heures creuses.` }),
+  ];
 }
 
 function resultats(ctx: UiCtx, id: number): (Node | null)[] {
   const g = ctx.game, s = g.shop(id)!;
   const days = [...s.history.slice(-13), s.today];
-  return [chart(days.map((d) => d.revenue), days.map((d) => d.revenue - d.costOfSales - d.wages - d.rent)),
-    el('p', { cls: 'muted small', text: 'Barres : ventes. Ligne : marge après salaires et loyer.' }),
+  const past = s.history.slice(-7);
+  const avg = past.length ? past.reduce((a, d) => a + shopResult(d), 0) / past.length : 0;
+  const best = past.reduce((m, d) => Math.max(m, d.revenue), 0);
+  return [
+    el('div', { cls: 'sp-strip' },
+      stat('Résultat moyen', past.length ? signed(avg) : '—', past.length ? `sur ${past.length} jour(s)` : 'pas encore de bilan', avg >= 0 ? 'ok' : 'bad'),
+      stat('Meilleures ventes', past.length ? chf(best) : '—', '7 derniers jours'),
+      stat('Dépôt de garantie', chf(s.deposit), 'rendu à la résiliation')),
+    section('14 derniers jours', legend([['rgba(95,195,255,0.7)', 'ventes'], ['#5cc77a', 'marge après salaires et loyer']])),
+    chart(days.map((d) => d.revenue), days.map(shopResult)),
     ledger(days.slice().reverse(), false),
-    button('Résilier le bail…', () => void askConfirm(`Résilier le bail de ${s.name} ? Le dépôt est rendu et le mobilier revendu à 40 %.`, 'Résilier', true).then((y) => { if (y) { ctx.act(g.release(id)); ctx.panel.close(); } }), 'danger')];
+    el('div', { cls: 'sp-danger' }, el('div', {}, el('b', { text: 'Résilier le bail' }), el('div', { cls: 'sub', text: 'Le dépôt est rendu et le mobilier revendu à 40 %.' })),
+      button('Résilier le bail…', () => void askConfirm(`Résilier le bail de ${s.name} ? Le dépôt est rendu et le mobilier revendu à 40 %.`, 'Résilier', true).then((y) => { if (y) { ctx.act(g.release(id)); ctx.panel.close(); } }), 'danger')),
+  ];
 }
 
 function ledger(days: DayStats[], all: boolean): HTMLElement {
-  return el('table', { cls: 'tbl' }, el('tr', {}, el('th', { text: 'Jour' }), el('th', { text: 'Clients' }), el('th', { text: 'Ventes' }), el('th', { text: 'Achats' }), el('th', { text: 'Salaires' }), el('th', { text: all ? 'Autres' : 'Loyer' }), el('th', { text: 'Solde' })),
+  return el('table', { cls: 'tbl ledger' }, el('tr', {}, ...['Jour', 'Clients', 'Ventes', 'Achats', 'Salaires', all ? 'Autres' : 'Loyer', 'Solde'].map((h, k) => el('th', { cls: k ? 'n' : '', text: h }))),
     ...days.map((d) => {
       const other = all ? d.rent + d.equipment + d.marketing + d.finance + d.living : d.rent;
       const p = all ? dayProfit(d) : d.revenue - d.purchases - d.wages - d.rent - d.equipment - d.marketing;
-      return el('tr', {}, el('td', { text: String(d.day + 1) }), el('td', { text: num(d.customers) }), el('td', { text: chf(d.revenue) }), el('td', { text: chf(d.purchases) }), el('td', { text: chf(d.wages) }), el('td', { text: chf(other) }), el('td', { text: signed(p), cls: p >= 0 ? 'ok' : 'bad' }));
+      return el('tr', {}, el('td', { text: String(d.day + 1) }), el('td', { cls: 'n', text: num(d.customers) }), el('td', { cls: 'n', text: chf(d.revenue) }), el('td', { cls: 'n', text: chf(d.purchases) }), el('td', { cls: 'n', text: chf(d.wages) }), el('td', { cls: 'n', text: chf(other) }), el('td', { text: signed(p), cls: `n ${p >= 0 ? 'ok' : 'bad'}` }));
     }));
 }
 
-/** Petit graphique : barres (valeurs a) et ligne (valeurs b). */
+/** Petit graphique : barres (valeurs a) et ligne (valeurs b), axe zéro tracé. */
 function chart(a: number[], b: number[]): SVGSVGElement {
-  const W = 360, H = 120, n = a.length;
+  const W = 560, H = 130, n = a.length;
   const max = Math.max(1, ...a, ...b.map(Math.abs));
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('class', 'chart');
   const y0 = H - 18, sc = (y0 - 6) / max, bw = W / Math.max(1, n);
-  a.forEach((v, k) => { const r = document.createElementNS(ns, 'rect'); r.setAttribute('x', String(k * bw + 3)); r.setAttribute('width', String(bw - 6)); r.setAttribute('y', String(y0 - v * sc)); r.setAttribute('height', String(v * sc)); r.setAttribute('fill', 'rgba(95,195,255,0.55)'); svg.append(r); });
+  a.forEach((v, k) => { const r = document.createElementNS(ns, 'rect'); r.setAttribute('x', String(k * bw + 3)); r.setAttribute('width', String(bw - 6)); r.setAttribute('y', String(y0 - v * sc)); r.setAttribute('height', String(v * sc)); r.setAttribute('rx', '2'); r.setAttribute('fill', 'rgba(95,195,255,0.55)'); svg.append(r); });
   const pl = document.createElementNS(ns, 'polyline');
   pl.setAttribute('points', b.map((v, k) => `${k * bw + bw / 2},${y0 - Math.max(-6, v) * sc}`).join(' '));
-  pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', '#5cc77a'); pl.setAttribute('stroke-width', '2.5');
+  pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', '#5cc77a'); pl.setAttribute('stroke-width', '2.5'); pl.setAttribute('stroke-linejoin', 'round');
   svg.append(pl);
+  b.forEach((v, k) => { const c = document.createElementNS(ns, 'circle'); c.setAttribute('cx', String(k * bw + bw / 2)); c.setAttribute('cy', String(y0 - Math.max(-6, v) * sc)); c.setAttribute('r', '2.6'); c.setAttribute('fill', v >= 0 ? '#5cc77a' : '#ef6b6b'); svg.append(c); });
   const base = document.createElementNS(ns, 'line');
   base.setAttribute('x1', '0'); base.setAttribute('x2', String(W)); base.setAttribute('y1', String(y0)); base.setAttribute('y2', String(y0)); base.setAttribute('stroke', 'rgba(255,255,255,0.25)');
   svg.append(base);
@@ -153,27 +277,38 @@ export function companyView(ctx: UiCtx): View {
     kicker: 'Entreprise', title: g.companyName, wide: true,
     render: () => {
       const days = [...g.ledger.slice(-13), g.today];
+      const today = dayProfit(g.today);
       const out: (Node | null)[] = [
-        el('div', { cls: 'kpis' }, kpi('Trésorerie', chf(g.cash)), kpi('Dette', chf(g.debt)), kpi('Solde du jour', signed(dayProfit(g.today)))),
-        el('div', { cls: 'sec', text: 'Mes commerces' }),
+        el('div', { cls: 'sp-stats sp-stats-co' },
+          stat('Trésorerie', chf(g.cash), null, g.cash >= 0 ? '' : 'bad'),
+          stat('Dette', chf(g.debt), g.loans.length ? `${g.loans.length} prêt(s)` : 'aucun prêt', g.debt > 0 ? 'warn' : ''),
+          stat('Solde du jour', signed(today), 'toutes dépenses', today >= 0 ? 'ok' : 'bad'),
+          stat('Valeur nette', chf(netWorth(g)), rankOf(g.achieved.length))),
+        section('Mes commerces', g.shops.length ? `${g.shops.length}` : null),
       ];
-      if (!g.shops.length) out.push(el('p', { cls: 'muted small', text: 'Aucun commerce. Repérez les anneaux jaunes devant les locaux à louer (carte : touche M).' }));
+      if (!g.shops.length) out.push(el('div', { cls: 'sp-empty', text: 'Aucun commerce. Repérez les anneaux jaunes devant les locaux à louer (carte : touche M).' }));
       for (const s of g.shops) {
-        const p = g.premise(s.premiseId)!;
-        out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: s.name }), el('div', { cls: 'muted small', text: `${s.today.customers} clients · ${chf(s.today.revenue)} aujourd’hui · ${g.staffOf(s.id).length} employé(s)` })),
+        const p = g.premise(s.premiseId)!, t = SHOP_TYPE_BY_ID.get(s.type)!, open = isOpen(g, s);
+        out.push(el('div', { cls: 'item sp-shoprow', attrs: { style: `--shop:${t.color}` } },
+          el('div', { cls: 'sp-shoprow-id' }, el('div', { cls: 'sp-sign sm', text: t.nameFr.slice(0, 1).toUpperCase() }),
+            el('div', {}, el('b', { text: s.name }), el('div', { cls: 'sub', text: `${t.nameFr} · ${open ? 'ouvert' : 'fermé'} · ${g.staffOf(s.id).length} employé(s)` }))),
+          el('div', { cls: 'sp-shoprow-n' }, el('b', { text: chf(s.today.revenue) }), el('div', { cls: 'sub', text: `${num(s.today.customers)} clients` })),
           el('div', { cls: 'row tight' }, button('Gérer', () => ctx.openShop(s.id), 'small'), button('Y aller', () => ctx.waypoint(p.doorX, p.doorZ, s.name), 'small'))));
       }
       if (g.vehicles.length) {
-        out.push(el('div', { cls: 'sec', text: 'Véhicules' }));
+        out.push(section('Véhicules'));
         for (const v of g.vehicles) {
           const load = Object.entries(v.cargo).map(([k, n]) => `${n} ${PRODUCT_BY_ID.get(k)!.nameFr.toLowerCase()}`).join(', ');
-          out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: VEHICLE_BY_ID.get(v.type)!.nameFr }), el('div', { cls: 'muted small', text: load || 'vide' })), button('Y aller', () => ctx.waypoint(v.x, v.z, 'Véhicule'), 'small')));
+          out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: VEHICLE_BY_ID.get(v.type)!.nameFr }), el('div', { cls: 'sub', text: load || 'vide' })), button('Y aller', () => ctx.waypoint(v.x, v.z, 'Véhicule'), 'small')));
         }
       }
-      out.push(el('div', { cls: 'sec', text: `Objectifs · ${rankOf(g.achieved.length)} · valeur nette ${chf(netWorth(g))}` }),
-        el('ul', { cls: 'checks objlist' }, ...OBJECTIVES.map((o) => { const done = g.achieved.includes(o.id); return el('li', { cls: done ? 'ok' : 'todo', text: `${done ? '✓' : '•'} ${o.title}${done ? '' : ` — ${o.progress(g).text}`}` }); })));
-      if (g.loans.length) out.push(el('p', { cls: 'small', text: `Prêts : ${g.loans.map((l) => `${chf(l.remaining)} restants (${chf2(l.daily)} / jour)`).join(' · ')}` }));
-      out.push(el('div', { cls: 'sec', text: 'Journal (toutes dépenses)' }), chart(days.map((d) => d.revenue), days.map(dayProfit)), ledger(days.slice().reverse(), true));
+      if (g.loans.length) out.push(el('p', { cls: 'sp-note', text: `Prêts : ${g.loans.map((l) => `${chf(l.remaining)} restants (${chf2(l.daily)} / jour)`).join(' · ')}` }));
+      out.push(section('Objectifs', `${g.achieved.length} / ${OBJECTIVES.length}`),
+        el('ul', { cls: 'sp-checks objlist' }, ...OBJECTIVES.map((o) => {
+          const done = g.achieved.includes(o.id);
+          return el('li', { cls: done ? 'ok' : 'todo' }, el('i', { attrs: { 'aria-hidden': 'true' } }), el('span', { text: o.title }), done ? null : el('small', { text: o.progress(g).text }));
+        })));
+      out.push(section('Journal (toutes dépenses)', legend([['rgba(95,195,255,0.7)', 'ventes'], ['#5cc77a', 'solde']])), chart(days.map((d) => d.revenue), days.map(dayProfit)), ledger(days.slice().reverse(), true));
       return out;
     },
   };
@@ -181,7 +316,7 @@ export function companyView(ctx: UiCtx): View {
 
 /** Barres par heure (6 h – 23 h) : clients servis (vert) et perdus (rouge) ; zone grisée hors ouverture. */
 function hourChart(served: number[], lost: number[], open: number, close: number): SVGSVGElement {
-  const ns = 'http://www.w3.org/2000/svg', W = 360, H = 90, h0 = 6, n = 18;
+  const ns = 'http://www.w3.org/2000/svg', W = 560, H = 100, h0 = 6, n = 18;
   const max = Math.max(1, ...served.map((v, k) => v + (lost[k] ?? 0)));
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -190,11 +325,14 @@ function hourChart(served: number[], lost: number[], open: number, close: number
   const rect = (x: number, y: number, w: number, h: number, fill: string): void => { const r = document.createElementNS(ns, 'rect'); r.setAttribute('x', String(x)); r.setAttribute('y', String(y)); r.setAttribute('width', String(w)); r.setAttribute('height', String(Math.max(0, h))); r.setAttribute('fill', fill); svg.append(r); };
   for (let k = 0; k < n; k++) {
     const hr = h0 + k, x = k * bw;
-    if (hr < open || hr >= close) rect(x, 0, bw, y0, 'rgba(255,255,255,0.04)');
+    if (hr < open || hr >= close) rect(x, 0, bw, y0, 'rgba(42,54,71,0.55)');
     const sv = served[hr] ?? 0, ls = lost[hr] ?? 0, sc = (y0 - 4) / max;
-    rect(x + 2, y0 - sv * sc, bw - 4, sv * sc, 'rgba(92,199,122,0.8)');
-    rect(x + 2, y0 - (sv + ls) * sc, bw - 4, ls * sc, 'rgba(239,107,107,0.8)');
+    rect(x + 2, y0 - sv * sc, bw - 4, sv * sc, 'rgba(92,199,122,0.85)');
+    rect(x + 2, y0 - (sv + ls) * sc, bw - 4, ls * sc, 'rgba(239,107,107,0.85)');
     if (k % 3 === 0) { const t = document.createElementNS(ns, 'text'); t.setAttribute('x', String(x + 2)); t.setAttribute('y', String(H - 2)); t.setAttribute('fill', '#9fb0c2'); t.setAttribute('font-size', '10'); t.textContent = `${hr} h`; svg.append(t); }
   }
+  const base = document.createElementNS(ns, 'line');
+  base.setAttribute('x1', '0'); base.setAttribute('x2', String(W)); base.setAttribute('y1', String(y0)); base.setAttribute('y2', String(y0)); base.setAttribute('stroke', 'rgba(255,255,255,0.25)');
+  svg.append(base);
   return svg;
 }
