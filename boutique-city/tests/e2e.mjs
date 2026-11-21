@@ -242,7 +242,8 @@ try {
   await page.keyboard.press('m');
   await page.waitForSelector('#map:not(.hidden) canvas');
   await shot('13-carte');
-  await page.click('#map .legend-btn:has-text("Grossiste")');
+  // Clic DOM : à très faible cadence d'images, le clic du pilote dépasse son délai (46 s mesurées en rendu logiciel chargé).
+  await ev(() => [...document.querySelectorAll('#map .legend-btn')].find((b) => b.textContent.includes('Grossiste')).click());
   check(await ev(() => document.getElementById('map').classList.contains('hidden')), 'destination choisie sur la carte');
   await ev(() => { for (let d = 0; d < 4; d++) { window.__bc.keepAlive(); window.__bc.advance(720); } });
   await page.waitForTimeout(400);
