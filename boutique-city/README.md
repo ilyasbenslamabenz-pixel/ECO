@@ -8,8 +8,9 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
 - **Se déplacer** : Z Q S D (ou W A S D, ou flèches), Maj pour courir. Souris : glisser pour tourner la caméra,
   molette pour le zoom. Sur écran tactile : joystick à gauche, glisser pour tourner, pincer pour zoomer.
 - **E** : entrer dans un bâtiment (anneau lumineux devant la porte), conduire un véhicule, tenir la caisse, dormir.
-- **B** : aménager le commerce (dans le magasin). **M** : carte (cliquer un lieu = destination). **P** : pause.
-  **Échap** : fermer.
+- **T** : téléphone (pause automatique) : Commerces, Immobilier, Banque, Équipe, Marché, Messages, Objectifs,
+  Véhicules, Carte, Entreprise, Réglages. **B** : aménager le commerce. **M** : carte. **P** : pause. **H** : aide.
+  **Échap** : fermer. Jeu pensé pour ordinateur (clavier et souris).
 
 ### Le quartier
 - Anneaux **jaunes** : locaux à louer (surface, loyer, passage, concurrence et clients estimés par type).
@@ -29,29 +30,35 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
 7. **Vie du personnage** : énergie et faim baissent ; manger au snack, dormir chez soi. À zéro d'énergie, taxi et
    longue nuit.
 8. **Banque** (prêts remboursés chaque jour), **publicité** (plus de clients pendant la campagne), **garage**.
-9. **Objectifs** (13, du premier pas à 100 000 CHF de valeur nette) et rang d'entrepreneur ; **récapitulatif** chaque
+9. **Objectifs** (13, du premier pas à 60 000 CHF de valeur nette) et rang d'entrepreneur ; **récapitulatif** chaque
    soir ; **affluence** par heure (servis / perdus) ; **avis clients** en bulles (trop cher, rupture, attente) ;
    employés qui progressent avec l'expérience ; **cycle jour/nuit** (lampadaires, vitrines éclairées) ; sons.
-10. Quatre types de commerce : épicerie, café, boutique de vêtements, fleuriste ; 28 meubles (gondoles,
+10. Sept types de commerce : épicerie, café, boutique de vêtements, fleuriste, boulangerie, fast-food, primeur ; 28 meubles (gondoles,
     congélateurs, bar, coin salon, tables bistrot, écran publicitaire…) ; 4 véhicules (scooter, citadine, camionnette,
     camion).
+
+11. **Immobilier** : louez plusieurs locaux ; prenez aussi des appartements ou des locaux à bail pour les
+    **sous-louer** (loyer demandé réglable, locataires qui arrivent et partent).
+12. **Économie vivante** : loyer des locaux provisionné chaque jour et prélevé tous les 30 jours ; prix du grossiste
+    qui varient chaque jour ; concurrents qui baissent leurs prix ; météo (pluie : moins de passants, sauf cafés et
+    fast-foods) ; jour de marché ; contrôles d'hygiène ; vols à l'étalage ; livraisons à 7 h et 14 h.
+13. **Employés** : compétence qui progresse, satisfaction liée au salaire, demandes d'augmentation, démissions.
+
+Équilibrage : `npx tsx scripts/equilibrage.ts` (7 jours par type, bien ou mal géré) ; parcours du tutoriel :
+`npx tsx scripts/tutoriel.ts`.
 
 Sauvegarde automatique chaque jour de jeu (dans le navigateur) et bouton Sauvegarder.
 
 ## Modèles 3D
-226 modèles **Kenney, licence CC0** (domaine public), dans `models/` (16 Mo, 3,4 Mo une fois compressés), tirés de
-11 packs :
-- **Quartier** : 19 immeubles et tours (City Kit Commercial), 12 maisons (City Kit Suburban), 4 entrepôts et une
-  citerne (City Kit Industrial) ;
-- **Rue** : lampadaires, feux tricolores, bancs, poubelles, bennes, jardinières, palettes, cartons, cônes et un
-  chantier, parasols, arbres et massifs de fleurs (Commercial, Suburban, Roads, Retro Urban, Car Kit, Nature Kit) ;
-- **Circulation** : 17 véhicules (berlines, taxis, citadines, SUV, police, ambulance, pompiers, camion-poubelle,
-  camions, utilitaires) ;
-- **Personnages animés** : 12 clients (Mini Characters) et l'employé en tenue (Mini Market) ;
-- **Mobilier** : 56 meubles (Furniture Kit) et 12 meubles d'épicerie (Mini Market : gondoles, présentoir à pain,
-  étal de fruits, congélateurs, caisse enregistreuse, chariots, consigne) ;
-- **Marchandise** : 63 produits (Food Kit, plantes, fleurs), plusieurs modèles par produit (pains, fruits, boissons,
-  pâtisseries…).
+877 modèles **Kenney, licence CC0** (domaine public), dans `models/` (40 Mo, 8,9 Mo une fois compressés), tirés de
+17 packs : City Kit Commercial, Suburban, Industrial et Roads, Retro Urban Kit, Car Kit, Mini Characters, Blocky
+Characters, Mini Market, Mini Arcade, Mini Skate, Furniture Kit, Food Kit, Nature Kit, Survival Kit, Holiday Kit,
+Cube Pets.
+- **Quartier** : tous les immeubles, tours, maisons et entrepôts ; ligne d'horizon (gratte-ciel, zone industrielle,
+  pavillons) ; voitures garées ; mobilier urbain ; parc avec statues, massifs, mini-zoo et skate-park ;
+- **Vie** : 30 apparences de clients (accessoires, fauteuils roulants), employés en tenue, animaux, skateurs ;
+- **Mobilier** : tout le Furniture Kit, le Mini Market, des bornes d'arcade et des décorations de fête ;
+- **Marchandise** : les 200 modèles du Food Kit répartis entre les produits.
 
 Sources et licences : `models/CREDITS.txt`. Page publiée : tous les GLB dans `models/pack.json` (bout à bout,
 compressés en gzip, décompressés dans le navigateur).

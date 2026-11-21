@@ -77,10 +77,38 @@ Ajouts de la version 4 (mêmes packs et nouveaux packs, tous CC0, même source) 
    flower_redA, flower_redB, flower_redC, flower_yellowA, flower_yellowB, flower_purpleA, flower_purpleB, plant_bush,
    plant_bushLarge, plant_bushDetailed, pot_large, pot_small, tree_default, tree_oak, tree_detailed
 
-Total : 226 modèles.
+Total (version 4) : 226 modèles.
 
 Modification : les textures de chaque pack (Textures/colormap.png ; pour le Retro Urban Kit, les images de
 Models/FBX format/Textures/ : metal, planks, roof, signs, metal_wall, wall, treeA, tiles, dirt, truck, truck_alien —
 CC0, même source) ont été intégrées dans chaque fichier GLB qui les référence (scripts/embed-textures.mjs) ;
 géométrie et animations inchangées. Le jeu force à 0 la « métallicité » des matériaux qui la mettent à 1 sans carte
 (Nature Kit), sans modifier les fichiers.
+
+Version 5 : tous les modèles utiles des packs ci-dessus et six nouveaux packs, tous CC0 (Kenney, www.kenney.nl),
+même source (github.com/series-ai/jam-ready-assets). Licence lue dans le License.txt de chaque pack. Liste complète :
+les fichiers du dossier models/ (préfixe = pack : com-, house-/sub-, ind-, road-, urb-, car-, mm-, food-, nat-, srv-,
+hol-, pet-, arc-, blk-, skt- ; sans préfixe : Furniture Kit, Mini Characters, immeubles du City Kit Commercial).
+
+  Blocky Characters 2.0 : 18 modèles
+  Car Kit 3.1 : 28 modèles
+  City Kit (Commercial) 2.1 : 41 modèles
+  City Kit Industrial 1.0 : 25 modèles
+  City Kit Roads 2.0 : 12 modèles
+  City Kit Suburban 2.0 : 40 modèles
+  Cube Pets 2.0 : 24 modèles
+  Food Kit 2.0 : 200 modèles
+  Furniture Kit 2.1 : 120 modèles
+  Holiday Kit 2.0 : 45 modèles
+  Mini Arcade 1.2 : 14 modèles
+  Mini Characters 1.0 : 26 modèles
+  Mini Market 1.0 : 15 modèles
+  Mini Skate 1.2 : 18 modèles
+  Nature Kit 2.1 : 199 modèles
+  Retro Urban Kit 2.0 : 37 modèles
+  Survival Kit 2.0 : 15 modèles
+
+Nouveaux packs : Survival Kit 2.0 (03-04-2024), Holiday Kit 2.0 (11-12-2024), Cube Pets 2.0 (26-03-2026),
+Mini Arcade 1.2 (22-07-2024), Blocky Characters 2.0 (10-06-2025), Mini Skate 1.2 (29-02-2024) — tous CC0.
+Textures intégrées comme précédemment (Blocky Characters : texture-a … texture-r ; Retro Urban Kit : images FBX).
+Total : 877 modèles.
