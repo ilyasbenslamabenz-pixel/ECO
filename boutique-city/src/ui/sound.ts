@@ -36,4 +36,9 @@ export const sound = {
   chime(): void { tone(880, 0, 0.35, 'sine', 0.08); tone(659, 0.16, 0.45, 'sine', 0.07); },
   blip(): void { tone(660, 0, 0.12, 'square', 0.03); },
   success(): void { [523, 659, 784, 1046].forEach((f, k) => tone(f, k * 0.09, 0.3, 'triangle', 0.08)); },
+  /** Palier franchi, victoire : fanfare plus longue, accord final tenu. */
+  fanfare(): void {
+    [392, 523, 659, 784].forEach((f, k) => tone(f, k * 0.11, 0.28, 'triangle', 0.08));
+    [523, 659, 784, 1046].forEach((f) => tone(f, 0.5, 0.9, 'triangle', 0.06));
+  },
 };

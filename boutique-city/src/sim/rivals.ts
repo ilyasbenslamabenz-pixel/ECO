@@ -55,7 +55,8 @@ export interface RivalShop {
   profit: number[];
 }
 
-export interface RivalSave { cos: RivalCo[]; shops: RivalShop[] }
+/** État sauvegardé ; `buys` : commerces déjà rachetés par le joueur (absent des anciennes sauvegardes : 0). */
+export interface RivalSave { cos: RivalCo[]; shops: RivalShop[]; buys?: number }
 
 export interface RivalQuote {
   /** Prix du fonds de commerce, dépôt de garantie du bail, total à payer. */
@@ -81,6 +82,8 @@ const typeLower = (t: ShopType): string => typeName(t).toLowerCase();
 export class Rivalry {
   cos: RivalCo[] = [];
   shops: RivalShop[] = [];
+  /** Commerces rivaux déjà rachetés par le joueur : chaque rachat renchérit les suivants (RIVALS.buySurcharge). */
+  buys = 0;
   private byPremise = new Map<number, RivalShop>();
 
   constructor(private readonly game: Game, private readonly host: Host) {}
@@ -92,6 +95,7 @@ export class Rivalry {
     if (save) {
       this.cos = structuredClone(save.cos);
       this.shops = structuredClone(save.shops);
+      this.buys = save.buys ?? 0;
     } else {
       const g = this.game, rng = new Rng((g.seed ^ 0x27d4eb2f) >>> 0);
       const n = rng.int(RIVALS.countMin, RIVALS.countMax);
@@ -124,7 +128,10 @@ export class Rivalry {
     this.apply();
   }
 
-  save(): RivalSave { return { cos: structuredClone(this.cos), shops: structuredClone(this.shops) }; }
+  save(): RivalSave { return { cos: structuredClone(this.cos), shops: structuredClone(this.shops), buys: this.buys }; }
+
+  /** Majoration des prix de rachat (× 1 + RIVALS.buySurcharge par commerce déjà racheté). */
+  buyFactor(): number { return 1 + RIVALS.buySurcharge * this.buys; }
 
   /** Recopie l'état sur les locaux du quartier (concurrent installé ou local libre). */
   private apply(): void {
@@ -364,13 +371,17 @@ export class Rivalry {
 
   /* ------------------------------ Rachat ------------------------------ */
 
-  /** Prix de rachat d'un commerce rival : chiffre d'affaires × réputation, plus le mobilier ; dépôt du bail en plus. */
+  /**
+   * Prix de rachat d'un commerce rival : chiffre d'affaires × réputation, plus le mobilier (plancher RIVALS.buyMin),
+   * majoré de RIVALS.buySurcharge par commerce déjà racheté ; dépôt du bail en plus.
+   */
   quote(premiseId: number): RivalQuote | null {
     const rs = this.byPremise.get(premiseId), p = this.game.premise(premiseId);
     if (!rs || !p) return null;
     const revenue = this.avgRevenue(rs);
     const furniture = RIVAL_LAYOUTS[rs.type].reduce((a, f) => a + (FURNITURE_BY_ID.get(f)?.price ?? 0), 0);
-    const price = Math.max(RIVALS.buyMin, Math.round((revenue * RIVALS.buyRevenueDays * (0.5 + rs.reputation) + furniture * 0.5) / 100) * 100);
+    const base = Math.max(RIVALS.buyMin, revenue * RIVALS.buyRevenueDays * (0.5 + rs.reputation) + furniture * 0.5);
+    const price = Math.round((base * this.buyFactor()) / 100) * 100;
     const deposit = p.rent * ECONOMY.depositMonths;
     const customers = rs.customers || this.estimate(rs).customers;
     return { price, deposit, total: price + deposit, revenue, customers, reputation: rs.reputation, furniture, staff: customers > 250 ? 2 : 1 };
@@ -389,6 +400,7 @@ export class Rivalry {
     this.shops = this.shops.filter((x) => x !== rs);
     this.apply();
     const s = r.data;
+    s.acquired = true;
     g.cash -= cost;
     s.today.equipment += cost; g.today.equipment += cost;
     s.reputation = r2(clamp(rs.reputation, 0.22, 0.9));
@@ -419,6 +431,7 @@ export class Rivalry {
     // Une entreprise sans commerce disparaît.
     const co = this.co(rs.co);
     if (co && !co.gone && !this.shopsOf(co.id).length) { co.gone = true; co.bought = true; co.endDay = g.day; }
+    this.buys++;
     this.host.bump();
     return { ok: true, data: s };
   }
@@ -440,12 +453,14 @@ export class Rivalry {
     if (!co || !q) return { ok: false, message: 'Cette entreprise n’est pas à vendre.' };
     if (g.cash < q.total) return { ok: false, message: `Trésorerie insuffisante : ${Math.round(q.total).toLocaleString('fr-CH')} CHF à payer.` };
     const list = this.shopsOf(co.id);
-    const sum = list.reduce((a, rs) => a + (this.quote(rs.premiseId)?.price ?? 0), 0) || 1;
+    // Parts du prix fixées avant le premier rachat (chaque rachat renchérit les devis suivants).
+    const prices = list.map((rs) => this.quote(rs.premiseId)?.price ?? 0);
+    const sum = prices.reduce((a, b) => a + b, 0) || 1;
     let n = 0;
-    for (const rs of list) {
-      const part = Math.round(q.price * ((this.quote(rs.premiseId)?.price ?? 0) / sum));
+    list.forEach((rs, k) => {
+      const part = Math.round(q.price * (prices[k]! / sum));
       if (this.buy(rs.premiseId, withStaff, part).ok) n++;
-    }
+    });
     co.gone = true; co.bought = true; co.endDay = g.day;
     g.notify('ok', `${co.name} vous appartient : ${n} commerce${n > 1 ? 's' : ''} repris.`);
     this.host.bump();

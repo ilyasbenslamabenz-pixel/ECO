@@ -153,7 +153,7 @@ const H = (pairs: [number, number][]): number[] => { const a = new Array<number>
 
 export const SHOP_TYPES: readonly ShopTypeDef[] = [
   {
-    id: 'epicerie', nameFr: 'Épicerie', capture: 0.095, basket: 2.2, weekend: 1.15, open: 8, close: 20, color: '#4caf6a',
+    id: 'epicerie', nameFr: 'Épicerie', capture: 0.095, basket: 2.5, weekend: 1.15, open: 8, close: 20, color: '#4caf6a',
     hourly: H([[7, 0.35], [8, 0.6], [9, 0.55], [10, 0.5], [11, 0.65], [12, 0.85], [13, 0.7], [14, 0.5], [15, 0.5], [16, 0.65], [17, 0.95], [18, 1], [19, 0.8], [20, 0.45], [21, 0.25]]),
   },
   {
@@ -161,15 +161,15 @@ export const SHOP_TYPES: readonly ShopTypeDef[] = [
     hourly: H([[6, 0.3], [7, 0.85], [8, 1], [9, 0.8], [10, 0.6], [11, 0.55], [12, 0.8], [13, 0.75], [14, 0.5], [15, 0.55], [16, 0.6], [17, 0.5], [18, 0.35], [19, 0.2], [20, 0.1]]),
   },
   {
-    id: 'vetements', nameFr: 'Boutique de vêtements', capture: 0.008, basket: 1.15, weekend: 1.6, open: 10, close: 19, color: '#8a5ad0',
+    id: 'vetements', nameFr: 'Boutique de vêtements', capture: 0.006, basket: 1.15, weekend: 1.6, open: 10, close: 19, color: '#8a5ad0',
     hourly: H([[9, 0.2], [10, 0.4], [11, 0.55], [12, 0.6], [13, 0.65], [14, 0.75], [15, 0.85], [16, 0.95], [17, 1], [18, 0.85], [19, 0.4], [20, 0.15]]),
   },
   {
-    id: 'fleuriste', nameFr: 'Fleuriste', capture: 0.013, basket: 1.3, weekend: 1.5, open: 9, close: 19, color: '#d9578a',
+    id: 'fleuriste', nameFr: 'Fleuriste', capture: 0.015, basket: 1.3, weekend: 1.5, open: 9, close: 19, color: '#d9578a',
     hourly: H([[8, 0.2], [9, 0.4], [10, 0.55], [11, 0.75], [12, 0.8], [13, 0.6], [14, 0.55], [15, 0.6], [16, 0.8], [17, 1], [18, 0.9], [19, 0.4], [20, 0.15]]),
   },
   {
-    id: 'boulangerie', nameFr: 'Boulangerie', capture: 0.09, basket: 1.8, weekend: 1.3, open: 6, close: 19, color: '#d9a23a',
+    id: 'boulangerie', nameFr: 'Boulangerie', capture: 0.09, basket: 2.1, weekend: 1.3, open: 6, close: 19, color: '#d9a23a',
     hourly: H([[6, 0.6], [7, 1], [8, 0.95], [9, 0.6], [10, 0.45], [11, 0.55], [12, 0.75], [13, 0.5], [14, 0.3], [15, 0.35], [16, 0.5], [17, 0.8], [18, 0.75], [19, 0.3]]),
   },
   {
@@ -177,7 +177,7 @@ export const SHOP_TYPES: readonly ShopTypeDef[] = [
     hourly: H([[11, 0.45], [12, 1], [13, 0.9], [14, 0.45], [15, 0.3], [16, 0.35], [17, 0.5], [18, 0.75], [19, 0.95], [20, 0.85], [21, 0.6], [22, 0.4], [23, 0.15]]),
   },
   {
-    id: 'primeur', nameFr: 'Primeur', capture: 0.028, basket: 2.4, weekend: 1.25, open: 8, close: 19, color: '#6aa83a',
+    id: 'primeur', nameFr: 'Primeur', capture: 0.031, basket: 2.9, weekend: 1.25, open: 8, close: 19, color: '#6aa83a',
     hourly: H([[7, 0.2], [8, 0.5], [9, 0.75], [10, 0.85], [11, 0.9], [12, 0.7], [13, 0.45], [14, 0.4], [15, 0.5], [16, 0.75], [17, 1], [18, 0.8], [19, 0.3]]),
   },
 ];
@@ -185,6 +185,14 @@ export const SHOP_TYPES: readonly ShopTypeDef[] = [
 export const SHOP_TYPE_BY_ID: ReadonlyMap<ShopType, ShopTypeDef> = new Map(SHOP_TYPES.map((t) => [t.id, t]));
 
 export function productsOf(shop: ShopType): ProductDef[] { return PRODUCTS.filter((p) => p.shop === shop); }
+
+/**
+ * Sensibilité des clients au prix, de part et d'autre du prix du quartier : sous ce prix, les prix bas attirent
+ * (`below`) ; au-dessus, les prix hauts repoussent moins fort (`above`) : se positionner plus cher reste un choix.
+ */
+export const PRICE = { below: 2.2, above: 1.6 } as const;
+/** Attrait d'un prix (1 au prix du quartier) selon le rapport prix / prix du quartier. */
+export const priceAppeal = (ratio: number): number => Math.exp(-(ratio > 1 ? PRICE.above : PRICE.below) * (ratio - 1));
 
 /** Réglages de partie (modifiables) : somme de départ. */
 export const CONFIG = {
@@ -205,7 +213,9 @@ export const ECONOMY = {
   /** Heure de livraison des commandes (lendemain). */
   deliveryHour: 7,
   /** Clients servis par heure et par caisse tenue (employé de compétence 1). */
-  servePerRegister: 28,
+  servePerRegister: 32,
+  /** Poids d'un client lassé d'attendre en caisse dans la réputation visée (un client perdu ailleurs compte pour 1). */
+  waitRepWeight: 1.5,
   /** Indemnité de licenciement (jours de salaire, 8 h / jour). */
   severanceDays: 3,
   /** Revente du mobilier (part du prix). */
@@ -272,8 +282,8 @@ export const loanTotal = (o: LoanOffer): number => Math.round(o.amount * (1 + (o
 export type CampaignKind = 'flyers' | 'affiches' | 'internet';
 export interface CampaignDef { id: CampaignKind; nameFr: string; perDay: number; /** Clients en plus (part). */ boost: number; scope: 'shop' | 'all'; desc: string }
 export const CAMPAIGNS: readonly CampaignDef[] = [
-  { id: 'flyers', nameFr: 'Distribution de flyers', perDay: 90, boost: 0.25, scope: 'shop', desc: 'Un commerce : +25 % de clients dès le lancement, la notoriété grimpe pendant la campagne puis s’estompe.' },
-  { id: 'affiches', nameFr: 'Affiches dans le quartier', perDay: 260, boost: 0.5, scope: 'shop', desc: 'Un commerce : +50 % de clients dès le lancement, la notoriété grimpe pendant la campagne puis s’estompe.' },
+  { id: 'flyers', nameFr: 'Distribution de flyers', perDay: 90, boost: 0.15, scope: 'shop', desc: 'Un commerce : +15 % de clients dès le lancement, la notoriété grimpe pendant la campagne puis s’estompe.' },
+  { id: 'affiches', nameFr: 'Affiches dans le quartier', perDay: 260, boost: 0.35, scope: 'shop', desc: 'Un commerce : +35 % de clients dès le lancement, la notoriété grimpe pendant la campagne puis s’estompe.' },
   { id: 'internet', nameFr: 'Publicité sur internet', perDay: 380, boost: 0.22, scope: 'all', desc: 'Tous vos commerces : +22 % de clients dès le lancement, la notoriété grimpe pendant la campagne puis s’estompe.' },
 ];
 export const CAMPAIGN_BY_ID: ReadonlyMap<CampaignKind, CampaignDef> = new Map(CAMPAIGNS.map((c) => [c.id, c]));
@@ -281,8 +291,13 @@ export const CAMPAIGN_BY_ID: ReadonlyMap<CampaignKind, CampaignDef> = new Map(CA
 /* ------------------------------ Finances : impôts, crédit, placements, notoriété ------------------------------ */
 
 export const FINANCE = {
-  /** Impôt sur le bénéfice : part du bénéfice positif de chaque semaine (7 jours), prélevée à minuit le 7e jour. */
-  taxRate: 0.18,
+  /**
+   * Impôt progressif sur le bénéfice de chaque semaine (7 jours), prélevé à minuit le 7e jour : 15 % jusqu'à
+   * 7 000 CHF, 25 % de 7 000 à 20 000 CHF, 35 % au-delà (tranches : [plafond, taux]).
+   */
+  taxBrackets: [[7_000, 0.15], [20_000, 0.25], [Infinity, 0.35]] as readonly (readonly [number, number])[],
+  /** Report des pertes : le déficit d'une semaine réduit le bénéfice imposable des 4 semaines suivantes. */
+  taxCarryWeeks: 4,
   taxPeriod: 7,
   /** Semaines exonérées au début (aide à la création d'entreprise). */
   taxGraceWeeks: 1,
@@ -295,11 +310,66 @@ export const FINANCE = {
   /** Notoriété (part de clients en plus) : perte de 20 % par jour, gain quotidien de 25 % de l'effet de chaque campagne en cours. */
   awarenessDecay: 0.2,
   awarenessGain: 0.25,
-  /** Notoriété maximale d'un commerce (+100 % de clients). */
-  awarenessMax: 1,
+  /** Notoriété maximale d'un commerce (+60 % de clients). */
+  awarenessMax: 0.6,
   /** Placement minimal (CHF). */
   investMin: 100,
+  /**
+   * Découvert : les commandes au grossiste restent possibles jusqu'à −25 % du crédit encore disponible ; intérêt de
+   * 0,05 % par jour sur tout solde négatif, prélevé à minuit.
+   */
+  overdraftShare: 0.25,
+  overdraftRate: 0.0005,
+  /**
+   * Frais de siège (encadrement, comptabilité) au-delà de 5 commerces : 50 CHF par jour pour le 6e, puis 25 CHF de
+   * plus pour chaque commerce suivant (500 CHF par jour à 10 commerces, 5 750 CHF à 25) : grandir coûte de plus en plus.
+   */
+  hqFreeShops: 5,
+  hqPerShop: 50,
+  hqStep: 25,
 } as const;
+
+/** Frais de siège par jour pour `shops` commerces (FINANCE.hqFreeShops gratuits, puis de plus en plus chers). */
+export function hqFee(shops: number): number {
+  const n = Math.max(0, shops - FINANCE.hqFreeShops);
+  return n * FINANCE.hqPerShop + (FINANCE.hqStep * n * (n - 1)) / 2;
+}
+
+/** Prêt d'urgence du plan de redressement : hors plafond de crédit, un seul à la fois, taux annuel plus élevé. */
+export const EMERGENCY_LOAN: LoanOffer = { amount: 10_000, days: 90, rate: 0.15 };
+
+/**
+ * Redressement et faillite : alerte forte après 2 jours de trésorerie négative, plan de redressement après 3 jours
+ * de pertes d'exploitation d'affilée (puis chaque semaine), faillite quand la valeur nette reste sous −20 000 CHF
+ * avec une trésorerie négative pendant 14 jours. Un commerce sans aucune vente pendant 2 jours et qui ne peut plus
+ * vendre (rayons vides, pas de caisse, pas de caissier) est mis à l'arrêt : employés en chômage technique (ni présents
+ * ni payés), nettoyage de nuit suspendu, jusqu'à ce qu'il puisse vendre à nouveau.
+ */
+export const RESCUE = {
+  negDaysAlert: 2,
+  lossDaysPlan: 3,
+  /** Le plan revient tous les `planEvery` jours si les pertes continuent. */
+  planEvery: 7,
+  bankruptWorth: -20_000,
+  bankruptDays: 14,
+  /** Jours sans vente avant la mise à l'arrêt d'un commerce qui ne peut plus vendre. */
+  idleDays: 2,
+} as const;
+
+/** Impôt progressif dû sur un bénéfice hebdomadaire imposable (tranches FINANCE.taxBrackets). */
+export function weeklyTax(base: number): number {
+  let due = 0, from = 0;
+  for (const [upTo, rate] of FINANCE.taxBrackets) {
+    if (base > from) due += (Math.min(base, upTo) - from) * rate;
+    from = upTo;
+  }
+  return Math.round(due * 100) / 100;
+}
+
+/** Tranches de l'impôt en clair : « 15 % jusqu'à 7 000 CHF, 25 % jusqu'à 20 000 CHF, 35 % au-delà ». */
+export function taxBracketsText(): string {
+  return FINANCE.taxBrackets.map(([upTo, rate], k) => `${Math.round(rate * 100)} % ${Number.isFinite(upTo) ? `jusqu’à ${upTo.toLocaleString('fr-CH')} CHF` : k ? 'au-delà' : 'du bénéfice'}`).join(', ');
+}
 
 export type InvestKind = 'epargne' | 'fonds';
 export interface InvestDef {
@@ -357,11 +427,19 @@ export const PREMIUM = {
   /** Prix de vente de référence du quartier pour la gamme premium (× prix habituel). */
   priceMult: 1.5,
   /** Prix d'achat au grossiste de la gamme premium (× coût habituel). */
-  costMult: 1.4,
-  /** Demande premium = base + slope × réputation (plafonnée à max). */
-  demandBase: 0.2,
-  demandSlope: 0.9,
+  costMult: 1.5,
+  /**
+   * Demande premium = base + slope × réputation (plafonnée à max) : la marge par client étant × 1,5, la gamme premium
+   * ne rapporte plus que la gamme standard qu'à partir d'environ 65 % de réputation. Sous `knee`, la clientèle premium
+   * fond en plus de `kneeSlope` par point de réputation manquant (plancher `demandMin`) : même un commerce débordé
+   * (plus de clients que de caisses) ne gagne rien à passer en premium tant qu'il n'est pas reconnu.
+   */
+  demandBase: 0.05,
+  demandSlope: 0.95,
   demandMax: 1.05,
+  knee: 0.65,
+  kneeSlope: 2.5,
+  demandMin: 0.05,
   /** Formation minimale d'au moins un employé du commerce pour passer en premium. */
   minTraining: 1,
 } as const;
@@ -376,7 +454,8 @@ export const PREMIUM_RANGES: readonly PremiumDef[] = [
 ];
 export const PREMIUM_BY_TYPE: ReadonlyMap<ShopType, PremiumDef> = new Map(PREMIUM_RANGES.map((p) => [p.type, p]));
 /** Part de la demande premium selon la réputation (0..1). */
-export const premiumDemand = (reputation: number): number => Math.min(PREMIUM.demandMax, PREMIUM.demandBase + PREMIUM.demandSlope * reputation);
+export const premiumDemand = (reputation: number): number => Math.max(PREMIUM.demandMin, Math.min(PREMIUM.demandMax,
+  PREMIUM.demandBase + PREMIUM.demandSlope * reputation - PREMIUM.kneeSlope * Math.max(0, PREMIUM.knee - reputation)));
 
 /**
  * Formation des employés (cours du soir, payée une fois par niveau) : chaque niveau sert plus de clients par heure,
@@ -409,21 +488,28 @@ export const STAFF_ROLES: readonly StaffRoleDef[] = [
 ];
 export const STAFF_ROLE_BY_ID: ReadonlyMap<StaffRole, StaffRoleDef> = new Map(STAFF_ROLES.map((r) => [r.id, r]));
 
-/** Équipes : matin (avant 14 h), soir (à partir de 14 h), journée complète. Limitées aux heures d'ouverture. */
-export type ShiftKind = 'matin' | 'soir' | 'journee';
+/**
+ * Équipes : matin (avant 14 h), soir (à partir de 14 h), journée complète, pointe (4 h, de 16 h à 20 h : un renfort
+ * bon marché pour l'affluence du soir). Limitées aux heures d'ouverture.
+ */
+export type ShiftKind = 'matin' | 'soir' | 'journee' | 'pointe';
 export interface ShiftDef { id: ShiftKind; nameFr: string; from: number; to: number }
 export const SHIFTS: readonly ShiftDef[] = [
   { id: 'journee', nameFr: 'Journée complète', from: 0, to: 24 },
   { id: 'matin', nameFr: 'Matin', from: 0, to: 14 },
   { id: 'soir', nameFr: 'Soir', from: 14, to: 24 },
+  { id: 'pointe', nameFr: 'Pointe', from: 16, to: 20 },
 ];
 export const SHIFT_BY_ID: ReadonlyMap<ShiftKind, ShiftDef> = new Map(SHIFTS.map((s) => [s.id, s]));
 
 export const STAFF = {
+  /** Salaire horaire du marché : base + skill × compétence (+ 1,5 CHF, + formation). */
+  wageBase: 18,
+  wageSkill: 12,
   /** Clients attirés en plus par employé de rayon présent (× compétence). */
-  shelfBonus: 0.15,
+  shelfBonus: 0.25,
   /** Plafond du bonus de rayon. */
-  shelfBonusMax: 0.3,
+  shelfBonusMax: 0.4,
   /** Baisse de la satisfaction visée quand l'équipe ne correspond pas au souhait du salarié. */
   shiftMood: 0.2,
   /** Baisse de la satisfaction visée quand le salaire passe sous le minimum demandé à l'embauche. */
@@ -467,7 +553,7 @@ export const CLEANING = {
   playerGain: 45,
   playerEnergy: 6,
   /** Points rendus par heure d'ouverture pour 1 point d'entretien de l'équipe (cleaningPower). */
-  perPower: 6,
+  perPower: 15,
   /**
    * Coup de balai des caissiers en heures creuses : points rendus par heure pour un caissier pleinement compétent et
    * inoccupé (× part de la caisse restée libre l'heure précédente), sans dépasser `cashierCap` (propre « passable »).
@@ -528,7 +614,7 @@ export const LOGISTICS = {
   bigUnitCost: 5,
   /** Commande minimale (palettes, tous produits confondus) et frais de transport par commande. */
   minPallets: 5,
-  importFee: 150,
+  importFee: 60,
   /** Délai : 1 jour jusqu'à fastPallets palettes, 2 jours au-delà ; arrivée à importHour. */
   fastPallets: 10,
   importHour: 14,
@@ -539,7 +625,7 @@ export const LOGISTICS = {
   /** Minimums proposés : part de la place en rayon. */
   autoMinShare: 0.8,
   /** Transporteur : forfait par tournée, par commerce livré, par unité ; capacité de sa camionnette. */
-  service: { base: 35, perStop: 8, perUnit: 0.03, cargo: 800 },
+  service: { base: 20, perStop: 8, perUnit: 0.03, cargo: 800 },
   /** Votre véhicule avec un chauffeur à la tournée : forfait, par commerce livré (capacité : soute du véhicule). */
   own: { base: 20, perStop: 5 },
 } as const;
@@ -599,10 +685,14 @@ export const RIVALS = {
   /** Fermeture après autant de jours de pertes d'affilée ; faillite sous cette trésorerie. */
   closeAfterLoss: 14,
   bankruptCash: -4_000,
-  /** Rachat : jours de chiffre d'affaires × (0,5 + réputation), plancher, part des rayons remplis à la reprise. */
-  buyRevenueDays: 20,
-  buyMin: 8_000,
+  /**
+   * Rachat : jours de chiffre d'affaires × (0,5 + réputation), plancher, part des rayons remplis à la reprise ;
+   * prix majoré de `buySurcharge` par commerce déjà racheté (les vendeurs connaissent votre appétit).
+   */
+  buyRevenueDays: 30,
+  buyMin: 15_000,
   buyStock: 0.6,
+  buySurcharge: 0.15,
   /** Rachat d'une entreprise entière : remise sur la somme des commerces. */
   buyCompanyDiscount: 0.9,
 } as const;

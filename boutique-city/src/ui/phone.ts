@@ -14,9 +14,11 @@ import { FINANCE, INVESTMENTS, type InvestKind } from '../sim/catalog';
 import { SHIFT_BY_ID, STAFF_ROLE_BY_ID } from '../sim/catalog';
 import { WEEKDAYS_FR, clockView } from '../sim/clock';
 import { dayProfit, type DayStats, type Notice } from '../sim/game';
-import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
+import { OBJECTIVES, TIERS, TIER_BY_ID, activeObjectives, currentTier, netWorth, rankOf, tierCount, tierObjectives } from '../sim/objectives';
 import { askConfirm, button, chf, chf2, el, icon, iconButton, num, pct, signed, type IconName } from './dom';
-import { rivalBuyView, rivalPriceText, subletView, type UiCtx } from './dialogs';
+import { rescueView, rivalBuyView, rivalPriceText, subletView, type UiCtx } from './dialogs';
+import { RESCUE, taxBracketsText, type ShopType } from '../sim/catalog';
+import { STOP_FR, type NoticeAction } from '../sim/game';
 import { RIVALS } from '../sim/catalog';
 import { batchView } from './shop-panel';
 import { logisticsView } from './warehouse-panel';
@@ -96,7 +98,7 @@ export class Phone {
   private readonly status = el('div', { cls: 'ph-status' });
   private app: AppId | null = null;
   private immoTab: 'locaux' | 'apparts' | 'baux' = 'locaux';
-  private immoSort: 'passants' | 'loyer' | 'surface' = 'passants';
+  private immoSort: 'benefice' | 'passants' | 'loyer' | 'surface' = 'benefice';
   private msgFilter: 'tout' | 'alertes' = 'tout';
   /** Voile assombri et flouté derrière le téléphone (un clic dessus le ferme). */
   private readonly veil = el('div', { cls: 'ph-veil hidden' });
@@ -195,7 +197,9 @@ export class Phone {
           el('span', { text: 'Compte' }), el('b', { cls: g.cash < 0 ? 'bad' : '', text: chf(g.cash) }),
           el('small', { cls: today >= 0 ? 'ok' : 'bad', text: `${signed(today)} aujourd’hui` })),
         el('button', { cls: 'ph-widget', attrs: { type: 'button' }, on: { click: () => this.go('objectifs') } },
-          el('span', { text: 'Valeur nette' }), el('b', { text: chf(netWorth(g)) }), el('small', { text: rankOf(g.achieved.length) }))),
+          el('span', { text: 'Valeur nette' }), el('b', { text: chf(netWorth(g)) }), el('small', { text: rankOf(g) }))),
+      g.inDifficulty() && !g.rescue.bankrupt ? el('button', { cls: 'ph-banner rd-banner', attrs: { type: 'button' }, on: { click: () => this.openRescue() } }, icon('alert'),
+        el('span', { text: g.bankruptcyIn() !== null ? `Faillite dans ${g.bankruptcyIn()} jour(s) : plan de redressement` : 'Entreprise en difficulté : plan de redressement' }), icon('next')) : null,
       warn ? el('button', { cls: 'ph-banner', attrs: { type: 'button' }, on: { click: () => this.go('commerces') } }, icon('alert'), el('span', { text: `${warn} alerte${warn > 1 ? 's' : ''} dans vos commerces` }), icon('next')) : null,
       el('div', { cls: 'ph-grid' }, ...APPS.map((a) => el('button', { cls: 'ph-app', attrs: { type: 'button', 'data-app': a.id, 'aria-label': a.name }, on: { click: () => this.go(a.id) } },
         el('span', { cls: 'ph-ico', attrs: { style: `--app:${a.color}` } }, icon(a.icon)),
@@ -230,6 +234,14 @@ export class Phone {
     const b = this.ctx.game.district.buildings.find((x) => x.service === service);
     return b ? iconButton('route', `Itinéraire : ${label}`, () => { this.ctx.waypoint(b.doorX, b.doorZ, label); this.close(); }, 'small primary') : null;
   }
+  /** Ouvre le plan de redressement (panneau) et ferme le téléphone. */
+  private openRescue(): void { this.close(); this.ctx.panel.open(rescueView(this.ctx)); }
+  /** Aligne les prix d'un type de commerce (ou de tous) sur le prix du quartier. */
+  private align(target: ShopType | 'tous'): void { this.ctx.act(this.ctx.game.applyBatch(target, { priceFactor: 1 }), (r) => r.changes ? `Prix alignés sur le quartier (${r.changes} prix modifié${r.changes > 1 ? 's' : ''}).` : 'Prix déjà au niveau du quartier.'); this.paint(true); }
+  /** Bouton d'une action proposée par une notification. */
+  private noticeButton(a: NoticeAction): HTMLButtonElement {
+    return a.kind === 'aligner' ? button('Aligner les prix', () => this.align(a.target), 'small primary') : button('Plan de redressement', () => this.openRescue(), 'small primary');
+  }
 
   /* ------------------------------ Commerces ------------------------------ */
 
@@ -239,8 +251,19 @@ export class Phone {
     const c = clockView(g.total);
     const totRev = g.shops.reduce((a, s) => a + s.today.revenue, 0), totCli = g.shops.reduce((a, s) => a + s.today.customers, 0);
     const lost = g.shops.reduce((a, s) => a + s.today.lostStaff + s.today.lostStock + s.today.lostCapacity, 0);
+    // Prix restés au-dessus du quartier, par type de commerce : bouton « Aligner ».
+    const gaps = [...new Set(g.shops.map((s) => s.type))].map((t) => ({ t, gap: g.priceGap(t), n: g.batchShops(t).length })).filter((x) => x.gap >= 0.03);
     return [
       tiles(tile('Ventes du jour', chf(totRev)), tile('Clients', num(totCli), '', lost ? `${num(lost)} perdu(s)` : 'aucun perdu')),
+      g.inDifficulty() && !g.rescue.bankrupt ? card({
+        accent: '#ef5a5a', title: 'Entreprise en difficulté', sub: g.rescue.lossDays >= RESCUE.lossDaysPlan ? `${g.rescue.lossDays} jours de pertes d’affilée` : g.cash < 0 ? `Trésorerie négative : ${chf(g.cash)}` : 'Risque de faillite',
+        actions: [button('Plan de redressement', () => this.openRescue(), 'small primary')],
+      }) : null,
+      ...gaps.map((x) => card({
+        accent: SHOP_TYPE_BY_ID.get(x.t)!.color, title: `Prix au-dessus du quartier · ${SHOP_TYPE_BY_ID.get(x.t)!.nameFr}`,
+        sub: `Vos prix sont ${Math.round(x.gap * 100)} % au-dessus du prix du quartier${x.n > 1 ? ` (${x.n} commerces)` : ''} : moins de clients, articles reposés.`,
+        actions: [button('Aligner', () => this.align(x.t), 'small primary')],
+      })),
       sec('Mes commerces', `${g.shops.length}`),
       g.shops.length >= 2 ? card({
         accent: '#2a9d9b', title: 'Réglages en lot', sub: 'Prix, réassort auto, horaires et nettoyage de nuit : tous les commerces d’un type (ou tous) d’un coup, avec aperçu.',
@@ -253,9 +276,10 @@ export class Phone {
         const sLost = s.today.lostStaff + s.today.lostStock + s.today.lostCapacity;
         return card({
           accent: t.color, title: s.name, sub: `${t.nameFr} · ${s.open} h – ${s.close} h`,
-          right: pill(open ? 'Ouvert' : 'Fermé', open ? 'ok' : ''),
+          right: s.stopped ? pill('À l’arrêt', 'bad') : pill(open ? 'Ouvert' : 'Fermé', open ? 'ok' : ''),
           body: [
             el('div', { cls: 'ph-kvs' }, kv('Clients', num(s.today.customers)), kv('Ventes', chf(s.today.revenue)), kv('Employés', String(staff), staff ? '' : 'warn')),
+            s.stopped ? el('div', { cls: 'ph-note bad' }, icon('alert'), el('span', { text: `À l’arrêt (${STOP_FR[s.stopped]}) : ${staff ? 'employés en chômage technique, non payés' : 'nettoyage de nuit suspendu'}. Il repart dès qu’il peut vendre.` })) : null,
             sLost ? el('div', { cls: 'ph-note warn' }, icon('alert'), el('span', { text: `${num(sLost)} client(s) perdu(s) aujourd’hui` })) : null,
             s.warned.length ? el('div', { cls: 'ph-note bad' }, icon('alert'), el('span', { text: `${s.warned.length} alerte(s) : stock, caisse ou place` })) : null,
           ],
@@ -275,20 +299,22 @@ export class Phone {
     const tabs = el('div', { cls: 'ph-seg' }, ...([['locaux', 'Locaux', free.length], ['apparts', 'Apparts', homes.length], ['baux', 'Mes baux', leases]] as const)
       .map(([id, l, n]) => { const b = button('', () => { this.immoTab = id; this.paint(true); }, this.immoTab === id ? 'on' : ''); b.append(el('span', { text: l }), el('i', { text: String(n) })); return b; }));
     const out: (Node | null)[] = [tabs];
-    const sortBar = (opts: readonly (readonly ['passants' | 'loyer' | 'surface', string])[]): HTMLElement => el('div', { cls: 'ph-sort' }, el('span', { text: 'Trier par' }),
+    const sortBar = (opts: readonly (readonly ['benefice' | 'passants' | 'loyer' | 'surface', string])[]): HTMLElement => el('div', { cls: 'ph-sort' }, el('span', { text: 'Trier par' }),
       ...opts.map(([id, l]) => button(l, () => { this.immoSort = id; this.paint(true); }, this.immoSort === id ? 'on' : '')));
     if (this.immoTab === 'locaux') {
-      const key = { passants: (p: { footfall: number }) => -p.footfall, loyer: (p: { rent: number }) => p.rent, surface: (p: { area: number }) => -p.area }[this.immoSort] as (p: typeof g.district.premises[number]) => number;
+      // Type conseillé : le meilleur bénéfice estimé par jour (pas seulement le plus de clients).
+      const best = new Map(free.map((p) => [p.id, g.bestType(p)]));
+      const key = { benefice: (p: { id: number }) => -(best.get(p.id)?.profit ?? 0), passants: (p: { footfall: number }) => -p.footfall, loyer: (p: { rent: number }) => p.rent, surface: (p: { area: number }) => -p.area }[this.immoSort] as (p: typeof g.district.premises[number]) => number;
       free.sort((a, b) => key(a) - key(b));
-      out.push(sortBar([['passants', 'Passants'], ['loyer', 'Loyer'], ['surface', 'Surface']]));
+      out.push(sortBar([['benefice', 'Bénéfice'], ['passants', 'Passants'], ['loyer', 'Loyer'], ['surface', 'Surface']]));
       if (!free.length) out.push(empty('building', 'Aucun local libre', 'Tous les locaux du quartier sont occupés pour le moment.'));
-      else out.push(el('p', { cls: 'ph-hint', text: 'Le bail se signe sur place, devant l’anneau jaune : pour votre commerce ou pour sous-louer.' }));
+      else out.push(el('p', { cls: 'ph-hint', text: 'Bénéfice estimé par jour pour le type conseillé, bien tenu en gamme standard (loyer, salaires, livraisons et nettoyage compris ; hors meubles et impôt). Le bail se signe sur place, devant l’anneau jaune.' }));
       for (const p of free.slice(0, 30)) {
-        const best = [...SHOP_TYPES].sort((a, b) => g.estimatePeak(p, b.id) - g.estimatePeak(p, a.id))[0]!;
+        const b = best.get(p.id)!, e = g.estimateProfit(p, b.type);
         out.push(card({
-          accent: '#ffd166', title: `Local de ${p.area} m²`, sub: `Grille ${p.gridW} × ${p.gridD} cases`,
+          accent: '#ffd166', title: `Local de ${p.area} m²`, sub: `Grille ${p.gridW} × ${p.gridD} cases · ${num(p.footfall)} passants/h`,
           right: el('div', { cls: 'ph-price' }, el('b', { text: chf(p.rent) }), el('small', { text: 'par mois' })),
-          body: [el('div', { cls: 'ph-kvs' }, kv('Passants/h', num(p.footfall)), kv('Idéal', best.nameFr), kv('Clients/h', `≈ ${num(g.estimatePeak(p, best.id))}`))],
+          body: [el('div', { cls: 'ph-kvs' }, kv('Conseillé', SHOP_TYPE_BY_ID.get(b.type)!.nameFr), kv('Bénéfice/j', `≈ ${signed(b.profit)}`, b.profit >= 0 ? 'ok' : 'bad'), kv('Clients/j', `≈ ${num(e.customers)}`))],
           actions: [this.onMap(p.doorX, p.doorZ, `Local ${p.area} m²`, 'primary'), this.gps(p.doorX, p.doorZ, `Local ${p.area} m²`)],
         }));
       }
@@ -346,10 +372,16 @@ export class Phone {
     const t = g.today;
     const lines = ([
       ['Ventes', t.revenue, 1], ['Loyers encaissés', t.rentalIncome ?? 0, 1], ['Achats de marchandise', t.purchases, -1], ['Salaires', t.wages, -1],
-      ['Loyers (provisions et payés)', t.rent, -1], ['Équipement', t.equipment, -1], ['Publicité', t.marketing, -1], ['Prêts', t.finance, -1], ['Vie courante', t.living, -1], ['Impôt sur le bénéfice', t.tax ?? 0, -1],
+      ['Loyers (provisions et payés)', t.rent, -1], ['Équipement', t.equipment, -1], ['Publicité', t.marketing, -1], ['Prêts et découvert', t.finance, -1], ['Vie courante', t.living, -1], ['Frais de siège', t.overhead ?? 0, -1], ['Impôt sur le bénéfice', t.tax ?? 0, -1],
     ] as [string, number, number][]).filter(([l, v]) => v > 0 || l === 'Ventes');
+    const em = g.emergencyOffer();
     return [
       tiles(tile('Compte', chf(g.cash), g.cash < 0 ? 'bad' : ''), tile('Dettes', chf(g.debt), g.debt > 0 ? 'warn' : ''), tile('Aujourd’hui', signed(today), today >= 0 ? 'ok' : 'bad')),
+      g.inDifficulty() && !g.rescue.bankrupt ? card({
+        accent: '#ef5a5a', title: 'Plan de redressement', sub: `${g.cash < 0 ? `Découvert de ${chf(-g.cash)} (${(FINANCE.overdraftRate * 100).toLocaleString('fr-CH')} % par jour). ` : ''}${g.rescue.lossDays ? `${g.rescue.lossDays} jour(s) de pertes d’affilée. ` : ''}${g.bankruptcyIn() !== null ? `Faillite dans ${g.bankruptcyIn()} jour(s).` : ''}`,
+        right: em.available ? pill(`prêt d’urgence ${chf(em.offer.amount)}`, 'warn') : null,
+        actions: [button('Ouvrir le plan', () => this.openRescue(), 'small primary')],
+      }) : null,
       this.financeStrip(),
       sec('Résultat des 7 derniers jours'),
       el('div', { cls: 'ph-bars' }, ...days.map((d) => {
@@ -393,23 +425,24 @@ export class Phone {
   private finances(): (Node | null)[] {
     const g = this.ctx.game;
     const tx = g.taxEstimate(), cl = g.creditLimit();
-    const rate = Math.round(FINANCE.taxRate * 100);
     const when = tx.daysLeft <= 0 ? 'ce soir à minuit' : tx.daysLeft === 1 ? 'demain à minuit' : `dans ${tx.daysLeft + 1} jours, à minuit`;
     const placed = g.investValue();
+    const carryLeft = g.lossCarry(tx.week + 1);
     const out: (Node | null)[] = [
       tiles(tile('Valeur nette', chf(netWorth(g)), 'wrap'), tile('Placements', chf(placed), 'wrap', 'valeur de rachat'), tile('Impôt estimé', tx.exempt ? 'exonéré' : chf(tx.due), tx.due > 0 ? 'warn wrap' : 'wrap')),
-      // Impôt sur le bénéfice.
-      sec('Impôt sur le bénéfice', `${rate} % par semaine`),
+      // Impôt sur le bénéfice : barème progressif par semaine, pertes reportées.
+      sec('Impôt sur le bénéfice', 'progressif, par semaine'),
       card({
         accent: '#7a5cff', title: `Semaine ${tx.week + 1}`, sub: tx.exempt ? 'Première semaine exonérée : aide à la création d’entreprise.' : `Prélèvement automatique ${when}.`,
         right: pill(tx.exempt ? 'exonéré' : chf(tx.due), tx.exempt ? 'ok' : tx.due > 0 ? 'warn' : 'ok'),
         body: [
           kv('Bénéfice de la semaine (avant impôt)', signed(tx.base), tx.base >= 0 ? 'ok' : 'bad'),
-          kv('Provision estimée', tx.exempt ? '0 CHF' : `${chf(tx.due)} (${rate} % du bénéfice)`),
-          el('p', { cls: 'ph-hint', text: `Le bénéfice est la somme des résultats du jour (ventes et loyers encaissés, moins toutes les dépenses). Une semaine en déficit n’est pas imposée. L’impôt apparaît dans le bilan du 7e jour.` }),
+          tx.carry > 0 ? kv('Pertes reportées déduites', `− ${chf(tx.carry)}`, 'ok') : null,
+          kv('Provision estimée', tx.exempt ? '0 CHF' : `${chf(tx.due)} sur ${chf(tx.taxable)} imposables`),
+          el('p', { cls: 'ph-hint', text: `Barème : ${taxBracketsText()} (chaque tranche n’est taxée qu’à son taux). Le bénéfice est la somme des résultats du jour (ventes et loyers encaissés, moins toutes les dépenses ; le capital des prêts n’est pas une charge). Une semaine en déficit n’est pas imposée, et ce déficit est déduit des bénéfices des ${FINANCE.taxCarryWeeks} semaines suivantes${carryLeft > 0 ? ` (encore ${chf(carryLeft)} à déduire)` : ''}. L’impôt apparaît dans le bilan du 7e jour.` }),
         ],
       }),
-      ...g.taxes.slice(-3).reverse().map((t) => kv(`Semaine ${t.week + 1} · bénéfice ${signed(t.base)}`, t.amount > 0 ? `− ${chf(t.amount)}` : 'aucun impôt', t.amount > 0 ? 'bad' : 'ok')),
+      ...g.taxes.slice(-3).reverse().map((t) => kv(`Semaine ${t.week + 1} · bénéfice ${signed(t.base)}${t.carried ? ` (− ${chf(t.carried)} reportés)` : ''}`, t.amount > 0 ? `− ${chf(t.amount)}` : 'aucun impôt', t.amount > 0 ? 'bad' : 'ok')),
       // Crédit.
       sec('Plafond de crédit', chf(cl.limit)),
       card({
@@ -622,7 +655,9 @@ export class Phone {
       const c = clockView(n.at);
       out.push(el('div', { cls: `ph-msg ${n.level}${isNew ? ' new' : ''}` },
         el('span', { cls: 'ph-msg-ico' }, icon(ic[n.level])),
-        el('div', { cls: 'ph-msg-txt' }, el('div', { text: n.text }), el('small', { text: hhmm(c.hour, c.minute) })),
+        el('div', { cls: 'ph-msg-txt' }, el('div', { text: n.text }), el('small', { text: hhmm(c.hour, c.minute) }),
+          // Action proposée (aligner les prix, plan de redressement), seulement pour les messages des deux derniers jours.
+          n.action && d >= today - 1 ? el('div', { cls: 'ph-msg-act' }, this.noticeButton(n.action)) : null),
         isNew ? el('i', { cls: 'ph-dot', attrs: { title: 'Nouveau' } }) : null));
     });
     return out;
@@ -630,30 +665,34 @@ export class Phone {
 
   /* ------------------------------ Objectifs ------------------------------ */
 
+  /** Objectifs : les trois objectifs actifs (indication, avancement), puis les quatre paliers et leurs récompenses. */
   private objectifs(): (Node | null)[] {
     const g = this.ctx.game;
-    const todo = OBJECTIVES.filter((o) => !g.achieved.includes(o.id));
-    const done = OBJECTIVES.filter((o) => g.achieved.includes(o.id));
-    const cur = todo[0];
+    const cur = currentTier(g), level = cur ? TIERS.indexOf(cur) : TIERS.length;
+    const active = activeObjectives(g);
     const out: (Node | null)[] = [
-      tiles(tile('Rang', rankOf(g.achieved.length), 'wrap'), tile('Atteints', `${done.length} / ${OBJECTIVES.length}`)),
-      meter(done.length / OBJECTIVES.length, 'ok'),
+      tiles(tile('Rang', rankOf(g), 'wrap'), tile('Palier', cur ? `${level + 1} / ${TIERS.length}` : 'tous', '', cur ? `${tierCount(g, cur.id).done} / ${tierCount(g, cur.id).total} objectifs` : 'franchis'), tile('Atteints', `${g.achieved.length} / ${OBJECTIVES.length}`)),
+      meter(g.achieved.length / OBJECTIVES.length, 'ok'),
     ];
-    if (cur) {
-      const pr = cur.progress(g);
-      out.push(sec('En cours'), card({
-        cls: 'current', accent: '#ffcc4d', title: cur.title, right: el('span', { cls: 'ph-step', text: String(done.length + 1) }),
-        body: [el('p', { cls: 'ph-card-txt', text: cur.hint }), meter(pr.p, 'ok'), el('div', { cls: 'ph-meter-l' }, el('span', { text: 'Avancement' }), el('b', { text: pr.text }))],
-      }));
-    } else out.push(el('div', { cls: 'ph-note ok' }, icon('trophy'), el('span', { text: 'Tous les objectifs sont atteints. Bravo !' })));
-    if (todo.length > 1) {
-      out.push(sec('À venir', `${todo.length - 1}`));
-      out.push(el('ol', { cls: 'ph-olist' }, ...todo.slice(1).map((o, k) => el('li', {}, el('i', { text: String(done.length + 2 + k) }), el('span', { text: o.title })))));
-    }
-    if (done.length) {
-      out.push(sec('Atteints', `${done.length}`));
-      out.push(el('ol', { cls: 'ph-olist done' }, ...done.map((o) => el('li', {}, el('i', {}, icon('check')), el('span', { text: o.title })))));
-    }
+    if (active.length) {
+      out.push(sec('En cours', `${active.length} en parallèle`));
+      for (const o of active) {
+        const pr = o.progress(g);
+        out.push(card({
+          cls: 'current', accent: '#ffcc4d', title: o.title, sub: `Palier ${TIER_BY_ID.get(o.tier)!.name}`, right: el('span', { cls: 'ph-step', text: String(OBJECTIVES.indexOf(o) + 1) }),
+          body: [el('p', { cls: 'ph-card-txt', text: o.hint }), meter(pr.p, 'ok'), el('div', { cls: 'ph-meter-l' }, el('span', { text: 'Avancement' }), el('b', { text: pr.text }))],
+        }));
+      }
+    } else out.push(el('div', { cls: 'ph-note ok' }, icon('trophy'), el('span', { text: 'Tous les objectifs sont atteints : vous êtes la légende du quartier !' })));
+    TIERS.forEach((t, k) => {
+      const c = tierCount(g, t.id);
+      out.push(sec(`Palier ${k + 1} · ${t.name}`, `${c.done} / ${c.total}`));
+      out.push(el('p', { cls: 'ph-hint', text: `${c.done >= c.total ? 'Récompense obtenue' : k > level ? 'À débloquer · récompense' : 'Récompense'} : ${t.reward}.` }));
+      out.push(el('ol', { cls: `ph-olist${k > level ? ' locked' : ''}` }, ...tierObjectives(t.id).map((o) => {
+        const done = g.achieved.includes(o.id);
+        return el('li', { cls: done ? 'done' : active.includes(o) ? 'on' : '' }, el('i', {}, done ? icon('check') : String(OBJECTIVES.indexOf(o) + 1)), el('span', { text: o.title }));
+      })));
+    });
     return out;
   }
 

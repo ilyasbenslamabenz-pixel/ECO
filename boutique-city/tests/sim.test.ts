@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ECONOMY, FURNITURE_BY_ID, HOME_BY_ID, LOAN_OFFERS, SERVICES, productsOf, type ServiceKind, type ShopType } from '../src/sim/catalog';
+import { CAMPAIGN_BY_ID, ECONOMY, FURNITURE_BY_ID, HOME_BY_ID, LOAN_OFFERS, SERVICES, productsOf, type ServiceKind, type ShopType } from '../src/sim/catalog';
 import { generateDistrict, serviceBuilding } from '../src/sim/district';
 import { canPlace, layoutStats, neighbourCells, registerSides, unreachable, type PlacedItem } from '../src/sim/layout';
 import { Game, dayProfit } from '../src/sim/game';
@@ -241,7 +241,8 @@ test('banque et publicité : prêt, remboursements quotidiens, plafond, campagne
   assert.equal(g.startCampaign('flyers', null, 3).ok, false, 'flyers : un commerce');
   assert.ok(g.startCampaign('flyers', shop.data.id, 3).ok);
   assert.ok(g.startCampaign('internet', null, 2).ok);
-  assert.ok(Math.abs(g.marketingBoost(shop.data.id) - 0.47) < 1e-9);
+  // Flyers (ce commerce) et internet (tous les commerces) s'additionnent dès le lancement.
+  assert.ok(Math.abs(g.marketingBoost(shop.data.id) - (CAMPAIGN_BY_ID.get('flyers')!.boost + CAMPAIGN_BY_ID.get('internet')!.boost)) < 1e-9);
   for (let d = 0; d < 6; d++) { g.advance(DAY / 2); keepAlive(g); }
   assert.equal(g.campaigns.length, 0, 'campagnes terminées');
 });
@@ -310,8 +311,8 @@ test('objectifs, avis clients et progression des employés', async () => {
   assert.ok(g.employees[0]!.skill > skill0, `compétence ${skill0} → ${g.employees[0]!.skill}`);
   for (const id of ['meubler', 'stock', 'servir10', 'embaucher']) assert.ok((g.achieved as string[]).includes(id), `objectif ${id}`);
   assert.ok(Number.isFinite(netWorth(g)) && netWorth(g) > 0);
-  assert.equal(OBJECTIVES.length, 13);
-  assert.equal(rankOf(0), 'Débutant');
+  assert.ok(OBJECTIVES.length >= 30, `${OBJECTIVES.length} objectifs`);
+  assert.equal(rankOf(g), 'Débutant', 'palier Démarrage en cours');
   // Sauvegarde : objectifs conservés.
   const h = new Game(g.seed, 'x', JSON.parse(JSON.stringify(g.save())));
   assert.deepEqual(h.achieved, g.achieved);
@@ -492,8 +493,8 @@ test('contrat fournisseur : signé chez le grossiste, remise, livraison offerte,
   assert.ok(g.signContract(null).ok && g.contract === null, 'contrat résilié');
 });
 
-test('objectif « Monter en gamme » : formation puis gamme premium', async () => {
-  const { OBJECTIVES } = await import('../src/sim/objectives');
+test('objectif « Monter en gamme » : formation puis gamme premium, validé une fois son palier ouvert', async () => {
+  const { OBJECTIVES, isUnlocked } = await import('../src/sim/objectives');
   const o = OBJECTIVES.find((x) => x.id === 'gamme')!;
   const g = new Game(7);
   const s = g.rent(bestFree(g), 'fastfood');
@@ -506,6 +507,10 @@ test('objectif « Monter en gamme » : formation puis gamme premium', async () =
   assert.equal(o.progress(g).p, 0.5);
   assert.ok(g.setPremium(s.data.id, true).ok);
   assert.equal(o.progress(g).p, 1);
+  g.checkObjectives();
+  assert.ok(!g.achieved.includes('gamme') && !isUnlocked(g, o), 'palier Entrepreneur encore verrouillé');
+  // Démarrage et Gérant franchis : le palier Entrepreneur s'ouvre, l'objectif déjà rempli se valide.
+  g.achieved = OBJECTIVES.filter((x) => x.tier === 'demarrage' || x.tier === 'gerant').map((x) => x.id);
   g.checkObjectives();
   assert.ok(g.achieved.includes('gamme'));
 });

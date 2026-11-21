@@ -732,7 +732,13 @@ try {
   await phoneOpen('finances');
   fin = await readFin();
   const taxCard = fin.cards.find((c) => c.title === 'Semaine 2');
-  const taxRate = Number(fin.secs['Impôt sur le bénéfice']?.match(/(\d+) % par semaine/)?.[1] ?? NaN);
+  // Barème progressif affiché (« 15 % jusqu’à 7 000 CHF, 25 % jusqu’à 20 000 CHF, 35 % au-delà ») : tranches [plafond, taux].
+  const scale = fin.text.slice(fin.text.indexOf('Barème'));
+  const brackets = [...scale.slice(0, scale.indexOf('au-delà') + 8).matchAll(/(\d+) % jusqu’à ([\d’'   ]+) CHF/g)].map((m) => [Number(m[2].replace(/\D/g, '')), Number(m[1]) / 100]);
+  const topRate = scale.match(/(\d+) % au-delà/);
+  if (topRate) brackets.push([Infinity, Number(topRate[1]) / 100]);
+  const taxOf = (b) => { let due = 0, from = 0; for (const [upTo, rate] of brackets) { if (b > from) due += (Math.min(b, upTo) - from) * rate; from = upTo; } return Math.round(due * 100) / 100; };
+  const taxRate = brackets.map(([u, r]) => `${Math.round(r * 100)} %${Number.isFinite(u) ? ` ≤ ${u}` : ''}`).join(', ');
   check(!fin.expect.exempt && fin.expect.daysLeft === 0 && fin.tiles['Impôt estimé'] === fin.expect.tax && !!taxCard?.text.includes('ce soir à minuit'), 'Finances, jour 14 : impôt estimé de la semaine 2, prélevé ce soir à minuit', JSON.stringify({ tuile: fin.tiles['Impôt estimé'], partie: fin.expect.tax }));
   await shot('09a-finances-impot-estime');
   await phoneClose();
@@ -747,7 +753,7 @@ try {
   }, nm);
   await shot('09b-recap-impot');
   const rec = levy.taxes[0];
-  check(levy.taxes.length === 1 && rec.week === 1 && Math.abs(rec.base - levy.base) < 0.02 && Math.abs(rec.amount - Math.round(Math.max(0, rec.base) * taxRate) / 100) < 0.011, `fin de la semaine 2 : impôt = ${taxRate} % (taux affiché) du bénéfice de la semaine (jours 8 à 14)`, JSON.stringify({ relevé: rec, bénéficeRecalculé: levy.base }));
+  check(brackets.length >= 2 && levy.taxes.length === 1 && rec.week === 1 && Math.abs(rec.base - levy.base) < 0.02 && Math.abs(rec.amount - taxOf(Math.max(0, rec.base - (rec.carried ?? 0)))) < 0.011, `fin de la semaine 2 : impôt = barème affiché (${taxRate}) appliqué au bénéfice de la semaine (jours 8 à 14)`, JSON.stringify({ relevé: rec, bénéficeRecalculé: levy.base }));
   check(rec?.amount > 0 && Math.abs(levy.tax13 - rec.amount) < 0.01 && !!levy.notice?.includes('prélevé'), 'impôt prélevé au jour 14 (inscrit au bilan du jour, notification)', JSON.stringify({ montant: rec?.amount, bilan: levy.tax13, notif: levy.notice?.slice(0, 80) }));
   check(levy.recap.includes('Impôt sur le bénéfice (semaine)') && levy.recap.includes(levy.chfAmount) && levy.recap.includes('Impôt de la semaine 2 prélevé'), 'récapitulatif du jour 14 : ligne d’impôt et rappel', levy.chfAmount);
   await closeRecap();

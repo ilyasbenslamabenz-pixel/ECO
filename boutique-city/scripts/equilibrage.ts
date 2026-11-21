@@ -65,7 +65,7 @@ function run(type: ShopType, good: boolean): { rows: string[]; firstProfitDay: n
     if (good) cleanUp(g, id);
     g.advance(1440 - (g.total - 7 * 60) % 1440);
     const y = g.ledger.at(-1)!;
-    const charges = y.purchases + y.wages + y.rent + y.equipment + y.marketing + y.finance + y.living + (y.tax ?? 0);
+    const charges = y.purchases + y.wages + y.rent + y.equipment + y.marketing + y.finance + y.living + (y.tax ?? 0) + (y.overhead ?? 0);
     const profit = dayProfit(y);
     if (first === null && profit > 0 && d > 0) first = d + 1;
     rows.push(`| ${d + 1} | ${fmt(y.revenue)} | ${fmt(charges)} | ${profit >= 0 ? '+' : ''}${fmt(profit)} | ${fmt(g.cash)} |`);
@@ -113,10 +113,14 @@ function mid(type: ShopType, premium: boolean): { profit: number; rep: number } 
 }
 out.push('## Milieu de partie : gamme premium (jours 15 à 21)', '', 'Même commerce bien géré ; « premium » = employé formé puis gamme premium activée au jour 8. Bénéfice moyen par jour, toutes dépenses.', '',
   '| Type | Standard | Premium | Réputation |', '|---|---|---|---|');
+const premiums: number[] = [];
 for (const t of SHOP_TYPES) {
   const a = mid(t.id, false), b = mid(t.id, true);
+  premiums.push(b.profit);
   out.push(`| ${t.nameFr} | ${a.profit >= 0 ? '+' : ''}${fmt(a.profit)} | ${b.profit >= 0 ? '+' : ''}${fmt(b.profit)} | ${Math.round(b.rep * 100)} % |`);
 }
+// Cible : aucun type plus de deux fois plus rentable qu'un autre en premium.
+out.push('', `Écart premium entre le meilleur et le moins bon type : ×${(Math.max(...premiums) / Math.max(1, Math.min(...premiums))).toFixed(2)} (cible ≤ ×2).`);
 // Logistique : trois épiceries réassorties par le grossiste (livraison, réassort automatique) ou par un entrepôt
 // (importateur, tournée de nuit par transporteur). Bénéfice moyen par jour des jours 8 à 21, toutes dépenses.
 function logi(depot: boolean): { profit: number; buy: number } {

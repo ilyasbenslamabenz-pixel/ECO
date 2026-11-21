@@ -184,7 +184,9 @@ try {
   await page.waitForTimeout(1500);
   await shot('10b-avis-client');
   check(await ev(() => { let n = 0; window.__bc.scene.interior.view.scene.traverse((o) => { if (o.isSprite) n++; }); return n; }) >= 1, 'bulle d’avis client affichée');
-  check(/Objectif \d+ \/ 13/.test(await page.textContent('.objective') ?? ''), 'carte d’objectif affichée', await page.textContent('.objective'));
+  // Carte d'objectifs : palier courant et son avancement, trois objectifs actifs chiffrés, indication du premier.
+  const card = await ev(() => ({ head: document.querySelector('.objective .obj-head')?.textContent ?? '', rows: [...document.querySelectorAll('.objective .obj-row')].map((r) => r.textContent), hint: document.querySelector('.objective .obj-hint')?.textContent ?? '' }));
+  check(/^Palier 1 · Démarrage.*\d+ \/ 11/.test(card.head) && card.rows.length === 3 && card.rows.every((t) => /\d+ \/ \d+|à faire/.test(t)) && card.hint.length > 20, 'carte d’objectifs : palier, 3 objectifs actifs chiffrés, indication', JSON.stringify(card));
   await ev(() => window.__bc.setSpeed(1));
   await page.keyboard.press('e');
 

@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { CAMPAIGN_BY_ID, FINANCE, INVEST_BY_ID } from '../src/sim/catalog';
+import { CAMPAIGN_BY_ID, FINANCE, INVEST_BY_ID, weeklyTax } from '../src/sim/catalog';
 import { serviceBuilding } from '../src/sim/district';
 import { Game, dayProfit } from '../src/sim/game';
 import { netWorth } from '../src/sim/objectives';
@@ -18,7 +18,7 @@ const goTo = (g: Game, kind: ServiceKind): void => { const b = serviceBuilding(g
 function day(g: Game, sales: number): void { g.today.revenue += sales; g.cash += sales; keepAlive(g); g.advance(DAY / 2); keepAlive(g); g.advance(DAY / 2); }
 const close = (a: number, b: number, eps = 0.02): boolean => Math.abs(a - b) <= eps;
 
-test('impôt : première semaine exonérée, 18 % du bénéfice ensuite, déficit non imposé, provision annoncée', () => {
+test('impôt : première semaine exonérée, barème progressif ensuite, déficit non imposé, provision annoncée', () => {
   const g = new Game(3);
   // Le premier jour commence en cours de journée : on s'aligne sur minuit.
   keepAlive(g); g.advance(DAY - (g.total % DAY));
@@ -32,7 +32,9 @@ test('impôt : première semaine exonérée, 18 % du bénéfice ensuite, défici
   assert.equal(est.daysLeft, 0, 'prélèvement ce soir');
   g.today.revenue += 2000; g.cash += 2000;
   const est2 = g.taxEstimate();
-  assert.ok(est2.base > est.base && close(est2.due, Math.max(0, est2.base) * FINANCE.taxRate));
+  assert.ok(est2.base > est.base && close(est2.due, weeklyTax(Math.max(0, est2.base))));
+  // Bénéfice à cheval sur les deux premières tranches : taux moyen entre 15 et 25 %.
+  assert.ok(est2.base > 7000 && est2.due > est2.base * 0.15 && est2.due < est2.base * 0.25, `impôt ${est2.due} pour ${est2.base}`);
   const cash = g.cash;
   keepAlive(g); g.advance(DAY - (g.total % DAY));
   const y = g.ledger.at(-1)!;
@@ -40,7 +42,7 @@ test('impôt : première semaine exonérée, 18 % du bénéfice ensuite, défici
   const week = g.ledger.filter((d) => d.day >= 7 && d.day <= 13);
   const base = week.reduce((a, d) => a + dayProfit(d) + (d.tax ?? 0), 0);
   assert.ok(base > 0);
-  assert.ok(close(y.tax ?? 0, base * FINANCE.taxRate, 0.05), `impôt ${y.tax} pour ${base}`);
+  assert.ok(close(y.tax ?? 0, weeklyTax(base), 0.05), `impôt ${y.tax} pour ${base}`);
   assert.ok(close(dayProfit(y), y.revenue - y.purchases - y.wages - y.rent - y.equipment - y.marketing - y.finance - y.living - (y.tax ?? 0)));
   assert.ok(cash - g.cash >= (y.tax ?? 0) - 0.01, 'impôt débité de la trésorerie');
   assert.deepEqual(g.taxes.at(-1), { week: 1, base: Math.round(base * 100) / 100, amount: y.tax });

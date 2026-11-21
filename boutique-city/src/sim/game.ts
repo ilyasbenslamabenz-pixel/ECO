@@ -15,12 +15,13 @@ import {
 import { SHIFT_BY_ID, STAFF, STAFF_ROLE_BY_ID, type ShiftKind, type StaffRole } from './catalog';
 import { CLEANING, FLOORING_BY_ID, WALLING_BY_ID, cleanAppeal, surfaceArea } from './catalog';
 import { FINANCE, INVESTMENTS, INVEST_BY_ID, type InvestKind } from './catalog';
+import { EMERGENCY_LOAN, RESCUE, RIVAL_LAYOUTS, hqFee, priceAppeal, taxBracketsText, weeklyTax, type LoanOffer } from './catalog';
 import { MINUTES_PER_DAY, START_MINUTE, clockView } from './clock';
 import { emptyLogi, logisticsHour, logisticsNight, restoreLogi, saveLogi, type LogiState } from './logistics';
 import { FACE_N, SIDEWALK_W, generateDistrict, type Building, type District, type Premise } from './district';
 import { canPlace, layoutStats, type LayoutStats, type PlacedItem, type Rot } from './layout';
 import { randomName } from './names';
-import { OBJECTIVES, netWorth } from './objectives';
+import { OBJECTIVES, netWorth, updateObjectives } from './objectives';
 import { Rng } from './rng';
 import { Rivalry, type RivalSave } from './rivals';
 
@@ -50,14 +51,33 @@ export interface Candidate {
   wantShift?: ShiftKind;
   /** Salaire minimum accepté (absent : le salaire demandé). */
   minWage?: number;
+  /** Recrue offerte par un palier d'objectifs : reste à l'agence jusqu'à ce jour inclus (absent : renouvelée le lundi). */
+  until?: number;
 }
 export interface ProductState { price: number; stock: number; auto: boolean }
 export interface Order { id: number; shopId: number; productId: string; qty: number; cost: number; deliverAt: number }
 export interface Vehicle { id: number; type: VehicleType; x: number; z: number; heading: number; cargo: Record<string, number> }
-export interface Loan { id: number; amount: number; total: number; remaining: number; daily: number; daysLeft: number }
+export interface Loan {
+  id: number; amount: number; total: number; remaining: number; daily: number; daysLeft: number;
+  /** Prêt d'urgence du plan de redressement (absent : prêt ordinaire). */
+  emergency?: boolean;
+}
 export interface Campaign { id: number; kind: CampaignKind; shopId: number | null; daysLeft: number; perDay: number }
-/** Impôt d'une semaine : semaine (0 = jours 1 à 7), bénéfice imposable, montant prélevé (0 : déficit ou exonération). */
-export interface TaxRecord { week: number; base: number; amount: number }
+/**
+ * Impôt d'une semaine : semaine (0 = jours 1 à 7), bénéfice de la semaine, montant prélevé (0 : déficit, pertes
+ * reportées ou exonération) ; pertes antérieures déduites (`carried`) ; déficit encore reportable (`loss`).
+ */
+export interface TaxRecord { week: number; base: number; amount: number; carried?: number; loss?: number }
+/** Raison de la mise à l'arrêt d'un commerce : rayons vides, pas de caisse, pas de caissier. */
+export type StopReason = 'rayons' | 'caisse' | 'caissier';
+export const STOP_FR: Record<StopReason, string> = { rayons: 'rayons vides', caisse: 'pas de caisse', caissier: 'pas de caissier' };
+/**
+ * Redressement (absent des anciennes sauvegardes : tout à zéro) : jours consécutifs terminés avec une trésorerie
+ * négative, de pertes d'exploitation (une fois l'activité lancée), en zone de faillite (valeur nette sous
+ * RESCUE.bankruptWorth et trésorerie négative) ; faillite prononcée (fin de partie).
+ */
+export interface RescueState { negDays: number; lossDays: number; redDays: number; bankrupt: boolean; bankruptDay?: number }
+const emptyRescue = (): RescueState => ({ negDays: 0, lossDays: 0, redDays: 0, bankrupt: false });
 /** État financier sauvegardé (placements, notoriété, impôts) ; absent des anciennes sauvegardes. */
 export interface FinanceSave {
   invest: Record<InvestKind, number>;
@@ -121,6 +141,8 @@ export interface DayStats {
   rentalIncome: number;
   /** Impôt sur le bénéfice prélevé ce jour-là (fin de semaine) ; absent : 0. */
   tax?: number;
+  /** Frais de siège (au-delà de FINANCE.hqFreeShops commerces) ; absent : 0. */
+  overhead?: number;
   /** Part de capital dans les remboursements de prêts (incluse dans finance, mais pas une charge imposable) ; absent : 0. */
   principal?: number;
   /**
@@ -192,9 +214,20 @@ export interface Shop {
   wallId?: string;
   /** Service de nettoyage de nuit sous contrat (forfait quotidien). */
   cleanService?: boolean;
+  /** Racheté à un concurrent (objectifs). */
+  acquired?: boolean;
+  /** Début (minute de jeu) de la série en cours à 90 % de propreté ou plus (objectif « Tenir un commerce impeccable »). */
+  cleanSince?: number;
+  /**
+   * À l'arrêt (aucune vente depuis RESCUE.idleDays jours et impossible de vendre) : employés en chômage technique,
+   * nettoyage de nuit suspendu, jusqu'à ce que le commerce puisse vendre à nouveau. Absent : en activité.
+   */
+  stopped?: StopReason;
 }
 
-export interface Notice { at: number; level: 'info' | 'ok' | 'warn' | 'error'; text: string }
+/** Action proposée par une notification (bouton dans l'appli Messages) : aligner des prix, ouvrir le plan de redressement. */
+export type NoticeAction = { kind: 'aligner'; target: BatchTarget } | { kind: 'redressement' };
+export interface Notice { at: number; level: 'info' | 'ok' | 'warn' | 'error'; text: string; action?: NoticeAction }
 /** Événement visuel : un client a acheté dans un commerce du joueur. */
 export interface ClientEvent { shopId: number; premiseId: number; products: string[] }
 /** Avis visible d'un client (bulle dans le magasin) : raison d'un départ sans achat, client ravi, ou magasin sale. */
@@ -211,7 +244,16 @@ const sumValues = (r: Record<string, number>): number => Object.values(r).reduce
 
 /** Résultat d'une journée (toutes dépenses comprises). */
 export function dayProfit(d: DayStats): number {
-  return d.revenue + (d.rentalIncome ?? 0) - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living - (d.tax ?? 0);
+  return d.revenue + (d.rentalIncome ?? 0) - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living - (d.tax ?? 0) - (d.overhead ?? 0);
+}
+
+/**
+ * Résultat d'exploitation d'une journée : ventes et loyers encaissés, moins le coût des articles vendus, salaires,
+ * loyers, publicité, vie courante, frais de siège et intérêts. Ni investissements (meubles, véhicules), ni achats de
+ * stock d'avance, ni capital des prêts, ni impôt : sert à repérer les vraies journées de perte.
+ */
+export function operatingResult(d: DayStats): number {
+  return d.revenue + (d.rentalIncome ?? 0) - d.costOfSales - d.wages - d.rent - d.marketing - d.living - (d.overhead ?? 0) - (d.finance - (d.principal ?? 0));
 }
 
 /** Réglages en lot : commerces visés (un type, ou tous les commerces). */
@@ -273,6 +315,8 @@ export interface GameSave {
   finance?: FinanceSave;
   /** Logistique : entrepôts, importations, stocks minimums, tournées (absent : aucun entrepôt). */
   logi?: LogiState;
+  /** Redressement et faillite (absent : aucune difficulté en cours). */
+  rescue?: RescueState;
   nextId: number;
   rng: number[];
 }
@@ -321,6 +365,8 @@ export class Game {
   taxes: TaxRecord[] = [];
   /** Logistique : entrepôts, importations en cours, stocks minimums des commerces, tournées (voir logistics.ts). */
   logi: LogiState = emptyLogi();
+  /** Redressement : jours de trésorerie négative, de pertes, en zone de faillite ; faillite (fin de partie). */
+  rescue: RescueState = emptyRescue();
   private rng: Rng;
   /** Concurrence active : entreprises rivales, leurs commerces, promotions, rachats (src/sim/rivals.ts). */
   readonly rivalry: Rivalry = new Rivalry(this, { newId: () => this.nextId++, bump: () => this.bump() });
@@ -487,7 +533,7 @@ export class Game {
   }
 
   /** Salaire du marché (CHF / h) pour une compétence donnée. */
-  marketWage(skill: number, training = 0): number { return Math.round(20 + skill * 14 + 1.5 + TRAINING.wage * training); }
+  marketWage(skill: number, training = 0): number { return Math.round(STAFF.wageBase + skill * STAFF.wageSkill + 1.5 + TRAINING.wage * training); }
 
   /** Augmente (ou fixe) le salaire horaire d'un employé ; la satisfaction monte aussitôt. */
   raiseWage(employeeId: number, wage: number): Result<number> {
@@ -615,6 +661,48 @@ export class Game {
     return p.footfall * t.capture * (1 / (1 + 0.6 * this.competition(p, type)));
   }
 
+  /**
+   * Bénéfice estimé par jour d'un commerce de ce type dans ce local, bien tenu, en gamme standard : attrait moyen du
+   * quartier, prix du quartier, 1 à 3 caissiers selon l'affluence (le meilleur choix), ventes limitées par la place en
+   * rayon d'un aménagement type (RIVAL_LAYOUTS) réassorti deux fois par jour, nettoyage de nuit et livraisons compris.
+   * Hors investissements (meubles, dépôt), impôt et vie courante. Sert à comparer les types (Immobilier).
+   */
+  estimateProfit(p: Premise, type: ShopType): { customers: number; revenue: number; margin: number; wages: number; rent: number; other: number; cashiers: number; profit: number } {
+    const t = SHOP_TYPE_BY_ID.get(type)!, prods = productsOf(type);
+    const comp = 1 / (1 + 0.6 * this.competition(p, type)), week = (5 + 2 * t.weekend) / 7;
+    // Place en rayon de l'aménagement type, partagée entre les produits d'un même meuble ; environ 1,8 rotation par
+    // jour (livraisons de 7 h et 14 h, réassort automatique à 11 h et 21 h).
+    const shelf = new Map<string, number>();
+    for (const f of RIVAL_LAYOUTS[type]) { const d = FURNITURE_BY_ID.get(f); if (d?.capacity) shelf.set(d.kind, (shelf.get(d.kind) ?? 0) + d.capacity); }
+    const turns = 1.8, sellMax = (pr: ProductDef): number => turns * (shelf.get(pr.store) ?? 0) / prods.filter((x) => x.store === pr.store).length;
+    // Caissier type : compétence 0,75, satisfait.
+    const skill = 0.75, perCashier = ECONOMY.servePerRegister * skill * (0.8 + 0.3 * 0.75), wage = this.marketWage(skill);
+    const rent = p.rent / 30, other = ECONOMY.deliveryBase + Math.max(CLEANING.serviceMin, Math.round(p.area * CLEANING.servicePerM2));
+    let best: ReturnType<Game['estimateProfit']> | null = null;
+    for (let k = 1; k <= 3; k++) {
+      let customers = 0;
+      for (let h = t.open; h < t.close; h++) customers += Math.min(p.footfall * (t.hourly[h] ?? 0) * t.capture * comp * week, perCashier * k);
+      let items = 0, revenue = 0, margin = 0;
+      for (const pr of prods) {
+        // Coût d'achat livré : prix catalogue plus la part proportionnelle des frais de livraison.
+        const q = Math.min(customers * t.basket * pr.share, sellMax(pr)), price = this.refPrice(pr);
+        items += q; revenue += q * price; margin += q * (price - pr.cost * (1 + ECONOMY.deliveryRate));
+      }
+      const wages = k * wage * (t.close - t.open), profit = margin - wages - rent - other;
+      // Clients servis : ceux qui trouvent ce qu'ils cherchent (au prorata des articles vendus).
+      const served = customers * (items / Math.max(1e-9, customers * t.basket));
+      if (!best || profit > best.profit) best = { customers: Math.round(served), revenue: Math.round(revenue), margin: Math.round(margin), wages: Math.round(wages), rent: Math.round(rent), other: Math.round(other), cashiers: k, profit: Math.round(profit) };
+    }
+    return best!;
+  }
+
+  /** Type de commerce au meilleur bénéfice estimé dans ce local (et ce bénéfice). */
+  bestType(p: Premise): { type: ShopType; profit: number } {
+    let type: ShopType = SHOP_TYPES[0]!.id, profit = -Infinity;
+    for (const t of SHOP_TYPES) { const e = this.estimateProfit(p, t.id).profit; if (e > profit) { profit = e; type = t.id; } }
+    return { type, profit };
+  }
+
   /** Capacité de transport (unités) : à pied ou dans un véhicule. */
   capacityOf(carrier: 'pied' | number): number {
     if (carrier === 'pied') return ECONOMY.carryOnFoot;
@@ -670,13 +758,21 @@ export class Game {
    * Impôt de la semaine en cours : bénéfice depuis le début de la semaine (avant impôt), montant estimé, jours avant
    * le prélèvement (0 : ce soir à minuit). Les premières semaines sont exonérées.
    */
-  taxEstimate(): { week: number; base: number; due: number; daysLeft: number; exempt: boolean } {
+  taxEstimate(): { week: number; base: number; carry: number; taxable: number; due: number; daysLeft: number; exempt: boolean } {
     const P = FINANCE.taxPeriod, week = Math.floor(this.today.day / P);
     const days = [...this.ledger.filter((d) => Math.floor(d.day / P) === week), this.today];
     // Le remboursement du capital d'un prêt n'est pas une charge : seuls les intérêts réduisent le bénéfice imposable.
     const base = r2(days.reduce((a, d) => a + dayProfit(d) + (d.tax ?? 0) + (d.principal ?? 0), 0));
     const exempt = week < FINANCE.taxGraceWeeks;
-    return { week, base, due: exempt ? 0 : r2(Math.max(0, base) * FINANCE.taxRate), daysLeft: week * P + P - 1 - this.today.day, exempt };
+    // Report des pertes : les déficits des semaines précédentes réduisent le bénéfice imposable.
+    const carry = exempt ? 0 : r2(Math.min(Math.max(0, base), this.lossCarry(week)));
+    const taxable = r2(Math.max(0, base - carry));
+    return { week, base, carry, taxable, due: exempt ? 0 : weeklyTax(taxable), daysLeft: week * P + P - 1 - this.today.day, exempt };
+  }
+
+  /** Déficits des semaines précédentes encore déductibles du bénéfice de la semaine `week` (FINANCE.taxCarryWeeks au plus). */
+  lossCarry(week: number): number {
+    return r2(this.taxes.filter((t) => t.week < week && t.week >= week - FINANCE.taxCarryWeeks).reduce((a, t) => a + (t.loss ?? 0), 0));
   }
 
   /** Plafond de crédit : socle + 150 % de la valeur nette positive + deux semaines de ventes récentes (borné). */
@@ -688,6 +784,128 @@ export class Game {
     const raw = FINANCE.creditBase + fromWorth + fromSales;
     const limit = Math.min(FINANCE.creditMax, raw);
     return { limit, base: FINANCE.creditBase, worth, fromWorth, sales7, fromSales, capped: raw > FINANCE.creditMax, available: Math.max(0, r2(limit - this.debt)) };
+  }
+
+  /* ------------------------------ Redressement : découvert, prêt d'urgence, plan, faillite ------------------------------ */
+
+  /** Découvert autorisé (CHF) pour les commandes au grossiste : part du crédit encore disponible. */
+  overdraftLimit(): number { return Math.round(this.creditLimit().available * FINANCE.overdraftShare); }
+
+  /** Entreprise en difficulté : trésorerie négative, pertes d'affilée ou zone de faillite. */
+  inDifficulty(): boolean { return this.cash < 0 || this.rescue.lossDays >= RESCUE.lossDaysPlan || this.rescue.redDays > 0; }
+
+  /** Plan de redressement à proposer ce soir : RESCUE.lossDaysPlan jours de pertes, puis chaque semaine de pertes en plus. */
+  planDue(): boolean {
+    const n = this.rescue.lossDays;
+    return !this.rescue.bankrupt && n >= RESCUE.lossDaysPlan && (n - RESCUE.lossDaysPlan) % RESCUE.planEvery === 0;
+  }
+
+  /** Jours restant avant la faillite (null hors zone de faillite). */
+  bankruptcyIn(): number | null { return this.rescue.redDays > 0 && !this.rescue.bankrupt ? RESCUE.bankruptDays - this.rescue.redDays : null; }
+
+  /** Prêt d'urgence : conditions, total, échéance, disponibilité (et raison du refus). */
+  emergencyOffer(): { offer: LoanOffer; total: number; daily: number; available: boolean; why: string | null } {
+    const o = EMERGENCY_LOAN, total = loanTotal(o);
+    const why = this.rescue.bankrupt ? 'Faillite prononcée.'
+      : this.loans.some((l) => l.emergency) ? 'Un prêt d’urgence est déjà en cours.'
+      : !this.inDifficulty() ? 'Réservé aux entreprises en difficulté (pertes d’affilée ou trésorerie négative).' : null;
+    return { offer: o, total, daily: r2(total / o.days), available: !why, why };
+  }
+
+  /** Prêt d'urgence du plan de redressement (à distance, hors plafond de crédit, un seul à la fois). */
+  takeEmergencyLoan(): Result<Loan> {
+    const e = this.emergencyOffer();
+    if (!e.available) return fail(e.why!);
+    const l: Loan = { id: this.nextId++, amount: e.offer.amount, total: e.total, remaining: e.total, daily: e.daily, daysLeft: e.offer.days, emergency: true };
+    this.loans.push(l);
+    this.cash += e.offer.amount;
+    this.notify('ok', `Prêt d’urgence accordé : ${e.offer.amount.toLocaleString('fr-CH')} CHF, ${e.daily} CHF par jour pendant ${e.offer.days} jours (taux ${Math.round(e.offer.rate * 100)} % par an).`);
+    this.bump();
+    return ok(l);
+  }
+
+  /** Moyennes par jour des dernières journées de pertes (au plus 7) : ventes, salaires, loyers, autres charges, résultat. */
+  lossSummary(): { days: number; revenue: number; wages: number; rent: number; other: number; result: number } {
+    const days = this.ledger.slice(-Math.max(1, Math.min(7, this.rescue.lossDays || 3)));
+    const n = Math.max(1, days.length), avg = (f: (d: DayStats) => number): number => r2(days.reduce((a, d) => a + f(d), 0) / n);
+    const result = avg(operatingResult);
+    const revenue = avg((d) => d.revenue + (d.rentalIncome ?? 0)), wages = avg((d) => d.wages), rent = avg((d) => d.rent);
+    return { days: days.length, revenue, wages, rent, other: r2(revenue - wages - rent - result), result };
+  }
+
+  /** Diagnostic par commerce pour le plan de redressement (moyennes des 3 derniers jours). */
+  shopDiagnosis(): { shop: Shop; revenue: number; margin: number; wages: number; rent: number; result: number; noSale: number; stopped: StopReason | null; blocker: StopReason | null }[] {
+    return this.shops.map((s) => {
+      const days = s.history.slice(-3), n = Math.max(1, days.length);
+      const sum = (f: (d: DayStats) => number): number => r2(days.reduce((a, d) => a + f(d), 0) / n);
+      const revenue = sum((d) => d.revenue), margin = sum((d) => d.revenue - d.costOfSales), wages = sum((d) => d.wages), rent = sum((d) => d.rent);
+      let noSale = 0;
+      for (const d of [...s.history].reverse()) { if (d.customers > 0) break; noSale++; }
+      return { shop: s, revenue, margin, wages, rent, result: r2(margin - wages - rent - sum((d) => d.marketing)), noSale, stopped: s.stopped ?? null, blocker: this.blocker(s) };
+    });
+  }
+
+  /** Ce qui empêche un commerce de vendre : pas de caisse, rayons vides, pas de caissier (ni le patron) ; null sinon. */
+  blocker(s: Shop): StopReason | null {
+    const st = this.stats(s);
+    if (st.registers === 0) return 'caisse';
+    if (!productsOf(s.type).some((pr) => this.sellable(s, pr, st))) return 'rayons';
+    if (this.player.tending !== s.id && !this.staffOf(s.id).some((e) => this.roleOf(e) === 'caisse')) return 'caissier';
+    return null;
+  }
+
+  /** Remet en route un commerce à l'arrêt qui peut de nouveau vendre. */
+  private restart(s: Shop): void {
+    delete s.stopped;
+    const n = this.staffOf(s.id).length;
+    this.notify('ok', `${s.name} repart : ${n ? `${n > 1 ? `ses ${n} employés reprennent` : 'son employé reprend'} le travail (salaires de nouveau payés)` : 'il peut de nouveau vendre'}${s.cleanService ? ', nettoyage de nuit rétabli' : ''}.`);
+    this.bump();
+  }
+
+  /** Minuit : un commerce sans aucune vente depuis RESCUE.idleDays jours et qui ne peut plus vendre est mis à l'arrêt. */
+  private stopIdleShops(): void {
+    for (const s of this.shops) {
+      // Rien à suspendre (ni employé, ni nettoyage de nuit, ex. local en cours d'installation) : pas de mise à l'arrêt.
+      if (s.stopped || (!this.staffOf(s.id).length && !s.cleanService)) continue;
+      const days = s.history.slice(-RESCUE.idleDays);
+      if (days.length < RESCUE.idleDays || days.some((d) => d.customers > 0)) continue;
+      const why = this.blocker(s);
+      if (!why) continue;
+      // Rayons vides mais marchandise en route (commande, tournée depuis un entrepôt) : il repartira de lui-même.
+      if (why === 'rayons' && (this.orders.some((o) => o.shopId === s.id) || (this.logi.mins[s.id] && this.logi.warehouses.some((w) => w.mode !== 'aucun')))) continue;
+      s.stopped = why;
+      const n = this.staffOf(s.id).length;
+      const fix = why === 'rayons' ? 'réapprovisionnez-le (grossiste, livraison ou réassort automatique)' : why === 'caisse' ? 'posez une caisse (Aménager)' : 'embauchez un caissier, donnez le rôle Caisse à un employé ou tenez la caisse';
+      this.notify('warn', `${s.name} n’a rien vendu depuis ${RESCUE.idleDays} jours (${STOP_FR[why]}) : il est mis à l’arrêt${n ? `, ${n > 1 ? `ses ${n} employés sont en chômage technique (ni présents ni payés)` : 'son employé est en chômage technique (ni présent ni payé)'}` : ''}${s.cleanService ? ', nettoyage de nuit suspendu' : ''}. Pour le relancer : ${fix} ; il repart tout seul.`);
+    }
+  }
+
+  /** Minuit : jours de trésorerie négative, de pertes et en zone de faillite ; alertes, plan de redressement, faillite. */
+  private rescueNight(y: DayStats): void {
+    const R = this.rescue;
+    if (R.bankrupt) return;
+    R.negDays = this.cash < 0 ? R.negDays + 1 : 0;
+    if (R.negDays === 1) this.notify('error', `Trésorerie négative (${Math.round(this.cash).toLocaleString('fr-CH')} CHF) : découvert facturé ${(FINANCE.overdraftRate * 100).toLocaleString('fr-CH')} % par jour. Réduisez les dépenses, empruntez ou résiliez un bail.`);
+    else if (R.negDays >= RESCUE.negDaysAlert && (R.negDays - RESCUE.negDaysAlert) % 7 === 0) {
+      this.notify('error', `ALERTE : trésorerie négative depuis ${R.negDays} jours (${Math.round(this.cash).toLocaleString('fr-CH')} CHF). Au-delà de ${this.overdraftLimit().toLocaleString('fr-CH')} CHF de découvert, plus aucune commande ne passe. Ouvrez le plan de redressement (téléphone › Banque).`, { kind: 'redressement' });
+    }
+    // Pertes d'exploitation d'affilée, une fois l'activité lancée (première vente faite).
+    const active = this.shops.length > 0 && (y.revenue > 0 || this.ledger.some((d) => d.revenue > 0));
+    R.lossDays = active && operatingResult(y) < 0 ? R.lossDays + 1 : 0;
+    if (this.planDue()) {
+      const s = this.lossSummary();
+      this.notify('warn', `${R.lossDays} jours de pertes d’affilée : ventes ${Math.round(s.revenue).toLocaleString('fr-CH')} CHF par jour, salaires ${Math.round(s.wages).toLocaleString('fr-CH')}, loyers ${Math.round(s.rent).toLocaleString('fr-CH')}. Un plan de redressement vous est proposé (téléphone › Banque).`, { kind: 'redressement' });
+    }
+    // Zone de faillite : valeur nette sous le seuil avec une trésorerie négative (la banque ne suit plus).
+    const worth = netWorth(this);
+    R.redDays = worth < RESCUE.bankruptWorth && this.cash < 0 ? R.redDays + 1 : 0;
+    const left = RESCUE.bankruptDays - R.redDays;
+    if (R.redDays >= RESCUE.bankruptDays) {
+      R.bankrupt = true; R.bankruptDay = this.day;
+      this.notify('error', `Faillite : valeur nette de ${Math.round(worth).toLocaleString('fr-CH')} CHF et trésorerie négative depuis ${RESCUE.bankruptDays} jours. La banque ferme vos comptes : la partie est terminée.`);
+    } else if (R.redDays === 1 || [7, 3, 2, 1].includes(left)) {
+      this.notify('error', `Risque de faillite : valeur nette de ${Math.round(worth).toLocaleString('fr-CH')} CHF (seuil −${Math.abs(RESCUE.bankruptWorth).toLocaleString('fr-CH')} CHF) et trésorerie négative. Faillite dans ${left} jour${left > 1 ? 's' : ''} si rien ne change.`, { kind: 'redressement' });
+    }
   }
 
   /** Valeur de rachat des placements (frais de retrait déduits). */
@@ -760,6 +978,10 @@ export class Game {
       open: t.open, close: t.close, reputation: 0.22, deposit, rentDue: 0, leaseDay: this.day, today: emptyDay(this.day), history: [], rate: 0, capacity: 0, servedThisHour: 0, warned: [],
     };
     this.shops.push(shop);
+    if (this.shops.length > FINANCE.hqFreeShops) {
+      const fee = hqFee(this.shops.length), more = hqFee(this.shops.length + 1) - fee;
+      this.notify('info', `Au-delà de ${FINANCE.hqFreeShops} commerces, frais de siège : ${Math.round(fee).toLocaleString('fr-CH')} CHF par jour désormais (un commerce de plus : +${more.toLocaleString('fr-CH')} CHF par jour).`);
+    }
     this.notify('ok', `Local loué : ${shop.name} (${p.area} m², ${p.rent} CHF / mois). Achetez des meubles au magasin de meubles, puis aménagez.`);
     this.bump();
     return ok(shop);
@@ -1040,7 +1262,11 @@ export class Game {
     const q = Math.min(n, room);
     const goods = this.orderCost(productId, q, shopId);
     const cost = r2(goods + this.deliveryFee(goods, shopId));
-    if (this.cash < cost) return fail(`Trésorerie insuffisante (${cost} CHF)`);
+    if (this.cash < cost) {
+      // Découvert autorisé pour les commandes : jusqu'à FINANCE.overdraftShare du crédit encore disponible.
+      const od = this.overdraftLimit();
+      if (this.cash - cost < -od) return fail(od > 0 ? `Trésorerie insuffisante (${cost} CHF) : découvert autorisé de ${od.toLocaleString('fr-CH')} CHF dépassé.` : `Trésorerie insuffisante (${cost} CHF)`);
+    }
     this.cash -= cost;
     s.today.purchases += cost; this.today.purchases += cost;
     const o: Order = { id: this.nextId++, shopId, productId, qty: q, cost, deliverAt: this.nextDelivery() };
@@ -1113,6 +1339,7 @@ export class Game {
     this.notify('ok', `${e.name} rejoint ${this.shop(shopId)!.name} : ${STAFF_ROLE_BY_ID.get(role)!.nameFr.toLowerCase()}, ${SHIFT_BY_ID.get(shift)!.nameFr.toLowerCase()} (${e.wage} CHF / h).`);
     if (e.wantShift !== shift) this.notify('warn', `${e.name} préférait l’équipe « ${SHIFT_BY_ID.get(e.wantShift!)!.nameFr} » : sa satisfaction va baisser.`);
     this.warnGaps(e);
+    this.warnRegisters(shopId);
     this.refreshCapacities();
     this.bump();
     return ok(e);
@@ -1125,6 +1352,7 @@ export class Game {
     if (!STAFF_ROLE_BY_ID.has(role)) return fail('Rôle inconnu');
     e.role = role;
     this.warnGaps(e);
+    this.warnRegisters(e.shopId);
     this.refreshCapacities();
     this.bump();
     return ok(undefined);
@@ -1138,6 +1366,7 @@ export class Game {
     e.shift = shift;
     if (e.wantShift && e.wantShift !== shift) this.notify('warn', `${e.name} préfère l’équipe « ${SHIFT_BY_ID.get(e.wantShift)!.nameFr} » : sa satisfaction va baisser.`);
     this.warnGaps(e);
+    this.warnRegisters(e.shopId);
     this.refreshCapacities();
     this.bump();
     return ok(undefined);
@@ -1148,6 +1377,29 @@ export class Game {
     if (e.shopId === null) return;
     const gaps = this.cashierGaps(e.shopId);
     if (gaps.length) this.notify('warn', `${this.shop(e.shopId)!.name} : aucun caissier ${gaps.map(([a, b]) => `de ${a} h à ${b} h`).join(', ')}.`);
+  }
+
+  /** Plages d'ouverture où plus de caissiers travaillent en même temps qu'il n'y a de caisses (le surplus ne sert presque à rien). */
+  cashierSurplus(shopId: number): { hours: [number, number][]; most: number; registers: number } {
+    const s = this.shop(shopId);
+    const out = { hours: [] as [number, number][], most: 0, registers: s ? this.stats(s).registers : 0 };
+    if (!s || out.registers === 0) return out;
+    for (let h = s.open; h < s.close; h++) {
+      const n = this.staffOf(s.id).filter((e) => this.roleOf(e) === 'caisse' && this.worksAt(e, h)).length;
+      out.most = Math.max(out.most, n);
+      if (n <= out.registers) continue;
+      const last = out.hours.at(-1);
+      if (last && last[1] === h) last[1] = h + 1; else out.hours.push([h, h + 1]);
+    }
+    return out;
+  }
+
+  /** Avertit quand des caissiers attendent faute de caisse (embauche, rôle, équipe, affectation). */
+  private warnRegisters(shopId: number | null): void {
+    if (shopId === null) return;
+    const s = this.shop(shopId), x = this.cashierSurplus(shopId);
+    if (!s || !x.hours.length) return;
+    this.notify('warn', `${s.name} : ${x.most} caissiers en même temps pour ${x.registers} caisse${x.registers > 1 ? 's' : ''} (${x.hours.map(([a, b]) => `${a} h – ${b} h`).join(', ')}) : le caissier en trop ne sert presque à rien. Achetez une caisse au magasin de meubles, ou passez-le en équipe de pointe (16 h – 20 h) ou à un autre rôle.`);
   }
 
   roleOf(e: Employee): StaffRole { return e.role ?? 'caisse'; }
@@ -1163,6 +1415,8 @@ export class Game {
 
   /** Employés présents dans un commerce à l'heure h (par défaut l'heure courante), éventuellement d'un rôle donné. */
   onDuty(shopId: number, role?: StaffRole, h = clockView(this.total).hour): Employee[] {
+    // Commerce à l'arrêt : employés en chômage technique (ni présents ni payés).
+    if (this.shop(shopId)?.stopped) return [];
     return this.staffOf(shopId).filter((e) => this.worksAt(e, h) && (!role || this.roleOf(e) === role));
   }
 
@@ -1179,7 +1433,8 @@ export class Game {
     if (!s) return [];
     const out: [number, number][] = [];
     for (let h = s.open; h < s.close; h++) {
-      if (this.onDuty(shopId, 'caisse', h).length) continue;
+      // Planning prévu (même pendant une mise à l'arrêt) : un caissier dont l'équipe couvre l'heure.
+      if (this.staffOf(shopId).some((e) => this.roleOf(e) === 'caisse' && this.worksAt(e, h))) continue;
       const last = out.at(-1);
       if (last && last[1] === h) last[1] = h + 1; else out.push([h, h + 1]);
     }
@@ -1212,16 +1467,24 @@ export class Game {
     if (!e) return fail('Employé introuvable');
     if (shopId !== null && !this.shop(shopId)) return fail('Commerce introuvable');
     e.shopId = shopId;
+    this.warnRegisters(shopId);
     this.refreshCapacities();
     this.bump();
     return ok(undefined);
   }
 
-  fire(employeeId: number): Result<number> {
+  /** Indemnité de licenciement d'un employé (CHF). */
+  severance(e: Employee): number { return Math.round(e.wage * 8 * ECONOMY.severanceDays); }
+
+  /**
+   * Licencie un employé (indemnité payée aussitôt). `overdraft` : depuis le plan de redressement, l'indemnité peut être
+   * payée à découvert (dans la limite du découvert autorisé).
+   */
+  fire(employeeId: number, overdraft = false): Result<number> {
     const e = this.employees.find((x) => x.id === employeeId);
     if (!e) return fail('Employé introuvable');
-    const pay = Math.round(e.wage * 8 * ECONOMY.severanceDays);
-    if (this.cash < pay) return fail(`Trésorerie insuffisante pour l’indemnité de licenciement (${pay} CHF).`);
+    const pay = this.severance(e);
+    if (this.cash < pay && !(overdraft && this.cash - pay >= -this.overdraftLimit())) return fail(`Trésorerie insuffisante pour l’indemnité de licenciement (${pay} CHF)${overdraft ? ' : découvert autorisé dépassé' : ''}.`);
     this.cash -= pay;
     this.today.wages += pay;
     this.employees = this.employees.filter((x) => x !== e);
@@ -1530,12 +1793,9 @@ export class Game {
     }
   }
 
-  /** Vérifie les objectifs (appelée chaque heure de jeu et par l'interface). */
+  /** Vérifie les objectifs (appelée chaque heure de jeu et par l'interface) : paliers, récompenses (objectives.ts). */
   checkObjectives(): void {
-    for (const o of OBJECTIVES) {
-      if (this.achieved.includes(o.id)) continue;
-      if (o.progress(this).p >= 1) { this.achieved.push(o.id); this.notify('ok', `Objectif atteint : ${o.title} !`); this.bump(); }
-    }
+    updateObjectives(this, { newId: () => this.nextId++, bump: () => this.bump() });
   }
 
   private hour(h: number, weekday: number): void {
@@ -1565,6 +1825,8 @@ export class Game {
     for (const s of this.shops) {
       this.updateReputation(s);
       s.servedThisHour = 0;
+      // Commerce à l'arrêt qui peut de nouveau vendre (livraison reçue, caissier embauché…) : il repart.
+      if (s.stopped && !this.blocker(s)) this.restart(s);
       const open = h >= s.open && h < s.close;
       if (!open) { s.rate = 0; s.capacity = 0; continue; }
       this.cleanHour(s);
@@ -1603,9 +1865,11 @@ export class Game {
     if (this.player.tending === s.id && st.registers > tended) skill += 1;
     return ECONOMY.servePerRegister * skill;
   }
-  /** Efficacité en caisse d'un employé : compétence × formation × satisfaction (1 ≈ 28 clients / h). */
+  /** Efficacité en caisse d'un employé : compétence × formation × satisfaction (1 ≈ ECONOMY.servePerRegister clients / h). */
   serviceSkill(e: Employee): number { return e.skill * (1 + TRAINING.capacity * (e.training ?? 0)) * (0.8 + 0.3 * (e.mood ?? 0.75)); }
   private refreshCapacities(): void {
+    // Commerce à l'arrêt remis en état (caissier embauché, rôle changé, patron en caisse) : il repart aussitôt.
+    for (const s of this.shops) if (s.stopped && !this.blocker(s)) this.restart(s);
     // Tous les commerces ouverts (y compris ceux encore sans clients ni capacité : premier caissier embauché).
     const h = clockView(this.total).hour;
     for (const s of this.shops) if (s.rate > 0 || s.capacity > 0 || (h >= s.open && h < s.close)) s.capacity = this.capacityNow(s);
@@ -1618,7 +1882,7 @@ export class Game {
       if (!this.sellable(s, pr, st)) continue;
       const ps = s.products[pr.id]!;
       shareAvail += pr.share;
-      priceAcc += pr.share * Math.min(1.8, Math.max(0.05, Math.exp(-2.2 * (ps.price / this.refPrice(pr, s) - 1))));
+      priceAcc += pr.share * Math.min(1.8, Math.max(0.05, priceAppeal(ps.price / this.refPrice(pr, s))));
     }
     if (shareAvail <= 0) return 0;
     const price = priceAcc / shareAvail;
@@ -1657,7 +1921,7 @@ export class Game {
         missing++;
         continue;
       }
-      if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / this.refPrice(want, s) - 1)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
+      if (this.rng.next() > Math.min(1, priceAppeal(ps.price / this.refPrice(want, s)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
       ps.stock--;
       // Alerte une fois par jour quand le stock passe sous 20 % de la place en rayon (sauf réassort automatique).
       if (!ps.auto && ps.stock === Math.floor(this.storageFor(s, want) * 0.2) && this.pendingQty(s.id, want.id) === 0) this.warnOnce(s, `bas-${want.id}`, `${s.name} : stock bas de ${want.nameFr.toLowerCase()} (${ps.stock} restants, moins de 20 %).`);
@@ -1683,7 +1947,8 @@ export class Game {
 
   private updateReputation(s: Shop): void {
     const d = s.today;
-    const served = d.customers, lost = d.lostStock + d.lostCapacity + d.lostStaff;
+    // Un client lassé d'attendre en caisse pèse plus lourd sur la réputation (ECONOMY.waitRepWeight).
+    const served = d.customers, lost = d.lostStock + d.lostCapacity * ECONOMY.waitRepWeight + d.lostStaff;
     if (served + lost < 3) return;
     // Magasin sale : la réputation visée baisse (jusqu'à −CLEANING.repPenalty à 0 % de propreté).
     const dirt = CLEANING.repPenalty * (1 - Math.min(1, this.cleanliness(s) / CLEANING.fine));
@@ -1717,7 +1982,8 @@ export class Game {
         s.rentDue = 0;
       }
       // Service de nettoyage de nuit : forfait du jour (compté avec le personnel), magasin impeccable au matin.
-      if (s.cleanService) {
+      // Suspendu (et non facturé) tant que le commerce est à l'arrêt.
+      if (s.cleanService && !s.stopped) {
         const fee = this.cleanServiceCost(s.id);
         this.cash -= fee; s.today.wages += fee; this.today.wages += fee;
         s.clean = 100;
@@ -1729,6 +1995,7 @@ export class Game {
       s.hourServed = new Array(24).fill(0);
       s.hourLost = new Array(24).fill(0);
     }
+    this.stopIdleShops();
     // Logement, assurance des véhicules, prêts, campagnes.
     if (this.player.home) {
       const def = HOME_BY_ID.get(this.district.homes.find((h) => h.id === this.player.home)!.def)!;
@@ -1738,6 +2005,9 @@ export class Game {
     }
     logisticsNight(this);
     for (const v of this.vehicles) { const ins = VEHICLE_BY_ID.get(v.type)!.insurance; this.cash -= ins; this.today.living += ins; }
+    // Frais de siège : au-delà de FINANCE.hqFreeShops commerces, de plus en plus chers par commerce supplémentaire.
+    const hq = hqFee(this.shops.length);
+    if (hq > 0) { this.cash -= hq; this.today.overhead = r2((this.today.overhead ?? 0) + hq); }
     // Employés : satisfaction selon le salaire comparé au marché ; demande d'augmentation ; démission.
     for (const e of [...this.employees]) {
       const ratio = e.wage / this.marketWage(e.skill, e.training ?? 0);
@@ -1788,6 +2058,8 @@ export class Game {
     }
     const done = this.loans.filter((l) => l.remaining <= 0.01 || l.daysLeft <= 0);
     if (done.length) { this.loans = this.loans.filter((l) => !done.includes(l)); this.notify('ok', `Prêt remboursé (${done.length}).`); }
+    // Découvert : intérêt quotidien sur le solde négatif (charge financière, déductible de l'impôt).
+    if (this.cash < 0) { const it = r2(-this.cash * FINANCE.overdraftRate); this.cash -= it; this.today.finance += it; }
     this.financeNight();
     for (const c of this.campaigns) c.daysLeft--;
     const ended = this.campaigns.filter((c) => c.daysLeft <= 0);
@@ -1800,9 +2072,9 @@ export class Game {
       const profit = dayProfit(y);
       this.notify(profit >= 0 ? 'ok' : 'info', `Bilan du jour ${y.day + 1} : ${Math.round(y.revenue)} CHF de ventes, ${y.customers} clients, solde ${profit >= 0 ? '+' : ''}${Math.round(profit)} CHF.`);
     }
-    if (this.cash < 0) this.notify('error', `Trésorerie négative (${Math.round(this.cash)} CHF) : réduisez les dépenses, empruntez ou résiliez un bail.`);
+    this.rescueNight(y);
     const tx = this.taxEstimate();
-    if (tx.daysLeft === 0 && !tx.exempt && this.shops.length) this.notify('info', `Impôt sur le bénéfice prélevé ce soir à minuit : environ ${Math.round(Math.max(0, tx.base) * FINANCE.taxRate)} CHF (${Math.round(FINANCE.taxRate * 100)} % du bénéfice de la semaine, selon la journée).`);
+    if (tx.daysLeft === 0 && !tx.exempt && this.shops.length) this.notify('info', `Impôt sur le bénéfice prélevé ce soir à minuit : environ ${Math.round(tx.due)} CHF selon la journée (impôt progressif : ${taxBracketsText()}${tx.carry > 0 ? ` ; ${Math.round(tx.carry)} CHF de pertes reportées déduites` : ''}).`);
     if (weekday === 0) this.refreshCandidates();
   }
 
@@ -1838,15 +2110,30 @@ export class Game {
     if (y.day % P === P - 1) {
       const t = this.taxEstimate();
       if (!t.exempt) {
+        // Report des pertes : les déficits les plus anciens sont imputés d'abord.
+        let left = t.carry;
+        for (const r of this.taxes) {
+          if (left <= 0) break;
+          if (!r.loss || r.week < t.week - FINANCE.taxCarryWeeks) continue;
+          const use = Math.min(r.loss, left);
+          r.loss = r2(r.loss - use); left = r2(left - use);
+          if (r.loss <= 0) delete r.loss;
+        }
         const rec: TaxRecord = { week: t.week, base: t.base, amount: t.due };
+        if (t.carry > 0) rec.carried = t.carry;
+        if (t.base < 0) rec.loss = r2(-t.base);
         this.taxes.push(rec);
         if (this.taxes.length > 12) this.taxes.shift();
         if (t.due > 0) {
           this.cash -= t.due; y.tax = r2((y.tax ?? 0) + t.due);
-          this.notify('info', `Impôt sur le bénéfice de la semaine ${t.week + 1} prélevé : ${Math.round(t.due)} CHF (${Math.round(FINANCE.taxRate * 100)} % de ${Math.round(t.base)} CHF de bénéfice).`);
-        } else if (this.shops.length) this.notify('ok', `Semaine ${t.week + 1} sans bénéfice (${Math.round(t.base)} CHF) : aucun impôt à payer.`);
+          this.notify('info', `Impôt sur le bénéfice de la semaine ${t.week + 1} prélevé : ${Math.round(t.due)} CHF sur ${Math.round(t.taxable)} CHF de bénéfice imposable${t.carry > 0 ? ` (${Math.round(t.base)} CHF moins ${Math.round(t.carry)} CHF de pertes reportées)` : ''} ; barème : ${taxBracketsText()}.`);
+        } else if (this.shops.length) {
+          this.notify('ok', t.base < 0
+            ? `Semaine ${t.week + 1} en déficit (${Math.round(t.base)} CHF) : aucun impôt, et ce déficit sera déduit des bénéfices des ${FINANCE.taxCarryWeeks} semaines suivantes.`
+            : `Semaine ${t.week + 1} : ${t.carry > 0 ? `bénéfice de ${Math.round(t.base)} CHF couvert par les pertes reportées` : `sans bénéfice (${Math.round(t.base)} CHF)`}, aucun impôt à payer.`);
+        }
       } else if (this.shops.length && t.week === FINANCE.taxGraceWeeks - 1) {
-        this.notify('info', `Fin de la période d’exonération : dès maintenant, ${Math.round(FINANCE.taxRate * 100)} % du bénéfice de chaque semaine est prélevé en impôt (provision visible dans l’appli Finances).`);
+        this.notify('info', `Fin de la période d’exonération : dès maintenant, le bénéfice de chaque semaine est imposé (${taxBracketsText()} ; un déficit est déduit des ${FINANCE.taxCarryWeeks} semaines suivantes). Provision visible dans l’appli Finances.`);
       }
     }
   }
@@ -1866,16 +2153,33 @@ export class Game {
       const target = Math.max(0.85, 1 - 0.05 * mine);
       const cur = this.rivals[t.id] ?? 1;
       const next = r2(cur + (target - cur) * 0.3);
-      if (next < cur - 0.015 && next <= 0.97) this.notify('warn', `Les concurrents (${t.nameFr.toLowerCase()}) baissent leurs prix : ${Math.round((1 - next) * 100)} % sous le prix habituel.`);
       this.rivals[t.id] = next;
+      if (next < cur - 0.015 && next <= 0.97) {
+        // Vos prix ne suivent pas tout seuls : écart avec le nouveau prix du quartier, et bouton « Aligner ».
+        const gap = this.shops.some((s) => s.type === t.id) ? this.priceGap(t.id) : 0;
+        const high = gap >= 0.03;
+        this.notify('warn', `Les concurrents (${t.nameFr.toLowerCase()}) baissent leurs prix : ${Math.round((1 - next) * 100)} % sous le prix habituel.${high ? ` Vos prix sont ${Math.round(gap * 100)} % au-dessus du quartier : moins de clients et des articles reposés. « Aligner » (téléphone › Commerces ou Messages) les ramène au prix du quartier.` : ''}`, high ? { kind: 'aligner', target: t.id } : undefined);
+      }
     }
   }
 
+  /**
+   * Écart moyen des prix avec le prix du quartier (+0,08 = 8 % plus cher), pondéré par la demande de chaque produit :
+   * un commerce, ou tous les commerces d'un type (ou tous).
+   */
+  priceGap(target: Shop | BatchTarget): number {
+    const shops = typeof target === 'string' ? this.batchShops(target) : [target];
+    let acc = 0, w = 0;
+    for (const s of shops) for (const pr of productsOf(s.type)) { acc += pr.share * (s.products[pr.id]!.price / this.refPrice(pr, s) - 1); w += pr.share; }
+    return w ? acc / w : 0;
+  }
+
   private refreshCandidates(): void {
-    this.candidates = [];
+    // Les recrues offertes par les objectifs restent jusqu'à leur date ; les autres candidats sont renouvelés.
+    this.candidates = this.candidates.filter((c) => (c.until ?? -1) >= this.day);
     for (let k = 0; k < 6; k++) {
       const skill = r2(0.55 + this.rng.next() * 0.45);
-      const c: Candidate = { id: this.nextId++, name: randomName(this.rng), skill, wage: Math.round(20 + skill * 14 + this.rng.next() * 3), look: this.rng.int(0, 999) };
+      const c: Candidate = { id: this.nextId++, name: randomName(this.rng), skill, wage: Math.round(STAFF.wageBase + skill * STAFF.wageSkill + this.rng.next() * 3), look: this.rng.int(0, 999) };
       // Souhaits tirés de l'allure (aucun tirage aléatoire de plus) : une moitié veut la journée complète, un quart le
       // matin, un quart le soir ; salaire minimum accepté de 0 à 3 CHF / h sous le salaire demandé.
       c.wantShift = (['journee', 'journee', 'matin', 'soir'] as const)[c.look % 4]!;
@@ -1904,8 +2208,8 @@ export class Game {
     this.notify('warn', text);
   }
 
-  notify(level: Notice['level'], text: string): void {
-    this.notices.push({ at: this.total, level, text });
+  notify(level: Notice['level'], text: string, action?: NoticeAction): void {
+    this.notices.push(action ? { at: this.total, level, text, action } : { at: this.total, level, text });
     if (this.notices.length > 100) this.notices.shift();
   }
 
@@ -1921,6 +2225,7 @@ export class Game {
       loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals }, rivalry: this.rivalry.save(), weather: this.weather, marketDay: this.marketDay, contract: this.contract,
       finance: { invest: { ...this.invest }, principal: { ...this.investPrincipal }, fundReturns: [...this.fundReturns], awareness: { ...this.awareness }, taxes: structuredClone(this.taxes) },
       logi: saveLogi(this.logi),
+      rescue: { ...this.rescue },
       nextId: this.nextId, rng: this.rng.state(),
     };
   }
@@ -1954,6 +2259,7 @@ export class Game {
     if (!f) for (const c of this.campaigns) { const k = String(c.shopId ?? 'all'); this.awareness[k] = Math.min(FINANCE.awarenessMax, (this.awareness[k] ?? 0) + (CAMPAIGN_BY_ID.get(c.kind)?.boost ?? 0)); }
     this.taxes = structuredClone(f?.taxes ?? []);
     this.logi = restoreLogi(s.logi);
+    this.rescue = { ...emptyRescue(), ...(s.rescue ?? {}) };
     // Sauvegardes antérieures : employés sans rôle ni équipe → caisse, journée complète ; candidats sans souhait.
     for (const e of this.employees) { e.role ??= 'caisse'; e.shift ??= 'journee'; }
     for (const c of this.candidates) { c.wantShift ??= 'journee'; c.minWage ??= c.wage; }

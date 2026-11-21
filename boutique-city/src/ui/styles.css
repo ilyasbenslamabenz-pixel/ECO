@@ -796,3 +796,85 @@ kbd { font-family: var(--font); }
 .riv-check { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; cursor: pointer; }
 .riv-check input { width: 16px; height: 16px; }
 .riv-tbl td:last-child, .riv-tbl th:last-child { white-space: nowrap; text-align: right; }
+
+/* Objectifs */
+/* Carte des trois objectifs actifs (en haut à gauche) : palier courant, avancement chiffré, indication de l'objectif choisi. */
+.objective { gap: 6px; padding: 8px 10px 10px; width: min(330px, calc(100vw - 20px)); }
+.objective button { font: inherit; color: inherit; background: none; border: 0; box-shadow: none; border-radius: 10px; padding: 0; margin: 0; text-align: left; width: 100%; font-weight: inherit; }
+.objective .obj-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px; }
+.objective .obj-head:hover { background: rgba(255, 255, 255, 0.04); }
+.obj-tier { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+.objective .obj-tier b { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #ffcc4d; white-space: nowrap; }
+.obj-tier small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.obj-count { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; color: #c9d4e0; }
+.obj-chev { font-size: 11px; color: var(--muted); }
+.obj-head.done { display: flex; align-items: center; gap: 8px; color: #ffcc4d; }
+.obj-head.done .ico { font-size: 18px; }
+.obj-tierbar { height: 4px; border-radius: 3px; background: #273141; overflow: hidden; margin: 0 4px; }
+.obj-tierbar i { display: block; height: 100%; background: #ffcc4d; transition: width .4s; }
+.obj-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.obj-row { border-radius: 10px; background: #18212e; border: 2px solid transparent; }
+.obj-row.focus { border-color: #a77a1c; background: #1d1a12; }
+.objective .obj-pick { display: grid; gap: 4px; padding: 6px 8px; }
+.objective .obj-pick:hover { background: rgba(255, 255, 255, 0.04); }
+.obj-title { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.objective .obj-title b { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.obj-ring { width: 12px; height: 12px; flex: none; border-radius: 50%; border: 2px solid #ffcc4d; }
+.obj-next { flex: none; margin-left: auto; font-style: normal; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #9fb0c2; border: 1px solid #3a4a60; border-radius: 6px; padding: 1px 5px; }
+.obj-prog { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 19px; }
+.obj-prog .obj-bar { flex: 0 0 72px; height: 6px; margin: 0; }
+.obj-prog small { flex: 1; min-width: 0; font-size: 11.5px; font-weight: 600; line-height: 1.25; color: #c9d4e0; font-variant-numeric: tabular-nums; }
+.obj-hint { margin: 0 8px 7px 27px; font-size: 11.5px; line-height: 1.35; color: var(--muted); }
+/* Téléphone (appli Objectifs) et panneau Entreprise : listes par palier. */
+.ph-olist li.done { color: #9fb0c2; }
+.ph-olist li.done i { background: #2f9a63; border-color: #2f9a63; color: #fff; font-size: 12px; }
+.ph-olist li.on { box-shadow: inset 3px 0 0 #ffcc4d; color: #fff; }
+.ph-olist li.on i { border-color: #ffcc4d; color: #ffcc4d; }
+.ph-olist.locked li { opacity: .55; }
+.obj-tier-h { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 10px; margin: 10px 0 4px; font-size: 12.5px; }
+.obj-tier-h.locked, .sp-checks.objlist.locked li { opacity: .6; }
+/* Bannière « Palier franchi » */
+.tier-banner { position: fixed; left: 50%; top: 34%; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 16px; max-width: min(540px, calc(100vw - 32px));
+  padding: 16px 22px 16px 16px; background: #141b26; border: 3px solid #ffcc4d; border-radius: 22px; box-shadow: 0 6px 0 rgba(0,0,0,.45), 0 0 48px rgba(255, 204, 77, .28); cursor: pointer; animation: tbIn .5s cubic-bezier(.2, 1.4, .4, 1); }
+.tier-banner.out { animation: tbOut .35s ease-in forwards; }
+.tb-ico { flex: none; width: 64px; height: 64px; display: grid; place-items: center; border-radius: 50%; background: #ffcc4d; color: #2b1d00; font-size: 36px; box-shadow: 0 4px 0 #b8861b; }
+.tb-txt { display: grid; gap: 2px; min-width: 0; }
+.tb-txt b { font-size: 28px; font-weight: 800; line-height: 1.1; }
+.tb-txt span:not(.kicker) { font-size: 13.5px; font-weight: 600; color: #e8eef5; }
+.tb-txt small { font-size: 12px; color: var(--muted); }
+@keyframes tbIn { from { transform: translateX(-50%) scale(.6); opacity: 0; } }
+@keyframes tbOut { to { transform: translateX(-50%) translateY(-16px); opacity: 0; } }
+/* Écran de victoire */
+.victory-card { width: min(520px, calc(100vw - 32px)); text-align: center; padding: 22px 24px 18px; border-color: #ffcc4d; box-shadow: 0 8px 0 rgba(0,0,0,.4), 0 0 60px rgba(255, 204, 77, .25); }
+.victory-card h2 { margin: 2px 0 6px; font-size: 30px; font-weight: 800; }
+.vc-ico { width: 76px; height: 76px; margin: 0 auto 8px; display: grid; place-items: center; border-radius: 50%; background: #ffcc4d; color: #2b1d00; font-size: 42px; box-shadow: 0 5px 0 #b8861b; }
+.vc-lead { margin: 0 0 12px; color: #c9d4e0; font-size: 14px; }
+.vc-score { display: grid; justify-items: center; margin: 4px 0 12px; }
+.vc-score span { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.vc-score b { font-size: 42px; font-weight: 800; color: #ffcc4d; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.vc-score small { font-size: 11.5px; color: var(--muted); }
+.kpis.vc-kpis { grid-template-columns: repeat(2, 1fr); text-align: left; }
+.victory-card .row.end { justify-content: center; margin-top: 12px; }
+@media (prefers-reduced-motion: reduce) { .tier-banner, .tier-banner.out { animation: none; } }
+/* Redressement */
+.rd-alert { margin: 8px 0; padding: 8px 11px; border-radius: 10px; font-size: 12.5px; font-weight: 700; border-left: 4px solid; }
+.rd-alert.bad { background: #3a1d24; border-color: #ff4d5e; color: #ffc2c9; }
+.rd-alert.warn { background: #3a2c0e; border-color: #ffb020; color: #ffd98a; }
+.rd-tbl td.bad, .rd-tbl td.warn, .rd-tbl td.ok { font-size: 12px; font-weight: 700; }
+.rd-item { border-color: #6b2c38; background: #2a1820; }
+.rd-best td { background: rgba(92, 199, 122, .08) !important; }
+.rd-tag { margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #143823; color: #9ff0bf; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.rd-recap { display: flex; align-items: center; gap: 12px; margin: 10px 0 4px; padding: 9px 12px; border-radius: 12px; border: 2px solid; }
+.rd-recap.bad { background: #2e161c; border-color: #6b2c38; }
+.rd-recap.warn { background: #2a2414; border-color: #a77a1c; }
+.rd-recap-list { flex: 1; display: grid; gap: 4px; }
+.rd-recap-list p { margin: 0; font-size: 12.5px; font-weight: 700; }
+.rd-recap-list p.bad { color: #ffb3bd; } .rd-recap-list p.warn { color: #ffd98a; }
+.rd-recap button { flex: none; }
+.ph-banner.rd-banner { border-color: #a4303d; background: rgba(58, 20, 28, .92); color: #ffb3bd; }
+.ph-msg-act { margin-top: 6px; }
+.rd-end { z-index: 60; background: rgba(12, 4, 8, .72); }
+.rd-end-card { border-color: #6b2c38; box-shadow: 0 8px 0 rgba(0,0,0,.4), 0 0 60px rgba(255, 77, 94, .18); }
+.rd-end-txt { margin: 0 0 12px; color: #e9c9cf; font-size: 14px; }
+.rd-end-actions { flex-wrap: wrap; gap: 8px; }
+@media (max-width: 640px) { .rd-recap { flex-direction: column; align-items: stretch; } }

@@ -19,13 +19,13 @@ import { InteriorView, type InteriorItem } from './render/interior-view';
 import { Scene3D } from './render/scene';
 import type { BuildingState } from './render/district-view';
 import { drive, type DriveState } from './world/vehicle';
-import { competitorView, homeView, premiseView, serviceView, subletView, type UiCtx } from './ui/dialogs';
+import { competitorView, homeView, premiseView, rescueView, serviceView, subletView, type UiCtx } from './ui/dialogs';
 import { $, askConfirm, button, chf, el, icon, signed, type IconName } from './ui/dom';
 import { BigMap, MiniMap } from './ui/map';
 import { Panel } from './ui/panel';
-import { showRecap } from './ui/recap';
+import { showBankruptcy, showRecap } from './ui/recap';
 import { sound } from './ui/sound';
-import { OBJECTIVES, rankOf } from './sim/objectives';
+import { ObjectiveCard, showVictory } from './ui/objectives-ui';
 import { companyView, shopView, surfaceView } from './ui/shop-panel';
 import { Phone } from './ui/phone';
 import { warehouseView } from './ui/warehouse-panel';
@@ -50,8 +50,16 @@ window.addEventListener('unhandledrejection', (e) => debug.errors.push(String(e.
 function readSave(): GameSave | null {
   try { const t = localStorage.getItem(SAVE_KEY); return t ? JSON.parse(t) as GameSave : null; } catch { return null; }
 }
+/** Point de reprise : dernière sauvegarde hors zone de faillite (proposé sur l'écran de faillite). */
+const RESCUE_KEY = 'boutique-city.save.v2.avant-difficultes';
 function writeSave(g: Game): void {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(g.save())); } catch { /* stockage indisponible */ }
+  // Partie terminée par une faillite : rien n'est écrasé (dernière sauvegarde et point de reprise conservés).
+  if (g.rescue.bankrupt) return;
+  try {
+    const t = JSON.stringify(g.save());
+    localStorage.setItem(SAVE_KEY, t);
+    if (g.rescue.redDays === 0) localStorage.setItem(RESCUE_KEY, t);
+  } catch { /* stockage indisponible */ }
 }
 
 const TOAST_ICON: Record<'ok' | 'error' | 'info' | 'warn', IconName> = { ok: 'check', error: 'alert', warn: 'alert', info: 'info' };
@@ -198,7 +206,7 @@ function showHelp(): void {
     el('div', { cls: 'confirm-card help-card' },
       el('div', { cls: 'help-head' }, el('div', {}, el('div', { cls: 'kicker', text: 'Aide · touche H' }), el('h2', { text: 'Comment jouer' })), button('×', close, 'icon-x')),
       el('ol', { cls: 'help-steps' }, ...steps.map((t, k) => el('li', {}, el('b', { text: String(k + 1) }), el('span', { text: t })))),
-      el('p', { cls: 'help-goal', text: 'Ensuite, développez votre empire : plusieurs commerces, sous-locations, publicité, véhicules. Suivez la carte d’objectif en haut à gauche.' }),
+      el('p', { cls: 'help-goal', text: 'Ensuite, développez votre empire : plusieurs commerces, sous-locations, publicité, véhicules. Suivez la carte d’objectifs en haut à gauche : trois objectifs à la fois, en quatre paliers, jusqu’à devenir la légende du quartier.' }),
       el('div', { cls: 'help-cols' }, ...groups.map(([title, keys]) => el('div', { cls: 'help-col' },
         el('div', { cls: 'sec', text: title }),
         el('div', { cls: 'help-grid' }, ...keys.flatMap(([ks, t]) => [el('span', { cls: 'help-keys' }, ...ks.map((k) => el('kbd', { text: k }))), el('span', { text: t })]))))),
@@ -238,6 +246,8 @@ function start(game: Game): void {
   let feedbackT = 0;
   let recapDue = false;
   let recapOpen: HTMLElement | null = null;
+  /** Écran de faillite (fin de partie) affiché. */
+  let bankruptOpen: HTMLElement | null = null;
 
   const act = <T,>(r: Result<T>, okText?: string | ((d: T) => string)): boolean => {
     if (!r.ok) { toast(r.message, 'error'); return false; }
@@ -570,26 +580,11 @@ function start(game: Game): void {
       el('div', { cls: 'wallet', attrs: { title: 'Trésorerie · résultat du jour' } }, cash, delta),
       phoneBtn,
       mapBtn));
-  // Objectif en cours (carte repliable en haut à gauche).
-  const objCard = el('button', { cls: 'objective', attrs: { type: 'button', 'aria-label': 'Objectif en cours' } });
-  let objOpen = true, objSig = '';
-  objCard.addEventListener('click', () => { objOpen = !objOpen; objSig = ''; });
-  document.body.append(objCard);
-  const renderObjective = (): void => {
-    game.checkObjectives();
-    const cur = OBJECTIVES.find((o) => !game.achieved.includes(o.id));
-    const pr = cur?.progress(game);
-    const sig = `${cur?.id}|${pr?.text}|${objOpen}|${game.achieved.length}`;
-    if (sig === objSig) return;
-    objSig = sig;
-    if (!cur || !pr) { objCard.replaceChildren(el('b', { text: `${rankOf(game.achieved.length)} · tous les objectifs atteints !` })); return; }
-    objCard.replaceChildren(
-      el('div', { cls: 'obj-top' }, el('span', { cls: 'kicker', text: `Objectif ${game.achieved.length + 1} / ${OBJECTIVES.length} · ${rankOf(game.achieved.length)}` }), el('span', { cls: 'muted small', text: objOpen ? '▾' : '▸' })),
-      el('b', { text: cur.title }),
-      objOpen ? el('div', { cls: 'muted small', text: cur.hint }) : '',
-      el('div', { cls: 'obj-bar' }, el('i', { attrs: { style: `width:${Math.round(pr.p * 100)}%` } })),
-      el('span', { cls: 'small', text: pr.text }));
-  };
+  // Objectifs : carte des trois objectifs actifs (en haut à gauche), bannière de palier franchi, écran de victoire.
+  let victoryDue = false;
+  let victoryOpen: HTMLElement | null = null;
+  const objectives = new ObjectiveCard(game, { onTier: () => sound.fanfare(), onVictory: () => { victoryDue = true; } });
+  const renderObjective = (): void => objectives.render();
   const paint = (): void => {
     const c = clockView(game.total);
     clock.textContent = `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}`;
@@ -696,7 +691,7 @@ function start(game: Game): void {
   /* ------------------------------ Clavier ------------------------------ */
 
   controls.onKey = (k) => {
-    if (recapOpen) return;
+    if (recapOpen || bankruptOpen || victoryOpen) return;
     if (k === 'Escape') {
       if (game.player.sleeping) { game.wake(); return; }
       if (phone.isOpen) { phone.back(); return; }
@@ -762,7 +757,7 @@ function start(game: Game): void {
     const rate = sleeping ? SLEEP_SPEED : SPEEDS[speed]!;
     acc += rate * dt;
     const n = Math.min(600, Math.floor(acc));
-    if (n > 0) { acc -= n; game.advance(n); }
+    if (n > 0) { acc -= n; if (!game.rescue.bankrupt) game.advance(n); }
     sleepCover.classList.toggle('hidden', !sleeping);
 
     if (game.player.teleportHome) {
@@ -851,17 +846,36 @@ function start(game: Game): void {
     for (; noticeIdx < game.notices.length; noticeIdx++) {
       const nt = game.notices[noticeIdx]!;
       toast(nt.text, nt.level === 'warn' ? 'warn' : nt.level);
-      if (nt.text.startsWith('Objectif atteint')) sound.success(); else if (nt.level === 'warn' || nt.level === 'error') sound.blip();
+      if (/^Objectifs? atteints?/.test(nt.text)) sound.success(); else if (nt.level === 'warn' || nt.level === 'error') sound.blip();
     }
     if (noticeIdx > game.notices.length) noticeIdx = game.notices.length;
     if (game.day !== lastDay) { lastDay = game.day; writeSave(game); if (game.shops.length) recapDue = true; }
     // Récapitulatif de fin de journée : jeu en pause tant qu'il est affiché (après le réveil si l'on dort).
-    if (recapDue && !game.player.sleeping && !recapOpen) {
+    if (recapDue && !game.player.sleeping && !recapOpen && !game.rescue.bankrupt) {
       recapDue = false;
       const before = speed;
       speed = 0;
-      recapOpen = showRecap(game, () => { recapOpen = null; speed = before || 1; paint(); });
+      recapOpen = showRecap(game, () => { recapOpen = null; speed = before || 1; paint(); }, () => panel.open(rescueView(ctx)));
       if (!recapOpen) speed = before;
+    }
+    // Faillite : écran de fin (le temps s'arrête) ; reprendre avant les difficultés, charger, ou recommencer.
+    if (game.rescue.bankrupt && !bankruptOpen && !recapOpen) {
+      recapDue = false; speed = 0; game.wake(); phone.close(); panel.close();
+      const read = (key: string): GameSave | null => { try { const t = localStorage.getItem(key); return t ? JSON.parse(t) as GameSave : null; } catch { return null; } };
+      const mine = (s: GameSave | null): s is GameSave => !!s && s.seed === game.seed && s.companyName === game.companyName;
+      const cp = read(RESCUE_KEY), last = readSave(), dayOf = (s: GameSave): number => Math.floor(s.total / 1440) + 1;
+      const acts: { label: string; run: () => void; primary?: boolean }[] = [];
+      if (mine(cp)) acts.push({ label: `Reprendre au jour ${dayOf(cp)} (avant les difficultés)`, primary: true, run: () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(cp)); } catch { /* stockage indisponible */ } location.reload(); } });
+      else if (mine(last)) acts.push({ label: `Charger la dernière sauvegarde (jour ${dayOf(last)})`, primary: true, run: () => location.reload() });
+      acts.push({ label: 'Recommencer une partie', primary: !acts.length, run: () => { try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(RESCUE_KEY); } catch { /* stockage indisponible */ } location.reload(); } });
+      bankruptOpen = showBankruptcy(game, acts);
+    }
+    // Écran de victoire (légende du quartier) : jeu en pause, jamais par-dessus le récapitulatif ni pendant le sommeil.
+    if (victoryDue && !recapDue && !recapOpen && !bankruptOpen && !game.player.sleeping && !victoryOpen) {
+      victoryDue = false;
+      const before = speed;
+      speed = 0;
+      victoryOpen = showVictory(game, () => { victoryOpen = null; speed = phone.isOpen ? 0 : before || 1; paint(); });
     }
 
     syncStreet();

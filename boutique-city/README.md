@@ -30,7 +30,8 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
 7. **Vie du personnage** : énergie et faim baissent ; manger au snack, dormir chez soi. À zéro d'énergie, taxi et
    longue nuit.
 8. **Banque** (prêts remboursés chaque jour), **publicité** (plus de clients pendant la campagne), **garage**.
-9. **Objectifs** (13, du premier pas à 60 000 CHF de valeur nette) et rang d'entrepreneur ; **récapitulatif** chaque
+9. **Objectifs** (33 en quatre paliers : Démarrage, Gérant, Entrepreneur, Magnat ; trois actifs à la fois, une
+   récompense par palier franchi, écran de victoire « Légende du quartier ») et rang d'entrepreneur ; **récapitulatif** chaque
    soir ; **affluence** par heure (servis / perdus) ; **avis clients** en bulles (trop cher, rupture, attente) ;
    employés qui progressent avec l'expérience ; **cycle jour/nuit** (lampadaires, vitrines éclairées) ; sons.
 10. Sept types de commerce : épicerie, café, boutique de vêtements, fleuriste, boulangerie, fast-food, primeur ; 28 meubles (gondoles,
@@ -44,8 +45,8 @@ s'aménage en 3D, et l'on voit clients et employés vivre dans ses magasins.
     fast-foods) ; jour de marché ; contrôles d'hygiène ; vols à l'étalage ; livraisons à 7 h et 14 h.
 13. **Employés** : compétence qui progresse, satisfaction liée au salaire, demandes d'augmentation, démissions.
 
-Équilibrage : `npx tsx scripts/equilibrage.ts` (7 jours par type, bien ou mal géré) ; parcours du tutoriel :
-`npx tsx scripts/tutoriel.ts`.
+Équilibrage : `npx tsx scripts/equilibrage.ts` (7 jours par type, bien ou mal géré) ; parcours d'un bon joueur
+jusqu'à la légende du quartier (jour d'atteinte de chaque objectif, paliers, espacement) : `npx tsx scripts/tutoriel.ts`.
 
 Sauvegarde automatique chaque jour de jeu (dans le navigateur) et bouton Sauvegarder.
 

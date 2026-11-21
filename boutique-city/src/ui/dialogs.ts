@@ -15,6 +15,9 @@ import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
 import type { Act, Panel, View } from './panel';
 import { LOGISTICS } from '../sim/catalog';
 import { freeOf, importQuote, importUnit, palletOf, placeImport, warehouseName } from '../sim/logistics';
+import { FINANCE, RESCUE, productsOf } from '../sim/catalog';
+import { STOP_FR } from '../sim/game';
+import { netWorth } from '../sim/objectives';
 
 export interface UiCtx {
   game: Game;
@@ -159,6 +162,8 @@ function meubles(ctx: UiCtx): (Node | null)[] {
 function banque(ctx: UiCtx): (Node | null)[] {
   const g = ctx.game;
   const out: (Node | null)[] = [el('div', { cls: 'kpis' }, kpi('Trésorerie', chf(g.cash)), kpi('Dette', chf(g.debt)), kpi('Plafond', chf(g.creditLimit().limit)))];
+  if (g.inDifficulty()) out.push(el('div', { cls: 'item rd-item' }, el('div', {}, el('b', { text: 'Entreprise en difficulté' }), el('div', { cls: 'muted small', text: 'Diagnostic, licenciements, résiliations et prêt d’urgence (hors plafond).' })),
+    button('Plan de redressement', () => ctx.panel.open(rescueView(ctx)), 'small primary')));
   out.push(sec('Prêts proposés'));
   LOAN_OFFERS.forEach((o, k) => {
     const total = loanTotal(o);
@@ -194,7 +199,7 @@ function emploi(ctx: UiCtx): (Node | null)[] {
       el('div', { cls: 'small emp-wish', text: wish })),
       s ? el('div', { cls: 'row tight emp-wrap' }, s, role, shift, button('Embaucher', () => ctx.act(g.hire(c.id, Number(s.value), { role: role.value as StaffRole, shift: shift.value as ShiftKind })), 'small primary')) : null));
   }
-  out.push(note(`Caisse : encaisse les clients. Rayon : conseille et présente, +${pct(STAFF.shelfBonus)} de clients par employé présent (selon compétence, jusqu’à +${pct(STAFF.shelfBonusMax)}). Entretien : garde le commerce propre. Équipes : matin (avant 14 h), soir (dès 14 h) ou journée complète ; le salaire est payé à l’heure travaillée. Une équipe non souhaitée ou un salaire sous le minimum fait baisser la satisfaction.`));
+  out.push(note(`Caisse : encaisse les clients (un caissier par caisse : sans caisse libre, le caissier en trop ne sert presque à rien). Rayon : conseille et présente, +${pct(STAFF.shelfBonus)} de clients par employé présent (selon compétence, jusqu’à +${pct(STAFF.shelfBonusMax)}). Entretien : garde le commerce propre. Équipes : matin (avant 14 h), soir (dès 14 h), journée complète, ou pointe (16 h – 20 h : un renfort de 4 h pour l’affluence du soir, avec une deuxième caisse) ; le salaire est payé à l’heure travaillée. Une équipe non souhaitée ou un salaire sous le minimum fait baisser la satisfaction.`));
   if (!g.candidates.length) out.push(note('Plus de candidats cette semaine : nouveaux candidats lundi.'));
   if (g.employees.length) {
     out.push(sec('Vos employés'));
@@ -203,7 +208,7 @@ function emploi(ctx: UiCtx): (Node | null)[] {
   return out;
 }
 
-const SHIFT_LABEL: Record<ShiftKind, string> = { journee: 'Journée complète', matin: 'Matin (avant 14 h)', soir: 'Soir (dès 14 h)' };
+const SHIFT_LABEL: Record<ShiftKind, string> = { journee: 'Journée complète', matin: 'Matin (avant 14 h)', soir: 'Soir (dès 14 h)', pointe: 'Pointe (16 h – 20 h)' };
 /** Menu des rôles (caisse, rayon, entretien). */
 function roleSelect(value: StaffRole): HTMLSelectElement {
   const s = el('select', { attrs: { 'aria-label': 'Rôle' } }, ...STAFF_ROLES.map((r) => el('option', { text: r.nameFr, attrs: { value: r.id, title: r.desc } })));
@@ -296,14 +301,21 @@ export function premiseView(ctx: UiCtx, p: Premise): View {
   return {
     kicker: 'Local commercial à louer', title: `${p.area} m² · ${chf(p.rent)} / mois`, onClose: () => ctx.leave(),
     render: () => {
+      // Potentiel par type : bénéfice estimé par jour (le plus rentable en tête et proposé par défaut).
+      const est = SHOP_TYPES.map((t) => ({ t, e: g.estimateProfit(p, t.id) })).sort((a, b) => b.e.profit - a.e.profit);
       const type = remember('rtype', el('select', { attrs: { 'aria-label': 'Type de commerce' } }, ...SHOP_TYPES.map((t) => el('option', { text: t.nameFr, attrs: { value: t.id } }))));
+      if (!memo.has('rtype')) type.value = est[0]!.t.id;
       const name = el('input', { attrs: { type: 'text', maxlength: '32', placeholder: 'Nom (facultatif)', 'aria-label': 'Nom du commerce' } });
-      const rows = SHOP_TYPES.map((t) => el('tr', {}, el('td', { text: t.nameFr }), el('td', { text: num(g.estimatePeak(p, t.id)) }), el('td', { text: String(g.competition(p, t.id)) })));
+      const rows = est.map(({ t, e }, k) => el('tr', { cls: k === 0 ? 'rd-best' : '' },
+        el('td', {}, el('b', { text: t.nameFr }), k === 0 ? el('span', { cls: 'rd-tag', text: 'conseillé' }) : null),
+        el('td', { cls: 'n', text: num(e.customers) }),
+        el('td', { cls: `n ${e.profit >= 0 ? 'ok' : 'bad'}`, text: signed(e.profit), attrs: { title: `Ventes ${chf(e.revenue)}, marge ${chf(e.margin)}, ${e.cashiers} caissier(s) ${chf(e.wages)}, loyer ${chf(e.rent)}, livraisons et nettoyage ${chf(e.other)}` } }),
+        el('td', { cls: 'n', text: String(g.competition(p, t.id)) })));
       return [
         el('div', { cls: 'kpis' }, kpi('Passage (pointe)', `${num(p.footfall)} / h`), kpi('Loyer', `${chf(p.rent)} / mois`), kpi('Grille', `${p.gridW} × ${p.gridD} m`)),
         sec('Potentiel par type de commerce'),
-        el('table', { cls: 'tbl' }, el('tr', {}, el('th', { text: 'Type' }), el('th', { text: 'Clients / h (pointe)' }), el('th', { text: 'Concurrence' })), ...rows),
-        note('Estimation pour un commerce moyen bien tenu. La concurrence pèse plus quand elle est proche.'),
+        el('table', { cls: 'tbl' }, el('tr', {}, el('th', { text: 'Type' }), el('th', { cls: 'n', text: 'Clients / jour' }), el('th', { cls: 'n', text: 'Bénéfice / jour' }), el('th', { cls: 'n', text: 'Concurrence' })), ...rows),
+        note('Estimation pour un commerce bien tenu en gamme standard : prix du quartier, caissiers selon l’affluence, loyer, livraisons et nettoyage de nuit compris (hors meubles, impôt et vie courante). La concurrence pèse plus quand elle est proche.'),
         sec('Louer'),
         el('div', { cls: 'row' }, type, name),
         button(`Signer le bail (dépôt ${chf(p.rent * ECONOMY.depositMonths)})`, () => {
@@ -362,10 +374,10 @@ export function rivalBuyView(ctx: UiCtx, premiseId: number): View {
         el('div', { cls: 'kpis' }, kpi('Ventes / jour', `≈ ${chf(q.revenue)}`), kpi('Clients / jour', `≈ ${num(q.customers)}`), kpi('Réputation', pct(q.reputation))),
         sec('Prix'),
         el('table', { cls: 'tbl riv-tbl' },
-          el('tr', {}, el('td', { text: `Fonds de commerce (${RIVALS.buyRevenueDays} jours de ventes × réputation, mobilier compris)` }), el('td', { text: chf(q.price) })),
+          el('tr', {}, el('td', { text: `Fonds de commerce (${RIVALS.buyRevenueDays} jours de ventes × réputation, mobilier compris${g.rivalry.buys ? `, majoré de ${Math.round((g.rivalry.buyFactor() - 1) * 100)} % : ${g.rivalry.buys} rachat${g.rivalry.buys > 1 ? 's' : ''} déjà fait${g.rivalry.buys > 1 ? 's' : ''}` : ''})` }), el('td', { text: chf(q.price) })),
           el('tr', {}, el('td', { text: 'Dépôt de garantie du bail (rendu à la résiliation)' }), el('td', { text: chf(q.deposit) })),
           el('tr', {}, el('th', { text: 'Total à payer' }), el('th', { text: chf(q.total) }))),
-        note(`${t.nameFr}${co ? ` de ${co.name}` : ' indépendant'} : vous reprenez le bail, le mobilier (${chf(q.furniture)} au catalogue, posé) et des rayons remplis à ${Math.round(RIVALS.buyStock * 100)} %. Le nom et la réputation restent.`),
+        note(`${t.nameFr}${co ? ` de ${co.name}` : ' indépendant'} : vous reprenez le bail, le mobilier (${chf(q.furniture)} au catalogue, posé) et des rayons remplis à ${Math.round(RIVALS.buyStock * 100)} %. Le nom et la réputation restent. Chaque rachat renchérit les suivants de ${Math.round(RIVALS.buySurcharge * 100)} % : les vendeurs connaissent votre appétit.`),
         el('label', { cls: 'riv-check' }, staff, el('span', { text: `Reprendre ${q.staff} employé${q.staff > 1 ? 's' : ''} en caisse (environ ${wage} CHF / h chacun)` })),
         button(`Racheter (${chf(q.total)})`, () => {
           if (ctx.act(g.rivalry.buy(premiseId, buyWithStaff), (sh) => `${sh.name} est à vous !`)) ctx.panel.close();
@@ -416,6 +428,85 @@ export function subletBlock(ctx: UiCtx, id: number): (Node | null)[] {
 
 export function kpi(label: string, value: string): HTMLElement {
   return el('div', { cls: 'kpi' }, el('span', { text: label }), el('b', { text: value }));
+}
+
+/* ------------------------------ Plan de redressement ------------------------------ */
+
+/**
+ * Plan de redressement (pertes d'affilée, trésorerie négative, risque de faillite) : état des comptes, diagnostic par
+ * commerce, puis les leviers : licencier (indemnité payable à découvert), résilier un bail, prêt d'urgence, relancer
+ * les ventes (prix alignés, réassort automatique). Accessible à distance (récapitulatif, téléphone, messages).
+ */
+export function rescueView(ctx: UiCtx): View {
+  const g = ctx.game;
+  return {
+    kicker: 'Banque du Quartier · conseil aux entreprises', title: 'Plan de redressement', wide: true,
+    render: () => {
+      const R = g.rescue, s = g.lossSummary(), od = g.overdraftLimit(), left = g.bankruptcyIn(), worth = netWorth(g);
+      const out: (Node | null)[] = [
+        el('div', { cls: 'kpis' }, kpi('Trésorerie', chf(g.cash)), kpi('Pertes d’affilée', R.lossDays ? `${R.lossDays} jour${R.lossDays > 1 ? 's' : ''}` : 'aucune'), kpi('Valeur nette', chf(worth))),
+      ];
+      if (R.bankrupt) out.push(el('p', { cls: 'rd-alert bad', text: 'Faillite prononcée : la partie est terminée.' }));
+      else if (left !== null) out.push(el('p', { cls: 'rd-alert bad', text: `Faillite dans ${left} jour${left > 1 ? 's' : ''} : valeur nette sous ${signed(RESCUE.bankruptWorth)} avec une trésorerie négative. Repassez la trésorerie au-dessus de zéro, ou la valeur nette au-dessus du seuil.` }));
+      if (g.cash < 0) out.push(el('p', { cls: 'rd-alert warn', text: `Découvert de ${chf(-g.cash)} depuis ${R.negDays || 1} jour${R.negDays > 1 ? 's' : ''}, facturé ${(FINANCE.overdraftRate * 100).toLocaleString('fr-CH')} % par jour. Commandes encore possibles jusqu’à ${chf(od)} de découvert${g.cash < -od ? ' : limite atteinte, plus aucune commande ne passe' : ` (reste ${chf(od + g.cash)})`}.` }));
+      // Diagnostic.
+      out.push(sec('Diagnostic'),
+        note(`Moyenne des ${s.days} dernier${s.days > 1 ? 's' : ''} jour${s.days > 1 ? 's' : ''} : ventes ${chf(s.revenue)}, salaires ${chf(s.wages)}, loyers ${chf(s.rent)}, marchandise vendue et autres charges ${chf(s.other)}, soit ${signed(s.result)} par jour (hors investissements).`));
+      const diag = g.shopDiagnosis().sort((a, b) => a.result - b.result);
+      const state = (d: typeof diag[number]): [string, string] => d.stopped ? [`à l’arrêt (${STOP_FR[d.stopped]})`, 'bad']
+        : d.noSale >= 1 && d.blocker ? [`aucune vente depuis ${d.noSale} j (${STOP_FR[d.blocker]})`, 'bad']
+        : d.result < 0 ? ['en perte', 'warn'] : ['rentable', 'ok'];
+      if (diag.length) out.push(el('table', { cls: 'tbl rd-tbl' },
+        el('tr', {}, ...['Commerce', 'Ventes / j', 'Marge / j', 'Salaires / j', 'Loyer / j', 'Solde / j', 'État'].map((t, k) => el('th', { cls: k && k < 6 ? 'n' : '', text: t }))),
+        ...diag.map((d) => { const [txt, tone] = state(d); return el('tr', {}, el('td', {}, el('b', { text: d.shop.name })), el('td', { cls: 'n', text: chf(d.revenue) }), el('td', { cls: 'n', text: chf(d.margin) }), el('td', { cls: 'n', text: chf(d.wages) }), el('td', { cls: 'n', text: chf(d.rent) }), el('td', { cls: `n ${d.result >= 0 ? 'ok' : 'bad'}`, text: signed(d.result) }), el('td', { cls: tone, text: txt })); })));
+      else out.push(note('Aucun commerce.'));
+      out.push(note('Un commerce qui n’a rien vendu depuis 2 jours et ne peut plus vendre (rayons vides, pas de caisse, pas de caissier) est mis à l’arrêt : ses employés sont en chômage technique (ni présents ni payés) et le nettoyage de nuit est suspendu, jusqu’à ce qu’il puisse vendre à nouveau.'));
+      // 1. Relancer les ventes.
+      const fixes: (Node | null)[] = [];
+      for (const d of diag) {
+        const sh = d.shop, gap = g.priceGap(sh);
+        if (gap >= 0.03) fixes.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: sh.name }), el('div', { cls: 'muted small', text: `Prix ${Math.round(gap * 100)} % au-dessus du quartier : des clients reposent les articles.` })),
+          button('Aligner les prix', () => ctx.act(g.applyBatch(sh.type, { priceFactor: 1 }), 'Prix alignés sur le quartier.'), 'small primary')));
+        const manual = productsOf(sh.type).filter((pr) => !sh.products[pr.id]!.auto).length;
+        if (d.blocker === 'rayons' || manual) fixes.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: sh.name }), el('div', { cls: 'muted small', text: d.blocker === 'rayons' ? 'Rayons vides : réassort automatique (livraison à 7 h ou 14 h), payable à découvert.' : `${manual} produit(s) sans réassort automatique : risque de rupture.` })),
+          button('Réassort automatique', () => { for (const pr of productsOf(sh.type)) g.setAuto(sh.id, pr.id, true); for (const pr of productsOf(sh.type)) { const q = g.room(sh, pr.id); if (q > 0 && sh.products[pr.id]!.stock === 0) g.order(sh.id, pr.id, q); } ctx.toast('Réassort automatique activé.', 'ok'); ctx.panel.paint(true); }, 'small')));
+        if (d.blocker === 'caissier') fixes.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: sh.name }), el('div', { cls: 'muted small', text: 'Personne en caisse : embauchez un caissier (agence pour l’emploi) ou donnez le rôle Caisse à un employé.' }))));
+        if (d.blocker === 'caisse') fixes.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: sh.name }), el('div', { cls: 'muted small', text: 'Aucune caisse posée : achetez-en une au magasin de meubles, puis Aménager.' }))));
+      }
+      out.push(sec('1. Relancer les ventes'), ...(fixes.length ? fixes : [note('Rien à corriger côté prix, stock et caisses.')]));
+      // 2. Réduire les salaires.
+      out.push(sec('2. Réduire les salaires'));
+      const byResult = new Map(diag.map((d) => [d.shop.id, d.result]));
+      const staff = [...g.employees].sort((a, b) => (byResult.get(a.shopId ?? -1) ?? -1e9) - (byResult.get(b.shopId ?? -1) ?? -1e9));
+      if (!staff.length) out.push(note('Aucun employé.'));
+      for (const e of staff) {
+        const sh = e.shopId === null ? undefined : g.shop(e.shopId), hours = g.hoursPerDay(e), pay = g.severance(e);
+        out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: e.name }),
+          el('div', { cls: 'muted small', text: `${sh?.name ?? 'sans affectation'} · ${STAFF_ROLE_BY_ID.get(g.roleOf(e))!.nameFr.toLowerCase()} · ${sh?.stopped ? 'chômage technique (non payé)' : `${chf(e.wage * hours)} par jour`}` })),
+          button(`Licencier (indemnité ${chf(pay)})`, () => ctx.act(g.fire(e.id, true), (p) => `${e.name} licencié : indemnité ${chf(p)}.`), 'small danger')));
+      }
+      if (staff.length) out.push(note(`L’indemnité (${ECONOMY.severanceDays} jours de salaire) peut être payée à découvert depuis ce plan, dans la limite du découvert autorisé.`));
+      // 3. Résilier un bail.
+      out.push(sec('3. Résilier un bail'));
+      for (const d of diag) {
+        const q = g.releaseQuote(d.shop.id);
+        if (!q) continue;
+        out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: d.shop.name }),
+          el('div', { cls: 'muted small', text: `solde ${signed(d.result)} par jour · récupéré : dépôt ${chf(q.deposit)}, mobilier ${chf(q.resale)}${q.refunds ? `, remboursements ${chf(q.refunds)}` : ''}${q.rentDue ? `, moins le loyer dû ${chf(q.rentDue)}` : ''}${q.stockUnits ? ` ; ${num(q.stockUnits)} articles perdus` : ''}` })),
+          button(`Résilier (${signed(q.total)})`, () => { void askConfirm(`Résilier le bail de ${d.shop.name} ? Vous récupérez ${chf(q.total)} ; employés sans affectation, stock en rayon perdu.`, 'Résilier', true).then((y) => { if (y) ctx.act(g.release(d.shop.id), (t) => `Bail résilié : ${chf(t)} récupérés.`); }); }, 'small danger')));
+      }
+      for (const sl of g.sublets.filter((x) => !x.tenant)) out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: sl.kind === 'logement' ? 'Appartement sous-loué (vacant)' : 'Local sous-loué (vacant)' }), el('div', { cls: 'muted small', text: `vous coûte ${chf2(sl.cost)} par jour sans locataire` })),
+        button('Résilier', () => ctx.act(g.endSublet(sl.id)), 'small danger')));
+      if (!g.shops.length && !g.sublets.some((x) => !x.tenant)) out.push(note('Aucun bail à résilier.'));
+      // 4. Prêt d'urgence.
+      const em = g.emergencyOffer();
+      out.push(sec('4. Prêt d’urgence'), el('div', { cls: 'item' }, el('div', {}, el('b', { text: `${chf(em.offer.amount)} tout de suite` }),
+        el('div', { cls: 'muted small', text: `${em.offer.days} jours · taux ${pct(em.offer.rate)} par an · ${chf2(em.daily)} par jour · total ${chf(em.total)}. Hors plafond de crédit, un seul à la fois.` })),
+        em.available ? button('Emprunter', () => ctx.act(g.takeEmergencyLoan(), (l) => `Prêt d’urgence : ${chf(l.amount)} versés.`), 'small primary') : el('span', { cls: 'muted small', text: em.why ?? '' })));
+      out.push(note(`Faillite si la valeur nette reste sous ${signed(RESCUE.bankruptWorth)} avec une trésorerie négative pendant ${RESCUE.bankruptDays} jours d’affilée.`));
+      return out;
+    },
+  };
 }
 
 /* ------------------------------ Logistique : importateur ------------------------------ */

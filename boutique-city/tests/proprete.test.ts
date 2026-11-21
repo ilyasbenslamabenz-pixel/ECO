@@ -18,15 +18,19 @@ function goTo(g: Game, kind: ServiceKind): void {
 }
 function keepAlive(g: Game): void { g.player.energy = 100; g.player.hunger = 100; }
 
-/** Épicerie aménagée, approvisionnée (réassort auto) et tenue par un employé. */
-function openShop(g: Game): number {
+/**
+ * Épicerie aménagée, approvisionnée (réassort auto) et tenue par un employé ; `registers` > 1 : autant de caisses et
+ * de caissiers (caisse peu sollicitée, aucun client perdu à l'attente).
+ */
+function openShop(g: Game, registers = 1): number {
   const p = g.district.premises.filter((x) => g.isFree(x)).sort((a, b) => b.footfall - a.footfall)[0]!;
   const r = g.rent(p.id, 'epicerie');
   assert.ok(r.ok);
   const id = r.data.id, s = g.shop(id)!;
+  const layout = [...LAYOUT, ...Array<string>(registers - 1).fill('caisse')];
   goTo(g, 'meubles');
-  for (const f of LAYOUT) assert.ok(g.buyFurniture(f, 1, id).ok);
-  for (const f of LAYOUT) {
+  for (const f of layout) assert.ok(g.buyFurniture(f, 1, id).ok);
+  for (const f of layout) {
     const def = FURNITURE_BY_ID.get(f)!;
     let done = false;
     for (let z = 0; z < p.gridD && !done; z += 2) for (let x = 0; x < p.gridW && !done; x++) {
@@ -37,7 +41,8 @@ function openShop(g: Game): number {
   }
   for (const pr of productsOf('epicerie')) { g.order(id, pr.id, Math.max(20, g.room(s, pr.id))); g.setAuto(id, pr.id, true); }
   goTo(g, 'emploi');
-  assert.ok(g.hire(g.candidates[0]!.id, id).ok);
+  for (let k = 0; k < registers; k++) assert.ok(g.hire(g.candidates[0]!.id, id).ok);
+  assert.equal(g.stats(s).registers, registers);
   g.setPlace({ kind: 'rue' });
   return id;
 }
@@ -75,9 +80,10 @@ test('propreté : alerte une fois par jour sous le seuil, avis « c’est sale �
   const alerts = g.notices.slice(before).filter((n) => n.text.includes('est sale'));
   assert.equal(alerts.length, 1, 'une seule alerte dans la journée');
   assert.ok(g.feedback.some((f) => f.shopId === id && f.kind === 'sale'), 'des clients se plaignent de la saleté');
-  // Réputation : deux commerces identiques, l'un propre, l'autre sale.
+  // Réputation : deux commerces identiques, l'un propre, l'autre sale. Deux caisses tenues : aucun client perdu à
+  // l'attente (qui pèse aussi sur la réputation), seule la saleté les distingue.
   const clean = new Game(7, 'Test'), dirty = new Game(7, 'Test');
-  const ic = openShop(clean), idd = openShop(dirty);
+  const ic = openShop(clean, 2), idd = openShop(dirty, 2);
   // Propreté maintenue heure par heure (sinon le coup de balai des caissiers remonte le magasin sale vers CLEANING.cashierCap).
   for (let hr = 0; hr < 3 * 24; hr++) {
     clean.shop(ic)!.clean = 100; dirty.shop(idd)!.clean = 5;
@@ -171,13 +177,14 @@ test('trois jours sans nettoyer : les ventes restent correctes', () => {
 
 test('coup de balai des caissiers : remonte un magasin sale vers un niveau « passable », pas au-delà, pas sans caissier', () => {
   const g = new Game(7, 'Test');
-  const id = openShop(g), s = g.shop(id)!;
+  // Deux caisses et deux caissiers : la caisse est peu sollicitée le matin (heures creuses).
+  const id = openShop(g, 2), s = g.shop(id)!;
   keepAlive(g); g.advance(1440);
-  // Heure creuse (caisse peu sollicitée) : le caissier nettoie un peu.
+  // Heure creuse (caisse peu sollicitée) : les caissiers nettoient un peu.
   keepAlive(g); g.advance(60);
   s.clean = 5;
   const sweep = g.cashierSweep(s);
-  assert.ok(sweep > 0 && sweep <= CLEANING.cashierPerHour, `balai ${sweep.toFixed(2)} point(s) / h`);
+  assert.ok(sweep > 0 && sweep <= CLEANING.cashierPerHour * g.onDuty(id, 'caisse').length, `balai ${sweep.toFixed(2)} point(s) / h`);
   keepAlive(g); g.advance(4 * 60);
   assert.ok(g.cleanliness(s) > 5, `propreté remontée (${g.cleanliness(s).toFixed(1)} %)`);
   assert.ok(g.cleanliness(s) <= CLEANING.cashierCap, 'jamais au-delà du plafond');

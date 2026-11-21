@@ -9,7 +9,7 @@ import { CLEANING, FLOORINGS, WALLINGS, cleanAppeal, type SurfaceDef } from '../
 import { clockView } from '../sim/clock';
 import { dayProfit, type DayStats, type Game, type Shop } from '../sim/game';
 import type { BatchSettings, BatchTarget } from '../sim/game';
-import { OBJECTIVES, netWorth, rankOf } from '../sim/objectives';
+import { OBJECTIVES, TIERS, currentTier, isUnlocked, netWorth, rankOf, tierCount, tierObjectives } from '../sim/objectives';
 import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
 import { employeeRow, type UiCtx } from './dialogs';
 import type { View } from './panel';
@@ -496,7 +496,7 @@ export function companyView(ctx: UiCtx): View {
           stat('Trésorerie', chf(g.cash), null, g.cash >= 0 ? '' : 'bad'),
           stat('Dette', chf(g.debt), g.loans.length ? `${g.loans.length} prêt(s)` : 'aucun prêt', g.debt > 0 ? 'warn' : ''),
           stat('Solde du jour', signed(today), 'toutes dépenses', today >= 0 ? 'ok' : 'bad'),
-          stat('Valeur nette', chf(netWorth(g)), rankOf(g.achieved.length))),
+          stat('Valeur nette', chf(netWorth(g)), rankOf(g))),
         section('Mes commerces', g.shops.length ? `${g.shops.length}` : null),
         g.shops.length >= 2 ? el('div', { cls: 'row lot-entry' }, button('Réglages en lot…', () => ctx.panel.open(batchView(ctx)), 'small primary'),
           el('span', { cls: 'sub', text: 'prix, réassort, horaires et nettoyage de plusieurs commerces d’un coup' })) : null,
@@ -520,11 +520,18 @@ export function companyView(ctx: UiCtx): View {
       const ct = g.contractDef();
       if (ct) out.push(el('p', { cls: 'sp-note', text: `${ct.nameFr} avec le grossiste : −${pct(ct.discount)} sur les achats, ${chf(ct.perDay)} / jour.` }));
       if (g.loans.length) out.push(el('p', { cls: 'sp-note', text: `Prêts : ${g.loans.map((l) => `${chf(l.remaining)} restants (${chf2(l.daily)} / jour)`).join(' · ')}` }));
-      out.push(section('Objectifs', `${g.achieved.length} / ${OBJECTIVES.length}`),
-        el('ul', { cls: 'sp-checks objlist' }, ...OBJECTIVES.map((o) => {
+      // Objectifs, palier par palier : avancement des objectifs ouverts, récompense de chaque palier.
+      out.push(section('Objectifs', `${g.achieved.length} / ${OBJECTIVES.length} · ${rankOf(g)}`));
+      const cur = currentTier(g), level = cur ? TIERS.indexOf(cur) : TIERS.length;
+      TIERS.forEach((t, k) => {
+        const c = tierCount(g, t.id);
+        out.push(el('div', { cls: `obj-tier-h${k > level ? ' locked' : ''}` }, el('b', { text: `Palier ${k + 1} · ${t.name} · ${c.done} / ${c.total}` }),
+          el('span', { cls: 'sub', text: c.done >= c.total ? 'récompense obtenue' : `récompense : ${t.reward}` })),
+        el('ul', { cls: `sp-checks objlist${k > level ? ' locked' : ''}` }, ...tierObjectives(t.id).map((o) => {
           const done = g.achieved.includes(o.id);
-          return el('li', { cls: done ? 'ok' : 'todo' }, el('i', { attrs: { 'aria-hidden': 'true' } }), el('span', { text: o.title }), done ? null : el('small', { text: o.progress(g).text }));
+          return el('li', { cls: done ? 'ok' : 'todo' }, el('i', { attrs: { 'aria-hidden': 'true' } }), el('span', { text: o.title }), !done && isUnlocked(g, o) ? el('small', { text: o.progress(g).text }) : null);
         })));
+      });
       out.push(section('Journal (toutes dépenses)', legend([['rgba(95,195,255,0.7)', 'ventes'], ['#5cc77a', 'solde']])), chart(days.map((d) => d.revenue), days.map(dayProfit)), ledger(days.slice().reverse(), true));
       return out;
     },
