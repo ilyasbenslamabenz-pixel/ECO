@@ -143,6 +143,7 @@ export class Scene3D {
     this.street.add(this.beacon);
 
     this.cam = new FollowCamera(canvas);
+    { const dbg = (window as unknown as { __bc?: Record<string, unknown> }).__bc; if (dbg) dbg['scene'] = this; } // TEMP-PERF
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
