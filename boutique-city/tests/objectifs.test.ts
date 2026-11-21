@@ -55,7 +55,7 @@ test('quatre paliers dans l’ordre, une trentaine d’objectifs, identifiants d
   // Démarrage : les objectifs d'avant jusqu'à « jour500 », puis pub, deux, trois et le véhicule (un scooter suffit).
   assert.deepEqual(ids('demarrage'), ['sortir', 'louer', 'meubler', 'stock', 'servir10', 'embaucher', 'jour500', 'pub', 'deux', 'trois', 'vehicule']);
   assert.match(OBJECTIVE_BY_ID.get('vehicule')!.hint, /scooter suffit/);
-  assert.equal(OBJECTIVE_BY_ID.get('valeur100k')!.title, 'Atteindre 60 000 CHF de valeur nette');
+  assert.equal(OBJECTIVE_BY_ID.get('valeur100k')!.title, 'Atteindre 80 000 CHF de valeur nette');
   assert.equal(OBJECTIVE_BY_ID.get('valeur100k')!.tier, 'entrepreneur');
   assert.equal(OBJECTIVE_BY_ID.get('gamme')!.tier, 'entrepreneur');
   assert.equal(OBJECTIVE_BY_ID.get('former')!.tier, 'gerant', 'former un employé : objectif à part');
