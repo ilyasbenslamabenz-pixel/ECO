@@ -73,9 +73,9 @@ function stock(ctx: UiCtx, id: number): (Node | null)[] {
     auto.addEventListener('change', () => ctx.act(g.setAuto(id, p.id, auto.checked)));
     const room = g.room(s, p.id);
     tbl.append(el('tr', {},
-      el('td', {}, el('b', { text: p.nameFr }), el('div', { cls: 'muted small', text: `achat ${chf2(p.cost)}${p.needsMachine ? ' · machine' : ''}` })),
+      el('td', {}, el('b', { text: p.nameFr }), el('div', { cls: 'muted small', text: `achat ${chf2(p.cost * g.marketIndex(p.id))}${p.needsMachine ? ' · machine' : ''}` })),
       el('td', { text: `${ps.stock} / ${cap}${pend ? ` (+${pend})` : ''}`, cls: ps.stock === 0 && cap > 0 ? 'bad' : '' }),
-      el('td', {}, price, el('div', { cls: 'muted small', text: chf2(p.basePrice) })),
+      el('td', {}, price, el('div', { cls: 'muted small', text: `quartier ${chf2(g.refPrice(p))}` })),
       el('td', {}, auto),
       el('td', {}, button(room > 0 ? `+${room}` : 'Plein', () => ctx.act(g.order(id, p.id, room), (o) => `Livraison demain 7 h : ${o.qty} ${p.nameFr.toLowerCase()} (${chf2(o.cost)}).`), 'small'))));
   }

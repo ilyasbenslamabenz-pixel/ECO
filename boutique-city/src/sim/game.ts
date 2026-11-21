@@ -7,6 +7,7 @@
  * TypeScript pur (aucun DOM).
  */
 import {
+  PRODUCTS, SHOP_TYPES,
   CAMPAIGN_BY_ID, ECONOMY, FOODS, FURNITURE_BY_ID, HOME_BY_ID, LOAN_OFFERS, NEEDS, PRODUCT_BY_ID, SHOP_TYPE_BY_ID,
   VEHICLE_BY_ID, loanTotal, productsOf,
   type CampaignKind, type ProductDef, type ServiceKind, type ShopType, type VehicleType,
@@ -76,6 +77,26 @@ export interface DayStats {
   finance: number;
   /** Logement, repas, assurance des véhicules, taxi. */
   living: number;
+  /** Loyers encaissés des sous-locations (appartements et locaux). */
+  rentalIncome: number;
+}
+
+/**
+ * Sous-location : un appartement ou un local pris à bail par le joueur pour le relouer. Le joueur paie `cost` par
+ * jour au propriétaire et encaisse `ask` par jour quand un locataire est en place.
+ */
+export interface Sublet {
+  id: number;
+  kind: 'logement' | 'local';
+  /** Logement (homeId) ou local (premiseId). */
+  ref: number;
+  cost: number;
+  ask: number;
+  tenant: string | null;
+  /** Jours d'occupation du locataire actuel. */
+  since: number;
+  /** Dépôt de garantie (locaux). */
+  deposit: number;
 }
 
 export interface Shop {
@@ -115,13 +136,13 @@ export type Result<T = undefined> = { ok: true; data: T } | { ok: false; message
 const ok = <T>(data: T): Result<T> => ({ ok: true, data });
 const fail = (message: string): Result<never> => ({ ok: false, message });
 
-const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, refusedPrice: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0, marketing: 0, finance: 0, living: 0 });
+const emptyDay = (day: number): DayStats => ({ day, customers: 0, lostStock: 0, lostCapacity: 0, lostStaff: 0, refusedPrice: 0, revenue: 0, costOfSales: 0, purchases: 0, wages: 0, rent: 0, equipment: 0, marketing: 0, finance: 0, living: 0, rentalIncome: 0 });
 const r2 = (v: number): number => Math.round(v * 100) / 100;
 const sumValues = (r: Record<string, number>): number => Object.values(r).reduce((a, b) => a + b, 0);
 
 /** Résultat d'une journée (toutes dépenses comprises). */
 export function dayProfit(d: DayStats): number {
-  return d.revenue - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living;
+  return d.revenue + (d.rentalIncome ?? 0) - d.purchases - d.wages - d.rent - d.equipment - d.marketing - d.finance - d.living;
 }
 
 export interface GameSave {
@@ -140,6 +161,9 @@ export interface GameSave {
   campaigns: Campaign[];
   ledger: DayStats[];
   achieved?: string[];
+  sublets?: Sublet[];
+  market?: Record<string, number>;
+  rivals?: Record<string, number>;
   nextId: number;
   rng: number[];
 }
@@ -165,6 +189,12 @@ export class Game {
   feedback: Feedback[] = [];
   /** Objectifs atteints (ids, dans l'ordre). */
   achieved: string[] = [];
+  /** Sous-locations en cours. */
+  sublets: Sublet[] = [];
+  /** Indice des prix du grossiste par produit (1 = prix catalogue), varie chaque jour. */
+  market: Record<string, number> = {};
+  /** Prix pratiqués par les concurrents, par type de commerce (1 = prix habituel ; baisse quand vous leur prenez des clients). */
+  rivals: Record<string, number> = {};
   private rng: Rng;
   private nextId = 1;
   /** Version de l'état (l'interface ne redessine que si elle change). */
@@ -210,7 +240,77 @@ export class Game {
   /** Incrémenté à chaque changement de mobilier (tous commerces). */
   layoutRev = 0;
 
-  isFree(p: Premise): boolean { return !p.competitor && !this.shopAt(p.id); }
+  isFree(p: Premise): boolean { return !p.competitor && !this.shopAt(p.id) && !this.sublets.some((x) => x.kind === 'local' && x.ref === p.id); }
+  /** Logement libre : ni le vôtre, ni déjà pris à bail. */
+  homeFree(homeId: number): boolean { return this.player.home !== homeId && !this.sublets.some((x) => x.kind === 'logement' && x.ref === homeId); }
+  subletOf(kind: Sublet['kind'], ref: number): Sublet | undefined { return this.sublets.find((x) => x.kind === kind && x.ref === ref); }
+
+  /** Prix de vente de référence d'un produit dans le quartier (prix habituel × prix des concurrents). */
+  refPrice(pr: ProductDef): number { return r2(pr.basePrice * (this.rivals[pr.shop] ?? 1)); }
+  /** Indice du grossiste pour un produit (1 = prix catalogue). */
+  marketIndex(productId: string): number { return this.market[productId] ?? 1; }
+
+  /** Loyer de marché par jour d'une sous-location : appartement (loyer du logement) ou local (loyer / 30). */
+  marketRent(kind: Sublet['kind'], ref: number): number {
+    if (kind === 'logement') { const h = this.district.homes.find((x) => x.id === ref); return h ? HOME_BY_ID.get(h.def)!.rentDay : 0; }
+    const p = this.premise(ref);
+    return p ? r2(p.rent / 30) : 0;
+  }
+
+  /**
+   * Prend à bail un appartement ou un local pour le sous-louer (sur place). Appartement : une semaine d'avance ;
+   * local : dépôt d'un mois. Le loyer demandé au locataire part à +25 % du loyer payé.
+   */
+  leaseForSublet(kind: Sublet['kind'], ref: number): Result<Sublet> {
+    const pl = this.player.place;
+    if (kind === 'logement') {
+      const h = this.district.homes.find((x) => x.id === ref);
+      if (!h) return fail('Logement introuvable');
+      if (!this.homeFree(ref)) return fail('Ce logement n’est pas libre.');
+      if (!(pl.kind === 'rue' || (pl.kind === 'logement'))) return fail('Rendez-vous devant l’immeuble pour signer.');
+    } else {
+      const p = this.premise(ref);
+      if (!p) return fail('Local introuvable');
+      if (!this.isFree(p)) return fail('Ce local est déjà occupé');
+    }
+    const cost = this.marketRent(kind, ref);
+    const upfront = kind === 'logement' ? r2(cost * 7) : r2(cost * 30 * ECONOMY.depositMonths);
+    if (this.cash < upfront) return fail(`Trésorerie insuffisante : ${Math.round(upfront)} CHF à verser.`);
+    this.cash -= upfront;
+    if (kind === 'logement') this.today.rent += upfront;
+    const sl: Sublet = { id: this.nextId++, kind, ref, cost, ask: r2(cost * 1.25), tenant: null, since: 0, deposit: kind === 'local' ? upfront : 0 };
+    this.sublets.push(sl);
+    this.notify('ok', `Bail signé pour sous-louer ${kind === 'logement' ? 'un appartement' : 'un local'} (${Math.round(cost)} CHF / jour). Fixez le loyer demandé dans l’appli Immobilier.`);
+    this.bump();
+    return ok(sl);
+  }
+
+  /** Loyer demandé au locataire (CHF / jour), entre 50 % et 250 % du loyer de marché. */
+  setSubletAsk(id: number, ask: number): Result<number> {
+    const sl = this.sublets.find((x) => x.id === id);
+    if (!sl) return fail('Sous-location introuvable');
+    const m = this.marketRent(sl.kind, sl.ref);
+    sl.ask = r2(Math.min(m * 2.5, Math.max(m * 0.5, ask)));
+    this.bump();
+    return ok(sl.ask);
+  }
+
+  /** Résilie une sous-location (le locataire part ; dépôt du local rendu). */
+  endSublet(id: number): Result<number> {
+    const sl = this.sublets.find((x) => x.id === id);
+    if (!sl) return fail('Sous-location introuvable');
+    this.cash += sl.deposit;
+    this.sublets = this.sublets.filter((x) => x !== sl);
+    this.notify('info', `Bail résilié${sl.tenant ? ` (locataire ${sl.tenant} parti)` : ''}.${sl.deposit ? ` Dépôt rendu : ${Math.round(sl.deposit)} CHF.` : ''}`);
+    this.bump();
+    return ok(sl.deposit);
+  }
+
+  /** Probabilité quotidienne de trouver un locataire selon le loyer demandé (rapport au loyer de marché). */
+  tenantChance(sl: Sublet): number {
+    const ratio = sl.ask / Math.max(1, this.marketRent(sl.kind, sl.ref));
+    return Math.max(0.04, Math.min(0.85, 0.75 * Math.exp(-3.2 * (ratio - 1.05))));
+  }
 
   /** Unités stockables d'un produit (capacité du meuble partagée entre les produits qu'il présente). */
   storageFor(shop: Shop, prod: ProductDef, st = this.stats(shop)): number {
@@ -434,7 +534,7 @@ export class Game {
   /** Prix d'achat (remise de gros au-delà de ECONOMY.bulkQty unités). */
   orderCost(productId: string, qty: number): number {
     const pr = PRODUCT_BY_ID.get(productId)!;
-    return r2(qty * pr.cost * (qty >= ECONOMY.bulkQty ? 1 - ECONOMY.bulkDiscount : 1));
+    return r2(qty * pr.cost * this.marketIndex(productId) * (qty >= ECONOMY.bulkQty ? 1 - ECONOMY.bulkDiscount : 1));
   }
   deliveryFee(goods: number): number { return r2(ECONOMY.deliveryBase + goods * ECONOMY.deliveryRate); }
 
@@ -640,6 +740,7 @@ export class Game {
     const h = this.district.homes.find((x) => x.id === homeId);
     if (!h) return fail('Logement introuvable');
     if (this.player.home === homeId) return fail('Vous habitez déjà ici.');
+    if (this.subletOf('logement', homeId)) return fail('Ce logement est sous-loué : résiliez d’abord le bail de sous-location.');
     const def = HOME_BY_ID.get(h.def)!;
     const first = def.rentDay * 7;
     if (this.cash < first) return fail(`Il faut ${first} CHF (une semaine d'avance).`);
@@ -825,7 +926,7 @@ export class Game {
       if (!this.sellable(s, pr, st)) continue;
       const ps = s.products[pr.id]!;
       shareAvail += pr.share;
-      priceAcc += pr.share * Math.min(1.8, Math.max(0.05, Math.exp(-2.2 * (ps.price / pr.basePrice - 1))));
+      priceAcc += pr.share * Math.min(1.8, Math.max(0.05, Math.exp(-2.2 * (ps.price / this.refPrice(pr) - 1))));
     }
     if (shareAvail <= 0) return 0;
     const price = priceAcc / shareAvail;
@@ -859,7 +960,7 @@ export class Game {
         missing++;
         continue;
       }
-      if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / want.basePrice - 1)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
+      if (this.rng.next() > Math.min(1, Math.exp(-2.2 * (ps.price / this.refPrice(want) - 1)))) { refused++; s.today.refusedPrice++; this.today.refusedPrice++; continue; }
       ps.stock--;
       bought.push(want.id);
       s.today.revenue += ps.price; this.today.revenue += ps.price; this.cash += ps.price;
@@ -918,6 +1019,21 @@ export class Game {
       this.cash -= def.rentDay; this.today.living += def.rentDay;
     }
     for (const v of this.vehicles) { const ins = VEHICLE_BY_ID.get(v.type)!.insurance; this.cash -= ins; this.today.living += ins; }
+    // Sous-locations : loyer payé, loyer encaissé, arrivées et départs de locataires.
+    for (const sl of this.sublets) {
+      this.cash -= sl.cost; this.today.rent += sl.cost;
+      if (sl.tenant) {
+        this.cash += sl.ask; this.today.rentalIncome += sl.ask;
+        sl.since++;
+        const ratio = sl.ask / Math.max(1, this.marketRent(sl.kind, sl.ref));
+        if (this.rng.next() < 0.02 + Math.max(0, ratio - 1.3) * 0.15) { this.notify('info', `Votre locataire ${sl.tenant} est parti (${sl.kind === 'logement' ? 'appartement' : 'local'} à relouer).`); sl.tenant = null; sl.since = 0; }
+      } else if (this.rng.next() < this.tenantChance(sl)) {
+        sl.tenant = sl.kind === 'logement' ? randomName(this.rng) : this.rng.pick(['Agence Horizon', 'Cabinet Benjelloun', 'Atelier Couture Nadia', 'Studio Photo Lumière', 'Pharmacie du Parc', 'Coiffure Élégance', 'Opticien Vision', 'Librairie Al Kitab']);
+        sl.since = 0;
+        this.notify('ok', `Nouveau locataire : ${sl.tenant} (${Math.round(sl.ask)} CHF / jour).`);
+      }
+    }
+    this.updateMarket();
     for (const l of this.loans) {
       const pay = Math.min(l.daily, l.remaining);
       this.cash -= pay; this.today.finance += pay;
@@ -939,6 +1055,25 @@ export class Game {
     }
     if (this.cash < 0) this.notify('error', `Trésorerie négative (${Math.round(this.cash)} CHF) : réduisez les dépenses, empruntez ou résiliez un bail.`);
     if (weekday === 0) this.refreshCandidates();
+  }
+
+  /**
+   * Marché du jour : chaque prix du grossiste suit une marche aléatoire (entre −15 % et +20 %) ; les concurrents
+   * baissent leurs prix quand vous avez plusieurs commerces du même type (jusqu'à −15 %) et les remontent sinon.
+   */
+  private updateMarket(): void {
+    for (const pr of PRODUCTS) {
+      const m = this.market[pr.id] ?? 1;
+      this.market[pr.id] = r2(Math.min(1.2, Math.max(0.85, m + (this.rng.next() - 0.5) * 0.08 + (1 - m) * 0.15)));
+    }
+    for (const t of SHOP_TYPES) {
+      const mine = this.shops.filter((x) => x.type === t.id && x.today.customers + (x.history.at(-1)?.customers ?? 0) > 0).length;
+      const target = Math.max(0.85, 1 - 0.05 * mine);
+      const cur = this.rivals[t.id] ?? 1;
+      const next = r2(cur + (target - cur) * 0.3);
+      if (next < cur - 0.015 && next <= 0.97) this.notify('warn', `Les concurrents (${t.nameFr.toLowerCase()}) baissent leurs prix : ${Math.round((1 - next) * 100)} % sous le prix habituel.`);
+      this.rivals[t.id] = next;
+    }
   }
 
   private refreshCandidates(): void {
@@ -975,7 +1110,7 @@ export class Game {
       v: SAVE_VERSION, seed: this.seed, companyName: this.companyName, total: this.total, cash: this.cash,
       player: structuredClone(this.player), shops: structuredClone(this.shops), employees: structuredClone(this.employees),
       candidates: structuredClone(this.candidates), orders: structuredClone(this.orders), vehicles: structuredClone(this.vehicles),
-      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved],
+      loans: structuredClone(this.loans), campaigns: structuredClone(this.campaigns), ledger: structuredClone([...this.ledger, this.today]), achieved: [...this.achieved], sublets: structuredClone(this.sublets), market: { ...this.market }, rivals: { ...this.rivals },
       nextId: this.nextId, rng: this.rng.state(),
     };
   }
@@ -993,7 +1128,10 @@ export class Game {
     this.nextId = s.nextId;
     this.rng = new Rng(s.rng);
     this.achieved = [...(s.achieved ?? [])];
+    this.sublets = structuredClone(s.sublets ?? []);
+    this.market = { ...(s.market ?? {}) };
+    this.rivals = { ...(s.rivals ?? {}) };
     // Sauvegardes antérieures : champs ajoutés depuis.
-    for (const d of [...this.ledger, this.today, ...this.shops.flatMap((x) => [x.today, ...x.history])]) d.refusedPrice ??= 0;
+    for (const d of [...this.ledger, this.today, ...this.shops.flatMap((x) => [x.today, ...x.history])]) { d.refusedPrice ??= 0; d.rentalIncome ??= 0; }
   }
 }

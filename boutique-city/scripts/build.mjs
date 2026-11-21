@@ -30,6 +30,7 @@ const body = `<canvas id="scene" aria-label="Quartier en 3D"></canvas>
 <div id="loading" class="hidden"><div class="load-card"><h1>Boutique City</h1><div class="bar-track"><div class="bar-fill"></div></div><p class="load-label">Chargement…</p></div></div>
 <script type="module" src="game.js"></script>`;
 const head = `<title>Boutique City</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap">
 <meta name="description" content="Boutique City — partez de rien et bâtissez votre empire de commerces">
 <style>${css}</style>`;
 // Page complète : sa propre balise viewport (le fragment artifact.html reçoit celle de l'enveloppe de publication).

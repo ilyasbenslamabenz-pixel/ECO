@@ -66,7 +66,7 @@ export class Scene3D {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.street.background = new THREE.Color(0xa9cbe6);
@@ -104,6 +104,19 @@ export class Scene3D {
     this.cam = new FollowCamera(canvas);
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  /** Niveau de qualité : 0 = basse (résolution 1, pas d'ombres), 1 = moyenne, 2 = haute. */
+  quality = 2;
+  setQuality(level: number): void {
+    this.quality = Math.max(0, Math.min(2, level));
+    const dpr = window.devicePixelRatio || 1;
+    this.renderer.setPixelRatio([1, Math.min(1.25, dpr), Math.min(1.75, dpr)][this.quality]!);
+    this.renderer.shadowMap.enabled = this.quality > 0;
+    this.sun.castShadow = this.quality > 0;
+    const size = this.quality === 2 ? 2048 : 1024;
+    if (this.sun.shadow.mapSize.x !== size) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null; }
+    this.resize();
   }
 
   resize(): void {

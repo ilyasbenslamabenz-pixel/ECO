@@ -9,7 +9,7 @@ import {
 } from '../sim/catalog';
 import type { Building, Home, Premise } from '../sim/district';
 import type { Game } from '../sim/game';
-import { button, chf, chf2, el, num, pct } from './dom';
+import { askConfirm, button, chf, chf2, el, num, pct, signed } from './dom';
 import type { Act, Panel, View } from './panel';
 
 export interface UiCtx {
@@ -76,7 +76,7 @@ function grossiste(ctx: UiCtx, b: Building): (Node | null)[] {
         ctx.act(g.buyStock(p.id, Number(q.value), c), (n) => `${n} ${p.nameFr.toLowerCase()} chargés.`);
       }, 'small primary');
       const deliver = dest ? button('Livrer', () => ctx.act(g.order(Number(dest.value), p.id, Number(q.value)), (o) => `${o.qty} ${p.nameFr.toLowerCase()} livrés demain à 7 h (${chf2(o.cost)}).`), 'small') : null;
-      tbl.append(el('tr', {}, el('td', { text: p.nameFr }), el('td', { text: chf2(p.cost) }), el('td', {}, q), el('td', { cls: 'nowrap' }, take, deliver)));
+      tbl.append(el('tr', {}, el('td', { text: p.nameFr }), el('td', {}, el('b', { text: chf2(p.cost * g.marketIndex(p.id)) }), el('span', { cls: g.marketIndex(p.id) > 1.02 ? 'small trend up' : g.marketIndex(p.id) < 0.98 ? 'small trend down' : 'small trend', text: g.marketIndex(p.id) > 1.02 ? ` ▲ ${Math.round((g.marketIndex(p.id) - 1) * 100)} %` : g.marketIndex(p.id) < 0.98 ? ` ▼ ${Math.round((1 - g.marketIndex(p.id)) * 100)} %` : ' =' })), el('td', {}, q), el('td', { cls: 'nowrap' }, take, deliver)));
     }
     out.push(tbl);
   }
@@ -235,6 +235,9 @@ export function premiseView(ctx: UiCtx, p: Premise): View {
           const r = g.rent(p.id, type.value as ShopType, name.value);
           if (ctx.act(r) && r.ok) ctx.enterShop(r.data.id);
         }, 'primary wide'),
+        sec('Ou louer pour sous-louer'),
+        note(`Vous payez ${chf2(g.marketRent('local', p.id))} / jour et relouez le local à une entreprise (cabinet, agence, atelier…). Plus le loyer demandé est élevé, plus il faut de temps pour trouver un locataire.`),
+        button('Prendre à bail pour sous-louer', () => { if (ctx.act(g.leaseForSublet('local', p.id))) ctx.panel.close(); }, 'wide'),
       ];
     },
   };
@@ -253,10 +256,37 @@ export function homeView(ctx: UiCtx, h: Home): View {
   const g = ctx.game, def = HOME_BY_ID.get(h.def)!;
   return {
     kicker: 'Logement', title: def.nameFr, onClose: () => ctx.leave(),
-    render: () => [el('div', { cls: 'kpis' }, kpi('Loyer', `${def.rentDay} CHF / jour`), kpi('Confort', `×${def.comfort}`), kpi('Surface', `${def.gridW * def.gridD} m²`)),
-      note('Le confort accélère la récupération pendant le sommeil. Vous pouvez déménager quand vous voulez (une semaine d’avance).'),
-      button(`Louer et emménager (${chf(def.rentDay * 7)})`, () => ctx.act(g.rentHome(h.id)), 'primary wide')],
+    render: () => {
+      const sl = g.subletOf('logement', h.id);
+      if (sl) return [el('div', { cls: 'kpis' }, kpi('Surface', `${def.gridW * def.gridD} m²`), kpi('Confort', `×${def.comfort}`)), ...subletBlock(ctx, sl.id)];
+      return [el('div', { cls: 'kpis' }, kpi('Loyer', `${def.rentDay} CHF / jour`), kpi('Confort', `×${def.comfort}`), kpi('Surface', `${def.gridW * def.gridD} m²`)),
+        note('Le confort accélère la récupération pendant le sommeil. Vous pouvez déménager quand vous voulez (une semaine d’avance).'),
+        button(`Louer et emménager (${chf(def.rentDay * 7)})`, () => ctx.act(g.rentHome(h.id)), 'primary wide'),
+        sec('Ou louer pour sous-louer'),
+        note(`Vous payez ${def.rentDay} CHF / jour et relouez l’appartement à un locataire. Revenu possible : environ ${chf(def.rentDay * 1.25)} / jour une fois loué.`),
+        button(`Prendre à bail pour sous-louer (${chf(def.rentDay * 7)})`, () => ctx.act(g.leaseForSublet('logement', h.id)), 'wide')];
+    },
   };
+}
+
+/** Vue d'une sous-location : sous-locataire, loyers, loyer demandé (modifiable), résiliation. */
+export function subletView(ctx: UiCtx, id: number): View {
+  return { kicker: 'Sous-location', title: 'Bien en sous-location', onClose: () => ctx.leave(), render: () => subletBlock(ctx, id) };
+}
+
+export function subletBlock(ctx: UiCtx, id: number): (Node | null)[] {
+  const g = ctx.game, sl = g.sublets.find((x) => x.id === id);
+  if (!sl) return [note('Ce bail est terminé.')];
+  const ask = el('input', { cls: 'price', attrs: { type: 'number', step: '1', min: '0', value: String(Math.round(sl.ask)), 'aria-label': 'Loyer demandé par jour' } });
+  ask.addEventListener('change', () => ctx.act(g.setSubletAsk(sl.id, Number(ask.value))));
+  const chance = g.tenantChance(sl);
+  return [
+    el('div', { cls: 'kpis' }, kpi('Locataire', sl.tenant ?? 'aucun'), kpi('Vous payez', `${chf2(sl.cost)} / j`), kpi('Marge', sl.tenant ? signed(sl.ask - sl.cost) + ' / j' : '—')),
+    sec('Loyer demandé (CHF / jour)'),
+    el('div', { cls: 'row' }, ask, el('span', { cls: 'muted small', text: `marché : ${chf2(g.marketRent(sl.kind, sl.ref))}` })),
+    sl.tenant ? note(`${sl.tenant} occupe les lieux depuis ${sl.since} jour(s).`) : note(`Chance de trouver un locataire chaque jour : ${Math.round(chance * 100)} %. Baissez le loyer pour louer plus vite.`),
+    button('Résilier le bail', () => { void askConfirm('Résilier ce bail de sous-location ?', 'Résilier', true).then((y) => { if (y) ctx.act(g.endSublet(sl.id)); }); }, 'danger wide'),
+  ];
 }
 
 export function kpi(label: string, value: string): HTMLElement {

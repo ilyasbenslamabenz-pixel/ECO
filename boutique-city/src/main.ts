@@ -10,7 +10,7 @@ import { gallery } from './gallery';
 import { FURNITURE_BY_ID, HOME_BY_ID, SERVICE_BY_ID, SHOP_TYPE_BY_ID, VEHICLE_BY_ID, productsOf } from './sim/catalog';
 import { clockView, formatClock } from './sim/clock';
 import { FACE_N, type Building } from './sim/district';
-import { Game, type GameSave, type Result, type Shop } from './sim/game';
+import { Game, dayProfit, type GameSave, type Result, type Shop } from './sim/game';
 import { canPlace, type Rot } from './sim/layout';
 import { Controls } from './input/controls';
 import { PRODUCT_COLORS } from './render/furniture3d';
@@ -19,7 +19,7 @@ import { InteriorView, type InteriorItem } from './render/interior-view';
 import { Scene3D } from './render/scene';
 import type { BuildingState } from './render/district-view';
 import { drive, type DriveState } from './world/vehicle';
-import { competitorView, homeView, premiseView, serviceView, type UiCtx } from './ui/dialogs';
+import { competitorView, homeView, premiseView, serviceView, subletView, type UiCtx } from './ui/dialogs';
 import { $, askConfirm, button, chf, el } from './ui/dom';
 import { BigMap, MiniMap } from './ui/map';
 import { Panel } from './ui/panel';
@@ -27,6 +27,7 @@ import { showRecap } from './ui/recap';
 import { sound } from './ui/sound';
 import { OBJECTIVES, rankOf } from './sim/objectives';
 import { companyView, shopView } from './ui/shop-panel';
+import { Phone } from './ui/phone';
 
 const SAVE_KEY = 'boutique-city.save.v2';
 /** Minutes de jeu par seconde réelle (0 = pause). */
@@ -137,10 +138,12 @@ function start(game: Game): void {
         const sh = game.shopAt(b.premise.id);
         if (sh) st.push({ buildingId: b.id, sign: sh.name, color: SHOP_TYPE_BY_ID.get(sh.type)!.color, ring: '#5cc77a', pin: false, poster: null });
         else if (b.premise.competitor) st.push({ buildingId: b.id, sign: b.premise.competitorName, color: mix(SHOP_TYPE_BY_ID.get(b.premise.competitor)!.color), ring: null, pin: false, poster: null });
+        else if (game.subletOf('local', b.premise.id)) { const sl = game.subletOf('local', b.premise.id)!; st.push({ buildingId: b.id, sign: sl.tenant, color: '#6f86a8', ring: '#c39bff', pin: false, poster: sl.tenant ? null : 'À SOUS-LOUER' }); }
         else st.push({ buildingId: b.id, sign: null, color: '#9aa0a6', ring: '#ffd166', pin: true, poster: 'À LOUER' });
       } else if (b.home) {
         const mine = b.home.id === game.player.home;
-        st.push({ buildingId: b.id, sign: null, color: '#9aa0a6', ring: mine ? '#ffffff' : '#9ec9ff', pin: false, poster: mine ? null : 'APPART. À LOUER' });
+        const sl = game.subletOf('logement', b.home.id);
+        st.push({ buildingId: b.id, sign: null, color: '#9aa0a6', ring: mine ? '#ffffff' : sl ? '#c39bff' : '#9ec9ff', pin: false, poster: mine ? null : sl ? (sl.tenant ? null : 'À SOUS-LOUER') : 'APPART. À LOUER' });
       }
     }
     scene.view.setStates(st);
@@ -235,12 +238,15 @@ function start(game: Game): void {
     if (b.home) {
       const h = b.home;
       if (h.id === game.player.home) return { label: 'Rentrer chez moi', run: () => enterHome(h.id) };
+      if (game.subletOf('logement', h.id)) return { label: 'Mon appartement en sous-location', run: () => panel.open(homeView(ctx, h)) };
       return { label: `Visiter : ${HOME_BY_ID.get(h.def)!.nameFr} à louer`, run: () => panel.open(homeView(ctx, h)) };
     }
     const p = b.premise!;
     const sh = game.shopAt(p.id);
     if (sh) return { label: `Entrer : ${sh.name}`, run: () => enterShop(sh.id) };
     if (p.competitor) return { label: `Regarder : ${p.competitorName}`, run: () => panel.open(competitorView(ctx, p)) };
+    const sl = game.subletOf('local', p.id);
+    if (sl) return { label: `Mon local sous-loué${sl.tenant ? ` : ${sl.tenant}` : ' (à relouer)'}`, run: () => panel.open(subletView(ctx, sl.id)) };
     return { label: `Visiter le local à louer (${p.area} m²)`, run: () => { panel.close(); game.setPlace({ kind: 'local', premiseId: p.id }); panel.open(premiseView(ctx, p)); } };
   };
 
@@ -373,24 +379,38 @@ function start(game: Game): void {
   /* ------------------------------ Interface ------------------------------ */
 
   const hud = $('hud');
-  const clock = el('span', { cls: 'clock' });
+  const clock = el('b', { cls: 'clock' });
+  const dayLabel = el('span', { cls: 'day' });
   const cash = el('b', { cls: 'cash' });
+  const delta = el('span', { cls: 'delta' });
   const energy = el('i'), hunger = el('i');
-  const carry = el('span', { cls: 'carry small' });
-  const speedBtns = ['⏸', '▶', '▶▶', '▶▶▶'].map((t, k) => button(t, () => { speed = k; paint(); }, 'spd'));
+  const carry = el('span', { cls: 'carry' });
+  const speedBtns = ['❚❚', '▶', '▶▶', '▶▶▶'].map((t, k) => button(t, () => { speed = k; paint(); }, 'spd'));
   speedBtns.forEach((b, k) => b.setAttribute('aria-label', k === 0 ? 'Pause' : `Vitesse ${k}`));
+  // Téléphone (applis) : gestion à distance, immobilier, banque, marché, messages…
+  const phone = new Phone(ctx, {
+    openMap: () => bigmap.toggle(game.player.x, game.player.z, game.player.heading),
+    openCompany: () => panel.open(companyView(ctx)),
+    save: () => { writeSave(game); toast('Partie sauvegardée', 'ok'); },
+    toggleSound: () => sound.toggle(),
+    muted: () => sound.muted,
+    quality: () => qualityPref,
+    setQuality: (q) => { qualityPref = q; try { localStorage.setItem('bc-qualite', q); } catch { /* stockage indisponible */ } applyQuality(); },
+  });
+  const phoneBadge = el('i', { cls: 'badge hidden' });
+  const phoneBtn = el('button', { cls: 'round phone-btn', attrs: { type: 'button', 'aria-label': 'Téléphone (T)', title: 'Téléphone (T)' }, on: { click: () => phone.toggle() } }, el('span', { text: '📱' }), phoneBadge);
   hud.replaceChildren(
-    el('div', { cls: 'brand' }, el('b', { text: 'Boutique City' }), el('span', { text: game.companyName })),
-    el('div', { cls: 'time' }, clock, el('div', { cls: 'speeds' }, ...speedBtns)),
-    el('div', { cls: 'needs' }, el('div', { cls: 'bar e', attrs: { title: 'Énergie' } }, el('span', { text: '⚡' }), el('div', { cls: 'track' }, energy)),
-      el('div', { cls: 'bar h', attrs: { title: 'Faim' } }, el('span', { text: '🍴' }), el('div', { cls: 'track' }, hunger))),
-    carry,
-    el('div', { cls: 'money' }, el('span', { text: 'Trésorerie' }), cash),
-    el('div', { cls: 'acts' },
-      button('Carte (M)', () => bigmap.toggle(game.player.x, game.player.z, game.player.heading)),
-      button('Entreprise', () => panel.open(companyView(ctx))),
-      button('Sauvegarder', () => { writeSave(game); toast('Partie sauvegardée', 'ok'); }),
-      (() => { const b = button(sound.muted ? '🔇' : '🔊', () => { b.textContent = sound.toggle() ? '🔇' : '🔊'; }, 'icon-x'); b.setAttribute('aria-label', 'Son'); return b; })()));
+    el('div', { cls: 'hud-left' },
+      el('div', { cls: 'when' }, clock, dayLabel),
+      el('div', { cls: 'speeds' }, ...speedBtns)),
+    el('div', { cls: 'hud-right' },
+      el('div', { cls: 'needs' },
+        el('div', { cls: 'need e', attrs: { title: 'Énergie' } }, el('span', { text: '⚡' }), el('div', { cls: 'track' }, energy)),
+        el('div', { cls: 'need h', attrs: { title: 'Faim' } }, el('span', { text: '🍔' }), el('div', { cls: 'track' }, hunger))),
+      carry,
+      el('div', { cls: 'wallet' }, cash, delta),
+      phoneBtn,
+      el('button', { cls: 'round', attrs: { type: 'button', 'aria-label': 'Carte (M)', title: 'Carte (M)' }, on: { click: () => bigmap.toggle(game.player.x, game.player.z, game.player.heading) } }, el('span', { text: '🗺️' }))));
   // Objectif en cours (carte repliable en haut à gauche).
   const objCard = el('button', { cls: 'objective', attrs: { type: 'button', 'aria-label': 'Objectif en cours' } });
   let objOpen = true, objSig = '';
@@ -412,9 +432,14 @@ function start(game: Game): void {
       el('span', { cls: 'small', text: pr.text }));
   };
   const paint = (): void => {
-    clock.textContent = formatClock(game.total);
+    const c = clockView(game.total);
+    clock.textContent = `${String(c.hour).padStart(2, '0')}:${String(c.minute).padStart(2, '0')}`;
+    dayLabel.textContent = formatClock(game.total).split('·').slice(0, 2).join('·').trim();
     cash.textContent = chf(game.cash);
     cash.classList.toggle('neg', game.cash < 0);
+    const today = dayProfit(game.today);
+    delta.textContent = `${today >= 0 ? '+' : '−'}${chf(Math.abs(today))} aujourd’hui`;
+    delta.classList.toggle('neg', today < 0);
     energy.style.width = `${game.player.energy}%`;
     hunger.style.width = `${game.player.hunger}%`;
     energy.classList.toggle('low', game.player.energy < 15);
@@ -422,6 +447,28 @@ function start(game: Game): void {
     const n = Object.values(game.player.carry).reduce((a, b) => a + b, 0);
     carry.textContent = n ? `📦 ${n}` : '';
     speedBtns.forEach((b, k) => b.classList.toggle('on', k === speed));
+    const u = phone.unread;
+    phoneBadge.textContent = String(Math.min(99, u));
+    phoneBadge.classList.toggle('hidden', u === 0 || phone.isOpen);
+  };
+
+  // Qualité graphique : auto (selon les images par seconde), basse ou haute.
+  let qualityPref = 'auto';
+  try { qualityPref = localStorage.getItem('bc-qualite') ?? 'auto'; } catch { /* stockage indisponible */ }
+  const applyQuality = (): void => { scene.setQuality(qualityPref === 'basse' ? 0 : qualityPref === 'haute' ? 2 : scene.quality); };
+  applyQuality();
+  let fpsAcc = 0, fpsFrames = 0, fpsHigh = 0;
+  /** Qualité automatique : baisse sous 38 images/s (moyenne sur 3 s), remonte après 12 s au-dessus de 57. */
+  const adaptQuality = (dt: number): void => {
+    if (qualityPref !== 'auto' || document.hidden) return;
+    fpsAcc += dt; fpsFrames++;
+    if (fpsAcc < 3) return;
+    const fps = fpsFrames / fpsAcc;
+    fpsAcc = 0; fpsFrames = 0;
+    if (fps < 38 && scene.quality > 0) { scene.setQuality(scene.quality - 1); fpsHigh = 0; }
+    else if (fps > 57 && scene.quality < 2) { if ((fpsHigh += 3) >= 12) { scene.setQuality(scene.quality + 1); fpsHigh = 0; } }
+    else fpsHigh = 0;
+    debug['fps'] = Math.round(fps);
   };
 
   const ibar = el('div', { cls: 'ibar hidden' });
@@ -462,13 +509,15 @@ function start(game: Game): void {
     if (recapOpen) return;
     if (k === 'Escape') {
       if (game.player.sleeping) { game.wake(); return; }
+      if (phone.isOpen) { phone.back(); return; }
       if (bigmap.isOpen) { bigmap.close(); return; }
       if (build.on && build.tool) { build.tool = null; scene.interior?.view.setGhost(null); renderBuildBar(); return; }
       if (build.on) { setBuild(false); return; }
       if (panel.isOpen) { panel.close(); return; }
       return;
     }
-    if (k === 'm') bigmap.toggle(game.player.x, game.player.z, game.player.heading);
+    if (k === 't') phone.toggle();
+    else if (k === 'm') bigmap.toggle(game.player.x, game.player.z, game.player.heading);
     else if (k === 'e') interact();
     else if (k === 'b') setBuild(!build.on);
     else if (k === 'r' && build.on) { build.rot = ((build.rot + 1) % 4) as Rot; }
@@ -620,6 +669,8 @@ function start(game: Game): void {
     syncStreet();
     paint();
     panel.paint();
+    phone.paint();
+    adaptQuality(dt);
     if ((refreshT += dt) > 0.5) { refreshT = 0; renderInteriorBar(); renderObjective(); if (build.on) renderBuildBar(); }
     const a = currentAction();
     prompt.classList.toggle('hidden', !a || build.on);
