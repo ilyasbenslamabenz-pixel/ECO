@@ -68,7 +68,7 @@ const QUALITY_HINT: Record<string, string> = {
   basse: 'Basse : résolution réduite, sans ombres. Pour les machines modestes.',
   moyenne: 'Moyenne : ombres nettes, résolution un peu réduite.',
   haute: 'Haute : ombres douces, reflets du ciel, ombrage des recoins, halo des lumières la nuit, brume et couleurs étalonnées.',
-  ultra: 'Ultra : comme Haute, en pleine définition, avec des ombres plus fines et plus lointaines. Pour carte graphique dédiée.',
+  ultra: 'Ultra : comme Haute, avec une image plus fine (sur-échantillonnée) et des ombres plus fines et plus lointaines. Pour carte graphique dédiée.',
 };
 const hhmm = (h: number, m: number): string => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 const WEATHER: Record<string, [IconName, string]> = { soleil: ['sun', 'Ensoleillé'], nuages: ['cloud', 'Nuageux'], pluie: ['rain', 'Pluie'] };

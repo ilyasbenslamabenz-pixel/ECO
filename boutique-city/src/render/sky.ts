@@ -1,8 +1,9 @@
 /**
  * Ciel et éclairage d'environnement.
- *  - SkyDome : dôme du ciel. Dégradé zénith / horizon, lueur autour du soleil et sur l'horizon au lever et au
- *    coucher ; en qualité haute et ultra, disque du soleil, nuages procéduraux qui dérivent (éclairés côté soleil),
- *    étoiles et lune la nuit. Couleurs gérées comme le reste de la scène (tone mapping, sRGB).
+ *  - SkyDome : dôme du ciel. Basse et moyenne : dégradé zénith / horizon (couleurs d'affichage, aussi léger que
+ *    l'ancien ciel). Haute et ultra : lueur autour du soleil et sur l'horizon au lever et au coucher, disque du
+ *    soleil, nuages procéduraux qui dérivent (éclairés côté soleil), étoiles et lune la nuit ; couleurs gérées comme
+ *    le reste de la scène (tone mapping, sRGB).
  *  - AnalyticEnv : carte d'environnement (« PMREM ») calculée directement, sans échantillonnage : chaque niveau de
  *    flou (rugosité) de la carte cubique est rendu par une formule du ciel déjà adoucie (ou d'une pièce éclairée pour
  *    les intérieurs). Quelques dizaines de petits rendus : peut suivre l'heure et la météo en continu.
@@ -36,14 +37,37 @@ float vnoise(vec2 p) {
 float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.07 + vec2(17.1, 9.2); a *= 0.5; } return s; }
 `;
 
-const SKY_VERT = `varying vec3 vDir;
-void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const SKY_VERT = `#ifdef SKY_HQ
+varying vec3 vDir;
+#else
+varying float vH;
+#endif
+void main() {
+#ifdef SKY_HQ
+  vDir = position;
+#else
+  vH = normalize(position).y;
+#endif
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
 
+/**
+ * Ciel. Qualités basse et moyenne (sans SKY_HQ) : simple dégradé en couleurs d'affichage, écrit tel quel (aussi peu
+ * coûteux que l'ancien ciel). Haute et ultra : valeurs de scène (HDR) passées au tone mapping comme le reste.
+ */
 const SKY_FRAG = `uniform vec3 zenith; uniform vec3 horizon; uniform vec3 ground; uniform vec3 sunColor; uniform vec3 sunDir; uniform vec3 moonDir;
+uniform vec3 zenithD; uniform vec3 horizonD;
 uniform float cloud; uniform float night; uniform float dusk; uniform float time;
+#ifdef SKY_HQ
 varying vec3 vDir;
 ${NOISE}
+#else
+varying float vH;
+#endif
 void main() {
+#ifndef SKY_HQ
+  gl_FragColor = vec4(mix(horizonD, zenithD, pow(clamp(vH * 1.6, 0.0, 1.0), 0.7)), 1.0);
+#else
   vec3 d = normalize(vDir);
   float h = d.y;
   vec3 col = mix(horizon, zenith, pow(clamp(h, 0.0, 1.0), 0.5));
@@ -55,7 +79,6 @@ void main() {
   // Lueur de l'horizon côté soleil (lever, coucher), et halo autour du soleil.
   col += sunColor * (dusk * (0.5 * az * az * az + 0.12) * exp(-max(h, 0.0) * 6.0));
   col += sunColor * day * (0.05 * pow(max(mu, 0.0), 6.0) + 0.3 * pow(max(mu, 0.0), 90.0));
-#ifdef SKY_HQ
   // Disque du soleil (très lumineux : le halo de l'image le fait rayonner), voilé par les nuages.
   col += sunColor * (smoothstep(0.99935, 0.9997, mu) * 14.0 * day * (1.0 - 0.85 * cloud));
   if (h > 0.0) {
@@ -84,10 +107,10 @@ void main() {
       col += vec3(0.75, 0.82, 1.0) * (smoothstep(0.99955, 0.99975, mm) * 3.0 + pow(max(mm, 0.0), 60.0) * 0.12) * night * (1.0 - 0.8 * cloud) * mix(1.0, clear, 0.7);
     }
   }
-#endif
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+#endif
 }`;
 
 export class SkyDome {
@@ -101,11 +124,12 @@ export class SkyDome {
       uniforms: {
         zenith: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, ground: { value: new THREE.Color() },
         sunColor: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, moonDir: { value: new THREE.Vector3(0, 1, 0) },
+        zenithD: { value: new THREE.Color() }, horizonD: { value: new THREE.Color() },
         cloud: { value: 0 }, night: { value: 0 }, dusk: { value: 0 }, time: { value: 0 },
       },
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG,
     });
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 16), this.material);
+    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 12), this.material);
     this.mesh.renderOrder = 10;
     this.mesh.frustumCulled = false;
   }
@@ -118,8 +142,14 @@ export class SkyDome {
     this.material.needsUpdate = true;
   }
 
-  update(s: SkyState, time: number): void {
+  /**
+   * `zenithD`, `horizonD` : couleurs d'affichage (composantes sRGB 0..1) du dégradé simple des qualités basse et
+   * moyenne.
+   */
+  update(s: SkyState, time: number, zenithD: THREE.Color, horizonD: THREE.Color): void {
     const u = this.material.uniforms;
+    (u['zenithD']!.value as THREE.Color).copy(zenithD);
+    (u['horizonD']!.value as THREE.Color).copy(horizonD);
     (u['zenith']!.value as THREE.Color).copy(s.zenith);
     (u['horizon']!.value as THREE.Color).copy(s.horizon);
     (u['ground']!.value as THREE.Color).copy(s.ground);

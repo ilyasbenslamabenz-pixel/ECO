@@ -1,6 +1,7 @@
 /**
- * Post-traitement des qualités haute et ultra. La scène est rendue dans une cible HDR (demi-flottants, MSAA 4×,
- * profondeur en texture) ; puis, en quelques passes plein écran :
+ * Post-traitement des qualités haute et ultra. La scène est rendue dans une cible HDR (flottants compacts 11-11-10
+ * bits, ou demi-flottants si la carte ne sait pas les rendre ; MSAA 4× ; profondeur en texture) ; puis, en quelques
+ * passes plein écran (sans EffectComposer : aucun second rendu de la scène) :
  *  - occlusion ambiante tirée de la seule profondeur (normales reconstruites, pas de second rendu de la scène),
  *    en demi-résolution (haute) ou pleine résolution (ultra), floutée sans baver sur les bords (flou bilatéral) ;
  *  - halo lumineux (« bloom ») des parties très claires (lampadaires, enseignes, vitrines la nuit) : seuil doux,
@@ -49,6 +50,8 @@ export interface PostConfig {
   aoFull: boolean; aoSamples: number;
   /** Niveaux de la chaîne du halo (4 ou 5). */
   bloomLevels: number;
+  /** Couleur de la scène en flottants compacts 11-11-10 bits (EXT_color_buffer_float). */
+  packed: boolean;
 }
 
 const VERT = `precision highp float;
@@ -69,7 +72,6 @@ const VIEWPOS = `vec3 viewPos(vec2 uv, float d) { vec4 c = vec4(vec3(uv, d) * 2.
 const AO_FRAG = `precision highp float;
 uniform highp sampler2D tDepth;
 uniform vec2 resolution;
-uniform vec2 depthTexel;
 uniform mat4 projInv;
 uniform float projScale;
 uniform float radius;
@@ -78,16 +80,25 @@ in vec2 vUv;
 out vec4 outColor;
 ${IGN}
 ${VIEWPOS}
-float depthAt(vec2 uv) { return textureLod(tDepth, uv, 0.0).r; }
+// Lectures au centre exact des texels de profondeur (sinon, en demi-résolution, l'écart entre la coordonnée et le
+// texel lu fausse les positions sur les surfaces rasantes : bandes sur la chaussée).
+vec3 texelPos(ivec2 t, vec2 fs) { return viewPos((vec2(t) + 0.5) / fs, texelFetch(tDepth, t, 0).r); }
 void main() {
-  float d = depthAt(vUv);
+  ivec2 size = textureSize(tDepth, 0);
+  vec2 fs = vec2(size);
+  ivec2 pc = ivec2(vUv * fs);
+  float d = texelFetch(tDepth, pc, 0).r;
   if (d >= 1.0) { outColor = vec4(1.0, 1.0e4, 0.0, 1.0); return; }
-  vec3 p = viewPos(vUv, d);
-  vec2 dx = vec2(depthTexel.x, 0.0), dy = vec2(0.0, depthTexel.y);
-  vec3 pl = viewPos(vUv - dx, depthAt(vUv - dx)), pr = viewPos(vUv + dx, depthAt(vUv + dx));
-  vec3 pb = viewPos(vUv - dy, depthAt(vUv - dy)), pt = viewPos(vUv + dy, depthAt(vUv + dy));
-  vec3 ex = abs(pr.z - p.z) < abs(p.z - pl.z) ? pr - p : p - pl;
-  vec3 ey = abs(pt.z - p.z) < abs(p.z - pb.z) ? pt - p : p - pb;
+  vec2 uvc = (vec2(pc) + 0.5) / fs;
+  vec3 p = viewPos(uvc, d);
+  ivec2 hi = size - 1;
+  // Normale : différences avec les voisins (du côté le plus proche en profondeur), décalées d'un texel au bord.
+  ivec2 pn = clamp(pc, ivec2(1), size - 2);
+  vec3 pm = texelPos(pn, fs);
+  vec3 pl = texelPos(pn - ivec2(1, 0), fs), pr = texelPos(pn + ivec2(1, 0), fs);
+  vec3 pb = texelPos(pn - ivec2(0, 1), fs), pt = texelPos(pn + ivec2(0, 1), fs);
+  vec3 ex = abs(pr.z - pm.z) < abs(pm.z - pl.z) ? pr - pm : pm - pl;
+  vec3 ey = abs(pt.z - pm.z) < abs(pm.z - pb.z) ? pt - pm : pm - pb;
   vec3 n = normalize(cross(ex, ey));
   float rpx = min(radius * projScale * resolution.y / -p.z, resolution.y * 0.12);
   if (rpx < 1.5) { outColor = vec4(1.0, -p.z, 0.0, 1.0); return; }
@@ -97,13 +108,13 @@ void main() {
   for (int i = 0; i < SAMPLES; i++) {
     float t = (float(i) + 0.5) / float(SAMPLES);
     float a = ang + float(i) * 2.3999632;
-    vec2 suv = vUv + vec2(cos(a), sin(a)) * (rpx * sqrt(t)) / resolution;
-    vec3 sp = viewPos(suv, depthAt(suv));
+    vec2 suv = uvc + vec2(cos(a), sin(a)) * (rpx * sqrt(t)) / resolution;
+    vec3 sp = texelPos(clamp(ivec2(suv * fs), ivec2(0), hi), fs);
     vec3 v = sp - p;
     float vv = dot(v, v);
-    occ += max(0.0, dot(v, n) * inversesqrt(vv + 1.0e-4) - 0.08) * max(0.0, 1.0 - vv / r2);
+    occ += max(0.0, dot(v, n) * inversesqrt(vv + 1.0e-4) - 0.1) * max(0.0, 1.0 - vv / r2);
   }
-  float ao = clamp(1.0 - intensity * occ * (2.0 / float(SAMPLES)), 0.0, 1.0);
+  float ao = clamp(1.0 - intensity * occ * (2.4 / float(SAMPLES)), 0.0, 1.0);
   outColor = vec4(ao, -p.z, 0.0, 1.0);
 }`;
 
@@ -258,6 +269,33 @@ export const FXAA_VERT = `precision highp float;
 attribute vec3 position; attribute vec2 uv; varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
+/**
+ * La carte sait-elle rendre dans ce format, avec ce nombre d'échantillons ? (tampon d'essai de 4 × 4 pixels : certains
+ * pilotes acceptent un format flottant mais pas son MSAA). Résultat mis en cache par format.
+ */
+const renderable = new Map<string, boolean>();
+export function canRender(gl: WebGL2RenderingContext, internalFormat: number, samples: number): boolean {
+  const key = `${internalFormat}|${samples}`;
+  const known = renderable.get(key);
+  if (known !== undefined) return known;
+  let ok = false;
+  const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null, prevRb = gl.getParameter(gl.RENDERBUFFER_BINDING) as WebGLRenderbuffer | null;
+  const fb = gl.createFramebuffer(), rb = gl.createRenderbuffer();
+  try {
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    if (samples > 0) gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, internalFormat, 4, 4);
+    else gl.renderbufferStorage(gl.RENDERBUFFER, internalFormat, 4, 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
+    ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE && gl.getError() === gl.NO_ERROR;
+  } catch { ok = false; }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, prevRb);
+  gl.deleteFramebuffer(fb); gl.deleteRenderbuffer(rb);
+  renderable.set(key, ok);
+  return ok;
+}
+
 function passMaterial(frag: string, uniforms: Record<string, THREE.IUniform>, defines: Record<string, string | number> = {}): THREE.RawShaderMaterial {
   return new THREE.RawShaderMaterial({
     glslVersion: THREE.GLSL3, vertexShader: VERT, fragmentShader: frag, uniforms, defines,
@@ -288,7 +326,7 @@ export class PostFX {
   private readonly fxaaMat: THREE.RawShaderMaterial;
   private w = 0;
   private h = 0;
-  private cfg: PostConfig = { msaa: true, fxaa: false, aoFull: false, aoSamples: 12, bloomLevels: 4 };
+  private cfg: PostConfig = { msaa: true, fxaa: false, aoFull: false, aoSamples: 12, bloomLevels: 4, packed: false };
   private frameN = 0;
 
   constructor() {
@@ -298,7 +336,7 @@ export class PostFX {
     this.quad = new THREE.Mesh(geo);
     this.quad.frustumCulled = false;
     this.aoMat = passMaterial(AO_FRAG, {
-      tDepth: { value: null }, resolution: { value: new THREE.Vector2() }, depthTexel: { value: new THREE.Vector2() },
+      tDepth: { value: null }, resolution: { value: new THREE.Vector2() },
       projInv: { value: new THREE.Matrix4() }, projScale: { value: 1 }, radius: { value: 1 }, intensity: { value: 1 },
     }, { SAMPLES: 12 });
     this.blurMat = passMaterial(BLUR_FRAG, { tAO: { value: null }, dir: { value: new THREE.Vector2() } });
@@ -323,7 +361,7 @@ export class PostFX {
 
   /** Change la configuration (qualité) : cibles recréées à la prochaine image. */
   configure(cfg: PostConfig): void {
-    const same = cfg.msaa === this.cfg.msaa && cfg.fxaa === this.cfg.fxaa && cfg.aoFull === this.cfg.aoFull && cfg.bloomLevels === this.cfg.bloomLevels;
+    const same = cfg.msaa === this.cfg.msaa && cfg.fxaa === this.cfg.fxaa && cfg.aoFull === this.cfg.aoFull && cfg.bloomLevels === this.cfg.bloomLevels && cfg.packed === this.cfg.packed;
     if (cfg.aoSamples !== this.cfg.aoSamples) { this.aoMat.defines['SAMPLES'] = cfg.aoSamples; this.aoMat.needsUpdate = true; }
     this.cfg = { ...cfg };
     if (!same) this.disposeTargets();
@@ -343,7 +381,10 @@ export class PostFX {
     this.w = w; this.h = h;
     const depth = new THREE.DepthTexture(w, h);
     depth.type = THREE.UnsignedIntType;
-    this.sceneRT = target(w, h, { type: THREE.HalfFloatType, depthBuffer: true, depthTexture: depth, samples: this.cfg.msaa ? 4 : 0 });
+    // Couleur HDR en flottants compacts 11-11-10 bits (moitié moins de mémoire et de bande passante que des
+    // demi-flottants, surtout avec le MSAA) si la carte sait les rendre ; demi-flottants sinon.
+    const packed = this.cfg.packed ? { format: THREE.RGBFormat, type: THREE.UnsignedInt101111Type } : { type: THREE.HalfFloatType };
+    this.sceneRT = target(w, h, { ...packed, depthBuffer: true, depthTexture: depth, samples: this.cfg.msaa ? 4 : 0 });
     const aw = this.cfg.aoFull ? w : Math.ceil(w / 2), ah = this.cfg.aoFull ? h : Math.ceil(h / 2);
     const aoOpts: THREE.RenderTargetOptions = { type: THREE.HalfFloatType, format: THREE.RGFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
     this.aoA = target(aw, ah, aoOpts);
@@ -386,7 +427,6 @@ export class PostFX {
       const u = this.aoMat.uniforms;
       u['tDepth']!.value = depth;
       (u['resolution']!.value as THREE.Vector2).set(aoA.width, aoA.height);
-      (u['depthTexel']!.value as THREE.Vector2).set(1 / this.w, 1 / this.h);
       (u['projInv']!.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
       u['projScale']!.value = camera.projectionMatrix.elements[5]! * 0.5;
       u['radius']!.value = p.aoRadius;

@@ -2,7 +2,9 @@
  * Intérieur d'un commerce ou d'un logement, en 3D : sol carrelé ou parquet, murs (coupés automatiquement du côté
  * de la caméra), vitrine et porte sur la façade (+z), trottoir et rue devant, mobilier, réserve au fond.
  * Ambiance propre à chaque type de commerce (motif et teintes du sol, soubassement des murs, décor mural au-dessus
- * de 2 m : étagères garnies, cadres, ardoise, miroir, horloge, appliques) et éclairage intérieur chaud. Revêtements
+ * de 2 m : étagères garnies, cadres, ardoise, miroir, horloge, appliques) et éclairage intérieur chaud qui suit
+ * l'heure (jour froid par la vitrine, lampes plus fortes le soir), sols légèrement brillants, ombres de contact sous
+ * les meubles ; en haute et ultra, reflets d'une pièce éclairée (environnement) et ombres douces. Revêtements
  * de sol et de murs choisis par le joueur (remplacent ceux du type) et saleté visible au sol selon la propreté.
  * Grille de cases de 1 m : la case (x, z) a son centre en (x + 0.5 − W/2, z + 0.5 − D/2). Fournit les collisions
  * (meubles, murs) et, en mode aménagement, la grille, le fantôme du meuble à poser et la surbrillance.
@@ -314,7 +316,7 @@ export class InteriorView {
   setLook(q: number, env: THREE.Texture | null): void {
     this.look = q;
     this.scene.environment = q >= 2 ? env : null;
-    this.scene.environmentIntensity = 0.8;
+    this.scene.environmentIntensity = 0.65;
     const size = q >= 2 ? 2048 : 1024;
     if (this.sun.shadow.mapSize.x !== size) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null; }
     this.sun.shadow.radius = q >= 2 ? 3 : 1;
@@ -333,7 +335,7 @@ export class InteriorView {
     const d = this.daylight, env = this.look >= 2 && this.scene.environment !== null;
     this.sun.intensity = 0.4 + 0.95 * d;
     this.sun.color.setRGB(0.55, 0.62, 0.85).lerp(new THREE.Color(0xffe4bf), d);
-    this.hemi.intensity = 1.2 * (0.85 + 0.15 * d) * (env ? 0.45 : 1);
+    this.hemi.intensity = 1.2 * (0.85 + 0.15 * d) * (env ? 0.4 : 1);
     const base = 5 + Math.max(this.W, this.D) * 0.6;
     for (const l of this.lampLights) l.intensity = base * (1 + 0.3 * (1 - d));
   }

@@ -1,7 +1,11 @@
 /**
  * Rendu du quartier, léger : tout est instancié (un appel de dessin par famille d'objets), aucune texture chargée.
  * Fenêtres calculées dans le shader à partir de la position monde (étages de 3,2 m, travées de 2,6 m) ; vitrines,
- * auvents, enseignes, parc, arbres. Repérage des bâtiments (survol, sélection) par rayon. Dépend de three.
+ * auvents, enseignes, parc, arbres. Repérage des bâtiments (survol, sélection) par rayon.
+ * Qualités haute et ultra (setQuality) : détail procédural des sols (herbe, asphalte, dalles : textures générées,
+ * aucun appel de dessin de plus), vitres des immeubles lisses et réfléchissantes, fenêtres allumées au hasard la
+ * nuit, flaques de lumière des lampadaires, sources lumineuses plus intenses que le blanc (halo). Chaussée mouillée
+ * sous la pluie (setWet). Dépend de three.
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -223,13 +227,13 @@ export class DistrictView {
     for (const [k, ms] of per) {
       const mg = assets.merged(k);
       if (!mg) return null;
-      // Vitres repérées (fenêtre par fenêtre) : reflets, et allumées au hasard la nuit.
+      // Vitres repérées (fenêtre par fenêtre) : reflets, et allumées au hasard la nuit (haute et ultra).
       glassAttr(mg.geo);
-      const bm = buildingMaterial(mg.mat);
-      for (const im of this.tiles(ms, (part) => instanced(mg.geo, bm as THREE.Material, part, `immeuble ${k}`, true, true))) {
+      for (const im of this.tiles(ms, (part) => instanced(mg.geo, mg.mat as THREE.Material, part, `immeuble ${k}`, true, true))) {
         const m = new THREE.Matrix4();
         for (let i = 0; i < im.count; i++) { im.getMatrixAt(i, m); const e = m.elements; im.setColorAt(i, tones[Math.abs(Math.floor(e[12]! * 7.3 + e[14]! * 3.1)) % tones.length]!); }
         if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        this.glassMeshes.push({ m: im, plain: im.material, glass: buildingMaterial(im.material) });
         g.add(im);
       }
     }
@@ -290,7 +294,7 @@ export class DistrictView {
     this.lightPoints = bulbs.map((m) => new THREE.Vector3().setFromMatrixPosition(m));
     // Flaques de lumière au sol sous chaque lampadaire, la nuit (qualités haute et ultra) : disques additifs à bord
     // doux, un seul appel de dessin pour tout le quartier.
-    const pools = this.lightPoints.map((p) => new THREE.Matrix4().compose(new THREE.Vector3(p.x, 0.175, p.z), new THREE.Quaternion(), new THREE.Vector3(11, 1, 11)));
+    const pools = this.lightPoints.map((p) => new THREE.Matrix4().compose(new THREE.Vector3(p.x, 0.175, p.z), new THREE.Quaternion(), new THREE.Vector3(12, 1, 12)));
     this.pools = instanced(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
       map: poolTexture(), color: 0xffc98a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
@@ -311,23 +315,23 @@ export class DistrictView {
   private readonly detailMats: THREE.MeshStandardMaterial[] = [];
 
   /**
-   * Nuit (0 = jour, 1 = nuit noire) et heure : globes, portes vitrées, enseignes et fenêtres allumées. En haute et
-   * ultra, les sources sont plus intenses que le blanc (le halo du post-traitement les fait rayonner) et des flaques
-   * de lumière s'allument au pied des lampadaires.
+   * Nuit (0 = jour, 1 = nuit noire) et heure : globes, portes vitrées et enseignes plus lumineux. En haute et ultra,
+   * les sources sont plus intenses que le blanc (le halo du post-traitement les fait rayonner), des fenêtres
+   * s'allument au hasard et des flaques de lumière apparaissent au pied des lampadaires.
    */
   setNight(k: number, hour = 22): void {
     this.night = k;
     const hdr = this.quality >= 2;
     const boost = 1 + (hdr ? 4.5 : 0) * k * k;
     this.lampMat.color.setRGB((0.54 + 0.46 * k) * boost, (0.56 + 0.4 * k) * boost, (0.59 + 0.2 * k) * boost);
-    for (const m of this.doorGlass) m.emissiveIntensity = 0.55 + (hdr ? 2.6 : 1.4) * k;
+    for (const m of this.doorGlass) m.emissiveIntensity = 0.55 + (hdr ? 1.7 : 1.4) * k;
     const sign = 1 + (hdr ? 1.1 : 0.25) * k;
     for (const m of this.signMats) m.color.setScalar(sign);
     // Part des fenêtres allumées : beaucoup le soir, peu au cœur de la nuit.
-    const lit = hour >= 17 ? 0.55 : hour < 5 ? 0.16 + 0.04 * (5 - hour) : hour < 9 ? 0.3 : 0.2;
+    const lit = hour >= 22 ? 0.42 : hour >= 17 ? 0.55 : hour < 5 ? 0.14 + 0.03 * (5 - hour) : hour < 9 ? 0.3 : 0.2;
     WINDOWS.uNight.value = k; WINDOWS.uLit.value = lit;
     this.pools.visible = hdr && k > 0.3;
-    (this.pools.material as THREE.MeshBasicMaterial).color.setHex(0xffc98a).multiplyScalar(0.55 * Math.min(1, (k - 0.3) / 0.4));
+    (this.pools.material as THREE.MeshBasicMaterial).color.setHex(0xffc98a).multiplyScalar(0.85 * Math.min(1, (k - 0.3) / 0.4));
   }
 
   /** Qualité : détail des sols, reflets des vitres (environnement présent), intensités de nuit (voir setNight). */
@@ -341,8 +345,13 @@ export class DistrictView {
       m.needsUpdate = true;
     }
     WINDOWS.uEnvOn.value = q >= 2 ? 1 : 0;
+    // Vitres et fenêtres allumées la nuit : matériaux propres en haute et ultra ; en basse et moyenne, matériaux
+    // d'origine des modèles (shader et coût inchangés).
+    for (const g of this.glassMeshes) g.m.material = q >= 2 ? g.glass : g.plain;
     this.setNight(this.night);
   }
+  /** Immeubles du City Kit (quartier et horizon) : matériau d'origine et matériau à vitres (voir buildingMaterial). */
+  private readonly glassMeshes: { m: THREE.InstancedMesh; plain: THREE.Material | THREE.Material[]; glass: THREE.Material | THREE.Material[] }[] = [];
 
   /**
    * Matériau de sol à détail procédural (herbe, asphalte, dalles) : texture de détail répétée en coordonnées du monde
@@ -375,8 +384,18 @@ export class DistrictView {
 #endif`);
     };
     m.customProgramCacheKey = (): string => 'sol-detail';
+    m.userData['base'] = { color: m.color.clone(), rough: roughness, wets: kind !== 'herbe' };
     this.detailMats.push(m);
     return m;
+  }
+
+  /** Pluie (0..1) : chaussée et trottoirs mouillés, plus sombres et plus lisses (reflets du ciel avec l'environnement). */
+  setWet(k: number): void {
+    for (const m of this.detailMats) {
+      const b = m.userData['base'] as { color: THREE.Color; rough: number; wets: boolean };
+      m.color.copy(b.color).multiplyScalar(1 - (b.wets ? 0.22 : 0.08) * k);
+      m.roughness = b.wets ? b.rough * (1 - 0.62 * k) : b.rough;
+    }
   }
 
   /** Lignes blanches discontinues au milieu des rues. */
@@ -702,7 +721,7 @@ export class DistrictView {
       for (const im of this.tiles(v.m, (part) => assets.instances(k, part, v.w, v.h, v.w))) {
         im.name = `horizon ${k}`; im.castShadow = false;
         // Bâtiments de l'horizon : mêmes vitres que le quartier (fenêtres allumées la nuit sur toute la ligne d'horizon).
-        if (/^f:(building|house|ind-building|com-low-detail)/.test(k)) { glassAttr(im.geometry); im.material = buildingMaterial(im.material); }
+        if (/^f:(building|house|ind-building|com-low-detail)/.test(k)) { glassAttr(im.geometry); this.glassMeshes.push({ m: im, plain: im.material, glass: buildingMaterial(im.material) }); }
         g.add(im);
       }
     }
@@ -963,8 +982,8 @@ function glassAttr(geo: THREE.BufferGeometry): void {
 
 /**
  * Matériau des immeubles (City Kit) : vitres plus lisses (reflets du ciel quand l'environnement est présent, en
- * haute et ultra) et, la nuit, fenêtres allumées au hasard (lumière chaude, quelques écrans bleutés) ; vitrines du
- * rez-de-chaussée presque toutes allumées. Une copie par matériau d'origine, programme partagé.
+ * haute et ultra) et, la nuit, fenêtres allumées au hasard (lumière chaude, quelques écrans bleutés). Une copie par
+ * matériau d'origine, programme partagé ; presque rien de plus à calculer par sommet (un attribut, un test).
  */
 const buildingMats = new Map<THREE.Material, THREE.Material>();
 function buildingMaterial(base: THREE.Material | THREE.Material[]): THREE.Material | THREE.Material[] {
@@ -976,17 +995,15 @@ function buildingMaterial(base: THREE.Material | THREE.Material[]): THREE.Materi
   m.onBeforeCompile = (sh): void => {
     Object.assign(sh.uniforms, WINDOWS);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aWin;\nvarying float vWin;\nvarying float vWinY;')
+      .replace('#include <common>', '#include <common>\nattribute float aWin;\nvarying float vWin;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+  // Hasard de la fenêtre, décalé d'un immeuble à l'autre (position de l'instance) ; −1 hors des vitres.
   vWin = aWin;
-  vec4 winP = vec4(transformed, 1.0);
   #ifdef USE_INSTANCING
-    winP = instanceMatrix * winP;
-    if (aWin >= 0.0) { vec3 ip = instanceMatrix[3].xyz; vWin = fract(aWin * 7.31 + fract(sin(dot(ip.xz, vec2(12.9898, 78.233))) * 43758.5453)); }
-  #endif
-  vWinY = (modelMatrix * winP).y;`);
+    vWin = aWin < 0.0 ? -1.0 : fract(aWin + dot(instanceMatrix[3].xz, vec2(0.0731, 0.1173)));
+  #endif`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uNight;\nuniform float uLit;\nuniform float uEnvOn;\nvarying float vWin;\nvarying float vWinY;')
+      .replace('#include <common>', '#include <common>\nuniform float uNight;\nuniform float uLit;\nuniform float uEnvOn;\nvarying float vWin;')
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
   float glassK = step(0.0, vWin);
   roughnessFactor = mix(roughnessFactor, 0.14, glassK);`)
@@ -994,11 +1011,10 @@ function buildingMaterial(base: THREE.Material | THREE.Material[]): THREE.Materi
   metalnessFactor = mix(metalnessFactor, 0.45, glassK * uEnvOn);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
   if (vWin >= 0.0 && uNight > 0.01) {
-    bool shop = vWinY < 3.3;
-    float on = step(1.0 - (shop ? 0.85 : uLit), fract(vWin * 3.7));
-    vec3 warm = mix(vec3(1.0, 0.7, 0.4), vec3(1.0, 0.85, 0.6), fract(vWin * 11.3));
-    warm = mix(warm, vec3(0.6, 0.76, 1.0), step(0.92, fract(vWin * 5.1)) * (shop ? 0.0 : 1.0));
-    totalEmissiveRadiance += warm * on * uNight * (shop ? 2.2 : 0.9 + 1.4 * fract(vWin * 17.9));
+    float on = step(1.0 - uLit, fract(vWin * 3.7));
+    vec3 warm = mix(vec3(1.0, 0.55, 0.22), vec3(1.0, 0.72, 0.4), fract(vWin * 11.3));
+    warm = mix(warm, vec3(0.5, 0.62, 0.95), step(0.96, fract(vWin * 5.1)) * 0.8);
+    totalEmissiveRadiance += warm * on * uNight * (0.35 + 0.75 * fract(vWin * 17.9));
   }`);
   };
   m.customProgramCacheKey = (): string => 'immeuble-vitres';
