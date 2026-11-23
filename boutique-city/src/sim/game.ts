@@ -1672,15 +1672,17 @@ export class Game {
     this.cash -= def.price;
     this.today.equipment += def.price;
     const b = here.data, n = FACE_N[b.face]!;
-    // Garé sur la chaussée devant le garage, parallèle au trottoir.
-    const off = SIDEWALK_W / 2 + 2.2 + this.vehicles.length * 0.01;
-    const shift = (this.vehicles.length % 3) * 6 - 6;
-    const v: Vehicle = {
-      id: this.nextId++, type, x: b.doorX + n[0] * off + n[1] * shift, z: b.doorZ + n[1] * off - n[0] * shift,
-      heading: Math.atan2(n[1], -n[0]), cargo: {},
-    };
+    // Garé sur la chaussée devant le garage, parallèle au trottoir, à la première place libre (jamais sur un véhicule
+    // déjà là, qu'il ait été livré avant ou garé là par le joueur) ; devant la porte en dernier recours.
+    const off = SIDEWALK_W / 2 + 2.2;
+    const spot = (shift: number): { x: number; z: number } => ({ x: b.doorX + n[0] * off + n[1] * shift, z: b.doorZ + n[1] * off - n[0] * shift });
+    const room = (p: { x: number; z: number }): number => Math.min(Infinity, ...this.vehicles.map((o) => Math.hypot(o.x - p.x, o.z - p.z)));
+    const spots = [-6, 6, -12, 12, 0, -18, 18, -24, 24].map(spot);
+    const at = spots.find((p) => room(p) >= 5.5) ?? spots.reduce((a, c) => (room(c) > room(a) ? c : a));
+    const v: Vehicle = { id: this.nextId++, type, x: at.x, z: at.z, heading: Math.atan2(n[1], -n[0]), cargo: {} };
     this.vehicles.push(v);
-    this.notify('ok', `${def.nameFr} achetée : elle vous attend devant le garage.`);
+    const name = /^.[a-zà-ÿ]/.test(def.nameFr) ? def.nameFr.charAt(0).toLowerCase() + def.nameFr.slice(1) : def.nameFr;
+    this.notify('ok', `Votre ${name} vous attend devant le garage : approchez-vous et appuyez sur E pour conduire.`);
     this.bump();
     return ok(v);
   }

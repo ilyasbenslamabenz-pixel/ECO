@@ -1,7 +1,11 @@
 /**
- * Scène : rendu WebGL, rue (ciel, soleil dont l'ombre suit le personnage, quartier, passants, circulation,
- * véhicules du joueur, balise de destination) et intérieur courant (commerce ou logement). Le personnage du joueur
- * passe d'une scène à l'autre. Caméra à la troisième personne. Dépend de three.
+ * Scène : rendu WebGL, rue (ciel, soleil qui suit sa course et dont l'ombre suit le personnage, quartier, passants,
+ * circulation, véhicules du joueur, balise de destination) et intérieur courant (commerce ou logement). Le
+ * personnage du joueur passe d'une scène à l'autre. Caméra à la troisième personne.
+ * Quatre qualités (setQuality) : basse (résolution 1, sans ombres, FXAA), moyenne (ombres 1024), haute et ultra
+ * (éclairage d'environnement calculé depuis le ciel, ciel détaillé, ombres douces élargies vers la vue, puis
+ * post-traitement : occlusion ambiante, halo des lumières, brume, étalonnage, vignettage ; voir post.ts).
+ * Dépend de three.
  */
 import * as THREE from 'three';
 import type { District } from '../sim/district';
@@ -14,6 +18,30 @@ import type { InteriorView } from './interior-view';
 import { People } from './people';
 import { StreetLife } from './life';
 import { PlayerVehicles, Traffic } from './vehicles3d';
+import { FXAA_FRAG, FXAA_VERT, PostFX, defaultPostParams } from './post';
+import { AnalyticEnv, SkyDome, makeSkyState } from './sky';
+
+// Ombres douces (PCF) : estompées sur les derniers 6 % de la carte au lieu de s'arrêter net à son bord.
+THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace(
+  'return mix( 1.0, shadow, shadowIntensity );',
+  'vec2 shadowEdge = min( shadowCoord.xy, 1.0 - shadowCoord.xy );\n\t\t\treturn mix( 1.0, shadow, shadowIntensity * smoothstep( 0.0, 0.06, min( shadowEdge.x, shadowEdge.y ) ) );',
+);
+
+/**
+ * Couleur d'affichage (sRGB, telle qu'on veut la voir à l'écran) → valeur de scène avant le tone mapping ACES de three
+ * et l'exposition donnée : inverse (canal par canal) de la courbe RRT/ODT. Sert au ciel et à la brume, pour qu'ils
+ * aient la teinte voulue quel que soit le chemin de rendu.
+ */
+function displayToScene(hex: number, exposure: number, out = new THREE.Color()): THREE.Color {
+  out.setHex(hex);
+  const inv = (y: number): number => {
+    y = Math.min(0.98, Math.max(0, y));
+    const a = 1 - 0.983729 * y, b = 0.0245786 - 0.432951 * y, c = 0.000090537 + 0.238081 * y;
+    return ((-b + Math.sqrt(b * b + 4 * a * c)) / (2 * a)) * (0.6 / exposure);
+  };
+  return out.setRGB(inv(out.r), inv(out.g), inv(out.b));
+}
+const smooth = (a: number, b: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export class Scene3D {
   readonly renderer: THREE.WebGLRenderer;
@@ -37,15 +65,25 @@ export class Scene3D {
   /** Quatre lampes réelles, placées sur les lampadaires les plus proches du joueur la nuit. */
   private readonly lamps: THREE.PointLight[] = [];
   private night = 0;
+  private day = 1;
+  private dusk = 0;
   private lampTimer = 0;
   /** Shaders « lampes allumées » déjà compilés ? */
   private lampsWarm = false;
-  private readonly daySky = new THREE.Color(0xa9cbe6);
-  private readonly duskSky = new THREE.Color(0xe8a070);
-  private readonly nightSky = new THREE.Color(0x0e1626);
-  private readonly greySky = new THREE.Color(0x8d98a3);
-  private skyMat!: THREE.ShaderMaterial;
-  private sky!: THREE.Mesh;
+  /** Ciel (dôme), son état (couleurs, astres) et environnement calculé depuis lui (qualités haute et ultra). */
+  private readonly skyDome = new SkyDome(1000);
+  private readonly skyState = makeSkyState();
+  /** État du ciel pour l'environnement (luminances d'éclairage, voir setTime). */
+  private readonly envState = makeSkyState();
+  private env: AnalyticEnv | null = null;
+  /** Environnement des intérieurs (pièce éclairée), partagé. */
+  private roomEnv: AnalyticEnv | null = null;
+  /** Post-traitement (qualités haute et ultra) et ses réglages de l'image courante. */
+  private post: PostFX | null = null;
+  private readonly postOk: boolean;
+  private readonly postParams = defaultPostParams();
+  /** Horloge (s) des nuages. */
+  private clock = 0;
   /** Couverture nuageuse 0..1 (1 = pluie) et averse : gouttes autour de la caméra. */
   private cloud = 0;
   private rain: THREE.LineSegments | null = null;
@@ -63,7 +101,7 @@ export class Scene3D {
       }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      this.rain = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xc8d6e6, transparent: true, opacity: 0.45 }));
+      this.rain = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xc8d6e6, transparent: true, opacity: 0.45, depthWrite: false }));
       this.rain.frustumCulled = false;
       this.street.add(this.rain);
     }
@@ -79,19 +117,68 @@ export class Scene3D {
     // 0 la nuit, 1 en plein jour ; aube 5 h 30 – 7 h 30, crépuscule 19 h – 21 h.
     const day = h < 5.5 || h > 21 ? 0 : h < 7.5 ? (h - 5.5) / 2 : h > 19 ? (21 - h) / 2 : 1;
     const dusk = Math.max(0, 1 - Math.abs(day - 0.45) * 2.2) * (day > 0 && day < 1 ? 1 : 0);
-    this.night = 1 - day;
+    this.night = 1 - day; this.day = day; this.dusk = dusk;
     const wet = this.cloud;
-    this.sun.intensity = (0.15 + 2.45 * day) * (1 - 0.55 * wet);
-    this.sun.color.setRGB(1, 0.85 + 0.1 * day, 0.7 + 0.2 * day);
-    this.hemi.intensity = 0.35 + 1.15 * day;
-    const sky = this.nightSky.clone().lerp(this.daySky, day).lerp(this.duskSky, dusk * 0.6).lerp(this.greySky.clone().multiplyScalar(0.25 + 0.75 * day), wet * 0.75);
-    (this.street.fog as THREE.Fog).near = 160 - 110 * wet; (this.street.fog as THREE.Fog).far = 620 - 330 * wet;
-    (this.street.background as THREE.Color).copy(sky);
-    (this.skyMat.uniforms['horizon']!.value as THREE.Color).copy(sky).lerp(new THREE.Color(1, 1, 1), 0.25 * day);
-    (this.skyMat.uniforms['top']!.value as THREE.Color).copy(sky).multiplyScalar(0.62 + 0.1 * (1 - day)).lerp(new THREE.Color(0x2f62b8), 0.35 * day * (1 - wet));
-    (this.street.fog as THREE.Fog).color.copy(sky);
-    this.renderer.toneMappingExposure = 0.85 + 0.2 * day;
-    this.view.setNight(this.night);
+    const exposure = 0.85 + 0.2 * day;
+    this.renderer.toneMappingExposure = exposure;
+    // Course du soleil : lever à l'est vers 6 h, plein sud à midi (62°), coucher à l'ouest vers 20 h 30 ; la nuit,
+    // la lumière (faible, bleutée) vient de la lune.
+    const t = Math.min(1, Math.max(0, (h - 6) / 14.5));
+    const el = THREE.MathUtils.degToRad(4 + 58 * Math.sin(t * Math.PI)), az = THREE.MathUtils.degToRad(100 - 200 * t);
+    const s = this.skyState;
+    s.sunDir.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
+    const toSun = smooth(0.04, 0.25, day);
+    const L = this.tmpV.copy(s.moonDir).lerp(s.sunDir, toSun).normalize();
+    if (L.distanceToSquared(this.lightDir) > 1e-7) this.setLightDir(L);
+    this.sun.intensity = (0.18 + 2.42 * day) * (1 - 0.55 * wet);
+    this.sun.color.setRGB(0.62, 0.72, 1).lerp(this.tmpC.setRGB(1, 0.95, 0.88), toSun).lerp(this.tmpC.setRGB(1, 0.6, 0.36), dusk * 0.85 * (1 - wet));
+    const envOn = this.env !== null;
+    this.hemi.intensity = (0.35 + 1.15 * day) * (envOn ? 0.4 : 1);
+    this.hemi.color.setHex(0x8fa6d6).lerp(this.tmpC.setHex(0xdfeeff), day).lerp(this.tmpC.setHex(0xffd2b0), dusk * 0.45);
+    // Ciel : couleurs d'affichage voulues (zénith, horizon) converties en valeurs de scène.
+    const c = this.tmpC, k = dusk * (1 - 0.6 * wet);
+    s.zenith.copy(displayToScene(0x060c1c, exposure, c)).lerp(displayToScene(0x4a8fe0, exposure, this.tmpC2), day).lerp(displayToScene(0x4d5b9c, exposure, this.tmpC2), k * 0.75);
+    s.horizon.copy(displayToScene(0x1b2842, exposure, c)).lerp(displayToScene(0xd3e8f8, exposure, this.tmpC2), day).lerp(displayToScene(0xffa66a, exposure, this.tmpC2), k * 0.85);
+    const grey = 0.3 + 0.7 * day;
+    s.zenith.lerp(displayToScene(0x9aa5b0, exposure, this.tmpC2).multiplyScalar(grey), wet * 0.8);
+    s.horizon.lerp(displayToScene(0xc6cdd4, exposure, this.tmpC2).multiplyScalar(grey), wet * 0.8);
+    s.ground.copy(displayToScene(0x2a3030, exposure, c)).multiplyScalar(0.25 + 0.75 * day);
+    s.sunColor.setRGB(1.5, 1.42, 1.3).lerp(this.tmpC2.setRGB(2.2, 1.05, 0.5), dusk).multiplyScalar(day > 0 ? 1 : 0);
+    s.cloud = wet; s.night = this.night; s.dusk = dusk;
+    this.skyDome.update(s, this.clock);
+    // Environnement (éclairage) : mêmes teintes que le ciel, mais ramenées à une luminance d'ambiance (le ciel
+    // affiché, presque blanc à l'horizon, éclairerait dix fois trop) et en partie désaturées (ambiance moins bleue).
+    const e = this.envState, lum = (x: THREE.Color): number => 0.2126 * x.r + 0.7152 * x.g + 0.0722 * x.b;
+    const sc = (0.025 + 0.3 * day) / Math.max(1e-4, (lum(s.zenith) + 2 * lum(s.horizon)) / 3);
+    const desat = (x: THREE.Color, k2: number): THREE.Color => x.lerp(this.tmpC2.setScalar(lum(x)), k2);
+    desat(e.zenith.copy(s.zenith).multiplyScalar(sc), 0.45);
+    desat(e.horizon.copy(s.horizon).multiplyScalar(sc), 0.35 - 0.2 * dusk);
+    e.ground.setRGB(0.2, 0.19, 0.17).multiplyScalar(0.08 + 0.92 * day * (1 - 0.4 * wet));
+    e.sunColor.copy(s.sunColor).multiplyScalar(0.35);
+    e.sunDir.copy(s.sunDir); e.cloud = wet; e.night = this.night; e.dusk = dusk;
+    // Brouillard des matériaux (qualités basse et moyenne : appliqué à l'écran, après le tone mapping) ; avec le
+    // post-traitement, la brume est calculée dans la passe finale et celui-ci ne garde que le fondu des globes.
+    const fog = this.street.fog as THREE.Fog;
+    if (this.post) { fog.near = 1e6; fog.far = 2e6; fog.color.copy(s.horizon); }
+    else {
+      fog.near = 160 - 110 * wet; fog.far = 620 - 330 * wet;
+      fog.color.setHex(0x1b2842).lerp(this.tmpC2.setHex(0xd3e8f8), day).lerp(this.tmpC2.setHex(0xffa66a), k * 0.85).lerp(this.tmpC2.setHex(0xc6cdd4).multiplyScalar(grey), wet * 0.8);
+    }
+    (this.street.background as THREE.Color).copy(fog.color);
+    this.view.setNight(this.night, h);
+    this.interior?.view.setDaylight(day);
+  }
+  private readonly tmpV = new THREE.Vector3();
+  private readonly tmpC = new THREE.Color();
+  private readonly tmpC2 = new THREE.Color();
+  /** Direction vers la lumière principale (soleil ou lune) et axes de la carte d'ombre (droite, haut). */
+  private readonly lightDir = new THREE.Vector3(-90, 160, 60).normalize();
+  private readonly sunRight = new THREE.Vector3();
+  private readonly sunUp = new THREE.Vector3();
+  private setLightDir(L: THREE.Vector3): void {
+    this.lightDir.copy(L);
+    const m = new THREE.Matrix4().lookAt(new THREE.Vector3(), this.tmpV.copy(L).negate(), new THREE.Vector3(0, 1, 0));
+    m.extractBasis(this.sunRight, this.sunUp, new THREE.Vector3());
   }
   /** Caméra de rue mémorisée pendant la visite d'un intérieur. */
   private streetCam = { yaw: 0, pitch: 0, dist: 0 };
@@ -101,12 +188,16 @@ export class Scene3D {
     // (pixel ratio ≥ 1,5) le crénelage se voit à peine et le MSAA coûte cher (≈ 25 % de l'image en rendu logiciel).
     // Le MSAA est fixé à la création du contexte : si la qualité basse est la préférence enregistrée (« bc-qualite »,
     // réglage de l'interface), il est omis dès le chargement et un FXAA léger le remplace (voir `fxaa`).
-    let low = false;
-    try { low = localStorage.getItem('bc-qualite') === 'basse'; } catch { /* stockage indisponible */ }
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !low && (window.devicePixelRatio || 1) < 1.5, powerPreference: 'high-performance' });
+    // Qualités haute et ultra : le post-traitement a son propre MSAA (cible de rendu) ; celui du contexte est alors
+    // omis aussi (s'il redescend en moyenne, le FXAA le remplace, comme en basse).
+    let pref = 'auto';
+    try { pref = localStorage.getItem('bc-qualite') ?? 'auto'; } catch { /* stockage indisponible */ }
+    const ownAA = pref === 'basse' || pref === 'haute' || pref === 'ultra';
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !ownAA && (window.devicePixelRatio || 1) < 1.5, powerPreference: 'high-performance' });
     this.msaa = this.renderer.getContext().getContextAttributes()?.antialias === true;
     this.fxaa = !this.msaa && (window.devicePixelRatio || 1) < 1.5;
-    // Compteurs remis à zéro à chaque image (voir frame) : scène et passe FXAA comptées ensemble.
+    this.postOk = this.renderer.extensions.has('EXT_color_buffer_float') || this.renderer.extensions.has('EXT_color_buffer_half_float');
+    // Compteurs remis à zéro à chaque image (voir frame) : scène et passes de post-traitement comptées ensemble.
     this.renderer.info.autoReset = false;
     this.renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
     this.renderer.shadowMap.enabled = true;
@@ -114,31 +205,22 @@ export class Scene3D {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.street.background = new THREE.Color(0xa9cbe6);
-    // Ciel en dégradé (dôme) : couleur du zénith et de l'horizon suivant l'heure et la météo.
-    this.skyMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { top: { value: new THREE.Color(0x5d93d6) }, horizon: { value: new THREE.Color(0xcfe3f2) } },
-      vertexShader: 'varying vec3 vP; void main() { vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main() { float h = clamp(vP.y * 1.6, 0.0, 1.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.7)), 1.0); }',
-    });
-    // Rayon sous le plan lointain de la caméra (1200 m), sinon le dôme est entièrement découpé. Dessiné après les
-    // objets opaques (test de profondeur) : seuls les pixels de ciel encore libres sont calculés.
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 24, 12), this.skyMat);
-    this.sky.renderOrder = 10;
-    this.sky.frustumCulled = false;
-    this.street.add(this.sky);
+    // Dôme du ciel : rayon sous le plan lointain de la caméra (1200 m), sinon il est entièrement découpé. Dessiné
+    // après les objets opaques (test de profondeur) : seuls les pixels de ciel encore libres sont calculés.
+    this.street.add(this.skyDome.mesh);
     this.street.fog = new THREE.Fog(0xa9cbe6, 160, 620);
-    this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1200);
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.25, 1200);
 
     this.street.add(this.hemi);
     for (let k = 0; k < 3; k++) { const l = new THREE.PointLight(0xffd9a0, 0, 22, 1.6); this.lamps.push(l); this.street.add(l); }
     this.sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    const s = Scene3D.SHADOW_EXTENT;
-    Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 10, far: 400 });
+    const s = this.shadowExtent;
+    Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 10, far: 700 });
     this.sun.shadow.bias = -0.0005; this.sun.shadow.normalBias = 0.4;
     this.street.add(this.sun, this.sun.target);
+    this.setLightDir(this.lightDir.clone());
 
     this.view = new DistrictView(district);
     this.street.add(this.view.group);
@@ -168,33 +250,76 @@ export class Scene3D {
     this.street.add(this.beacon);
 
     this.cam = new FollowCamera(canvas);
+    this.quality = this.suggestedQuality = Scene3D.autoLevel(this.renderer);
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
 
-  /** Demi-côté (m) de la zone couverte par la carte d'ombre du soleil, autour du joueur. */
-  private static readonly SHADOW_EXTENT = 70;
-  /** Direction du soleil (vers le sol) et axes de sa carte d'ombre (droite, haut). */
-  private static readonly SUN_DIR = new THREE.Vector3(90, -160, -60);
-  private static readonly SUN_RIGHT = new THREE.Vector3();
-  private static readonly SUN_UP = new THREE.Vector3();
-  static {
-    const m = new THREE.Matrix4().lookAt(new THREE.Vector3(), Scene3D.SUN_DIR, new THREE.Vector3(0, 1, 0));
-    m.extractBasis(Scene3D.SUN_RIGHT, Scene3D.SUN_UP, new THREE.Vector3());
+  /**
+   * Qualité de départ du mode automatique selon la carte graphique : basse en rendu logiciel, ultra sur une carte
+   * dédiée (NVIDIA, Radeon RX / Pro, Intel Arc), haute sinon (graphismes intégrés, Apple) ; le mode automatique
+   * ajuste ensuite selon les images par seconde.
+   */
+  static autoLevel(r: THREE.WebGLRenderer): number {
+    const gl = r.getContext();
+    let name = '';
+    try {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).toLowerCase();
+    } catch { /* inconnu */ }
+    if (/swiftshader|llvmpipe|softpipe|software|basic render|mesa offscreen/.test(name)) return 0;
+    if (/nvidia|geforce|quadro|rtx|radeon rx|radeon pro|radeon r9|intel\(r\) arc|\barc a\d/.test(name)) return 3;
+    return 2;
   }
+  readonly suggestedQuality: number;
+
+  /** Demi-côté (m) de la zone couverte par la carte d'ombre du soleil (décalée vers ce que regarde la caméra). */
+  private shadowExtent = 70;
   private readonly shadowCenter = new THREE.Vector3();
 
-  /** Niveau de qualité : 0 = basse (résolution 1, pas d'ombres, FXAA au lieu du MSAA), 1 = moyenne, 2 = haute. */
+  /**
+   * Niveau de qualité : 0 = basse (résolution 1, pas d'ombres, FXAA au lieu du MSAA), 1 = moyenne (ombres 1024),
+   * 2 = haute (environnement, ciel détaillé, ombres douces 2048 élargies, post-traitement : occlusion en
+   * demi-résolution, halo, brume, étalonnage), 3 = ultra (résolution jusqu'à 2, ombres 4096 sur une zone plus
+   * grande, occlusion en pleine résolution, MSAA même sur écran haute densité).
+   */
   quality = 2;
   setQuality(level: number): void {
-    this.quality = Math.max(0, Math.min(2, level));
+    const q = this.quality = Math.max(0, Math.min(3, Math.round(level)));
     const dpr = window.devicePixelRatio || 1;
-    this.fxaa = !this.msaa && (this.quality === 0 || dpr < 1.5);
-    this.renderer.setPixelRatio([1, Math.min(1.25, dpr), Math.min(1.75, dpr)][this.quality]!);
-    this.renderer.shadowMap.enabled = this.quality > 0;
-    this.sun.castShadow = this.quality > 0;
-    const size = this.quality === 2 ? 2048 : 1024;
+    const usePost = q >= 2 && this.postOk;
+    this.fxaa = !usePost && !this.msaa && (q === 0 || dpr < 1.5);
+    this.renderer.setPixelRatio([1, Math.min(1.25, dpr), Math.min(1.75, dpr), Math.min(2, dpr)][q]!);
+    this.renderer.shadowMap.enabled = q > 0;
+    this.sun.castShadow = q > 0;
+    const size = Math.min([1024, 1024, 2048, 4096][q]!, this.renderer.capabilities.maxTextureSize);
     if (this.sun.shadow.mapSize.x !== size) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null; }
+    const ext = this.shadowExtent = [70, 70, 90, 120][q]!;
+    Object.assign(this.sun.shadow.camera, { left: -ext, right: ext, top: ext, bottom: -ext });
+    this.sun.shadow.camera.updateProjectionMatrix();
+    // Pénombre (rayon du filtrage PCF, en texels) : plus large en haute et ultra.
+    this.sun.shadow.radius = [1, 1, 2.4, 3][q]!;
+    if (usePost) {
+      this.post ??= new PostFX();
+      const msaa = dpr < 1.5 || q === 3;
+      this.post.configure({ msaa, fxaa: !msaa && dpr < 1.5, aoFull: q === 3, aoSamples: q === 3 ? 16 : 10, bloomLevels: q === 3 ? 5 : 4 });
+    } else if (this.post) { this.post.dispose(); this.post = null; }
+    // Environnement : carte calculée depuis le ciel (et pièce éclairée pour les intérieurs).
+    const envSize = q === 3 ? 128 : 64;
+    if (q >= 2) {
+      if (this.env?.target.width !== envSize) { this.env?.dispose(); this.env = new AnalyticEnv(envSize, 'ciel'); }
+      this.roomEnv ??= new AnalyticEnv(64, 'piece');
+    } else {
+      this.env?.dispose(); this.env = null;
+      this.roomEnv?.dispose(); this.roomEnv = null;
+    }
+    this.street.environment = this.env?.texture ?? null;
+    this.skyDome.setHQ(q >= 2);
+    this.view.setQuality(q);
+    this.life.setQuality(q);
+    if (this.interior) this.interior.view.setLook(q, this.roomEnv?.texture ?? null);
+    // Variantes de shaders à compiler de nouveau (lampes allumées comprises).
+    this.lampsWarm = false;
     this.resize();
   }
 
@@ -217,6 +342,8 @@ export class Scene3D {
     this.exitInterior();
     this.interior = { view, agents };
     view.scene.add(this.player.group);
+    view.setLook(this.quality, this.roomEnv?.texture ?? null);
+    view.setDaylight(this.day);
     this.streetCam = { yaw: this.cam.yaw, pitch: this.cam.pitch, dist: this.cam.dist };
     Object.assign(this.cam, { yaw: 0, pitch: 0.95, dist: Math.max(view.W, view.D) * 0.95 + 2, minDist: 3, maxDist: 22, minPitch: 0.35, maxPitch: 1.45 });
   }
@@ -286,24 +413,30 @@ export class Scene3D {
   /** Une image : `focus` = point suivi (tête du personnage ou véhicule). */
   frame(dt: number, focus: THREE.Vector3, snap = false): void {
     this.renderer.info.reset();
+    this.clock += dt;
     if (this.interior) {
       this.cam.apply(this.camera, focus, dt, undefined, snap);
       this.interior.view.updateCutaway(this.camera, snap ? 1 : dt);
-      this.renderer.render(this.interior.view.scene, this.camera);
-      if (this.fxaa) this.antialias();
+      this.roomEnv?.updateRoom(this.renderer, this.interior.view.roomState());
+      this.draw(this.interior.view.scene, true);
       return;
     }
     this.cam.apply(this.camera, focus, dt, (a, b) => this.collider.clearFraction(a.x, a.y, a.z, b.x, b.y, b.z), snap);
-    // Carte d'ombre centrée sur le joueur, recalée sur sa grille de texels dans le repère de la lumière (les bords
-    // d'ombre ne scintillent pas quand on marche).
-    const texel = (2 * Scene3D.SHADOW_EXTENT) / this.sun.shadow.mapSize.x;
+    // Carte d'ombre centrée sur le joueur (en haute et ultra : avancée vers ce que regarde la caméra, pour couvrir la
+    // rue devant), recalée sur sa grille de texels dans le repère de la lumière (les bords d'ombre ne scintillent
+    // pas quand on marche).
+    const ext = this.shadowExtent, texel = (2 * ext) / this.sun.shadow.mapSize.x;
     const c = this.shadowCenter.copy(focus).setY(0);
-    const r = c.dot(Scene3D.SUN_RIGHT), u = c.dot(Scene3D.SUN_UP);
-    c.addScaledVector(Scene3D.SUN_RIGHT, Math.round(r / texel) * texel - r)
-      .addScaledVector(Scene3D.SUN_UP, Math.round(u / texel) * texel - u);
+    if (this.quality >= 2) {
+      const f = this.tmpV.copy(focus).sub(this.camera.position).setY(0);
+      if (f.lengthSq() > 1e-6) c.addScaledVector(f.normalize(), ext * 0.45);
+    }
+    const r = c.dot(this.sunRight), u = c.dot(this.sunUp);
+    c.addScaledVector(this.sunRight, Math.round(r / texel) * texel - r)
+      .addScaledVector(this.sunUp, Math.round(u / texel) * texel - u);
     this.sun.target.position.copy(c);
-    this.sun.position.copy(c).sub(Scene3D.SUN_DIR);
-    this.sky.position.set(focus.x, 0, focus.z);
+    this.sun.position.copy(c).addScaledVector(this.lightDir, 300);
+    this.skyDome.mesh.position.set(focus.x, 0, focus.z);
     this.people.update(dt);
     this.life.update(dt, focus);
     this.view.updateLabels(this.camera, dt);
@@ -327,9 +460,14 @@ export class Scene3D {
       this.lampsWarm = true;
       const vis = this.lamps.map((l) => l.visible);
       this.lamps.forEach((l) => { l.visible = true; });
+      // Variante des shaders du chemin de rendu courant (cible HDR du post-traitement, ou écran).
+      const prev = this.renderer.getRenderTarget();
+      if (this.post) this.renderer.setRenderTarget(this.post.sceneTarget(this.renderer));
       this.renderer.compileAsync(this.street, this.camera).catch(() => { /* compilé au premier usage */ });
+      this.renderer.setRenderTarget(prev);
       this.lamps.forEach((l, k) => { l.visible = vis[k]!; });
     }
+    this.env?.updateSky(this.renderer, this.envState);
     if (this.rain && this.rainOn) {
       this.rain.position.set(focus.x, 0, focus.z);
       const a = this.rain.geometry.getAttribute('position') as THREE.BufferAttribute, arr = a.array as Float32Array;
@@ -337,31 +475,47 @@ export class Scene3D {
       for (let i = 1; i < arr.length; i += 6) { arr[i]! -= fall; arr[i + 3]! -= fall; if (arr[i]! < 0) { arr[i]! += 40; arr[i + 3]! += 40; } }
       a.needsUpdate = true;
     }
-    this.renderer.render(this.street, this.camera);
+    this.draw(this.street, false);
+  }
+
+  /** Rendu de la scène : post-traitement (haute, ultra) ou direct à l'écran (basse, moyenne ; FXAA éventuel). */
+  private draw(scene: THREE.Scene, inside: boolean): void {
+    if (this.post) {
+      this.postFor(inside);
+      this.post.render(this.renderer, scene, this.camera, this.postParams);
+      return;
+    }
+    this.renderer.render(scene, this.camera);
     if (this.fxaa) this.antialias();
   }
+
+  /**
+   * Réglages du post-traitement : intérieur (occlusion serrée, halo discret des appliques, tons chauds) ou rue selon
+   * l'heure et la météo (halo des lumières surtout la nuit, brume teintée vers le soleil au crépuscule, ombres
+   * bleutées et lumières chaudes, saturation un peu plus forte au coucher du soleil, plus faible sous la pluie).
+   */
+  private postFor(inside: boolean): void {
+    const p = this.postParams, d = this.day, n = this.night, k = this.dusk, wet = this.cloud, s = this.skyState, t = this.tmpC;
+    p.exposure = this.renderer.toneMappingExposure;
+    if (inside) {
+      // Intérieur éclairé : même exposition de jour comme de nuit.
+      p.exposure = 1;
+      p.ao = 1; p.aoRadius = 0.55;
+      p.bloom = 0.22; p.bloomThreshold = 2.2;
+      p.contrast = 1.05; p.saturation = 1.08;
+      p.shadowTint.setRGB(0.97, 0.96, 1); p.highlightTint.setRGB(1.04, 1, 0.94);
+      p.vignette = 0.3; p.fog = 0;
+      return;
+    }
+    p.ao = 0.85; p.aoRadius = 1.4;
+    p.bloom = 0.16 + 0.6 * n + 0.12 * k; p.bloomThreshold = 6 - 4.8 * n;
+    p.contrast = 1.05 + 0.03 * d * (1 - wet); p.saturation = 1.1 + 0.12 * k - 0.15 * wet - 0.1 * n;
+    p.shadowTint.setRGB(0.97, 0.99, 1.04).lerp(t.setRGB(0.95, 0.92, 1.06), k).lerp(t.setRGB(0.88, 0.94, 1.12), n);
+    p.highlightTint.setRGB(1.03, 1, 0.96).lerp(t.setRGB(1.08, 0.98, 0.86), k).lerp(t.setRGB(1.06, 1, 0.9), n);
+    p.vignette = 0.2 + 0.1 * n;
+    p.fog = (0.0009 + 0.005 * wet) * (1 - 0.3 * n); p.fogHeight = 0.012; p.fogMax = 0.8;
+    p.fogColor.copy(s.horizon);
+    p.fogSunColor.copy(s.horizon).lerp(t.copy(s.sunColor).multiplyScalar(0.6), d > 0 ? 0.15 + 0.5 * k : 0);
+    p.sunDir.copy(s.sunDir);
+  }
 }
-
-const FXAA_VERT = `precision highp float;
-attribute vec3 position; attribute vec2 uv; varying vec2 vUv;
-void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
-
-/** FXAA « console » (Lottes) : direction du bord d'après 4 voisins diagonaux, puis 2 ou 4 lectures le long du bord. */
-const FXAA_FRAG = `precision highp float;
-uniform sampler2D tDiffuse; uniform vec2 texel; varying vec2 vUv;
-float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-void main() {
-  vec4 m = texture2D(tDiffuse, vUv);
-  float lNW = luma(texture2D(tDiffuse, vUv + vec2(-1.0, -1.0) * texel).rgb), lNE = luma(texture2D(tDiffuse, vUv + vec2(1.0, -1.0) * texel).rgb);
-  float lSW = luma(texture2D(tDiffuse, vUv + vec2(-1.0, 1.0) * texel).rgb), lSE = luma(texture2D(tDiffuse, vUv + vec2(1.0, 1.0) * texel).rgb);
-  float lM = luma(m.rgb);
-  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE))), lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
-  if (lMax - lMin < max(0.0312, lMax * 0.125)) { gl_FragColor = m; return; }
-  vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
-  float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);
-  dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * texel;
-  vec3 a = 0.5 * (texture2D(tDiffuse, vUv - dir / 6.0).rgb + texture2D(tDiffuse, vUv + dir / 6.0).rgb);
-  vec3 b = 0.5 * a + 0.25 * (texture2D(tDiffuse, vUv - dir * 0.5).rgb + texture2D(tDiffuse, vUv + dir * 0.5).rgb);
-  float lB = luma(b);
-  gl_FragColor = vec4(lB < lMin || lB > lMax ? a : b, m.a);
-}`;

@@ -1,6 +1,7 @@
 /**
- * Véhicules : modèles du joueur (scooter, camionnette) et circulation d'ambiance (voitures instanciées qui suivent
- * les voies des rues et s'arrêtent devant le personnage). Avant des modèles vers −z (cap 0). Dépend de three.
+ * Véhicules : modèles du joueur (scooter, citadine, sportive, SUV, camionnette, camion) et circulation d'ambiance
+ * (voitures instanciées qui suivent les voies des rues et s'arrêtent devant le personnage). Avant des modèles vers −z
+ * (cap 0). Dépend de three.
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -11,8 +12,9 @@ import { assets } from '../assets';
 import { box, cyl, mat } from './kit';
 
 export function buildVehicle(type: VehicleType): THREE.Group {
-  // Modèles du Car Kit à l'échelle (largeur réelle), avant vers −z ; sinon modèle fait en code.
-  const kit: Partial<Record<VehicleType, [string, number]>> = { citadine: ['auto.citadine', 1.8], sportive: ['auto.sport', 1.9], suv: ['auto.suv-luxe', 2.0], camionnette: ['auto.camionnette', 2.1], camion: ['auto.camion', 2.4] };
+  // Modèles du Car Kit à l'échelle (largeur réelle, gabarits dans VEHICLE_BODY), avant vers −z ; sinon modèle fait en
+  // code. Camion de livraison : le fourgon à caisse (le pick-up vert ressemblait à la citadine).
+  const kit: Partial<Record<VehicleType, [string, number]>> = { citadine: ['auto.citadine', 1.8], sportive: ['auto.sport', 1.9], suv: ['auto.suv-luxe', 2.0], camionnette: ['auto.camionnette', 2.1], camion: ['auto.livraison', 2.4] };
   const km = kit[type];
   if (km) {
     const sz = assets.size(km[0]);
@@ -62,7 +64,7 @@ export class PlayerVehicles {
   }
 }
 
-interface Car { axis: 'x' | 'z'; line: number; dir: 1 | -1; s: number; v: number; color: THREE.Color; variant: number; slot: number }
+interface Car { axis: 'x' | 'z'; line: number; dir: 1 | -1; s: number; v: number; color: THREE.Color; variant: number; slot: number; stopped?: boolean }
 
 /** Modèles de la circulation (fréquence = répétitions) ; largeur réelle de chacun (m). */
 const CAR_KEYS = ['auto.berline', 'auto.taxi', 'auto.suv', 'auto.citadine', 'auto.livraison', 'auto.berline', 'auto.sport', 'auto.suv-luxe',
@@ -124,6 +126,24 @@ export class Traffic {
     }
   }
 
+  /**
+   * Point le plus proche de (x, z) sur une voiture de la circulation (rectangle de 2 × 4,4 m) à moins de `max` m, et
+   * sa distance ; null s'il n'y en a pas : pour expliquer au joueur que ces voitures ne sont pas à lui. `stopped` :
+   * seulement les voitures arrêtées devant le personnage (pas celles qui passent).
+   */
+  nearestPoint(x: number, z: number, max = 6, stopped = false): { x: number; z: number; d: number } | null {
+    let best: { x: number; z: number; d: number } | null = null;
+    for (const c of this.cars) {
+      if (stopped && !c.stopped) continue;
+      const [cx, cz] = this.pos(c);
+      const hx = c.axis === 'x' ? 2.2 : 1, hz = c.axis === 'x' ? 1 : 2.2;
+      const px = Math.max(cx - hx, Math.min(x, cx + hx)), pz = Math.max(cz - hz, Math.min(z, cz + hz));
+      const d = Math.hypot(px - x, pz - z);
+      if (d <= max && (!best || d < best.d)) best = { x: px, z: pz, d };
+    }
+    return best;
+  }
+
   /** Position monde d'une voiture (voie de droite, à 2,6 m de l'axe). */
   private pos(c: Car): [number, number] {
     const off = 2.6 * c.dir;
@@ -140,6 +160,7 @@ export class Traffic {
         const ahead = (ox - x) * fx + (oz - z) * fz, side = Math.abs((ox - x) * fz - (oz - z) * fx);
         if (ahead > 0 && ahead < 7 && side < 1.8) { blocked = true; break; }
       }
+      c.stopped = blocked;
       if (!blocked) c.s += c.v * c.dir * dt;
       const len = c.axis === 'x' ? this.half.w : this.half.d;
       if (c.s > len) c.s = -len; else if (c.s < -len) c.s = len;

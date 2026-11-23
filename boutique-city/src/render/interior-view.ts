@@ -16,6 +16,7 @@ import type { ShopType } from '../sim/catalog';
 import { assets } from '../assets';
 import { buildFurniture, furnitureSize } from './furniture3d';
 import { box, cyl, disposeOwn, hashRand, mat, textPlane } from './kit';
+import type { RoomState } from './sky';
 
 export const WALL_H = 3.2;
 
@@ -59,6 +60,17 @@ export class InteriorView {
   private readonly dirt: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>;
   private surfKey = '';
   private dirtLevel = -1;
+  private readonly theme: Theme | null;
+  private readonly hemi: THREE.HemisphereLight;
+  private readonly lampLights: THREE.PointLight[] = [];
+  /** Ombres de contact sous les meubles (disques sombres à bord doux, un seul appel de dessin) et leur signature. */
+  private contact: THREE.InstancedMesh | null = null;
+  private contactKey = '';
+  private contactGeo: THREE.PlaneGeometry | null = null;
+  private contactMat: THREE.MeshBasicMaterial | null = null;
+  /** Qualité courante et jour (0 nuit … 1 plein jour) : lumière de la vitrine, lampes, reflets. */
+  private look = 1;
+  private daylight = 1;
 
   constructor(readonly opts: InteriorOpts) {
     this.W = opts.gridW; this.D = opts.gridD;
@@ -67,8 +79,11 @@ export class InteriorView {
     const kind = opts.kind ?? guessKind(opts);
     const theme = kind ? THEMES[kind] : null;
     // Éclairage intérieur chaud : ciel crème et sol ambré, lumière principale dorée (ombres), et deux à trois
-    // lampes ponctuelles sans ombre au plafond (halo chaud sur le mobilier).
-    this.scene.add(new THREE.HemisphereLight(0xfff0d8, 0x5a4434, 1.2));
+    // lampes ponctuelles sans ombre au plafond (halo chaud sur le mobilier). Jour de la vitrine et lampes suivent
+    // l'heure (setDaylight) ; reflets de la pièce en haute et ultra (setLook).
+    this.theme = theme;
+    this.hemi = new THREE.HemisphereLight(0xffecd2, 0x6b4a33, 1.2);
+    this.scene.add(this.hemi);
     const sun = new THREE.DirectionalLight(0xffe4bf, 1.35);
     sun.position.set(-W * 0.4, 12, D * 0.9);
     sun.target.position.set(0, 0, 0);
@@ -84,10 +99,11 @@ export class InteriorView {
       const pl = new THREE.PointLight(theme?.lamp ?? 0xffc98a, 5 + Math.max(W, D) * 0.6, 0, 2);
       pl.position.set(((i + 0.5) / lamps - 0.5) * W * 0.8, WALL_H - 0.3, -D * 0.12 + (i % 2 ? D * 0.18 : -D * 0.05));
       this.scene.add(pl);
+      this.lampLights.push(pl);
     }
 
-    // Sol intérieur, trottoir et rue devant la vitrine, sol sombre autour.
-    this.floorBase = { spec: theme?.floor ?? (opts.floor === 'carrelage' ? FLOORS.carreaux : FLOORS.parquet), rough: opts.floor === 'carrelage' ? 0.35 : 0.6 };
+    // Sol intérieur, trottoir et rue devant la vitrine, sol sombre autour. Sols un peu brillants (reflets doux).
+    this.floorBase = { spec: theme?.floor ?? (opts.floor === 'carrelage' ? FLOORS.carreaux : FLOORS.parquet), rough: opts.floor === 'carrelage' ? 0.24 : 0.42 };
     this.floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(this.floorBase.spec, W, D), roughness: this.floorBase.rough });
     this.floorMat.userData['own'] = true;
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D).rotateX(-Math.PI / 2), this.floorMat);
@@ -146,7 +162,7 @@ export class InteriorView {
     for (let z = 0; z <= D; z++) pts.push(-W / 2, 0.012, z - D / 2, W / 2, 0.012, z - D / 2);
     const gg = new THREE.BufferGeometry();
     gg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    this.grid = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0x5fc3ff, transparent: true, opacity: 0.45 }));
+    this.grid = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0x5fc3ff, transparent: true, opacity: 0.45, depthWrite: false }));
     this.grid.visible = false;
     this.scene.add(this.grid);
     this.highlight = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.22, depthWrite: false }));
@@ -260,7 +276,80 @@ export class InteriorView {
     }
     for (const [uid, cur] of this.itemObjs) if (!keep.has(uid)) { this.furniture.remove(cur.obj); disposeOwn(cur.obj); this.itemObjs.delete(uid); }
     this.rebuildCollision();
+    this.rebuildContact();
   }
+
+  /**
+   * Ombres de contact : sous chaque meuble posé (sauf les tapis), un disque sombre à bord doux un peu plus grand que
+   * son emprise, juste au-dessus du sol. Ancre les meubles au sol à toutes les qualités (même sans carte d'ombre).
+   */
+  private rebuildContact(): void {
+    const list = this.items.filter((it) => it.def !== 'tapis');
+    const key = list.map((it) => `${it.def}|${it.x}|${it.z}|${it.rot}`).join(';');
+    if (key === this.contactKey) return;
+    this.contactKey = key;
+    if (this.contact) { this.scene.remove(this.contact); this.contact.dispose(); this.contact = null; }
+    if (!list.length) return;
+    this.contactGeo ??= new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    if (!this.contactMat) {
+      this.contactMat = new THREE.MeshBasicMaterial({ map: contactTexture(), color: 0x24170e, transparent: true, opacity: 0.62, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+      this.contactMat.userData['own'] = true;
+    }
+    const im = new THREE.InstancedMesh(this.contactGeo, this.contactMat, list.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    list.forEach((it, k) => {
+      const f = rotSize(it.def, it.rot);
+      im.setMatrixAt(k, m.compose(p.set(it.x + f.w / 2 - this.W / 2, 0.009, it.z + f.d / 2 - this.D / 2), q, s.set(f.w + 0.35, 1, f.d + 0.35)));
+    });
+    im.renderOrder = 1;
+    im.computeBoundingSphere();
+    this.contact = im;
+    this.scene.add(im);
+  }
+
+  /**
+   * Qualité : en haute et ultra, environnement de la pièce (reflets doux sur les sols et les meubles brillants,
+   * lumière ambiante moins uniforme) et ombres plus douces.
+   */
+  setLook(q: number, env: THREE.Texture | null): void {
+    this.look = q;
+    this.scene.environment = q >= 2 ? env : null;
+    this.scene.environmentIntensity = 0.8;
+    const size = q >= 2 ? 2048 : 1024;
+    if (this.sun.shadow.mapSize.x !== size) { this.sun.shadow.mapSize.set(size, size); this.sun.shadow.map?.dispose(); this.sun.shadow.map = null; }
+    this.sun.shadow.radius = q >= 2 ? 3 : 1;
+    this.applyLight();
+  }
+
+  /** Jour (0 nuit … 1 plein jour) : lumière froide et faible par la vitrine la nuit, lampes un peu plus fortes. */
+  setDaylight(day: number): void {
+    const d = Math.round(day * 20) / 20;
+    if (d === this.daylight) return;
+    this.daylight = d;
+    this.applyLight();
+  }
+
+  private applyLight(): void {
+    const d = this.daylight, env = this.look >= 2 && this.scene.environment !== null;
+    this.sun.intensity = 0.4 + 0.95 * d;
+    this.sun.color.setRGB(0.55, 0.62, 0.85).lerp(new THREE.Color(0xffe4bf), d);
+    this.hemi.intensity = 1.2 * (0.85 + 0.15 * d) * (env ? 0.45 : 1);
+    const base = 5 + Math.max(this.W, this.D) * 0.6;
+    for (const l of this.lampLights) l.intensity = base * (1 + 0.3 * (1 - d));
+  }
+
+  /** Couleurs de la pièce pour son environnement (murs, sol, plafond, plafonniers, vitrine selon le jour). */
+  roomState(): RoomState {
+    const r = this.room, d = this.daylight;
+    r.wall.set(this.opts.wall).multiplyScalar(0.3);
+    r.floor.set(this.floorBase.spec.c[0]!).multiplyScalar(0.15);
+    r.ceil.setRGB(0.85, 0.8, 0.72).multiplyScalar(0.4);
+    r.lamp.setHex(this.theme?.lamp ?? 0xffc98a).multiplyScalar(1.3);
+    r.window.setRGB(0.04, 0.05, 0.09).lerp(this.tmpColor.setRGB(0.8, 0.88, 1), d);
+    return r;
+  }
+  private readonly room: RoomState = { wall: new THREE.Color(), floor: new THREE.Color(), ceil: new THREE.Color(), lamp: new THREE.Color(), window: new THREE.Color() };
+  private readonly tmpColor = new THREE.Color();
 
   private placeObj(obj: THREE.Object3D, def: string, x: number, z: number, rot: Rot): void {
     const f = rotSize(def, rot);
@@ -499,10 +588,10 @@ function floorTexture(f: FloorSpec, W: number, D: number): THREE.CanvasTexture {
 
 /** Sols du catalogue des revêtements (ids de FLOORINGS) : motif et rugosité (« origine » : sol du type). */
 const FLOOR_SURF: Record<string, { spec: FloorSpec; rough: number }> = {
-  lino: { spec: { pattern: 'lino', c: ['#a9bdb1', '#e4ece6', '#5f6f66'] }, rough: 0.55 },
-  carrelage: { spec: { pattern: 'dalles', c: ['#f1eee8', '#e2ddd3', '#bdb6aa'] }, rough: 0.3 },
-  chene: { spec: { pattern: 'lames', c: ['#c08a55', '#b07c4a', '#c99760', '#a87444'] }, rough: 0.5 },
-  marbre: { spec: { pattern: 'marbre', c: ['#f2f0ec', '#e4e1db', '#8e8a86'] }, rough: 0.15 },
+  lino: { spec: { pattern: 'lino', c: ['#a9bdb1', '#e4ece6', '#5f6f66'] }, rough: 0.45 },
+  carrelage: { spec: { pattern: 'dalles', c: ['#f1eee8', '#e2ddd3', '#bdb6aa'] }, rough: 0.2 },
+  chene: { spec: { pattern: 'lames', c: ['#c08a55', '#b07c4a', '#c99760', '#a87444'] }, rough: 0.38 },
+  marbre: { spec: { pattern: 'marbre', c: ['#f2f0ec', '#e4e1db', '#8e8a86'] }, rough: 0.1 },
 };
 /** Revêtements muraux (ids de WALLINGS) : motif, couleurs [fond, motif, joint], rugosité. */
 interface WallSpec { pattern: 'uni' | 'papier' | 'lambris' | 'brique'; c: [string, string, string]; rough: number }
@@ -762,4 +851,26 @@ function backdrop(): THREE.CanvasTexture {
   backdropTex = new THREE.CanvasTexture(cv);
   backdropTex.colorSpace = THREE.SRGBColorSpace;
   return backdropTex;
+}
+
+/** Ombre de contact : rectangle sombre aux bords très adoucis (alpha), étiré à l'emprise du meuble. */
+function contactTexture(): THREE.CanvasTexture {
+  const N = 64, cv = document.createElement('canvas');
+  cv.width = cv.height = N;
+  const g = cv.getContext('2d')!;
+  const img = g.createImageData(N, N);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    // Distance au rectangle intérieur (marge de 22 %), puis fondu jusqu'au bord.
+    const u = Math.abs((x + 0.5) / N - 0.5) * 2, v = Math.abs((y + 0.5) / N - 0.5) * 2;
+    const dx = Math.max(0, u - 0.56), dy = Math.max(0, v - 0.56);
+    const t = Math.min(1, Math.hypot(dx, dy) / 0.44);
+    const a = (1 - t) * (1 - t) * (0.75 + 0.25 * (1 - Math.max(u, v)));
+    const i = (y * N + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+    img.data[i + 3] = Math.round(a * 255);
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }

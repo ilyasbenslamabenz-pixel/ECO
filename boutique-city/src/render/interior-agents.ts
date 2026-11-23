@@ -675,7 +675,7 @@ function bubbleMaterial(kind: FeedbackKind): THREE.SpriteMaterial {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false });
   bubbleCache.set(kind, m);
   return m;
 }
@@ -692,7 +692,7 @@ function moneyMaterial(amount: number): THREE.SpriteMaterial {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true });
   drawMoney(m, amount);
   return m;
 }
@@ -730,7 +730,7 @@ function iconMaterial(mood: Mood): THREE.SpriteMaterial {
   drawFace(g, 64, 64, 46, mood);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const m = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false });
   iconCache.set(mood, m);
   return m;
 }

@@ -208,8 +208,11 @@ export class AssetLib {
       if (m.isMesh) {
         m.castShadow = true; m.receiveShadow = true; m.geometry.userData['shared'] = true;
         // Packs sans « metallicFactor » (Nature Kit) : métal par défaut du glTF, noir sans carte d'environnement.
+        // Rugosité par défaut du glTF (1, mat absolu) : un peu moins rugueux, pour un léger lustré sous le soleil et
+        // dans les reflets de l'environnement (plus encore pour les modèles à palette : peinture, plastique).
         for (const mt of (Array.isArray(m.material) ? m.material : [m.material]) as THREE.MeshStandardMaterial[]) {
           if (mt.isMeshStandardMaterial && mt.metalness > 0.5 && !mt.metalnessMap) mt.metalness = 0;
+          if (mt.isMeshStandardMaterial && mt.roughness > 0.99 && !mt.roughnessMap) mt.roughness = mt.map ? 0.78 : 0.88;
         }
       }
       if ((o as THREE.SkinnedMesh).isSkinnedMesh) skinned = true;

@@ -27,7 +27,8 @@ export interface UiCtx {
   toast: (text: string, kind?: 'ok' | 'error' | 'info' | 'warn') => void;
   enterShop: (shopId: number) => void;
   openShop: (shopId: number) => void;
-  waypoint: (x: number, z: number, label: string) => void;
+  /** Destination (balise bleue, flèche à l'écran) ; `quiet` : sans notification « Destination : … ». */
+  waypoint: (x: number, z: number, label: string, quiet?: boolean) => void;
   /** Appelé à la fermeture d'une vue de lieu (le personnage ressort). */
   leave: () => void;
 }
@@ -326,18 +327,25 @@ export function employeeRow(ctx: UiCtx, id: number): HTMLElement {
 
 function garage(ctx: UiCtx): (Node | null)[] {
   const g = ctx.game;
-  const out: (Node | null)[] = [sec('À vendre')];
+  // On ne conduit que ses propres véhicules : dit avant la liste, pas seulement après.
+  const out: (Node | null)[] = [note('Le véhicule acheté vous attend devant le garage (balise bleue) : approchez-vous-en et appuyez sur E pour monter. Z / S ou ↑ ↓ : avancer, reculer · Q / D ou ← → : tourner · Espace : freiner · E : descendre.'), sec('À vendre')];
   for (const v of VEHICLES) out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: v.nameFr }), el('div', { cls: 'muted small', text: `${v.cargo} unités de marchandise · ${Math.round(v.speed * 3.6)} km/h · assurance ${v.insurance} CHF / jour` })),
-    button(`Acheter ${chf(v.price)}`, () => ctx.act(g.buyVehicle(v.id)), 'small primary')));
+    button(`Acheter ${chf(v.price)}`, () => {
+      // Achat : le panneau se ferme et la balise montre le véhicule, garé devant (le message dit quoi faire).
+      const r = g.buyVehicle(v.id);
+      if (ctx.act(r) && r.ok) { ctx.panel.close(); ctx.waypoint(r.data.x, r.data.z, v.nameFr, true); }
+    }, 'small primary')));
   if (g.vehicles.length) {
     out.push(sec('Vos véhicules'));
     for (const v of g.vehicles) {
       const d = VEHICLE_BY_ID.get(v.type)!;
       out.push(el('div', { cls: 'item' }, el('div', {}, el('b', { text: d.nameFr }), el('div', { cls: 'muted small', text: `cargaison ${Object.values(v.cargo).reduce((a, b) => a + b, 0)} / ${d.cargo}` })),
-        button(`Revendre ${chf(d.price * ECONOMY.vehicleResale)}`, () => ctx.act(g.sellVehicle(v.id)), 'small')));
+        el('div', { cls: 'row tight' },
+          button('Y aller', () => { ctx.panel.close(); ctx.waypoint(v.x, v.z, d.nameFr); }, 'small'),
+          button(`Revendre ${chf(d.price * ECONOMY.vehicleResale)}`, () => ctx.act(g.sellVehicle(v.id)), 'small'))));
     }
   }
-  out.push(note('Approchez-vous d’un véhicule et appuyez sur E pour le conduire (Z/Q/S/D ou flèches, Espace pour freiner).'));
+  out.push(note('Seuls vos véhicules se conduisent : les voitures garées, la circulation et les voitures exposées devant le garage ne sont pas à vous. Touche V : retrouver votre véhicule.'));
   return out;
 }
 

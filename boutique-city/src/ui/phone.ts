@@ -50,6 +50,8 @@ export interface PhoneHooks {
   muted: () => boolean;
   quality: () => string;
   setQuality: (q: string) => void;
+  /** Qualité effective en mode automatique (« Haute »…), facultatif. */
+  qualityNow?: () => string;
   /** Ouverture / fermeture (le jeu se met en pause pendant que le téléphone est ouvert). */
   onToggle: (open: boolean) => void;
   /** Centre la caméra sur un point de la rue avec une balise lumineuse. */
@@ -59,6 +61,15 @@ export interface PhoneHooks {
 type Tone = 'ok' | 'bad' | 'warn' | 'wrap' | 'warn wrap' | '';
 /** Première lettre en capitale (« lundi » → « Lundi »). */
 const cap = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
+/** Réglage de la qualité graphique (valeurs de « bc-qualite ») et explication de chaque niveau. */
+const QUALITIES = [['auto', 'Auto'], ['basse', 'Basse'], ['moyenne', 'Moyenne'], ['haute', 'Haute'], ['ultra', 'Ultra']] as const;
+const QUALITY_HINT: Record<string, string> = {
+  auto: 'Auto : démarre selon votre carte graphique, puis baisse ou remonte selon la fluidité.',
+  basse: 'Basse : résolution réduite, sans ombres. Pour les machines modestes.',
+  moyenne: 'Moyenne : ombres nettes, résolution un peu réduite.',
+  haute: 'Haute : ombres douces, reflets du ciel, ombrage des recoins, halo des lumières la nuit, brume et couleurs étalonnées.',
+  ultra: 'Ultra : comme Haute, en pleine définition, avec des ombres plus fines et plus lointaines. Pour carte graphique dédiée.',
+};
 const hhmm = (h: number, m: number): string => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 const WEATHER: Record<string, [IconName, string]> = { soleil: ['sun', 'Ensoleillé'], nuages: ['cloud', 'Nuageux'], pluie: ['rain', 'Pluie'] };
 
@@ -704,20 +715,25 @@ export class Phone {
 
   private vehicules(): (Node | null)[] {
     const g = this.ctx.game;
-    if (!g.vehicles.length) return [empty('truck', 'Aucun véhicule', 'Le garage vend scooters, citadines, voitures de luxe, camionnettes et camions pour transporter la marchandise.', this.serviceGps('garage', 'Garage'))];
+    const how = 'Approchez-vous de votre véhicule et appuyez sur E pour monter. Z / S : avancer, reculer · Q / D : tourner · Espace : freiner · E : descendre. Touche V : retrouver votre véhicule.';
+    if (!g.vehicles.length) return [empty('truck', 'Aucun véhicule', 'On ne conduit que ses propres véhicules : les voitures du quartier ne sont pas à vous. Le garage vend scooters, citadines, voitures de luxe, camionnettes et camions ; le véhicule acheté vous attend devant.', this.serviceGps('garage', 'Garage'))];
     const names = new Map(PRODUCTS.map((p) => [p.id, p.nameFr]));
+    const p = g.player;
     return [
       tiles(tile('Véhicules', String(g.vehicles.length)), tile('Capacité', num(g.vehicles.reduce((a, v) => a + VEHICLE_BY_ID.get(v.type)!.cargo, 0)), '', 'unités au total')),
+      el('p', { cls: 'ph-hint', text: how }),
       ...g.vehicles.map((v) => {
         const d = VEHICLE_BY_ID.get(v.type)!;
         const goods = Object.entries(v.cargo).filter(([, n]) => n > 0);
         const load = goods.reduce((a, [, n]) => a + n, 0);
+        const driving = p.driving === v.id;
         return card({
-          accent: d.color, title: d.nameFr, sub: `Assurance ${d.insurance} CHF/jour`,
+          accent: d.color, title: d.nameFr, sub: driving ? 'Au volant' : `À ${num(Math.hypot(v.x - p.x, v.z - p.z))} m · assurance ${d.insurance} CHF/jour`,
           right: el('div', { cls: 'ph-price' }, el('b', { text: `${num(load)} / ${num(d.cargo)}` }), el('small', { text: 'chargement' })),
           body: [meter(load / d.cargo, load >= d.cargo ? 'warn' : ''),
             el('p', { cls: 'ph-card-txt', text: goods.length ? goods.map(([id, n]) => `${names.get(id) ?? id} × ${n}`).join(' · ') : 'Vide' })],
-          actions: [this.gps(v.x, v.z, d.nameFr, 'primary')],
+          // « Retrouver mon véhicule » : destination (balise bleue) sur le véhicule, téléphone fermé.
+          actions: [driving ? null : iconButton('route', 'Retrouver mon véhicule', () => { this.ctx.waypoint(v.x, v.z, d.nameFr); this.close(); }, 'small primary'), this.onMap(v.x, v.z, d.nameFr)],
         });
       }),
     ];
@@ -728,11 +744,16 @@ export class Phone {
   private reglages(): (Node | null)[] {
     const q = this.hooks.quality();
     const muted = this.hooks.muted();
-    const keys: [string, string][] = [['T', 'Téléphone'], ['M', 'Carte'], ['E', 'Interagir'], ['B', 'Aménager'], ['P', 'Pause'], ['1 – 4', 'Vitesse'], ['H', 'Aide'], ['Échap', 'Fermer']];
+    const keys: [string, string][] = [['T', 'Téléphone'], ['M', 'Carte'], ['E', 'Interagir, monter / descendre'], ['V', 'Retrouver mon véhicule'], ['B', 'Aménager'], ['P', 'Pause'], ['1 – 4', 'Vitesse'], ['H', 'Aide'], ['Échap', 'Fermer']];
     return [
       sec('Graphismes'),
-      el('div', { cls: 'ph-seg' }, ...([['auto', 'Auto'], ['basse', 'Basse'], ['haute', 'Haute']] as const).map(([id, l]) => button(l, () => { this.hooks.setQuality(id); this.paint(true); }, q === id ? 'on' : ''))),
-      el('p', { cls: 'ph-hint', text: 'Auto : la qualité baisse toute seule si les images par seconde chutent (ombres, résolution).' }),
+      el('div', { cls: 'ph-seg', attrs: { role: 'group', 'aria-label': 'Qualité graphique' } }, ...QUALITIES.map(([id, l]) => {
+        const b = button(l, () => { this.hooks.setQuality(id); this.paint(true); }, q === id ? 'on' : '');
+        b.setAttribute('aria-pressed', String(q === id));
+        b.style.padding = '6px 2px';
+        return b;
+      })),
+      el('p', { cls: 'ph-hint', text: (QUALITY_HINT[q] ?? QUALITY_HINT['auto']!) + (q === 'auto' && this.hooks.qualityNow ? ` En ce moment : ${this.hooks.qualityNow()}.` : '') }),
       sec('Son'),
       el('button', { cls: `ph-toggle${muted ? '' : ' on'}`, attrs: { type: 'button', 'aria-pressed': String(!muted) }, on: { click: () => { this.hooks.toggleSound(); this.paint(true); } } },
         icon(muted ? 'mute' : 'sound'), el('span', { text: muted ? 'Son coupé' : 'Son activé' }), el('i', {})),

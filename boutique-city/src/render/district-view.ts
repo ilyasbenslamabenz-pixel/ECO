@@ -81,9 +81,10 @@ export class DistrictView {
     this.group.name = 'quartier';
     const halfW = d.size.w / 2 + 40, halfD = d.size.d / 2 + 40;
     // Sol (herbe sombre au-delà du quartier) et chaussée (tout le quadrillage), puis îlots surélevés (trottoirs).
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(halfW * 6, halfD * 6).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x6f8f5a, roughness: 1 }));
+    // Matériaux à détail procédural (variations de teinte, grain), activé en qualité haute et ultra.
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(halfW * 6, halfD * 6).rotateX(-Math.PI / 2), this.detailMat(0x6f8f5a, 1, 'herbe'));
     ground.position.y = -0.05; ground.receiveShadow = true; this.group.add(ground);
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(d.size.w + STREET_W, d.size.d + STREET_W).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x3b3f45, roughness: 0.95 }));
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(d.size.w + STREET_W, d.size.d + STREET_W).rotateX(-Math.PI / 2), this.detailMat(0x3b3f45, 0.9, 'asphalte'));
     road.receiveShadow = true; this.group.add(road);
     const blocks: THREE.Matrix4[] = [], parks: THREE.Matrix4[] = [];
     for (let i = 0; i < d.nx; i++) for (let j = 0; j < d.nz; j++) {
@@ -92,8 +93,8 @@ export class DistrictView {
       blocks.push(m);
       if (i === d.parkBlock.i && j === d.parkBlock.j) parks.push(new THREE.Matrix4().compose(new THREE.Vector3(c.x, 0.17, c.z), new THREE.Quaternion(), new THREE.Vector3(BLOCK, 0.02, BLOCK)));
     }
-    this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0xb9b4aa, roughness: 0.9 }), blocks, 'trottoirs', false, true));
-    this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x7fae5e, roughness: 1 }), parks, 'parc', false, true));
+    this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1), this.detailMat(0xb9b4aa, 0.85, 'dalles'), blocks, 'trottoirs', false, true));
+    this.group.add(instanced(new THREE.BoxGeometry(1, 1, 1), this.detailMat(0x7fae5e, 1, 'herbe'), parks, 'parc', false, true));
     this.group.add(this.markings());
 
     // Immeubles : boîte par bâtiment (hauteur = étages), toit en saillie, auvents des commerces.
@@ -222,7 +223,10 @@ export class DistrictView {
     for (const [k, ms] of per) {
       const mg = assets.merged(k);
       if (!mg) return null;
-      for (const im of this.tiles(ms, (part) => instanced(mg.geo, mg.mat as THREE.Material, part, `immeuble ${k}`, true, true))) {
+      // Vitres repérées (fenêtre par fenêtre) : reflets, et allumées au hasard la nuit.
+      glassAttr(mg.geo);
+      const bm = buildingMaterial(mg.mat);
+      for (const im of this.tiles(ms, (part) => instanced(mg.geo, bm as THREE.Material, part, `immeuble ${k}`, true, true))) {
         const m = new THREE.Matrix4();
         for (let i = 0; i < im.count; i++) { im.getMatrixAt(i, m); const e = m.elements; im.setColorAt(i, tones[Math.abs(Math.floor(e[12]! * 7.3 + e[14]! * 3.1)) % tones.length]!); }
         if (im.instanceColor) im.instanceColor.needsUpdate = true;
@@ -284,15 +288,95 @@ export class DistrictView {
       this.globeTiles.push({ m: im, c: s.center.clone(), r: s.radius });
     }
     this.lightPoints = bulbs.map((m) => new THREE.Vector3().setFromMatrixPosition(m));
+    // Flaques de lumière au sol sous chaque lampadaire, la nuit (qualités haute et ultra) : disques additifs à bord
+    // doux, un seul appel de dessin pour tout le quartier.
+    const pools = this.lightPoints.map((p) => new THREE.Matrix4().compose(new THREE.Vector3(p.x, 0.175, p.z), new THREE.Quaternion(), new THREE.Vector3(11, 1, 11)));
+    this.pools = instanced(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
+      map: poolTexture(), color: 0xffc98a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    }), pools, 'flaques-de-lumiere', false, false);
+    this.pools.renderOrder = 2;
+    this.pools.visible = false;
+    g.add(this.pools);
     return g;
   }
   /** Positions des globes (pour éclairer les abords du joueur la nuit). */
   lightPoints: THREE.Vector3[] = [];
+  private pools!: THREE.InstancedMesh;
+  private night = 0;
+  private quality = 2;
+  /** Matériaux des enseignes et affiches (plus lumineuses la nuit). */
+  private readonly signMats = new Set<THREE.MeshBasicMaterial>();
+  /** Matériaux du sol à détail procédural (voir detailMat). */
+  private readonly detailMats: THREE.MeshStandardMaterial[] = [];
 
-  /** Nuit (0 = jour, 1 = nuit noire) : globes et portes vitrées plus lumineux. */
-  setNight(k: number): void {
-    this.lampMat.color.setRGB(0.54 + 0.46 * k, 0.56 + 0.4 * k, 0.59 + 0.2 * k);
-    for (const m of this.doorGlass) m.emissiveIntensity = 0.55 + 1.4 * k;
+  /**
+   * Nuit (0 = jour, 1 = nuit noire) et heure : globes, portes vitrées, enseignes et fenêtres allumées. En haute et
+   * ultra, les sources sont plus intenses que le blanc (le halo du post-traitement les fait rayonner) et des flaques
+   * de lumière s'allument au pied des lampadaires.
+   */
+  setNight(k: number, hour = 22): void {
+    this.night = k;
+    const hdr = this.quality >= 2;
+    const boost = 1 + (hdr ? 4.5 : 0) * k * k;
+    this.lampMat.color.setRGB((0.54 + 0.46 * k) * boost, (0.56 + 0.4 * k) * boost, (0.59 + 0.2 * k) * boost);
+    for (const m of this.doorGlass) m.emissiveIntensity = 0.55 + (hdr ? 2.6 : 1.4) * k;
+    const sign = 1 + (hdr ? 1.1 : 0.25) * k;
+    for (const m of this.signMats) m.color.setScalar(sign);
+    // Part des fenêtres allumées : beaucoup le soir, peu au cœur de la nuit.
+    const lit = hour >= 17 ? 0.55 : hour < 5 ? 0.16 + 0.04 * (5 - hour) : hour < 9 ? 0.3 : 0.2;
+    WINDOWS.uNight.value = k; WINDOWS.uLit.value = lit;
+    this.pools.visible = hdr && k > 0.3;
+    (this.pools.material as THREE.MeshBasicMaterial).color.setHex(0xffc98a).multiplyScalar(0.55 * Math.min(1, (k - 0.3) / 0.4));
+  }
+
+  /** Qualité : détail des sols, reflets des vitres (environnement présent), intensités de nuit (voir setNight). */
+  setQuality(q: number): void {
+    this.quality = q;
+    const detail = q >= 2;
+    for (const m of this.detailMats) {
+      const defs = (m.defines ??= {});
+      if (('DETAIL' in defs) === detail) continue;
+      if (detail) defs['DETAIL'] = ''; else delete defs['DETAIL'];
+      m.needsUpdate = true;
+    }
+    WINDOWS.uEnvOn.value = q >= 2 ? 1 : 0;
+    this.setNight(this.night);
+  }
+
+  /**
+   * Matériau de sol à détail procédural (herbe, asphalte, dalles) : texture de détail répétée en coordonnées du monde
+   * (deux échelles : grain fin et grandes plaques de teinte) qui module la couleur. Sans la définition DETAIL
+   * (qualités basse et moyenne), shader et coût identiques à un matériau uni.
+   */
+  private detailMat(color: number, roughness: number, kind: DetailKind): THREE.MeshStandardMaterial {
+    const m = new THREE.MeshStandardMaterial({ color, roughness });
+    const tex = detailTexture(kind), sc = DETAIL_SCALE[kind];
+    m.onBeforeCompile = (sh): void => {
+      sh.uniforms['tDetail'] = { value: tex };
+      sh.uniforms['detailScale'] = { value: new THREE.Vector4(...sc) };
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\n#ifdef DETAIL\nvarying vec3 vDetailP;\n#endif')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+#ifdef DETAIL
+  vec4 detailP = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+    detailP = instanceMatrix * detailP;
+  #endif
+  vDetailP = (modelMatrix * detailP).xyz;
+#endif`);
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\n#ifdef DETAIL\nuniform sampler2D tDetail;\nuniform vec4 detailScale;\nvarying vec3 vDetailP;\n#endif')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+#ifdef DETAIL
+  vec4 dA = texture2D(tDetail, vDetailP.xz * detailScale.x);
+  float dB = texture2D(tDetail, vDetailP.xz * detailScale.y + vec2(0.37, 0.71)).a;
+  diffuseColor.rgb *= mix(vec3(1.0), dA.rgb * 2.0, detailScale.z) * (1.0 + detailScale.w * (dB - 0.5) * 2.0);
+#endif`);
+    };
+    m.customProgramCacheKey = (): string => 'sol-detail';
+    this.detailMats.push(m);
+    return m;
   }
 
   /** Lignes blanches discontinues au milieu des rues. */
@@ -615,7 +699,12 @@ export class DistrictView {
       if (e) put(e, x + 5.5, z - 6, Math.PI, 3, 4);
     }
     for (const [k, v] of per) {
-      for (const im of this.tiles(v.m, (part) => assets.instances(k, part, v.w, v.h, v.w))) { im.name = `horizon ${k}`; im.castShadow = false; g.add(im); }
+      for (const im of this.tiles(v.m, (part) => assets.instances(k, part, v.w, v.h, v.w))) {
+        im.name = `horizon ${k}`; im.castShadow = false;
+        // Bâtiments de l'horizon : mêmes vitres que le quartier (fenêtres allumées la nuit sur toute la ligne d'horizon).
+        if (/^f:(building|house|ind-building|com-low-detail)/.test(k)) { glassAttr(im.geometry); im.material = buildingMaterial(im.material); }
+        g.add(im);
+      }
     }
     return g;
   }
@@ -638,12 +727,18 @@ export class DistrictView {
       const key = `${st.sign}|${st.color}|${st.poster}`;
       const cur = this.signs.get(b.id);
       if (!cur || cur.key !== key) {
-        if (cur) { this.group.remove(cur.obj); disposeOwn(cur.obj); }
+        if (cur) {
+          this.group.remove(cur.obj);
+          cur.obj.traverse((o) => { this.signMats.delete((o as THREE.Mesh).material as THREE.MeshBasicMaterial); });
+          disposeOwn(cur.obj);
+        }
         const g = new THREE.Group();
         g.position.set(b.x + n[0] * (depth / 2 + 0.08), 0.16, b.z + n[1] * (depth / 2 + 0.08));
         g.rotation.y = Math.atan2(n[0], n[1]);
         if (st.sign) { const p = textPlane(st.sign, 0.75, st.color, '#ffffff', front * 0.85); p.position.y = 3.65; g.add(p); }
         if (st.poster) { const p = textPlane(st.poster, 0.42, '#ffd166', '#2d3440', 2.6); p.position.set(front * 0.22, 1.55, 0.02); g.add(p); }
+        for (const p of g.children) this.signMats.add((p as THREE.Mesh).material as THREE.MeshBasicMaterial);
+        if (g.children.length) this.setNight(this.night);
         g.updateMatrix(); g.matrixAutoUpdate = false;
         this.group.add(g);
         this.signs.set(b.id, { key, obj: g });
@@ -815,7 +910,183 @@ function pinMaterial(): THREE.SpriteMaterial {
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
   // Caché par les immeubles qui le masquent (sinon il flotte devant tout, comme un point dans le ciel).
-  pinMat = new THREE.SpriteMaterial({ map: tex, depthTest: true, sizeAttenuation: false });
+  // Sans écriture de profondeur : pas d'ombrage des recoins (occlusion ambiante) autour du repère.
+  pinMat = new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false, sizeAttenuation: false });
   return pinMat;
 }
 
+
+/* ------------------------------ Vitres des immeubles ------------------------------ */
+
+/** Uniformes partagés des vitres : nuit (0..1), part des fenêtres allumées, environnement présent (reflets). */
+const WINDOWS = { uNight: { value: 0 }, uLit: { value: 0.5 }, uEnvOn: { value: 0 } };
+
+/**
+ * Vitres d'un modèle du City Kit (géométrie fusionnée, non indexée) : triangles dont les coordonnées de texture
+ * tombent dans la case bleu clair de la palette Kenney (u 0,625–0,75 ; v 0,25–0,5). Les triangles vitrés reliés par
+ * un sommet forment une fenêtre ; chacune reçoit un nombre au hasard (attribut aWin, −1 hors des vitres) qui décide
+ * si elle est allumée la nuit, et de sa teinte.
+ */
+function glassAttr(geo: THREE.BufferGeometry): void {
+  if (geo.getAttribute('aWin')) return;
+  const pos = geo.getAttribute('position'), uv = geo.getAttribute('uv');
+  const out = new Float32Array(pos.count).fill(-1);
+  if (uv && !geo.index) {
+    const tri = Math.floor(pos.count / 3);
+    const parent = new Int32Array(tri);
+    const glass = new Uint8Array(tri);
+    const find = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]!]!; i = parent[i]!; } return i; };
+    const seen = new Map<string, number>();
+    for (let t = 0; t < tri; t++) {
+      parent[t] = t;
+      let u = 0, v = 0;
+      for (let k = 0; k < 3; k++) { u += uv.getX(t * 3 + k); v += uv.getY(t * 3 + k); }
+      u /= 3; v /= 3;
+      if (!(u > 0.625 && u < 0.75 && v > 0.25 && v < 0.5)) continue;
+      glass[t] = 1;
+      for (let k = 0; k < 3; k++) {
+        const i = t * 3 + k;
+        const key = `${Math.round(pos.getX(i) * 2e4)},${Math.round(pos.getY(i) * 2e4)},${Math.round(pos.getZ(i) * 2e4)}`;
+        const o = seen.get(key);
+        if (o === undefined) seen.set(key, t);
+        else { const a = find(o), b = find(t); if (a !== b) parent[a] = b; }
+      }
+    }
+    for (let t = 0; t < tri; t++) {
+      if (!glass[t]) continue;
+      const r = find(t), h = Math.abs(Math.sin(r * 12.9898 + 4.1) * 43758.5453) % 1;
+      out[t * 3] = out[t * 3 + 1] = out[t * 3 + 2] = h;
+    }
+  }
+  geo.setAttribute('aWin', new THREE.BufferAttribute(out, 1));
+}
+
+/**
+ * Matériau des immeubles (City Kit) : vitres plus lisses (reflets du ciel quand l'environnement est présent, en
+ * haute et ultra) et, la nuit, fenêtres allumées au hasard (lumière chaude, quelques écrans bleutés) ; vitrines du
+ * rez-de-chaussée presque toutes allumées. Une copie par matériau d'origine, programme partagé.
+ */
+const buildingMats = new Map<THREE.Material, THREE.Material>();
+function buildingMaterial(base: THREE.Material | THREE.Material[]): THREE.Material | THREE.Material[] {
+  if (Array.isArray(base)) return base.map((m) => buildingMaterial(m) as THREE.Material);
+  const done = buildingMats.get(base);
+  if (done) return done;
+  if (!(base as THREE.MeshStandardMaterial).isMeshStandardMaterial) return base;
+  const m = (base as THREE.MeshStandardMaterial).clone();
+  m.onBeforeCompile = (sh): void => {
+    Object.assign(sh.uniforms, WINDOWS);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aWin;\nvarying float vWin;\nvarying float vWinY;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+  vWin = aWin;
+  vec4 winP = vec4(transformed, 1.0);
+  #ifdef USE_INSTANCING
+    winP = instanceMatrix * winP;
+    if (aWin >= 0.0) { vec3 ip = instanceMatrix[3].xyz; vWin = fract(aWin * 7.31 + fract(sin(dot(ip.xz, vec2(12.9898, 78.233))) * 43758.5453)); }
+  #endif
+  vWinY = (modelMatrix * winP).y;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uNight;\nuniform float uLit;\nuniform float uEnvOn;\nvarying float vWin;\nvarying float vWinY;')
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+  float glassK = step(0.0, vWin);
+  roughnessFactor = mix(roughnessFactor, 0.14, glassK);`)
+      .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+  metalnessFactor = mix(metalnessFactor, 0.45, glassK * uEnvOn);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  if (vWin >= 0.0 && uNight > 0.01) {
+    bool shop = vWinY < 3.3;
+    float on = step(1.0 - (shop ? 0.85 : uLit), fract(vWin * 3.7));
+    vec3 warm = mix(vec3(1.0, 0.7, 0.4), vec3(1.0, 0.85, 0.6), fract(vWin * 11.3));
+    warm = mix(warm, vec3(0.6, 0.76, 1.0), step(0.92, fract(vWin * 5.1)) * (shop ? 0.0 : 1.0));
+    totalEmissiveRadiance += warm * on * uNight * (shop ? 2.2 : 0.9 + 1.4 * fract(vWin * 17.9));
+  }`);
+  };
+  m.customProgramCacheKey = (): string => 'immeuble-vitres';
+  buildingMats.set(base, m);
+  return m;
+}
+
+/* ------------------------------ Détail des sols ------------------------------ */
+
+type DetailKind = 'herbe' | 'asphalte' | 'dalles';
+/** Échelles (1/m) du grain fin et des grandes plaques, force du grain et des plaques. */
+const DETAIL_SCALE: Record<DetailKind, [number, number, number, number]> = {
+  herbe: [1 / 3, 1 / 40, 0.9, 0.16], asphalte: [1 / 4, 1 / 55, 0.7, 0.08], dalles: [1 / 2, 1 / 30, 0.8, 0.05],
+};
+
+/** Bruit de valeur périodique (période `p` cases) : textures qui se répètent sans couture. */
+function tileNoise(seed: number, p: number): (x: number, y: number) => number {
+  const g = new Float32Array(p * p);
+  let s = seed * 9301 + 49297;
+  for (let i = 0; i < g.length; i++) { s = (s * 9301 + 49297) % 233280; g[i] = s / 233280; }
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+    const at = (i: number, j: number): number => g[(((j % p) + p) % p) * p + (((i % p) + p) % p)]!;
+    const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    return (at(xi, yi) * (1 - u) + at(xi + 1, yi) * u) * (1 - v) + (at(xi, yi + 1) * (1 - u) + at(xi + 1, yi + 1) * u) * v;
+  };
+}
+
+/**
+ * Texture de détail (256², répétée, données linéaires) : RVB = multiplicateur de couleur autour de 0,5 (grain,
+ * touffes d'herbe, rapiéçages de l'asphalte, joints des dalles) ; alpha = bruit doux pour les grandes plaques.
+ */
+const detailCache = new Map<DetailKind, THREE.DataTexture>();
+function detailTexture(kind: DetailKind): THREE.DataTexture {
+  const c = detailCache.get(kind);
+  if (c) return c;
+  const N = 256, data = new Uint8Array(N * N * 4);
+  const n1 = tileNoise(kind.length * 7 + 1, 32), n2 = tileNoise(kind.length * 13 + 5, 8), n3 = tileNoise(kind.length * 3 + 9, 4), n4 = tileNoise(kind.length * 17 + 2, 64);
+  let s = 12345;
+  const rnd = (): number => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const u = x / N, v = y / N, i = (y * N + x) * 4;
+    let r = 0.5, g = 0.5, b = 0.5;
+    const macro = 0.6 * n3(u * 4, v * 4) + 0.4 * n2(u * 8, v * 8);
+    if (kind === 'herbe') {
+      const clump = n1(u * 32, v * 32), fine = rnd();
+      const l = 0.5 + (clump - 0.5) * 0.22 + (fine - 0.5) * 0.12 + (n4(u * 64, v * 64) - 0.5) * 0.1;
+      const dry = Math.max(0, n2(u * 8, v * 8) - 0.55) * 0.5;
+      r = l + dry * 0.25; g = l + dry * 0.05; b = l - 0.04 - dry * 0.15;
+    } else if (kind === 'asphalte') {
+      const grain = (rnd() - 0.5) * 0.1, speck = rnd() > 0.985 ? 0.12 : 0;
+      const patch = n1(u * 32, v * 32) > 0.72 ? -0.06 : 0;
+      const l = 0.5 + grain + speck + patch + (n4(u * 64, v * 64) - 0.5) * 0.06;
+      r = g = l; b = l + 0.01;
+    } else {
+      // Dalles de 1 m (texture de 2 m) : joints sombres, chaque dalle un peu différente.
+      const sx = Math.floor(u * 2), sy = Math.floor(v * 2), fx = (u * 2) % 1, fy = (v * 2) % 1;
+      const joint = Math.min(fx, 1 - fx, fy, 1 - fy) < 0.012 ? -0.14 : 0;
+      const slab = (Math.abs(Math.sin((sx * 7 + sy * 13) * 12.9898) * 43758.5453) % 1 - 0.5) * 0.07;
+      const l = 0.5 + joint + slab + (rnd() - 0.5) * 0.06 + (n4(u * 64, v * 64) - 0.5) * 0.04;
+      r = l + 0.005; g = l; b = l - 0.005;
+    }
+    data[i] = Math.round(Math.min(1, Math.max(0, r)) * 255);
+    data[i + 1] = Math.round(Math.min(1, Math.max(0, g)) * 255);
+    data[i + 2] = Math.round(Math.min(1, Math.max(0, b)) * 255);
+    data[i + 3] = Math.round(Math.min(1, Math.max(0, macro)) * 255);
+  }
+  const t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
+  t.anisotropy = 8;
+  t.colorSpace = THREE.NoColorSpace;
+  t.needsUpdate = true;
+  detailCache.set(kind, t);
+  return t;
+}
+
+/** Disque lumineux à bord doux (flaques de lumière des lampadaires). */
+function poolTexture(): THREE.CanvasTexture {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 64;
+  const g = cv.getContext('2d')!;
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.6)'); gr.addColorStop(0.7, 'rgba(255,255,255,0.18)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}

@@ -73,7 +73,7 @@ export class StreetLife {
       for (let x = zoo.x0; x < zoo.x1; x += 2) { this.prop(fence, 2, 1, 0.3, x + 1, zoo.z0, 0); this.prop(fence, 2, 1, 0.3, x + 1, zoo.z1, 0); }
       for (let zz = zoo.z0; zz < zoo.z1; zz += 2) { this.prop(fence, 2, 1, 0.3, zoo.x0, zz + 1, Math.PI / 2); this.prop(fence, 2, 1, 0.3, zoo.x1, zz + 1, Math.PI / 2); }
     }
-    const pond = new THREE.Mesh(new THREE.CircleGeometry(2.6, 28).rotateX(-Math.PI / 2), mat('#3f8fbf', { rough: 0.15, metal: 0.1 }));
+    const pond = new THREE.Mesh(new THREE.CircleGeometry(2.6, 28).rotateX(-Math.PI / 2), this.water);
     pond.position.set(zoo.x1 - 4, 0.2, zoo.z0 + 4); this.still(pond);
     for (const [dx, dz, k] of [[-1, 0.6, 'f:nat-lily_large'], [1.1, -0.8, 'f:nat-lily_small'], [0.2, 1.4, 'f:nat-lily_small']] as const) this.prop(k, 0.9, 0.2, 0.9, zoo.x1 - 4 + dx, zoo.z0 + 4 + dz, rnd() * 6, 0.21);
     this.add('f:pet-animal-fish', ANIMAL_SIZE['fish']!, { zone: { x0: zoo.x1 - 5.5, z0: zoo.z0 + 2.5, x1: zoo.x1 - 2.5, z1: zoo.z0 + 5.5 }, speed: 0.5, y: 0.05 });
@@ -243,8 +243,21 @@ export class StreetLife {
     m.cur = name;
   }
 
+  /**
+   * Eau du bassin : lisse et sombre (elle reflète le ciel quand l'environnement est présent) ; en qualité haute et
+   * ultra, ondulations animées (normale perturbée par quelques ondes en coordonnées du monde).
+   */
+  private readonly water = waterMaterial();
+  setQuality(q: number): void {
+    const on = q >= 2, defs = (this.water.defines ??= {});
+    if (('RIPPLES' in defs) === on) return;
+    if (on) defs['RIPPLES'] = ''; else delete defs['RIPPLES'];
+    this.water.needsUpdate = true;
+  }
+
   /** Avance les animaux et personnages proches de `focus` (au-delà de 90 m : figés). */
   update(dt: number, focus: THREE.Vector3): void {
+    (this.water.userData['time'] as { value: number }).value += dt;
     for (const m of this.movers) {
       const p = m.obj.position;
       if (Math.abs(p.x - focus.x) > 90 || Math.abs(p.z - focus.z) > 90) continue;
@@ -396,4 +409,28 @@ function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   const out = mergeGeometries(geos, false);
   out?.computeBoundingSphere();
   return out;
+}
+
+/** Matériau de l'eau du bassin (voir StreetLife.water) ; horloge des ondes dans userData.time. */
+function waterMaterial(): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color: 0x2c78a0, roughness: 0.05, metalness: 0 });
+  const time = { value: 0 };
+  m.userData['time'] = time;
+  m.onBeforeCompile = (sh): void => {
+    sh.uniforms['uTime'] = time;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\n#ifdef RIPPLES\nvarying vec2 vWaterP;\n#endif')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n#ifdef RIPPLES\nvWaterP = (modelMatrix * vec4(transformed, 1.0)).xz;\n#endif');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\n#ifdef RIPPLES\nuniform float uTime;\nvarying vec2 vWaterP;\n#endif')
+      .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+#ifdef RIPPLES
+  vec2 wp = vWaterP;
+  float gx = cos(wp.x * 3.1 + uTime * 1.6) * 0.6 + cos((wp.x + wp.y) * 5.3 - uTime * 2.3) * 0.4;
+  float gz = cos(wp.y * 2.7 - uTime * 1.3) * 0.6 + cos((wp.x - wp.y) * 4.7 + uTime * 1.9) * 0.4;
+  normal = normalize(normal + (viewMatrix * vec4(gx, 0.0, gz, 0.0)).xyz * 0.12);
+#endif`);
+  };
+  m.customProgramCacheKey = (): string => 'eau-bassin';
+  return m;
 }
